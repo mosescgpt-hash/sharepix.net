@@ -45,6 +45,9 @@ export default function Navbar() {
       >
         Create an event
       </Link>
+      <Link href="/my-events" className="font-medium text-ink/75 hover:text-accent">
+        {username ? 'My events' : 'Host login'}
+      </Link>
       {admin ? (
         <Link href="/global-admin" className="font-medium text-accent hover:text-ink">
           Global admin

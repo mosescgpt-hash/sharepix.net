@@ -135,6 +135,22 @@ export async function listAllEvents(): Promise<QREvent[]> {
   return (data ?? []) as QREvent[];
 }
 
+/** Return only events owned by the currently signed-in host. */
+export async function listMyEvents(): Promise<QREvent[]> {
+  const user = await getCurrentUserInfo();
+  if (!user) throw new Error('Sign in to see your events.');
+
+  const { data, errors } = await client.models.Event.list({
+    limit: 1000,
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error('Your events could not be loaded.');
+
+  return ((data ?? []) as QREvent[])
+    .filter((event) => event.owner?.includes(user.userId))
+    .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+}
+
 export async function listAllPhotos(): Promise<QRPhoto[]> {
   const { data, errors } = await client.models.Photo.list({
     limit: 1000,
