@@ -52,13 +52,18 @@ export default function Navbar() {
       ) : null}
       <InstallAppButton />
       {username ? (
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="text-ink/70 hover:text-accent"
-        >
-          Sign out ({username})
-        </button>
+        <>
+          <Link href="/account-security" className="text-ink/70 hover:text-accent">
+            Security
+          </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="text-ink/70 hover:text-accent"
+          >
+            Sign out ({username})
+          </button>
+        </>
       ) : null}
     </>
   );
