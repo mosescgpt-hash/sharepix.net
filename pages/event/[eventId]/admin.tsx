@@ -5,6 +5,7 @@ import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import EventQRCode from '@/components/EventQRCode';
+import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { getTier } from '@/lib/pricing';
 import { DisplayPhoto, QREvent } from '@/lib/types';
@@ -45,7 +46,7 @@ function AdminDashboardPage() {
         return;
       }
       setEvent(ev);
-      const items = await fetchEventPhotos(eventId, { includeUnapproved: true });
+      const items = await fetchEventPhotos(eventId, { includeUnapproved: true, useOriginals: true });
       setPhotos(items);
     } catch {
       setError('Something went wrong loading the dashboard. Try again in a moment.');
@@ -130,6 +131,16 @@ function AdminDashboardPage() {
                 <p className="font-display text-2xl font-bold">{hiddenCount}</p>
                 <p className="text-xs text-ink/60">Hidden from gallery</p>
               </div>
+            </div>
+
+            <div className="mt-8">
+              {tier?.id === 'premium' ? (
+                <DownloadShareBuilder event={event} photos={photos} />
+              ) : (
+                <div className="rounded-xl border border-dashed border-ink/20 bg-white px-4 py-5 text-sm text-ink/60">
+                  Download-sharing QR codes with a host-selected collection are available on Premium events.
+                </div>
+              )}
             </div>
 
             <div className="mt-8">

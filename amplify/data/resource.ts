@@ -32,6 +32,7 @@ const schema = a.schema({
       eventId: a.id().required(),
       event: a.belongsTo('Event', 'eventId'),
       s3Key: a.string().required(),
+      previewS3Key: a.string(),
       uploadedBy: a.string(),
       uploadedByUserId: a.string(),
       approved: a.boolean(),
@@ -43,6 +44,22 @@ const schema = a.schema({
       allow.group('ADMINS'),
       allow.authenticated().to(['create', 'read']),
       allow.guest().to(['create', 'read']),
+    ]),
+
+  DownloadShare: a
+    .model({
+      eventId: a.id().required(),
+      eventName: a.string().required(),
+      photoIdsJson: a.string().required(),
+      expiresAt: a.datetime(),
+      createdBy: a.string(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [
+      allow.owner(),
+      allow.group('ADMINS'),
+      allow.authenticated().to(['read']),
+      allow.guest().to(['read']),
     ]),
 
   DiscountCode: a

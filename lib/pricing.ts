@@ -55,6 +55,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Moderation tools (approve before showing)',
       'Guest and host photo and video downloads',
       'Guest and host bulk ZIP downloads',
+      'Selected-media download sharing QR codes',
     ],
   },
 ];

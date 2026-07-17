@@ -8,12 +8,14 @@ import type { Schema } from '@/amplify/data/resource';
 import {
   DiscountCode,
   DiscountRedemption,
+  DownloadShare,
   QREvent,
   QRPhoto,
   DisplayPhoto,
 } from '@/lib/types';
-import { buildPhotoKey, generateEventCode } from '@/lib/validation';
+import { buildPhotoKey, buildPreviewKey, generateEventCode } from '@/lib/validation';
 import { computeAccessExpiresAt, getTier } from '@/lib/pricing';
+import { createPhotoPreview } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
 
@@ -169,6 +171,7 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
 
   for (const photo of photos ?? []) {
     await remove({ path: photo.s3Key });
+    if (photo.previewS3Key) await remove({ path: photo.previewS3Key });
     const { errors } = await client.models.Photo.delete(
       { id: photo.id },
       { authMode: 'userPool' },
@@ -204,6 +207,8 @@ export async function uploadEventPhoto(
 ): Promise<QRPhoto> {
   const key = buildPhotoKey(eventId, file.name);
   const user = await getCurrentUserInfo();
+  const preview = await createPhotoPreview(file);
+  const previewKey = preview ? buildPreviewKey(key) : null;
 
   // The event carries its owner id, which we stamp onto the photo.
   const event = await fetchEvent(eventId);
@@ -222,10 +227,19 @@ export async function uploadEventPhoto(
     },
   }).result;
 
+  if (preview && previewKey) {
+    await uploadData({
+      path: previewKey,
+      data: preview,
+      options: { contentType: 'image/jpeg' },
+    }).result;
+  }
+
   const { data: photo, errors } = await client.models.Photo.create(
     {
       eventId,
       s3Key: key,
+      previewS3Key: previewKey,
       uploadedBy: user?.displayName ?? (uploaderName?.trim().slice(0, 60) || 'Anonymous'),
       uploadedByUserId: user?.userId ?? null,
       approved: true, // hosts can hide from the admin dashboard
@@ -243,7 +257,7 @@ export async function uploadEventPhoto(
 /** Fetch photos for an event and resolve signed URLs for display. */
 export async function fetchEventPhotos(
   eventId: string,
-  opts: { includeUnapproved?: boolean } = {}
+  opts: { includeUnapproved?: boolean; useOriginals?: boolean } = {}
 ): Promise<DisplayPhoto[]> {
   const { data } = await client.models.Photo.listPhotoByEventId(
     { eventId },
@@ -257,7 +271,8 @@ export async function fetchEventPhotos(
 
   const withUrls = await Promise.all(
     photos.map(async (p) => {
-      const { url } = await getUrl({ path: p.s3Key });
+      const displayPath = opts.useOriginals ? p.s3Key : p.previewS3Key || p.s3Key;
+      const { url } = await getUrl({ path: displayPath });
       return { ...p, url: url.toString() };
     })
   );
@@ -277,6 +292,79 @@ export async function deleteEventPhoto(photo: QRPhoto): Promise<void> {
   const { errors } = await client.models.Photo.delete({ id: photo.id });
   if (errors?.length) throw new Error('Could not delete the photo record.');
   await remove({ path: photo.s3Key });
+  if (photo.previewS3Key) await remove({ path: photo.previewS3Key });
+}
+
+export async function createDownloadShare(
+  event: QREvent,
+  requestedPhotoIds: string[],
+): Promise<DownloadShare> {
+  if (event.tier.toLowerCase() !== 'premium') {
+    throw new Error('Download-sharing QR codes are available on Premium events.');
+  }
+
+  const user = await getCurrentUserInfo();
+  if (!user || !event.owner?.includes(user.userId)) {
+    throw new Error('Only the signed-in event host can create a download-sharing QR code.');
+  }
+
+  const { data: eventPhotos, errors: photoErrors } = await client.models.Photo.listPhotoByEventId(
+    { eventId: event.id },
+    { limit: 1000, authMode: 'userPool' },
+  );
+  if (photoErrors?.length) throw new Error('The event photos could not be checked.');
+
+  const allowedIds = new Set(
+    (eventPhotos ?? []).filter((photo) => photo.approved !== false).map((photo) => photo.id),
+  );
+  const photoIds = [...new Set(requestedPhotoIds)].filter((id) => allowedIds.has(id));
+  if (photoIds.length === 0) throw new Error('Select at least one approved photo or video.');
+
+  const { data, errors } = await client.models.DownloadShare.create(
+    {
+      eventId: event.id,
+      eventName: event.name,
+      photoIdsJson: JSON.stringify(photoIds),
+      expiresAt: event.accessExpiresAt ?? null,
+      createdBy: user.displayName,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length || !data) throw new Error('The download-sharing QR code could not be created.');
+
+  return {
+    id: data.id,
+    eventId: data.eventId,
+    eventName: data.eventName,
+    photoIds,
+    expiresAt: data.expiresAt,
+    createdBy: data.createdBy,
+    createdAt: data.createdAt,
+  };
+}
+
+export async function fetchDownloadShare(shareId: string): Promise<DownloadShare | null> {
+  const { data, errors } = await client.models.DownloadShare.get(
+    { id: shareId },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length || !data) return null;
+
+  try {
+    const parsed = JSON.parse(data.photoIdsJson);
+    if (!Array.isArray(parsed) || !parsed.every((value) => typeof value === 'string')) return null;
+    return {
+      id: data.id,
+      eventId: data.eventId,
+      eventName: data.eventName,
+      photoIds: parsed,
+      expiresAt: data.expiresAt,
+      createdBy: data.createdBy,
+      createdAt: data.createdAt,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Triggers a browser download of a photo. */

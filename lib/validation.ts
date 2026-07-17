@@ -94,6 +94,12 @@ export function buildPhotoKey(eventId: string, filename: string, now: Date = new
   return `events/${eventId}/photos/${now.getTime()}-${sanitizeFilename(filename)}`;
 }
 
+/** Put a reduced-quality JPEG beside the original without exposing it as a download filename. */
+export function buildPreviewKey(originalKey: string): string {
+  const withoutExtension = originalKey.replace(/\.[^/.]+$/, '');
+  return `${withoutExtension.replace('/photos/', '/previews/')}-preview.jpg`;
+}
+
 /** Generate a short human-friendly event code, e.g. "K7MPQ2". */
 export function generateEventCode(length = 6): string {
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no confusing 0/O, 1/I/L

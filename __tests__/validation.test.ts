@@ -1,5 +1,6 @@
 import {
   buildPhotoKey,
+  buildPreviewKey,
   generateEventCode,
   isAllowedImageType,
   isAllowedVideoType,
@@ -100,6 +101,12 @@ describe('S3 keys', () => {
     const now = new Date('2026-01-01T00:00:00Z');
     const key = buildPhotoKey('abc123', 'party pic.png', now);
     expect(key).toBe(`events/abc123/photos/${now.getTime()}-party-pic.png`);
+  });
+
+  it('builds a separate JPEG preview key', () => {
+    expect(buildPreviewKey('events/evt/photos/1234-camera.heic')).toBe(
+      'events/evt/previews/1234-camera-preview.jpg',
+    );
   });
 });
 

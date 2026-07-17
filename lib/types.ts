@@ -15,6 +15,7 @@ export interface QRPhoto {
   id: string;
   eventId: string;
   s3Key: string;
+  previewS3Key?: string | null;
   uploadedBy?: string | null;
   uploadedByUserId?: string | null;
   approved?: boolean | null;
@@ -39,6 +40,16 @@ export interface DiscountCode {
   createdBy?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+export interface DownloadShare {
+  id: string;
+  eventId: string;
+  eventName: string;
+  photoIds: string[];
+  expiresAt?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
 }
 
 export interface DiscountRedemption {
