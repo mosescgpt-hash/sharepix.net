@@ -1,6 +1,7 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
+import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
 
 /**
  * SharePix data models.
@@ -113,6 +114,18 @@ const schema = a.schema({
     eventOwner: a.string(),
     createdAt: a.string(),
   }),
+
+  CheckoutSession: a.customType({
+    url: a.string().required(),
+  }),
+
+  // Starts a Stripe Checkout Session for a plan and returns the hosted URL.
+  createCheckoutSession: a
+    .mutation()
+    .arguments({ tier: a.string().required() })
+    .returns(a.ref('CheckoutSession'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(stripeCheckoutFn)),
 
   // Creates a photo record after stamping eventOwner from the event and
   // enforcing the event's photo limit (plan limit + purchased extra credits).

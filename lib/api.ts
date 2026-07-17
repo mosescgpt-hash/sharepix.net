@@ -209,6 +209,22 @@ export async function deleteDiscountCode(code: string): Promise<void> {
 }
 
 /**
+ * Starts a Stripe Checkout Session for a plan and returns the hosted-page URL.
+ * The caller redirects the browser there; card details are entered on Stripe,
+ * never in this app.
+ */
+export async function startCheckout(tier: string): Promise<string> {
+  const { data, errors } = await client.mutations.createCheckoutSession(
+    { tier: tier.trim().toLowerCase() },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length || !data?.url) {
+    throw new Error('Checkout could not be started. Please try again.');
+  }
+  return data.url;
+}
+
+/**
  * Global-admin grant of extra photo capacity to one event (the pilot version of
  * the "buy more storage" add-on). `additionalCredits` is added to whatever the
  * event already has; the effective limit becomes photoLimit + extraPhotoCredits.
