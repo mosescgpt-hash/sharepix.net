@@ -2,7 +2,7 @@
 // Gen 2 / aws-amplify v6: typed data client + path-based storage.
 import { generateClient } from 'aws-amplify/data';
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
-import { uploadData, getUrl, remove, downloadData } from 'aws-amplify/storage';
+import { uploadData, getUrl, downloadData } from 'aws-amplify/storage';
 import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
 import {
@@ -216,13 +216,13 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
   if (photoListErrors?.length) throw new Error('Event photos could not be loaded.');
 
   for (const photo of photos ?? []) {
-    await remove({ path: photo.s3Key });
-    if (photo.previewS3Key) await remove({ path: photo.previewS3Key });
-    const { errors } = await client.models.Photo.delete(
-      { id: photo.id },
+    // The function removes both the S3 objects and the record after an
+    // ownership/admin check — clients can no longer delete S3 objects directly.
+    const { data, errors } = await client.mutations.deleteEventPhoto(
+      { photoId: photo.id },
       { authMode: 'userPool' },
     );
-    if (errors?.length) throw new Error('A photo record could not be removed.');
+    if (errors?.length || !data?.success) throw new Error('A photo record could not be removed.');
   }
 
   const { errors } = await client.models.Event.delete(
@@ -427,12 +427,13 @@ export async function setPhotoApproval(photoId: string, approved: boolean): Prom
   if (errors?.length) throw new Error('Could not update the photo.');
 }
 
-/** Deletes the metadata record and the S3 object. */
+/** Deletes the S3 objects and the metadata record via an ownership-checked function. */
 export async function deleteEventPhoto(photo: QRPhoto): Promise<void> {
-  const { errors } = await client.models.Photo.delete({ id: photo.id });
-  if (errors?.length) throw new Error('Could not delete the photo record.');
-  await remove({ path: photo.s3Key });
-  if (photo.previewS3Key) await remove({ path: photo.previewS3Key });
+  const { data, errors } = await client.mutations.deleteEventPhoto(
+    { photoId: photo.id },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length || !data?.success) throw new Error('Could not delete the photo.');
 }
 
 export async function createDownloadShare(
