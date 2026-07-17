@@ -4,6 +4,7 @@ import { getCurrentUser, signOut } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import Logo from '@/components/Logo';
 import { isGlobalAdmin } from '@/lib/admin';
+import InstallAppButton from '@/components/InstallAppButton';
 
 export default function Navbar() {
   const [username, setUsername] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export default function Navbar() {
           Global admin
         </Link>
       ) : null}
+      <InstallAppButton />
       {username ? (
         <button
           type="button"

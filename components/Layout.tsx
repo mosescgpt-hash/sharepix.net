@@ -19,7 +19,6 @@ export default function Layout({ title, children }: LayoutProps) {
           name="description"
           content="Every guest is a photographer. Create an event, print a QR code, and collect everyone's photos in one gallery."
         />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </Head>
       <Navbar />

@@ -4,8 +4,20 @@ export const ALLOWED_IMAGE_TYPES = [
   'image/png',
   'image/gif',
   'image/webp',
+  'image/avif',
   'image/heic',
   'image/heif',
+];
+
+export const ALLOWED_IMAGE_EXTENSIONS = [
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.avif',
+  '.heic',
+  '.heif',
 ];
 
 export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -20,8 +32,11 @@ export function isAllowedFileSize(sizeBytes: number): boolean {
 
 /** Human-readable reason a file was rejected, or null if it is fine. */
 export function validateImageFile(file: { type: string; size: number; name: string }): string | null {
-  if (!isAllowedImageType(file.type)) {
-    return `"${file.name}" is not a supported image type. Use JPG, PNG, GIF, WEBP, or HEIC.`;
+  const lowerName = file.name.toLowerCase();
+  const hasAllowedExtension = ALLOWED_IMAGE_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+  const browserOmittedType = file.type.trim() === '';
+  if (!isAllowedImageType(file.type) && !(browserOmittedType && hasAllowedExtension)) {
+    return `"${file.name}" is not a supported image type. Use JPG, PNG, GIF, WEBP, AVIF, or HEIC.`;
   }
   if (!isAllowedFileSize(file.size)) {
     return `"${file.name}" is larger than 25 MB. Resize it and try again.`;

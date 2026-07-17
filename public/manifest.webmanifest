@@ -1,0 +1,28 @@
+{
+  "name": "sharepix.net — Event Photo Sharing",
+  "short_name": "sharepix.net",
+  "description": "Collect every guest photo in one shared event gallery.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F4F6F5",
+  "theme_color": "#123851",
+  "orientation": "any",
+  "categories": ["photo", "social", "events"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icons/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -37,6 +37,33 @@ describe('image validation', () => {
     });
     expect(result).toBeNull();
   });
+
+  it('accepts an iPhone HEIC photo when the browser omits its MIME type', () => {
+    const result = validateImageFile({
+      type: '',
+      size: 3 * 1024 * 1024,
+      name: 'IMG_1234.HEIC',
+    });
+    expect(result).toBeNull();
+  });
+
+  it('accepts AVIF photos', () => {
+    const result = validateImageFile({
+      type: 'image/avif',
+      size: 3 * 1024 * 1024,
+      name: 'photo.avif',
+    });
+    expect(result).toBeNull();
+  });
+
+  it('does not trust an image extension when the browser reports a non-image MIME type', () => {
+    const result = validateImageFile({
+      type: 'application/pdf',
+      size: 1024,
+      name: 'not-really-a-photo.jpg',
+    });
+    expect(result).toContain('not a supported image type');
+  });
 });
 
 describe('S3 keys', () => {

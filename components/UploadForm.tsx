@@ -29,7 +29,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
         ? { file, status: 'error', percent: 0, error: problem }
         : { file, status: 'pending', percent: 0 };
     });
-    setQueue(next);
+    setQueue((previous) => [...previous, ...next]);
     setSuccessCount(0);
     e.target.value = '';
   }
@@ -64,22 +64,53 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
     if (uploaded > 0) onUploaded?.();
   }
 
+  function handleRetryFailed() {
+    setQueue((previous) =>
+      previous.map((item) =>
+        item.status === 'error'
+          ? { ...item, status: 'pending', percent: 0, error: undefined }
+          : item,
+      ),
+    );
+    setSuccessCount(0);
+  }
+
   const pendingCount = queue.filter((q) => q.status === 'pending').length;
+  const failedCount = queue.filter((q) => q.status === 'error').length;
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-white p-5">
-      <label
-        htmlFor="photo-input"
-        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink/20 px-4 py-10 text-center hover:border-accent"
-      >
+      <div className="rounded-xl border-2 border-dashed border-ink/20 px-4 py-6 text-center">
         <span className="text-3xl" aria-hidden>📷</span>
-        <span className="font-medium">Tap to choose photos</span>
-        <span className="text-sm text-ink/60">JPG, PNG, GIF, WEBP, or HEIC · up to 25 MB each</span>
-      </label>
+        <p className="mt-2 font-medium">Add photos from this device</p>
+        <p className="mt-1 text-sm text-ink/60">JPG, PNG, GIF, WEBP, AVIF, or HEIC · up to 25 MB each</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label
+            htmlFor="photo-camera-input"
+            className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
+          >
+            Take a photo
+          </label>
+          <label
+            htmlFor="photo-library-input"
+            className="cursor-pointer rounded-full border border-ink/20 bg-white px-4 py-3 font-medium text-ink hover:border-accent"
+          >
+            Choose photos
+          </label>
+        </div>
+      </div>
       <input
-        id="photo-input"
+        id="photo-camera-input"
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
+        capture="environment"
+        className="sr-only"
+        onChange={handleFileSelect}
+      />
+      <input
+        id="photo-library-input"
+        type="file"
+        accept="image/*,.heic,.heif"
         multiple
         className="sr-only"
         onChange={handleFileSelect}
@@ -116,6 +147,16 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
         <p className="mt-3 text-center text-xs text-ink/50">
           By uploading, you understand these photos will be visible to other event guests.
         </p>
+      ) : null}
+
+      {failedCount > 0 && !busy ? (
+        <button
+          type="button"
+          onClick={handleRetryFailed}
+          className="mt-3 w-full rounded-full border border-ink/20 bg-white py-2.5 font-medium text-ink hover:border-accent"
+        >
+          Retry {failedCount} failed photo{failedCount === 1 ? '' : 's'}
+        </button>
       ) : null}
 
       {pendingCount > 0 ? (

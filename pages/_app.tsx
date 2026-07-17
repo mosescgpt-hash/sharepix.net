@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import Head from 'next/head';
 import type { AppProps } from 'next/app';
 import { Amplify } from 'aws-amplify';
 import '@aws-amplify/ui-react/styles.css';
@@ -22,8 +24,24 @@ try {
 }
 
 export default function App({ Component, pageProps }: AppProps) {
+  useEffect(() => {
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      void navigator.serviceWorker.register('/sw.js');
+    }
+  }, []);
+
   return (
     <>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta name="theme-color" content="#123851" />
+        <meta name="application-name" content="sharepix.net" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="sharepix.net" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+      </Head>
       {!configured ? (
         <div className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
           AWS is not configured yet. Run <code>npx ampx sandbox</code> to generate{' '}
