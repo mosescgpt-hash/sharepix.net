@@ -2,9 +2,12 @@ import {
   buildPhotoKey,
   generateEventCode,
   isAllowedImageType,
+  isAllowedVideoType,
   isGalleryActive,
+  isVideoFilename,
   sanitizeFilename,
   validateImageFile,
+  validateMediaFile,
 } from '../lib/validation';
 import { computeAccessExpiresAt, getTier } from '../lib/pricing';
 
@@ -63,6 +66,28 @@ describe('image validation', () => {
       name: 'not-really-a-photo.jpg',
     });
     expect(result).toContain('not a supported image type');
+  });
+});
+
+describe('video validation', () => {
+  it('accepts common iPhone, Android, and web video types', () => {
+    expect(isAllowedVideoType('video/mp4')).toBe(true);
+    expect(isAllowedVideoType('video/quicktime')).toBe(true);
+    expect(isAllowedVideoType('video/webm')).toBe(true);
+  });
+
+  it('recognizes video filenames for gallery playback', () => {
+    expect(isVideoFilename('events/abc/photos/clip.MOV')).toBe(true);
+    expect(isVideoFilename('events/abc/photos/image.jpg')).toBe(false);
+  });
+
+  it('accepts a short video and rejects one over 100 MB', () => {
+    expect(validateMediaFile({ type: 'video/mp4', size: 20 * 1024 * 1024, name: 'clip.mp4' })).toBeNull();
+    expect(validateMediaFile({ type: 'video/mp4', size: 101 * 1024 * 1024, name: 'long.mp4' })).toContain('100 MB');
+  });
+
+  it('accepts an iPhone MOV when the browser omits its MIME type', () => {
+    expect(validateMediaFile({ type: '', size: 20 * 1024 * 1024, name: 'IMG_1234.MOV' })).toBeNull();
   });
 });
 

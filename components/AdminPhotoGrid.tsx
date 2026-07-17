@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { deleteEventPhoto, setPhotoApproval } from '@/lib/api';
+import { isVideoFilename } from '@/lib/validation';
 
 interface AdminPhotoGridProps {
   photos: DisplayPhoto[];
@@ -42,7 +43,7 @@ export default function AdminPhotoGrid({ photos, onChanged }: AdminPhotoGridProp
   if (photos.length === 0) {
     return (
       <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-ink/60">
-        No photos have been uploaded to this event yet.
+        No photos or videos have been uploaded to this event yet.
       </p>
     );
   }
@@ -56,6 +57,7 @@ export default function AdminPhotoGrid({ photos, onChanged }: AdminPhotoGridProp
         {photos.map((photo) => {
           const hidden = photo.approved === false;
           const busy = workingId === photo.id;
+          const isVideo = isVideoFilename(photo.s3Key);
           return (
             <figure
               key={photo.id}
@@ -63,13 +65,26 @@ export default function AdminPhotoGrid({ photos, onChanged }: AdminPhotoGridProp
                 hidden ? 'border-amber-400' : 'border-ink/10'
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photo.url}
-                alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
-                loading="lazy"
-                className={`aspect-square w-full object-cover ${hidden ? 'opacity-50' : ''}`}
-              />
+              {isVideo ? (
+                <video
+                  src={photo.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  aria-label={`Video uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+                  className={`aspect-square w-full bg-black object-contain ${hidden ? 'opacity-50' : ''}`}
+                />
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photo.url}
+                    alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+                    loading="lazy"
+                    className={`aspect-square w-full object-cover ${hidden ? 'opacity-50' : ''}`}
+                  />
+                </>
+              )}
               <figcaption className="space-y-2 px-3 py-2 text-xs">
                 <p className="truncate font-medium">{photo.uploadedBy || 'Anonymous'}</p>
                 {photo.uploadedByUserId ? (

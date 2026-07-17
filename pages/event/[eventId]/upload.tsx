@@ -42,7 +42,7 @@ export default function GuestUploadPage() {
   const active = isGalleryActive(event?.accessExpiresAt);
 
   return (
-    <Layout title={event ? `Upload to ${event.name}` : 'Upload photos'}>
+    <Layout title={event ? `Upload to ${event.name}` : 'Upload photos and videos'}>
       <section className="mx-auto max-w-lg py-8">
         {loading ? (
           <p className="text-center text-ink/60">Loading event…</p>
@@ -51,7 +51,7 @@ export default function GuestUploadPage() {
         ) : event ? (
           <>
             <p className="text-center text-sm uppercase tracking-wide text-ink/50">
-              You&apos;re adding photos to
+              You&apos;re adding photos and videos to
             </p>
             <h1 className="mt-1 text-center font-display text-3xl font-extrabold">
               {event.name}

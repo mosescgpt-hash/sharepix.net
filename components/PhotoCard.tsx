@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { downloadPhoto } from '@/lib/api';
+import { isVideoFilename } from '@/lib/validation';
 
 interface PhotoCardProps {
   photo: DisplayPhoto;
@@ -21,17 +22,31 @@ export default function PhotoCard({ photo }: PhotoCardProps) {
   const uploadedDate = photo.createdAt
     ? new Date(photo.createdAt).toLocaleDateString()
     : null;
+  const isVideo = isVideoFilename(photo.s3Key);
 
   return (
     <figure className="overflow-hidden rounded-xl border border-ink/10 bg-white">
-      {/* Signed S3 URLs change constantly, so a plain img tag is simpler than next/image here */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={photo.url}
-        alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
-        loading="lazy"
-        className="aspect-square w-full object-cover"
-      />
+      {isVideo ? (
+        <video
+          src={photo.url}
+          controls
+          playsInline
+          preload="metadata"
+          aria-label={`Video uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+          className="aspect-square w-full bg-black object-contain"
+        />
+      ) : (
+        <>
+          {/* Signed S3 URLs change constantly, so a plain img tag is simpler than next/image here */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photo.url}
+            alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+            loading="lazy"
+            className="aspect-square w-full object-cover"
+          />
+        </>
+      )}
       <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
         <div className="min-w-0">
           <p className="truncate font-medium">

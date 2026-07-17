@@ -1,6 +1,6 @@
 import { ChangeEvent, useState } from 'react';
 import { uploadEventPhoto } from '@/lib/api';
-import { validateImageFile } from '@/lib/validation';
+import { validateMediaFile } from '@/lib/validation';
 
 interface UploadFormProps {
   eventId: string;
@@ -24,7 +24,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     const next: QueuedFile[] = files.map((file) => {
-      const problem = validateImageFile(file);
+      const problem = validateMediaFile(file);
       return problem
         ? { file, status: 'error', percent: 0, error: problem }
         : { file, status: 'pending', percent: 0 };
@@ -82,27 +82,29 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
     <div className="rounded-2xl border border-ink/10 bg-white p-5">
       <div className="rounded-xl border-2 border-dashed border-ink/20 px-4 py-6 text-center">
         <span className="text-3xl" aria-hidden>📷</span>
-        <p className="mt-2 font-medium">Add photos from this device</p>
-        <p className="mt-1 text-sm text-ink/60">JPG, PNG, GIF, WEBP, AVIF, or HEIC · up to 25 MB each</p>
+        <p className="mt-2 font-medium">Add photos or videos</p>
+        <p className="mt-1 text-sm text-ink/60">
+          Photos up to 25 MB · MP4, MOV, or WEBM videos up to 100 MB
+        </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label
             htmlFor="photo-camera-input"
             className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
           >
-            Take a photo
+            Use camera
           </label>
           <label
             htmlFor="photo-library-input"
             className="cursor-pointer rounded-full border border-ink/20 bg-white px-4 py-3 font-medium text-ink hover:border-accent"
           >
-            Choose photos
+            Choose from device
           </label>
         </div>
       </div>
       <input
         id="photo-camera-input"
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif,.mov,.m4v"
         capture="environment"
         className="sr-only"
         onChange={handleFileSelect}
@@ -110,7 +112,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
       <input
         id="photo-library-input"
         type="file"
-        accept="image/*,.heic,.heif"
+        accept="image/*,video/*,.heic,.heif,.mov,.m4v"
         multiple
         className="sr-only"
         onChange={handleFileSelect}
@@ -145,7 +147,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
 
       {pendingCount > 0 ? (
         <p className="mt-3 text-center text-xs text-ink/50">
-          By uploading, you understand these photos will be visible to other event guests.
+          By uploading, you understand these photos and videos will be visible to other event guests.
         </p>
       ) : null}
 
@@ -155,7 +157,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
           onClick={handleRetryFailed}
           className="mt-3 w-full rounded-full border border-ink/20 bg-white py-2.5 font-medium text-ink hover:border-accent"
         >
-          Retry {failedCount} failed photo{failedCount === 1 ? '' : 's'}
+          Retry {failedCount} failed file{failedCount === 1 ? '' : 's'}
         </button>
       ) : null}
 
@@ -166,13 +168,13 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
           disabled={busy}
           className="mt-4 w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
         >
-          {busy ? 'Uploading…' : `Upload ${pendingCount} photo${pendingCount === 1 ? '' : 's'}`}
+          {busy ? 'Uploading…' : `Upload ${pendingCount} file${pendingCount === 1 ? '' : 's'}`}
         </button>
       ) : null}
 
       {successCount > 0 && !busy ? (
         <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-center text-sm text-green-700">
-          {successCount} photo{successCount === 1 ? '' : 's'} uploaded. Thanks for sharing! 🎉
+          {successCount} file{successCount === 1 ? '' : 's'} uploaded. Thanks for sharing! 🎉
         </p>
       ) : null}
     </div>
