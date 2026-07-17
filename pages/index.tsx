@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
+import HomepageEventAccess from '@/components/HomepageEventAccess';
 
 const steps = [
   {
@@ -49,24 +50,13 @@ export default function HomePage() {
           >
             See pricing
           </Link>
-          <Link
-            href="/my-events"
-            className="rounded-full border border-ink/20 px-8 py-3 font-medium hover:border-accent hover:text-accent"
-          >
-            Host login
-          </Link>
         </div>
-        <p className="mt-4 text-sm text-ink/60">
-          Already created an event?{' '}
-          <Link href="/my-events" className="font-medium text-accent underline-offset-4 hover:underline">
-            Sign in to manage it
-          </Link>
-          .
-        </p>
         <p className="mt-4 text-sm text-ink/50">
           Pay per event, with a monthly Corporate option coming soon.
         </p>
       </section>
+
+      <HomepageEventAccess />
 
       {/* How it works */}
       <section className="py-10">

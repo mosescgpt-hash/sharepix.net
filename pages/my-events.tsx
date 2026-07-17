@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
+import { signOut } from 'aws-amplify/auth';
 import Layout from '@/components/Layout';
 import { listMyEvents } from '@/lib/api';
+import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
 
@@ -13,16 +16,26 @@ function formatDate(value?: string | null) {
 }
 
 function MyEventsPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<QREvent[]>([]);
+  const [admin, setAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listMyEvents()
-      .then(setEvents)
+    Promise.all([listMyEvents(), isGlobalAdmin().catch(() => false)])
+      .then(([ownedEvents, globalAdmin]) => {
+        setEvents(ownedEvents);
+        setAdmin(globalAdmin);
+      })
       .catch(() => setError('We could not load your events. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleSignOut() {
+    await signOut();
+    await router.replace('/');
+  }
 
   return (
     <Layout title="My events">
@@ -37,12 +50,25 @@ function MyEventsPage() {
               Open an event to manage uploads, download media, or update its QR code.
             </p>
           </div>
-          <Link
-            href="/create-event"
-            className="self-start rounded-full bg-ink px-6 py-3 font-medium text-white hover:bg-night sm:self-auto"
-          >
-            Create another event
-          </Link>
+          <div className="flex flex-wrap gap-2 sm:justify-end">
+            {admin ? (
+              <Link href="/global-admin" className="rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent hover:text-white">
+                Global admin
+              </Link>
+            ) : null}
+            <Link href="/account-security" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
+              Account security
+            </Link>
+            <button type="button" onClick={handleSignOut} className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-red-500 hover:text-red-700">
+              Sign out
+            </button>
+            <Link
+              href="/create-event"
+              className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white hover:bg-night"
+            >
+              Create another event
+            </Link>
+          </div>
         </div>
 
         {loading ? (

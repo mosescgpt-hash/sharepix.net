@@ -1,38 +1,9 @@
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { getCurrentUser, signOut } from 'aws-amplify/auth';
-import { Hub } from 'aws-amplify/utils';
+import { useState } from 'react';
 import Logo from '@/components/Logo';
-import { isGlobalAdmin } from '@/lib/admin';
-import InstallAppButton from '@/components/InstallAppButton';
 
 export default function Navbar() {
-  const [username, setUsername] = useState<string | null>(null);
-  const [admin, setAdmin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    const refresh = () => {
-      getCurrentUser()
-        .then(async (user) => {
-          const loginId = user.signInDetails?.loginId;
-          setUsername(loginId ? loginId.split('@')[0] : 'host');
-          setAdmin(await isGlobalAdmin());
-        })
-        .catch(() => {
-          setUsername(null);
-          setAdmin(false);
-        });
-    };
-    refresh();
-    const unsubscribe = Hub.listen('auth', refresh);
-    return () => unsubscribe();
-  }, []);
-
-  async function handleSignOut() {
-    await signOut();
-    setUsername(null);
-  }
 
   const links = (
     <>
@@ -46,28 +17,8 @@ export default function Navbar() {
         Create an event
       </Link>
       <Link href="/my-events" className="font-medium text-ink/75 hover:text-accent">
-        {username ? 'My events' : 'Host login'}
+        Host access
       </Link>
-      {admin ? (
-        <Link href="/global-admin" className="font-medium text-accent hover:text-ink">
-          Global admin
-        </Link>
-      ) : null}
-      <InstallAppButton />
-      {username ? (
-        <>
-          <Link href="/account-security" className="text-ink/70 hover:text-accent">
-            Security
-          </Link>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="text-ink/70 hover:text-accent"
-          >
-            Sign out ({username})
-          </button>
-        </>
-      ) : null}
     </>
   );
 
