@@ -13,7 +13,9 @@ import {
   listAllPhotos,
   listDiscountCodes,
   setDiscountCodeActive,
+  startCheckout,
 } from '@/lib/api';
+import { PRICING_TIERS } from '@/lib/pricing';
 import { DiscountCode, QREvent } from '@/lib/types';
 
 function defaultExpiryValue(): string {
@@ -147,6 +149,18 @@ function GlobalAdminPage() {
     }
   }
 
+  async function handleTestCheckout(tier: string) {
+    setWorking(`checkout-${tier}`);
+    setError(null);
+    try {
+      const url = await startCheckout(tier);
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Checkout could not be started.');
+      setWorking(null);
+    }
+  }
+
   async function handleAddCredits(event: QREvent) {
     const input = window.prompt(
       `Add how many extra photos to “${event.name}”?\n\nPlan limit: ${event.photoLimit ?? 'unlimited'} · Current add-on: ${event.extraPhotoCredits ?? 0}\n\nUse a negative number to remove add-on capacity.`,
@@ -233,6 +247,30 @@ function GlobalAdminPage() {
               <div className="rounded-2xl border border-ink/10 bg-white p-5">
                 <p className="text-sm text-ink/60">Active pilot codes</p>
                 <p className="font-display text-3xl font-bold">{activeCodes}</p>
+              </div>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-dashed border-accent/40 bg-accent/5 p-5">
+              <div className="flex flex-col gap-1">
+                <h2 className="font-display text-xl font-bold">Payments — test mode</h2>
+                <p className="text-sm text-ink/70">
+                  Run a real Stripe checkout with the test card <span className="font-mono">4242 4242 4242 4242</span>{' '}
+                  (any future date / any CVC). No real money moves. Events stay free during the pilot — this only
+                  confirms the payment flow works.
+                </p>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {PRICING_TIERS.map((tier) => (
+                  <button
+                    key={tier.id}
+                    type="button"
+                    disabled={working === `checkout-${tier.id}`}
+                    onClick={() => void handleTestCheckout(tier.id)}
+                    className="rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                  >
+                    {working === `checkout-${tier.id}` ? 'Starting…' : `Test ${tier.name} · $${tier.price}`}
+                  </button>
+                ))}
               </div>
             </div>
 

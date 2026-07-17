@@ -5,6 +5,7 @@ import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
+import { stripeCheckout } from './functions/stripe-checkout/resource';
 
 const backend = defineBackend({
   auth,
@@ -12,6 +13,7 @@ const backend = defineBackend({
   storage,
   deleteEventPhoto,
   createEventPhoto,
+  stripeCheckout,
 });
 
 const eventTable = backend.data.resources.tables.Event;
