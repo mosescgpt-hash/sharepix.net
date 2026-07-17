@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.env*.local
+amplify_outputs.json
+.amplify/
+build/
+dist/
+coverage/
+*.tsbuildinfo
