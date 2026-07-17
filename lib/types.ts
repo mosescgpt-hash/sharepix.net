@@ -5,6 +5,8 @@ export interface QREvent {
   date?: string | null;
   tier: string;
   photoLimit?: number | null;
+  extraPhotoCredits?: number | null;
+  photoCount?: number | null;
   accessExpiresAt?: string | null;
   createdBy?: string | null;
   owner?: string | null;

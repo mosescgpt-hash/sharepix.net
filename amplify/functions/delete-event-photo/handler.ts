@@ -2,6 +2,7 @@ import {
   DynamoDBClient,
   GetItemCommand,
   DeleteItemCommand,
+  UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import type { Schema } from '../../data/resource';
@@ -10,6 +11,7 @@ const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
 
 const TABLE = process.env.PHOTO_TABLE_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const BUCKET = process.env.BUCKET_NAME as string;
 
 type Handler = Schema['deleteEventPhoto']['functionHandler'];
@@ -60,6 +62,23 @@ export const handler: Handler = async (event) => {
   await dynamo.send(
     new DeleteItemCommand({ TableName: TABLE, Key: { id: { S: photoId } } }),
   );
+
+  // Free the slot so the event's photo limit reflects the deletion. Best-effort
+  // and floored at zero so the counter never goes negative.
+  const eventId = item.eventId?.S;
+  if (eventId) {
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'ADD photoCount :neg',
+          ConditionExpression: 'attribute_exists(photoCount) AND photoCount > :zero',
+          ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
+        }),
+      )
+      .catch(() => undefined);
+  }
 
   return { success: true, message: 'Photo deleted.' };
 };
