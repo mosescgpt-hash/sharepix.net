@@ -240,20 +240,6 @@ export async function fetchEvent(eventId: string): Promise<QREvent | null> {
   return (data as QREvent) ?? null;
 }
 
-/** Find an event from the short code printed with its QR materials. */
-export async function findEventByCode(eventCode: string): Promise<QREvent | null> {
-  const code = eventCode.trim().toUpperCase();
-  if (!code) return null;
-
-  const { data, errors } = await client.models.Event.list({
-    filter: { eventCode: { eq: code } },
-    limit: 1,
-    authMode: await authModeFor(),
-  });
-  if (errors?.length) throw new Error('The event code could not be checked.');
-  return ((data ?? [])[0] as QREvent | undefined) ?? null;
-}
-
 export interface EventUploadContext {
   eventId: string;
   eventOwner: string | null;

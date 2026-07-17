@@ -1,17 +1,12 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import InstallAppButton from '@/components/InstallAppButton';
-import { findEventByCode, getCurrentUserInfo, listMyEvents } from '@/lib/api';
+import { getCurrentUserInfo, listMyEvents } from '@/lib/api';
 import { QREvent } from '@/lib/types';
 
 type HostState = 'loading' | 'signed-out' | 'signed-in';
 
 export default function HomepageEventAccess() {
-  const router = useRouter();
-  const [eventCode, setEventCode] = useState('');
-  const [codeBusy, setCodeBusy] = useState(false);
-  const [codeError, setCodeError] = useState<string | null>(null);
   const [hostState, setHostState] = useState<HostState>('loading');
   const [events, setEvents] = useState<QREvent[]>([]);
 
@@ -37,70 +32,9 @@ export default function HomepageEventAccess() {
     };
   }, []);
 
-  async function openEvent(e: FormEvent) {
-    e.preventDefault();
-    if (!eventCode.trim()) {
-      setCodeError('Enter the event code first.');
-      return;
-    }
-
-    setCodeBusy(true);
-    setCodeError(null);
-    try {
-      const event = await findEventByCode(eventCode);
-      if (!event) {
-        setCodeError('We could not find that event code. Check it and try again.');
-        return;
-      }
-      await router.push(`/event/${event.id}`);
-    } catch {
-      setCodeError('We could not check that code right now. Please try again.');
-    } finally {
-      setCodeBusy(false);
-    }
-  }
-
   return (
-    <section className="grid gap-5 py-10 lg:grid-cols-2" aria-labelledby="event-access-heading">
-      <div className="rounded-2xl border border-ink/10 bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">Guest access</p>
-        <h2 id="event-access-heading" className="mt-1 font-display text-2xl font-bold">
-          Enter an event
-        </h2>
-        <p className="mt-2 text-sm text-ink/65">
-          Scan the event QR code or type the short event code supplied by the host.
-        </p>
-        <form onSubmit={openEvent} className="mt-5 flex flex-col gap-2 sm:flex-row">
-          <label htmlFor="homepage-event-code" className="sr-only">Event code</label>
-          <input
-            id="homepage-event-code"
-            value={eventCode}
-            onChange={(e) => {
-              setEventCode(e.target.value.toUpperCase());
-              setCodeError(null);
-            }}
-            placeholder="Enter event code"
-            autoCapitalize="characters"
-            autoComplete="off"
-            maxLength={12}
-            className="min-w-0 flex-1 rounded-xl border border-ink/20 px-4 py-3 uppercase tracking-widest focus:border-accent focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={codeBusy}
-            className="rounded-xl bg-accent px-5 py-3 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-          >
-            {codeBusy ? 'Opening…' : 'Open event'}
-          </button>
-        </form>
-        {codeError ? (
-          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
-            {codeError}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="rounded-2xl border border-ink/10 bg-ink p-6 text-white shadow-sm">
+    <section className="mx-auto max-w-3xl py-10" aria-label="Host event access">
+      <div className="rounded-2xl border border-ink/10 bg-ink p-6 text-white shadow-sm sm:p-8">
         <p className="text-sm font-medium uppercase tracking-[0.16em] text-mint">Event hosts</p>
         {hostState === 'loading' ? (
           <div className="mt-3 space-y-3" aria-label="Checking host account">
@@ -109,9 +43,9 @@ export default function HomepageEventAccess() {
           </div>
         ) : hostState === 'signed-out' ? (
           <>
-            <h2 className="mt-1 font-display text-2xl font-bold">Already created an event?</h2>
+            <h2 id="host-access-heading" className="mt-1 font-display text-2xl font-bold">Already created an event?</h2>
             <p className="mt-2 text-sm text-white/75">
-              Sign in to open your events, manage uploads, download media, and edit QR codes.
+              Sign in to open your events, manage uploads, and get your event QR code anytime.
             </p>
             <Link
               href="/my-events"
@@ -123,7 +57,7 @@ export default function HomepageEventAccess() {
         ) : (
           <>
             <div className="mt-1 flex items-center justify-between gap-3">
-              <h2 className="font-display text-2xl font-bold">Your events</h2>
+              <h2 id="host-access-heading" className="font-display text-2xl font-bold">Your events</h2>
               <Link href="/my-events" className="text-sm font-medium text-mint hover:underline">
                 View all
               </Link>
@@ -131,14 +65,17 @@ export default function HomepageEventAccess() {
             {events.length ? (
               <div className="mt-4 space-y-2">
                 {events.map((event) => (
-                  <Link
-                    key={event.id}
-                    href={`/event/${event.id}/admin`}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-white/10 px-4 py-3 hover:bg-white/15"
-                  >
+                  <div key={event.id} className="flex flex-col gap-3 rounded-xl bg-white/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <span className="min-w-0 truncate font-medium">{event.name}</span>
-                    <span className="shrink-0 text-sm text-mint">Open →</span>
-                  </Link>
+                    <div className="flex shrink-0 gap-2 text-sm">
+                      <Link href={`/event/${event.id}/admin`} className="rounded-full border border-white/20 px-3 py-1.5 hover:border-mint hover:text-mint">
+                        Manage
+                      </Link>
+                      <Link href={`/event/${event.id}/admin#event-qr-code`} className="rounded-full bg-mint px-3 py-1.5 font-semibold text-ink hover:bg-white">
+                        QR code
+                      </Link>
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (

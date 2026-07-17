@@ -20,7 +20,7 @@ function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showQR, setShowQR] = useState(false);
+  const [showQR, setShowQR] = useState(true);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -58,6 +58,14 @@ function AdminDashboardPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!event || !router.asPath.endsWith('#event-qr-code')) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById('event-qr-code')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [event, router.asPath]);
 
   const tier = event ? getTier(event.tier) : undefined;
   const hiddenCount = photos.filter((p) => p.approved === false).length;
@@ -113,7 +121,7 @@ function AdminDashboardPage() {
             </div>
 
             {showQR ? (
-              <div className="mx-auto mt-6 max-w-sm">
+              <div id="event-qr-code" className="mx-auto mt-6 max-w-sm scroll-mt-24">
                 <EventQRCode
                   eventId={event.id}
                   eventName={event.name}

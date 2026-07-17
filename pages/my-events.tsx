@@ -108,16 +108,22 @@ function MyEventsPage() {
                       Gallery access through {new Date(event.accessExpiresAt).toLocaleDateString()}
                     </p>
                   ) : null}
-                  <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                  <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                    <Link
+                      href={`/event/${event.id}/admin#event-qr-code`}
+                      className="rounded-full bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-accent/90"
+                    >
+                      QR code
+                    </Link>
                     <Link
                       href={`/event/${event.id}/admin`}
-                      className="flex-1 rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night"
+                      className="rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night"
                     >
                       Manage event
                     </Link>
                     <Link
                       href={`/event/${event.id}`}
-                      className="flex-1 rounded-full border border-ink/20 px-4 py-2.5 text-center text-sm font-medium hover:border-accent hover:text-accent"
+                      className="rounded-full border border-ink/20 px-4 py-2.5 text-center text-sm font-medium hover:border-accent hover:text-accent"
                     >
                       View gallery
                     </Link>
