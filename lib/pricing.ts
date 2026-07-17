@@ -21,7 +21,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Up to 100 photos',
       'Gallery access for 2 weeks',
       'Standard QR code',
-      'Host photo and video downloads (sign-in required)',
+      'Host individual and bulk ZIP downloads (sign-in required)',
     ],
   },
   {
@@ -36,7 +36,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Up to 1,000 photos',
       'Gallery access for 3 months',
       'Customizable QR code',
-      'Host photo and video downloads',
+      'Host individual and bulk ZIP downloads',
       'Uploader names on photos',
     ],
   },
@@ -54,7 +54,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Event branding',
       'Moderation tools (approve before showing)',
       'Guest and host photo and video downloads',
-      'Bulk ZIP downloads',
+      'Guest and host bulk ZIP downloads',
     ],
   },
 ];
