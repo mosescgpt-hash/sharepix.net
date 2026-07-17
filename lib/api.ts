@@ -208,6 +208,30 @@ export async function deleteDiscountCode(code: string): Promise<void> {
   if (errors?.length) throw new Error('Discount code could not be removed.');
 }
 
+/**
+ * Global-admin grant of extra photo capacity to one event (the pilot version of
+ * the "buy more storage" add-on). `additionalCredits` is added to whatever the
+ * event already has; the effective limit becomes photoLimit + extraPhotoCredits.
+ */
+export async function addEventPhotoCredits(
+  eventId: string,
+  additionalCredits: number,
+): Promise<number> {
+  const { data: existing, errors: readErrors } = await client.models.Event.get(
+    { id: eventId },
+    { authMode: 'userPool' },
+  );
+  if (readErrors?.length || !existing) throw new Error('The event could not be loaded.');
+
+  const nextCredits = Math.max(0, (existing.extraPhotoCredits ?? 0) + additionalCredits);
+  const { errors } = await client.models.Event.update(
+    { id: eventId, extraPhotoCredits: nextCredits },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The photo capacity could not be updated.');
+  return nextCredits;
+}
+
 export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
   const { data: photos, errors: photoListErrors } = await client.models.Photo.listPhotoByEventId(
     { eventId },

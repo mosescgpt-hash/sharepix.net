@@ -4,6 +4,7 @@ import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import { isGlobalAdmin } from '@/lib/admin';
 import {
+  addEventPhotoCredits,
   createDiscountCode,
   deleteDiscountCode,
   deleteEventAsGlobalAdmin,
@@ -146,6 +147,30 @@ function GlobalAdminPage() {
     }
   }
 
+  async function handleAddCredits(event: QREvent) {
+    const input = window.prompt(
+      `Add how many extra photos to “${event.name}”?\n\nPlan limit: ${event.photoLimit ?? 'unlimited'} · Current add-on: ${event.extraPhotoCredits ?? 0}\n\nUse a negative number to remove add-on capacity.`,
+      '100',
+    );
+    if (input === null) return;
+    const amount = parseInt(input, 10);
+    if (!Number.isFinite(amount) || amount === 0) {
+      setError('Enter a whole number of photos to add or remove.');
+      return;
+    }
+
+    setWorking(`credits-${event.id}`);
+    setError(null);
+    try {
+      await addEventPhotoCredits(event.id, amount);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The photo capacity could not be updated.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleDeleteEvent(event: QREvent) {
     if (
       !window.confirm(
@@ -237,7 +262,11 @@ function GlobalAdminPage() {
                         <div className="min-w-0">
                           <h3 className="truncate font-display text-lg font-bold">{event.name}</h3>
                           <p className="mt-1 text-sm text-ink/60">
-                            {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0} photos
+                            {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
+                            {event.photoLimit == null
+                              ? ' photos (unlimited)'
+                              : ` / ${event.photoLimit + (event.extraPhotoCredits ?? 0)} photos`}
+                            {event.extraPhotoCredits ? ` (+${event.extraPhotoCredits} add-on)` : ''}
                           </p>
                           <p className="mt-1 text-xs text-ink/50">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
@@ -250,6 +279,16 @@ function GlobalAdminPage() {
                           <Link href={`/event/${event.id}/admin`} className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent">
                             Manage
                           </Link>
+                          {event.photoLimit != null ? (
+                            <button
+                              type="button"
+                              disabled={working === `credits-${event.id}`}
+                              onClick={() => void handleAddCredits(event)}
+                              className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent disabled:opacity-50"
+                            >
+                              Add photos
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             disabled={working === `event-${event.id}`}
