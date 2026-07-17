@@ -50,7 +50,9 @@ export default function HomePage() {
             See pricing
           </Link>
         </div>
-        <p className="mt-4 text-sm text-ink/50">Pay per event. No subscription.</p>
+        <p className="mt-4 text-sm text-ink/50">
+          Pay per event, with a monthly Corporate option coming soon.
+        </p>
       </section>
 
       {/* How it works */}

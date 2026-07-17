@@ -3,6 +3,7 @@
 import { generateClient } from 'aws-amplify/data';
 import { getCurrentUser } from 'aws-amplify/auth';
 import { uploadData, getUrl, remove, downloadData } from 'aws-amplify/storage';
+import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
 import {
   DiscountCode,
@@ -198,7 +199,8 @@ export async function fetchEvent(eventId: string): Promise<QREvent | null> {
 export async function uploadEventPhoto(
   eventId: string,
   file: File,
-  onProgress?: (p: { loaded: number; total: number }) => void
+  onProgress?: (p: { loaded: number; total: number }) => void,
+  uploaderName?: string,
 ): Promise<QRPhoto> {
   const key = buildPhotoKey(eventId, file.name);
   const user = await getCurrentUserInfo();
@@ -224,7 +226,7 @@ export async function uploadEventPhoto(
     {
       eventId,
       s3Key: key,
-      uploadedBy: user?.displayName ?? 'Anonymous',
+      uploadedBy: user?.displayName ?? (uploaderName?.trim().slice(0, 60) || 'Anonymous'),
       uploadedByUserId: user?.userId ?? null,
       approved: true, // hosts can hide from the admin dashboard
       eventOwner: event.owner ?? null,
@@ -286,6 +288,38 @@ export async function downloadPhoto(photo: QRPhoto): Promise<void> {
   const link = document.createElement('a');
   link.href = blobUrl;
   link.download = photo.s3Key.split('/').pop() ?? 'photo.jpg';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
+/** Creates one ZIP download from selected photos and videos. */
+export async function downloadPhotosAsZip(
+  photos: QRPhoto[],
+  archiveName: string,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<void> {
+  if (photos.length === 0) throw new Error('Select at least one photo or video.');
+
+  const zip = new JSZip();
+  for (let index = 0; index < photos.length; index += 1) {
+    const photo = photos[index];
+    const { body } = await downloadData({ path: photo.s3Key }).result;
+    const blob = await body.blob();
+    const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
+    const numberedName = `${String(index + 1).padStart(3, '0')}-${originalName}`;
+    zip.file(numberedName, blob);
+    onProgress?.(index + 1, photos.length);
+  }
+
+  // Photos and videos are already compressed, so STORE is faster and uses less memory.
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeName = archiveName.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-|-$/g, '') || 'sharepix';
+  link.href = blobUrl;
+  link.download = `${safeName}.zip`;
   document.body.appendChild(link);
   link.click();
   link.remove();

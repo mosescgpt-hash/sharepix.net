@@ -1,4 +1,4 @@
-import { ChangeEvent, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import { uploadEventPhoto } from '@/lib/api';
 import { validateMediaFile } from '@/lib/validation';
 
@@ -20,6 +20,25 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
+  const [uploaderName, setUploaderName] = useState('');
+
+  useEffect(() => {
+    setUploaderName(window.localStorage.getItem('sharepix-uploader-name') ?? '');
+  }, []);
+
+  function uploaderLabel(): string {
+    const entered = uploaderName.trim().slice(0, 60);
+    if (entered) {
+      window.localStorage.setItem('sharepix-uploader-name', entered);
+      return entered;
+    }
+
+    const savedLabel = window.localStorage.getItem('sharepix-guest-label');
+    if (savedLabel) return savedLabel;
+    const label = `Guest ${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    window.localStorage.setItem('sharepix-guest-label', label);
+    return label;
+  }
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -41,6 +60,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
   async function handleUpload() {
     setBusy(true);
     let uploaded = 0;
+    const uploadedBy = uploaderLabel();
 
     for (let i = 0; i < queue.length; i += 1) {
       const item = queue[i];
@@ -50,7 +70,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
       try {
         await uploadEventPhoto(eventId, item.file, ({ loaded, total }) => {
           updateItem(i, { percent: total ? Math.round((loaded / total) * 100) : 0 });
-        });
+        }, uploadedBy);
         updateItem(i, { status: 'done', percent: 100 });
         uploaded += 1;
       } catch (err) {
@@ -80,6 +100,21 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-white p-5">
+      <label htmlFor="uploader-name" className="mb-4 block">
+        <span className="text-sm font-medium">Your name or nickname (optional)</span>
+        <input
+          id="uploader-name"
+          type="text"
+          value={uploaderName}
+          maxLength={60}
+          onChange={(event) => setUploaderName(event.target.value)}
+          placeholder="Example: Aunt Maya"
+          className="mt-1.5 w-full rounded-lg border border-ink/20 px-3 py-2.5 outline-none focus:border-accent"
+        />
+        <span className="mt-1 block text-xs text-ink/50">
+          This helps everyone sort by uploader. If left blank, this browser gets a reusable guest label.
+        </span>
+      </label>
       <div className="rounded-xl border-2 border-dashed border-ink/20 px-4 py-6 text-center">
         <span className="text-3xl" aria-hidden>📷</span>
         <p className="mt-2 font-medium">Add photos or videos</p>

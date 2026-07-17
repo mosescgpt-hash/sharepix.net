@@ -26,7 +26,7 @@ export default function Layout({ title, children }: LayoutProps) {
         {children}
       </main>
       <footer className="border-t-4 border-mint bg-ink py-6 text-center text-sm text-white/80">
-        sharepix.net · Capture. Connect. Celebrate. · pay per event, no subscription
+        sharepix.net · Capture. Connect. Celebrate. · event plans plus Corporate monthly
       </footer>
     </div>
   );

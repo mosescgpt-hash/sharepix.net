@@ -3,8 +3,9 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import PhotoGrid from '@/components/PhotoGrid';
-import { fetchEvent, fetchEventPhotos } from '@/lib/api';
+import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { isGalleryActive } from '@/lib/validation';
+import { canDownloadEventMedia, isEventHost } from '@/lib/gallery';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 
 export default function EventGalleryPage() {
@@ -15,6 +16,7 @@ export default function EventGalleryPage() {
   const [photos, setPhotos] = useState<DisplayPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [host, setHost] = useState(false);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -27,6 +29,8 @@ export default function EventGalleryPage() {
         return;
       }
       setEvent(ev);
+      const user = await getCurrentUserInfo();
+      setHost(isEventHost(ev, user));
       if (isGalleryActive(ev.accessExpiresAt)) {
         const items = await fetchEventPhotos(eventId);
         setPhotos(items);
@@ -43,6 +47,7 @@ export default function EventGalleryPage() {
   }, [load]);
 
   const active = isGalleryActive(event?.accessExpiresAt);
+  const canDownload = event ? canDownloadEventMedia(event.tier, host) : false;
 
   return (
     <Layout title={event ? event.name : 'Event gallery'}>
@@ -58,7 +63,7 @@ export default function EventGalleryPage() {
             <div className="flex flex-col items-center gap-2 text-center">
               <h1 className="font-display text-3xl font-extrabold sm:text-4xl">{event.name}</h1>
               <p className="text-ink/60">
-                {photos.length} photo{photos.length === 1 ? '' : 's'} shared by guests
+                {photos.length} item{photos.length === 1 ? '' : 's'} shared by guests
               </p>
               <div className="mt-2 flex gap-3 text-sm">
                 <Link
@@ -79,7 +84,12 @@ export default function EventGalleryPage() {
 
             <div className="mt-8">
               {active ? (
-                <PhotoGrid photos={photos} />
+                <PhotoGrid
+                  photos={photos}
+                  canDownload={canDownload}
+                  eventName={event.name}
+                  downloadMessage="Guest downloads are included with Premium. Event hosts can sign in to download on any plan."
+                />
               ) : (
                 <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
                   This gallery&apos;s access window has ended. Hosts can still reach it

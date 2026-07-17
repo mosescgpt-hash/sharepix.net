@@ -21,7 +21,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Up to 100 photos',
       'Gallery access for 2 weeks',
       'Standard QR code',
-      'Photo downloads',
+      'Host photo and video downloads (sign-in required)',
     ],
   },
   {
@@ -36,7 +36,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Up to 1,000 photos',
       'Gallery access for 3 months',
       'Customizable QR code',
-      'Photo downloads',
+      'Host photo and video downloads',
       'Uploader names on photos',
     ],
   },
@@ -53,10 +53,25 @@ export const PRICING_TIERS: PricingTier[] = [
       'Customizable QR code',
       'Event branding',
       'Moderation tools (approve before showing)',
-      'Photo downloads',
+      'Guest and host photo and video downloads',
+      'Bulk ZIP downloads',
     ],
   },
 ];
+
+export const CORPORATE_PLAN = {
+  name: 'Corporate',
+  priceLabel: 'Monthly plan',
+  accessLabel: 'Multiple events under one account',
+  features: [
+    'Multiple active events',
+    'Central event and storage dashboard',
+    'Team access and permissions',
+    'Custom company branding',
+    'Guest downloads and bulk ZIP downloads',
+    'Priority support',
+  ],
+};
 
 export function getTier(id: string): PricingTier | undefined {
   return PRICING_TIERS.find((t) => t.id === id);
