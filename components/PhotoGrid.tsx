@@ -12,6 +12,15 @@ interface PhotoGridProps {
   downloadMessage?: string;
 }
 
+const SORT_STORAGE_KEY = 'sharepix-gallery-sort';
+const SORT_OPTIONS: GallerySort[] = [
+  'date-newest',
+  'date-oldest',
+  'time-newest',
+  'time-oldest',
+  'uploader',
+];
+
 export default function PhotoGrid({
   photos,
   emptyMessage,
@@ -25,6 +34,19 @@ export default function PhotoGrid({
   const [downloadProgress, setDownloadProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const sortedPhotos = useMemo(() => sortGalleryPhotos(photos, sort), [photos, sort]);
+
+  // Restore the last chosen sort so it survives a gallery refresh.
+  useEffect(() => {
+    const saved = window.localStorage.getItem(SORT_STORAGE_KEY);
+    if (saved && (SORT_OPTIONS as string[]).includes(saved)) {
+      setSort(saved as GallerySort);
+    }
+  }, []);
+
+  function changeSort(next: GallerySort) {
+    setSort(next);
+    window.localStorage.setItem(SORT_STORAGE_KEY, next);
+  }
 
   useEffect(() => {
     const currentIds = new Set(photos.map((photo) => photo.id));
@@ -74,7 +96,7 @@ export default function PhotoGrid({
           Sort
           <select
             value={sort}
-            onChange={(event) => setSort(event.target.value as GallerySort)}
+            onChange={(event) => changeSort(event.target.value as GallerySort)}
             className="rounded-lg border border-ink/20 bg-white px-3 py-2"
           >
             <option value="date-newest">Date — newest day</option>
