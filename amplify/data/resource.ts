@@ -1,5 +1,6 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
+import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
 
 /**
  * SharePix data models.
@@ -17,6 +18,12 @@ const schema = a.schema({
       date: a.date(),
       tier: a.string().required(),
       photoLimit: a.integer(),
+      // Extra photo capacity purchased on top of the plan (the "buy more
+      // storage" add-on). Effective limit = photoLimit + extraPhotoCredits.
+      extraPhotoCredits: a.integer(),
+      // Running count of photos, maintained by the create/delete functions so
+      // the limit can be enforced atomically without scanning the table.
+      photoCount: a.integer(),
       accessExpiresAt: a.datetime(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
@@ -40,11 +47,15 @@ const schema = a.schema({
       eventOwner: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
+    // No direct `create`: photos are created only through the createEventPhoto
+    // function, which stamps eventOwner from the event server-side and enforces
+    // the photo limit. Clients can therefore no longer spoof ownership,
+    // self-approve, or bypass the limit.
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner'),
       allow.group('ADMINS'),
-      allow.authenticated().to(['create', 'read']),
-      allow.guest().to(['create', 'read']),
+      allow.authenticated().to(['read']),
+      allow.guest().to(['read']),
     ]),
 
   DownloadShare: a
@@ -90,6 +101,33 @@ const schema = a.schema({
     success: a.boolean().required(),
     message: a.string(),
   }),
+
+  PhotoUploadResult: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    s3Key: a.string().required(),
+    previewS3Key: a.string(),
+    uploadedBy: a.string(),
+    uploadedByUserId: a.string(),
+    approved: a.boolean(),
+    eventOwner: a.string(),
+    createdAt: a.string(),
+  }),
+
+  // Creates a photo record after stamping eventOwner from the event and
+  // enforcing the event's photo limit (plan limit + purchased extra credits).
+  createEventPhoto: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      s3Key: a.string().required(),
+      previewS3Key: a.string(),
+      uploadedBy: a.string(),
+      uploadedByUserId: a.string(),
+    })
+    .returns(a.ref('PhotoUploadResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(createEventPhotoFn)),
 
   // Deletes a photo's S3 objects and record behind an ownership check, so S3
   // delete permission never has to be granted to every signed-in user.

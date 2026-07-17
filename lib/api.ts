@@ -369,16 +369,17 @@ export async function uploadEventPhotoWithContext(
     );
   }
 
+  // Creation goes through the function so eventOwner is stamped from the event
+  // and the photo limit is enforced server-side — the client can no longer set
+  // ownership/approval or exceed the limit.
   const { data: photo } = await retryTransient(async () => {
-    const result = await client.models.Photo.create(
+    const result = await client.mutations.createEventPhoto(
       {
         eventId,
         s3Key: key,
-        previewS3Key: previewKey,
+        previewS3Key: previewKey ?? undefined,
         uploadedBy: context.uploadedBy,
         uploadedByUserId: context.uploadedByUserId,
-        approved: true,
-        eventOwner: context.eventOwner,
       },
       { authMode: context.authMode },
     );
