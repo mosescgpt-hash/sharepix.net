@@ -1,4 +1,5 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
+import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
 
 /**
  * SharePix data models.
@@ -84,6 +85,20 @@ const schema = a.schema({
     appliesToTier: a.string(),
     remainingUses: a.integer(),
   }),
+
+  PhotoDeletionResult: a.customType({
+    success: a.boolean().required(),
+    message: a.string(),
+  }),
+
+  // Deletes a photo's S3 objects and record behind an ownership check, so S3
+  // delete permission never has to be granted to every signed-in user.
+  deleteEventPhoto: a
+    .mutation()
+    .arguments({ photoId: a.id().required() })
+    .returns(a.ref('PhotoDeletionResult'))
+    .authorization((allow) => [allow.authenticated(), allow.group('ADMINS')])
+    .handler(a.handler.function(deleteEventPhotoFn)),
 
   validateDiscountCode: a
     .query()

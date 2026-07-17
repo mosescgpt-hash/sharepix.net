@@ -2,7 +2,7 @@
 // Gen 2 / aws-amplify v6: typed data client + path-based storage.
 import { generateClient } from 'aws-amplify/data';
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
-import { uploadData, getUrl, remove, downloadData } from 'aws-amplify/storage';
+import { uploadData, getUrl, downloadData } from 'aws-amplify/storage';
 import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
 import {
@@ -216,13 +216,13 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
   if (photoListErrors?.length) throw new Error('Event photos could not be loaded.');
 
   for (const photo of photos ?? []) {
-    await remove({ path: photo.s3Key });
-    if (photo.previewS3Key) await remove({ path: photo.previewS3Key });
-    const { errors } = await client.models.Photo.delete(
-      { id: photo.id },
+    // The function removes both the S3 objects and the record after an
+    // ownership/admin check — clients can no longer delete S3 objects directly.
+    const { data, errors } = await client.mutations.deleteEventPhoto(
+      { photoId: photo.id },
       { authMode: 'userPool' },
     );
-    if (errors?.length) throw new Error('A photo record could not be removed.');
+    if (errors?.length || !data?.success) throw new Error('A photo record could not be removed.');
   }
 
   const { errors } = await client.models.Event.delete(
@@ -255,7 +255,12 @@ export async function prepareEventUpload(
 ): Promise<EventUploadContext> {
   let user = await getCurrentUserInfo();
   let authMode: DataAuthMode = user ? 'userPool' : 'identityPool';
-  await fetchAuthSession().catch(() => undefined);
+  // Guests read the event through the identity pool's unauthenticated role. On a
+  // fresh browser those credentials may not be minted on the first call, so a
+  // guest request can go out unsigned and come back as
+  // "Not Authorized to access getEvent on type Query". Force the session so the
+  // very first read is signed with real guest credentials.
+  await fetchAuthSession({ forceRefresh: authMode === 'identityPool' }).catch(() => undefined);
 
   const loadEvent = async (mode: DataAuthMode) => {
     const result = await client.models.Event.get({ id: eventId }, { authMode: mode });
@@ -265,17 +270,35 @@ export async function prepareEventUpload(
     return result;
   };
 
+  // A guest whose credentials weren't ready the first time: an authorization
+  // failure here is usually a cold session rather than a real permission problem,
+  // so mint fresh guest credentials and try again before giving up.
+  const loadAsGuest = async () => {
+    try {
+      return await loadEvent('identityPool');
+    } catch (error) {
+      if (/not authoriz|unauthoriz|credential|no current user/i.test(errorMessage(error))) {
+        await fetchAuthSession({ forceRefresh: true }).catch(() => undefined);
+      }
+      return retryTransient(() => loadEvent('identityPool'));
+    }
+  };
+
   let response: Awaited<ReturnType<typeof loadEvent>>;
-  try {
-    // Try once so a stale signed-in session can fall back to guest mode immediately.
-    response = await loadEvent(authMode);
-  } catch (error) {
-    if (authMode === 'userPool' && /no current user|unauthoriz|token/i.test(errorMessage(error))) {
-      user = null;
-      authMode = 'identityPool';
-      response = await retryTransient(() => loadEvent(authMode));
-    } else {
-      response = await retryTransient(() => loadEvent(authMode));
+  if (authMode === 'identityPool') {
+    response = await loadAsGuest();
+  } else {
+    try {
+      // Try once so a stale signed-in session can fall back to guest mode immediately.
+      response = await loadEvent('userPool');
+    } catch (error) {
+      if (/no current user|unauthoriz|token/i.test(errorMessage(error))) {
+        user = null;
+        authMode = 'identityPool';
+        response = await loadAsGuest();
+      } else {
+        response = await retryTransient(() => loadEvent('userPool'));
+      }
     }
   }
 
@@ -283,7 +306,7 @@ export async function prepareEventUpload(
   if (!response.data && authMode === 'userPool') {
     user = null;
     authMode = 'identityPool';
-    response = await retryTransient(() => loadEvent(authMode));
+    response = await loadAsGuest();
   }
 
   const event = response.data as QREvent | null;
@@ -404,12 +427,13 @@ export async function setPhotoApproval(photoId: string, approved: boolean): Prom
   if (errors?.length) throw new Error('Could not update the photo.');
 }
 
-/** Deletes the metadata record and the S3 object. */
+/** Deletes the S3 objects and the metadata record via an ownership-checked function. */
 export async function deleteEventPhoto(photo: QRPhoto): Promise<void> {
-  const { errors } = await client.models.Photo.delete({ id: photo.id });
-  if (errors?.length) throw new Error('Could not delete the photo record.');
-  await remove({ path: photo.s3Key });
-  if (photo.previewS3Key) await remove({ path: photo.previewS3Key });
+  const { data, errors } = await client.mutations.deleteEventPhoto(
+    { photoId: photo.id },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length || !data?.success) throw new Error('Could not delete the photo.');
 }
 
 export async function createDownloadShare(
