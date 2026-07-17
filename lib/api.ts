@@ -1,7 +1,7 @@
 // All Amplify calls live here so pages/components stay simple.
 // Gen 2 / aws-amplify v6: typed data client + path-based storage.
 import { generateClient } from 'aws-amplify/data';
-import { getCurrentUser } from 'aws-amplify/auth';
+import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { uploadData, getUrl, remove, downloadData } from 'aws-amplify/storage';
 import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
@@ -18,6 +18,7 @@ import { computeAccessExpiresAt, getTier } from '@/lib/pricing';
 import { createPhotoPreview } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
+type DataAuthMode = 'userPool' | 'identityPool';
 
 export interface CurrentUser {
   userId: string;
@@ -40,8 +41,37 @@ export async function getCurrentUserInfo(): Promise<CurrentUser | null> {
 }
 
 /** Guests use the identity pool; signed-in users use the user pool. */
-async function authModeFor(): Promise<'userPool' | 'identityPool'> {
+async function authModeFor(): Promise<DataAuthMode> {
   return (await getCurrentUserInfo()) ? 'userPool' : 'identityPool';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function isTransientUploadError(error: unknown): boolean {
+  return /rate exceeded|throttl|too many request|network|timeout|temporar|no current user|credential/i.test(
+    errorMessage(error),
+  );
+}
+
+async function retryTransient<T>(operation: () => Promise<T>, attempts = 4): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientUploadError(error) || attempt === attempts - 1) throw error;
+      // Refresh credentials only when the session was lost; throttling needs quiet backoff instead.
+      if (/no current user|credential/i.test(errorMessage(error))) {
+        await fetchAuthSession({ forceRefresh: true }).catch(() => undefined);
+      }
+      const delay = 600 * 2 ** attempt + Math.floor(Math.random() * 250);
+      await new Promise((resolve) => window.setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
 }
 
 export async function createNewEvent(input: {
@@ -194,6 +224,64 @@ export async function fetchEvent(eventId: string): Promise<QREvent | null> {
   return (data as QREvent) ?? null;
 }
 
+export interface EventUploadContext {
+  eventId: string;
+  eventOwner: string | null;
+  authMode: DataAuthMode;
+  uploadedBy: string;
+  uploadedByUserId: string | null;
+}
+
+/** Resolve auth, guest credentials, and the event once for an entire upload batch. */
+export async function prepareEventUpload(
+  eventId: string,
+  uploaderName?: string,
+): Promise<EventUploadContext> {
+  let user = await getCurrentUserInfo();
+  let authMode: DataAuthMode = user ? 'userPool' : 'identityPool';
+  await fetchAuthSession().catch(() => undefined);
+
+  const loadEvent = async (mode: DataAuthMode) => {
+    const result = await client.models.Event.get({ id: eventId }, { authMode: mode });
+    if (result.errors?.length) {
+      throw new Error(result.errors.map((error) => error.message).join(' · '));
+    }
+    return result;
+  };
+
+  let response: Awaited<ReturnType<typeof loadEvent>>;
+  try {
+    // Try once so a stale signed-in session can fall back to guest mode immediately.
+    response = await loadEvent(authMode);
+  } catch (error) {
+    if (authMode === 'userPool' && /no current user|unauthoriz|token/i.test(errorMessage(error))) {
+      user = null;
+      authMode = 'identityPool';
+      response = await retryTransient(() => loadEvent(authMode));
+    } else {
+      response = await retryTransient(() => loadEvent(authMode));
+    }
+  }
+
+  // A stale signed-in browser session should still be able to upload as a guest.
+  if (!response.data && authMode === 'userPool') {
+    user = null;
+    authMode = 'identityPool';
+    response = await retryTransient(() => loadEvent(authMode));
+  }
+
+  const event = response.data as QREvent | null;
+  if (!event) throw new Error('This event no longer exists or cannot accept uploads.');
+
+  return {
+    eventId,
+    eventOwner: event.owner ?? null,
+    authMode,
+    uploadedBy: user?.displayName ?? (uploaderName?.trim().slice(0, 60) || 'Anonymous'),
+    uploadedByUserId: user?.userId ?? null,
+  };
+}
+
 /**
  * Uploads one image to S3 and records its metadata.
  * Signed-in hosts are tagged with their name; guests are "Anonymous".
@@ -205,50 +293,63 @@ export async function uploadEventPhoto(
   onProgress?: (p: { loaded: number; total: number }) => void,
   uploaderName?: string,
 ): Promise<QRPhoto> {
+  const context = await prepareEventUpload(eventId, uploaderName);
+  return uploadEventPhotoWithContext(context, file, onProgress);
+}
+
+export async function uploadEventPhotoWithContext(
+  context: EventUploadContext,
+  file: File,
+  onProgress?: (p: { loaded: number; total: number }) => void,
+): Promise<QRPhoto> {
+  const { eventId } = context;
   const key = buildPhotoKey(eventId, file.name);
-  const user = await getCurrentUserInfo();
   const preview = await createPhotoPreview(file);
   const previewKey = preview ? buildPreviewKey(key) : null;
 
-  // The event carries its owner id, which we stamp onto the photo.
-  const event = await fetchEvent(eventId);
-  if (!event) throw new Error('This event no longer exists.');
-
-  await uploadData({
-    path: key,
-    data: file,
-    options: {
-      contentType: file.type,
-      onProgress: ({ transferredBytes, totalBytes }) => {
-        if (totalBytes) {
-          onProgress?.({ loaded: transferredBytes, total: totalBytes });
-        }
+  await retryTransient(() =>
+    uploadData({
+      path: key,
+      data: file,
+      options: {
+        contentType: file.type,
+        onProgress: ({ transferredBytes, totalBytes }) => {
+          if (totalBytes) onProgress?.({ loaded: transferredBytes, total: totalBytes });
+        },
       },
-    },
-  }).result;
-
-  if (preview && previewKey) {
-    await uploadData({
-      path: previewKey,
-      data: preview,
-      options: { contentType: 'image/jpeg' },
-    }).result;
-  }
-
-  const { data: photo, errors } = await client.models.Photo.create(
-    {
-      eventId,
-      s3Key: key,
-      previewS3Key: previewKey,
-      uploadedBy: user?.displayName ?? (uploaderName?.trim().slice(0, 60) || 'Anonymous'),
-      uploadedByUserId: user?.userId ?? null,
-      approved: true, // hosts can hide from the admin dashboard
-      eventOwner: event.owner ?? null,
-    },
-    { authMode: await authModeFor() }
+    }).result,
   );
 
-  if (errors?.length || !photo) {
+  if (preview && previewKey) {
+    await retryTransient(() =>
+      uploadData({
+        path: previewKey,
+        data: preview,
+        options: { contentType: 'image/jpeg' },
+      }).result,
+    );
+  }
+
+  const { data: photo } = await retryTransient(async () => {
+    const result = await client.models.Photo.create(
+      {
+        eventId,
+        s3Key: key,
+        previewS3Key: previewKey,
+        uploadedBy: context.uploadedBy,
+        uploadedByUserId: context.uploadedByUserId,
+        approved: true,
+        eventOwner: context.eventOwner,
+      },
+      { authMode: context.authMode },
+    );
+    if (result.errors?.length) {
+      throw new Error(result.errors.map((error) => error.message).join(' · '));
+    }
+    return result;
+  });
+
+  if (!photo) {
     throw new Error('Photo record could not be saved.');
   }
   return photo as QRPhoto;

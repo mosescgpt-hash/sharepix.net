@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useState } from 'react';
-import { uploadEventPhoto } from '@/lib/api';
+import { prepareEventUpload, uploadEventPhotoWithContext } from '@/lib/api';
 import { validateMediaFile } from '@/lib/validation';
 
 interface UploadFormProps {
@@ -61,6 +61,18 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
     setBusy(true);
     let uploaded = 0;
     const uploadedBy = uploaderLabel();
+    let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
+
+    try {
+      uploadContext = await prepareEventUpload(eventId, uploadedBy);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'The upload session could not be started.';
+      setQueue((previous) => previous.map((item) =>
+        item.status === 'pending' ? { ...item, status: 'error', error: message } : item,
+      ));
+      setBusy(false);
+      return;
+    }
 
     for (let i = 0; i < queue.length; i += 1) {
       const item = queue[i];
@@ -68,13 +80,17 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
 
       updateItem(i, { status: 'uploading', percent: 0 });
       try {
-        await uploadEventPhoto(eventId, item.file, ({ loaded, total }) => {
+        await uploadEventPhotoWithContext(uploadContext, item.file, ({ loaded, total }) => {
           updateItem(i, { percent: total ? Math.round((loaded / total) * 100) : 0 });
-        }, uploadedBy);
+        });
         updateItem(i, { status: 'done', percent: 100 });
         uploaded += 1;
+        await new Promise((resolve) => window.setTimeout(resolve, 150));
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Upload failed. Check your connection and try again.';
+        const rawMessage = err instanceof Error ? err.message : '';
+        const message = /rate exceeded|throttl|no current user/i.test(rawMessage)
+          ? 'The service was busy. Use Retry failed files, then tap Upload again.'
+          : rawMessage || 'Upload failed. Check your connection and try again.';
         updateItem(i, { status: 'error', error: message });
       }
     }
