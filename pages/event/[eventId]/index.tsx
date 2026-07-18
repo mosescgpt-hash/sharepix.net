@@ -87,6 +87,7 @@ export default function EventGalleryPage() {
                 <PhotoGrid
                   photos={photos}
                   canDownload={canDownload}
+                  canViewOriginal={host}
                   eventName={event.name}
                   downloadMessage="Guest downloads are included with Premium. Event hosts can sign in to download on any plan."
                 />
