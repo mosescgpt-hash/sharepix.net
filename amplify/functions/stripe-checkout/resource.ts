@@ -7,6 +7,9 @@ import { defineFunction, secret } from '@aws-amplify/backend';
  */
 export const stripeCheckout = defineFunction({
   name: 'stripe-checkout',
+  // Data resolver (custom mutation), so keep it in the data stack alongside the
+  // other resolver functions to avoid cross-stack circular dependencies.
+  resourceGroupName: 'data',
   environment: {
     STRIPE_SECRET_KEY: secret('STRIPE_SECRET_KEY'),
     APP_URL: 'https://www.sharepix.net',

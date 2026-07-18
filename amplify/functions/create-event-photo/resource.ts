@@ -7,4 +7,7 @@ import { defineFunction } from '@aws-amplify/backend';
  */
 export const createEventPhoto = defineFunction({
   name: 'create-event-photo',
+  // This is a data resolver that also reads/writes the data tables, so it must
+  // live in the data stack to avoid a circular dependency between stacks.
+  resourceGroupName: 'data',
 });
