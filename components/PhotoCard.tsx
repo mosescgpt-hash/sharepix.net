@@ -9,6 +9,8 @@ interface PhotoCardProps {
   selectable?: boolean;
   selected?: boolean;
   onToggleSelected?: () => void;
+  /** When set (hosts only), clicking the photo opens the full-quality view. */
+  onEnlarge?: () => void;
 }
 
 export default function PhotoCard({
@@ -17,6 +19,7 @@ export default function PhotoCard({
   selectable = false,
   selected = false,
   onToggleSelected,
+  onEnlarge,
 }: PhotoCardProps) {
   const [downloading, setDownloading] = useState(false);
 
@@ -48,6 +51,22 @@ export default function PhotoCard({
             aria-label={`Video uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
             className="aspect-square w-full bg-black object-contain"
           />
+        ) : onEnlarge ? (
+          // Hosts can click to open the full-quality original.
+          <button
+            type="button"
+            onClick={onEnlarge}
+            aria-label="View full-quality photo"
+            className="block w-full cursor-zoom-in"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photo.url}
+              alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+              loading="lazy"
+              className="aspect-square w-full object-cover"
+            />
+          </button>
         ) : (
           // Signed S3 URLs change constantly, so a plain img tag is simpler than next/image here.
           // eslint-disable-next-line @next/next/no-img-element

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import PhotoCard from '@/components/PhotoCard';
-import { downloadPhotosAsZip } from '@/lib/api';
+import { downloadPhoto, downloadPhotosAsZip, getOriginalMediaUrl } from '@/lib/api';
 import { GallerySort, sortGalleryPhotos } from '@/lib/gallery';
+import { isVideoFilename } from '@/lib/validation';
 
 interface PhotoGridProps {
   photos: DisplayPhoto[];
@@ -10,6 +11,8 @@ interface PhotoGridProps {
   canDownload?: boolean;
   eventName?: string;
   downloadMessage?: string;
+  /** Hosts only: click a photo to open the full-quality original. */
+  canViewOriginal?: boolean;
 }
 
 const SORT_STORAGE_KEY = 'sharepix-gallery-sort';
@@ -27,13 +30,44 @@ export default function PhotoGrid({
   canDownload = false,
   eventName = 'sharepix-event',
   downloadMessage,
+  canViewOriginal = false,
 }: PhotoGridProps) {
   const [sort, setSort] = useState<GallerySort>('time-newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [enlarged, setEnlarged] = useState<DisplayPhoto | null>(null);
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
+  const [originalLoading, setOriginalLoading] = useState(false);
   const sortedPhotos = useMemo(() => sortGalleryPhotos(photos, sort), [photos, sort]);
+
+  async function openEnlarge(photo: DisplayPhoto) {
+    setEnlarged(photo);
+    setOriginalUrl(null);
+    setOriginalLoading(true);
+    try {
+      setOriginalUrl(await getOriginalMediaUrl(photo));
+    } catch {
+      setOriginalUrl(photo.url); // fall back to the preview if the original can't load
+    } finally {
+      setOriginalLoading(false);
+    }
+  }
+
+  function closeEnlarge() {
+    setEnlarged(null);
+    setOriginalUrl(null);
+  }
+
+  useEffect(() => {
+    if (!enlarged) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeEnlarge();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [enlarged]);
 
   // Restore the last chosen sort so it survives a gallery refresh.
   useEffect(() => {
@@ -156,9 +190,64 @@ export default function PhotoGrid({
             selectable={canDownload}
             selected={selected.has(photo.id)}
             onToggleSelected={() => toggleSelected(photo.id)}
+            onEnlarge={
+              canViewOriginal && !isVideoFilename(photo.s3Key)
+                ? () => openEnlarge(photo)
+                : undefined
+            }
           />
         ))}
       </div>
+
+      {enlarged ? (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-black/90"
+          role="dialog"
+          aria-modal="true"
+          onClick={closeEnlarge}
+        >
+          <div className="flex items-center justify-between gap-3 px-4 py-3 text-white">
+            <p className="truncate text-sm">
+              Full quality · uploaded by {enlarged.uploadedBy || 'Anonymous'}
+            </p>
+            <button
+              type="button"
+              onClick={closeEnlarge}
+              aria-label="Close full-quality view"
+              className="shrink-0 rounded-full bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/20"
+            >
+              Close ✕
+            </button>
+          </div>
+          <div
+            className="flex flex-1 items-center justify-center overflow-auto p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {originalLoading ? (
+              <p className="text-sm text-white/70">Loading full-quality photo…</p>
+            ) : originalUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={originalUrl}
+                alt={`Full-quality photo uploaded by ${enlarged.uploadedBy ?? 'Anonymous'}`}
+                className="max-h-full max-w-full object-contain"
+              />
+            ) : null}
+          </div>
+          <div
+            className="flex justify-center px-4 py-3"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => downloadPhoto(enlarged)}
+              className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-ink hover:bg-white/90"
+            >
+              Download original
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

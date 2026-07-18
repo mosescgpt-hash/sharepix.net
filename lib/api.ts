@@ -218,8 +218,11 @@ export async function startCheckout(tier: string): Promise<string> {
     { tier: tier.trim().toLowerCase() },
     { authMode: 'userPool' },
   );
-  if (errors?.length || !data?.url) {
-    throw new Error('Checkout could not be started. Please try again.');
+  if (errors?.length) {
+    throw new Error(errors.map((error) => error.message).join(' · '));
+  }
+  if (!data?.url) {
+    throw new Error('Checkout did not return a URL. Check the Stripe secret key.');
   }
   return data.url;
 }
@@ -547,6 +550,12 @@ export async function fetchDownloadShare(shareId: string): Promise<DownloadShare
   } catch {
     return null;
   }
+}
+
+/** Signed URL for the full-resolution original — used for the host's enlarged view. */
+export async function getOriginalMediaUrl(photo: QRPhoto): Promise<string> {
+  const { url } = await getUrl({ path: photo.s3Key });
+  return url.toString();
 }
 
 /** Triggers a browser download of a photo. */
