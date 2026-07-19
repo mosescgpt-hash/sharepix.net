@@ -53,14 +53,13 @@ const schema = a.schema({
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create`: photos are created only through the createEventPhoto
-    // function, which stamps eventOwner from the event server-side and enforces
-    // the photo limit. Clients can therefore no longer spoof ownership,
-    // self-approve, or bypass the limit.
+    // function. And no guest/authenticated model read: that would let anyone
+    // `list` every photo across all events (and, with storage read, reach
+    // them). The host (eventOwner) and admins keep full access for moderation;
+    // the public gallery reads through the scoped `listEventPhotos` query.
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner'),
       allow.group('ADMINS'),
-      allow.authenticated().to(['read']),
-      allow.guest().to(['read']),
     ]),
 
   DownloadShare: a
@@ -120,6 +119,32 @@ const schema = a.schema({
     eventOwner: a.string(),
     createdAt: a.string(),
   }),
+
+  EventPhoto: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    s3Key: a.string().required(),
+    previewS3Key: a.string(),
+    uploadedBy: a.string(),
+    uploadedByUserId: a.string(),
+    approved: a.boolean(),
+    eventOwner: a.string(),
+    createdAt: a.string(),
+  }),
+
+  // Scoped read of one event's approved photos for the public gallery, so the
+  // Photo model never has to grant guests broad list access.
+  listEventPhotos: a
+    .query()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('EventPhoto').array())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(
+      a.handler.custom({
+        dataSource: a.ref('Photo'),
+        entry: './list-event-photos.js',
+      }),
+    ),
 
   CheckoutSession: a.customType({
     url: a.string().required(),
