@@ -29,11 +29,15 @@ const schema = a.schema({
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })
+    // Guests and other signed-in users may fetch a single event by id (needed
+    // to open a gallery), but not `list` — that would let anyone enumerate
+    // every host's events and event codes. Owners still list their own events
+    // (allow.owner) and admins list all (allow.group).
     .authorization((allow) => [
       allow.owner(),
       allow.group('ADMINS'),
-      allow.authenticated().to(['read']),
-      allow.guest().to(['read']),
+      allow.authenticated().to(['get']),
+      allow.guest().to(['get']),
     ]),
 
   Photo: a
@@ -68,11 +72,13 @@ const schema = a.schema({
       createdBy: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
+    // Fetch a single share by id (for the share page), not list — same
+    // enumeration concern as Event.
     .authorization((allow) => [
       allow.owner(),
       allow.group('ADMINS'),
-      allow.authenticated().to(['read']),
-      allow.guest().to(['read']),
+      allow.authenticated().to(['get']),
+      allow.guest().to(['get']),
     ]),
 
   DiscountCode: a
