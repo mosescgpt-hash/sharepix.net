@@ -443,25 +443,12 @@ export async function fetchEventPhotos(
   eventId: string,
   opts: { includeUnapproved?: boolean; useOriginals?: boolean } = {}
 ): Promise<DisplayPhoto[]> {
-  let photos: QRPhoto[];
-  if (opts.includeUnapproved) {
-    // Moderation view: the host (eventOwner) or an admin reads the model
-    // directly so unapproved photos are visible.
-    const { data } = await client.models.Photo.listPhotoByEventId(
-      { eventId },
-      { limit: 500, authMode: 'userPool' },
-    );
-    photos = (data ?? []) as QRPhoto[];
-  } else {
-    // Public gallery/share: scoped query that only returns this event's
-    // approved photos, so photos can't be enumerated across events.
-    const { data } = await client.queries.listEventPhotos(
-      { eventId },
-      { authMode: await authModeFor() },
-    );
-    photos = (data ?? []).filter((p): p is NonNullable<typeof p> => p !== null) as QRPhoto[];
-  }
+  const { data } = await client.models.Photo.listPhotoByEventId(
+    { eventId },
+    { limit: 500, authMode: await authModeFor() }
+  );
 
+  let photos = (data ?? []) as QRPhoto[];
   if (!opts.includeUnapproved) {
     photos = photos.filter((p) => p.approved !== false);
   }
