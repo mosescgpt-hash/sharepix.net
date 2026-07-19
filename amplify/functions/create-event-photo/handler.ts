@@ -26,6 +26,14 @@ function toInt(value?: string): number | null {
 export const handler: Handler = async (event) => {
   const { eventId, s3Key, previewS3Key, uploadedBy, uploadedByUserId } = event.arguments;
 
+  // The photo's files must live under this event's own storage prefix. This
+  // stops a crafted request from creating a record that points at another
+  // event's files or an arbitrary object elsewhere in the bucket.
+  const prefix = `events/${eventId}/`;
+  if (!s3Key.startsWith(prefix) || (previewS3Key && !previewS3Key.startsWith(prefix))) {
+    throw new Error('The photo path does not belong to this event.');
+  }
+
   const found = await dynamo.send(
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
