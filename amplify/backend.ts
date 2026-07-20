@@ -6,6 +6,7 @@ import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
+import { listEventPhotos } from './functions/list-event-photos/resource';
 
 const backend = defineBackend({
   auth,
@@ -14,6 +15,7 @@ const backend = defineBackend({
   deleteEventPhoto,
   createEventPhoto,
   stripeCheckout,
+  listEventPhotos,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -37,3 +39,8 @@ eventTable.grantReadWriteData(createFn);
 photoTable.grantWriteData(createFn);
 createFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// List function: read one event's photos for the public gallery (read-only).
+const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
+photoTable.grantReadData(listFn);
+listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);

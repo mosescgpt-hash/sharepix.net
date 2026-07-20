@@ -2,6 +2,7 @@ import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
+import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 
 /**
  * SharePix data models.
@@ -120,6 +121,27 @@ const schema = a.schema({
     eventOwner: a.string(),
     createdAt: a.string(),
   }),
+
+  EventPhoto: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    s3Key: a.string().required(),
+    previewS3Key: a.string(),
+    uploadedBy: a.string(),
+    uploadedByUserId: a.string(),
+    approved: a.boolean(),
+    eventOwner: a.string(),
+    createdAt: a.string(),
+  }),
+
+  // Scoped read of one event's approved photos for the public gallery, so the
+  // Photo model won't need to grant guests broad list access.
+  listEventPhotos: a
+    .query()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('EventPhoto').array())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(listEventPhotosFn)),
 
   CheckoutSession: a.customType({
     url: a.string().required(),
