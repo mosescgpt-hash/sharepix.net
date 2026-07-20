@@ -12,6 +12,10 @@ export const storage = defineStorage({
     'events/*': [
       allow.guest.to(['read', 'write']),
       allow.authenticated.to(['read', 'write']),
+      // Users in the ADMINS group use the admin IAM role, which otherwise
+      // wouldn't inherit the authenticated role's storage access — so admins
+      // couldn't load photos. Grant it explicitly.
+      allow.groups(['ADMINS']).to(['read', 'write']),
     ],
   }),
 });
