@@ -475,20 +475,14 @@ export async function fetchEventPhotos(
     // photos are visible.
     photos = await listEventPhotosViaModel(eventId);
   } else {
-    // Public gallery: prefer the scoped secure query, but fall back to the
-    // model path on any error or empty result so the gallery never goes blank
-    // while the secure query is being validated.
-    try {
-      const { data, errors } = await client.queries.listEventPhotos(
-        { eventId },
-        { authMode: await authModeFor() },
-      );
-      if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
-      const scoped = (data ?? []).filter((p): p is NonNullable<typeof p> => p !== null) as QRPhoto[];
-      photos = scoped.length > 0 ? scoped : await listEventPhotosViaModel(eventId);
-    } catch {
-      photos = await listEventPhotosViaModel(eventId);
-    }
+    // Public gallery: scoped query that only returns this event's approved
+    // photos, so photos can't be enumerated across events.
+    const { data, errors } = await client.queries.listEventPhotos(
+      { eventId },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    photos = (data ?? []).filter((p): p is NonNullable<typeof p> => p !== null) as QRPhoto[];
   }
 
   if (!opts.includeUnapproved) {
