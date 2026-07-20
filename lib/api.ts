@@ -228,6 +228,20 @@ export async function startCheckout(tier: string): Promise<string> {
 }
 
 /**
+ * Admin self-test: how many photos the scoped secure query (listEventPhotos)
+ * returns for an event. Used to confirm the secure path works before the broad
+ * Photo read is removed. Throws with the real error if the query fails.
+ */
+export async function countPhotosViaSecureQuery(eventId: string): Promise<number> {
+  const { data, errors } = await client.queries.listEventPhotos(
+    { eventId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((error) => error.message).join(' · '));
+  return (data ?? []).filter((photo) => photo !== null).length;
+}
+
+/**
  * Global-admin grant of extra photo capacity to one event (the pilot version of
  * the "buy more storage" add-on). `additionalCredits` is added to whatever the
  * event already has; the effective limit becomes photoLimit + extraPhotoCredits.
@@ -438,17 +452,45 @@ export async function uploadEventPhotoWithContext(
   return photo as QRPhoto;
 }
 
+/**
+ * Load one event's photos the old (model) way. Used for moderation (needs
+ * unapproved photos) and as a safety fallback for the public gallery.
+ */
+async function listEventPhotosViaModel(eventId: string): Promise<QRPhoto[]> {
+  const { data } = await client.models.Photo.listPhotoByEventId(
+    { eventId },
+    { limit: 500, authMode: await authModeFor() },
+  );
+  return (data ?? []) as QRPhoto[];
+}
+
 /** Fetch photos for an event and resolve signed URLs for display. */
 export async function fetchEventPhotos(
   eventId: string,
   opts: { includeUnapproved?: boolean; useOriginals?: boolean } = {}
 ): Promise<DisplayPhoto[]> {
-  const { data } = await client.models.Photo.listPhotoByEventId(
-    { eventId },
-    { limit: 500, authMode: await authModeFor() }
-  );
+  let photos: QRPhoto[];
+  if (opts.includeUnapproved) {
+    // Moderation view: read the model directly (host/admin) so unapproved
+    // photos are visible.
+    photos = await listEventPhotosViaModel(eventId);
+  } else {
+    // Public gallery: prefer the scoped secure query, but fall back to the
+    // model path on any error or empty result so the gallery never goes blank
+    // while the secure query is being validated.
+    try {
+      const { data, errors } = await client.queries.listEventPhotos(
+        { eventId },
+        { authMode: await authModeFor() },
+      );
+      if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+      const scoped = (data ?? []).filter((p): p is NonNullable<typeof p> => p !== null) as QRPhoto[];
+      photos = scoped.length > 0 ? scoped : await listEventPhotosViaModel(eventId);
+    } catch {
+      photos = await listEventPhotosViaModel(eventId);
+    }
+  }
 
-  let photos = (data ?? []) as QRPhoto[];
   if (!opts.includeUnapproved) {
     photos = photos.filter((p) => p.approved !== false);
   }
