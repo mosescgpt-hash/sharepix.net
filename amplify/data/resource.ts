@@ -53,15 +53,14 @@ const schema = a.schema({
       eventOwner: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
-    // No direct `create`: photos are created only through the createEventPhoto
-    // function, which stamps eventOwner from the event server-side and enforces
-    // the photo limit. Clients can therefore no longer spoof ownership,
-    // self-approve, or bypass the limit.
+    // No direct `create` (photos come only from createEventPhoto) and no
+    // guest/authenticated read (that allowed listing every photo across all
+    // events). The host (eventOwner) and admins keep full access for
+    // moderation/downloads; the public gallery reads through the scoped
+    // listEventPhotos query.
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner'),
       allow.group('ADMINS'),
-      allow.authenticated().to(['read']),
-      allow.guest().to(['read']),
     ]),
 
   DownloadShare: a
