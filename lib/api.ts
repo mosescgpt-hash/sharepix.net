@@ -172,6 +172,7 @@ export async function listDiscountCodes(): Promise<DiscountCode[]> {
 export async function createDiscountCode(input: {
   code: string;
   assignedTo?: string;
+  tier: string;
   expiresAt: string;
   maxUses: number;
   createdBy?: string;
@@ -181,7 +182,7 @@ export async function createDiscountCode(input: {
       code: input.code.trim().toUpperCase(),
       assignedTo: input.assignedTo?.trim() || null,
       active: true,
-      appliesToTier: 'standard',
+      appliesToTier: input.tier.trim().toLowerCase(),
       expiresAt: input.expiresAt,
       maxUses: input.maxUses,
       usedCount: 0,
