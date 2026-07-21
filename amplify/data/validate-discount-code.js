@@ -1,7 +1,6 @@
 import { util } from '@aws-appsync/utils';
 
 export function request(ctx) {
-  ctx.stash.requestedTier = ctx.args.tier;
   ctx.stash.now = util.time.nowISO8601();
 
   return {
@@ -14,11 +13,11 @@ export function request(ctx) {
 
 export function response(ctx) {
   const code = ctx.result;
+  // The code carries the plan it unlocks (appliesToTier); it is valid as long
+  // as it is active, unexpired, and has uses left — whichever plan it's for.
   const valid =
     code &&
     code.active === true &&
-    code.appliesToTier === 'standard' &&
-    ctx.stash.requestedTier === 'standard' &&
     code.expiresAt > ctx.stash.now &&
     code.usedCount < code.maxUses;
 
@@ -31,7 +30,7 @@ export function response(ctx) {
 
   return {
     valid: true,
-    message: 'Standard pilot access applied.',
+    message: 'Pilot access applied.',
     code: code.code,
     appliesToTier: code.appliesToTier,
     remainingUses: code.maxUses - code.usedCount,

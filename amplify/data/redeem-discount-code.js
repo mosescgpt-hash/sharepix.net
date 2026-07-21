@@ -21,7 +21,7 @@ export function request(ctx) {
     },
     condition: {
       expression:
-        '#active = :active AND #tier = :standard AND #tier = :requestedTier AND #expiresAt > :now AND #usedCount < #maxUses',
+        '#active = :active AND #tier = :requestedTier AND #expiresAt > :now AND #usedCount < #maxUses',
       expressionNames: {
         '#active': 'active',
         '#tier': 'appliesToTier',
@@ -31,7 +31,6 @@ export function request(ctx) {
       },
       expressionValues: util.dynamodb.toMapValues({
         ':active': true,
-        ':standard': 'standard',
         ':requestedTier': tier,
         ':now': now,
       }),
@@ -49,7 +48,7 @@ export function response(ctx) {
 
   return {
     valid: true,
-    message: 'Standard pilot access applied.',
+    message: 'Pilot access applied.',
     code: ctx.result.code,
     appliesToTier: ctx.result.appliesToTier,
     remainingUses: ctx.result.maxUses - ctx.result.usedCount,

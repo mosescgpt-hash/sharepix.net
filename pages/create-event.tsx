@@ -34,7 +34,7 @@ function CreateEventPage() {
     setPilotCodeMessage(null);
 
     try {
-      const result = await validateDiscountCode(pilotCode, 'standard');
+      const result = await validateDiscountCode(pilotCode, tierId);
 
       if (!result.valid) {
         setPilotCodeStatus('invalid');
@@ -44,9 +44,14 @@ function CreateEventPage() {
         return;
       }
 
+      // The code carries the plan it unlocks — switch the event to that plan.
+      const unlockedTier =
+        result.appliesToTier && getTier(result.appliesToTier) ? result.appliesToTier : tierId;
+      setTierId(unlockedTier);
       setPilotCodeStatus('valid');
-      setPilotCodeMessage('Pilot access applied to the Standard plan.');
-      setTierId('standard');
+      setPilotCodeMessage(
+        `Pilot access applied to the ${getTier(unlockedTier)?.name ?? 'selected'} plan.`,
+      );
     } catch {
       setPilotCodeStatus('invalid');
       setPilotCodeMessage('We could not check that code. Please try again.');
@@ -55,8 +60,8 @@ function CreateEventPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (pilotCodeStatus !== 'valid' || tierId !== 'standard') {
-      setError('Pilot codes currently apply to the Standard plan only.');
+    if (pilotCodeStatus !== 'valid') {
+      setError('Apply a valid pilot code to create your event free during the pilot.');
       return;
     }
     if (!name.trim()) {
@@ -173,7 +178,14 @@ function CreateEventPage() {
                     name="tier"
                     value={tier.id}
                     checked={tierId === tier.id}
-                    onChange={() => setTierId(tier.id)}
+                    onChange={() => {
+                      setTierId(tier.id);
+                      // A code is tied to a plan, so switching plans clears it.
+                      if (pilotCodeStatus !== 'idle') {
+                        setPilotCodeStatus('idle');
+                        setPilotCodeMessage(null);
+                      }
+                    }}
                     className="sr-only"
                   />
                   <span className="block font-display font-bold">{tier.name}</span>
@@ -192,7 +204,7 @@ function CreateEventPage() {
               Have a pilot access code?
             </label>
             <p className="mt-1 text-sm text-ink/60">
-              Apply it to make the Standard plan free during the sharepix.net pilot.
+              Apply it to make your event free during the sharepix.net pilot. The code sets the plan.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <input
@@ -238,16 +250,11 @@ function CreateEventPage() {
               </p>
             ) : null}
             {pilotCodeStatus === 'valid' ? (
-              tierId === 'standard' ? (
-                <p className="mt-3 text-sm font-medium text-ink">
-                  Standard: <span className="text-ink/50 line-through">$25</span>{' '}
-                  <span className="text-accent">$0</span>
-                </p>
-              ) : (
-                <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  Pilot codes only cover the Standard plan. Select Standard to continue for free.
-                </p>
-              )
+              <p className="mt-3 text-sm font-medium text-ink">
+                {getTier(tierId)?.name}:{' '}
+                <span className="text-ink/50 line-through">${getTier(tierId)?.price}</span>{' '}
+                <span className="text-accent">$0</span>
+              </p>
             ) : null}
           </div>
 
@@ -257,12 +264,12 @@ function CreateEventPage() {
 
           <button
             type="submit"
-            disabled={busy || pilotCodeStatus !== 'valid' || tierId !== 'standard'}
+            disabled={busy || pilotCodeStatus !== 'valid'}
             className="w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
           >
             {busy
               ? 'Creating…'
-              : pilotCodeStatus === 'valid' && tierId === 'standard'
+              : pilotCodeStatus === 'valid'
                 ? 'Create free event & get QR code'
                 : 'Apply pilot code to continue'}
           </button>

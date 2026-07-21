@@ -16,7 +16,7 @@ import {
   setDiscountCodeActive,
   startCheckout,
 } from '@/lib/api';
-import { PRICING_TIERS } from '@/lib/pricing';
+import { PRICING_TIERS, getTier } from '@/lib/pricing';
 import { DiscountCode, QREvent } from '@/lib/types';
 
 function defaultExpiryValue(): string {
@@ -40,6 +40,7 @@ function GlobalAdminPage() {
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
+  const [codeTier, setCodeTier] = useState('standard');
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
 
@@ -110,6 +111,7 @@ function GlobalAdminPage() {
       await createDiscountCode({
         code,
         assignedTo,
+        tier: codeTier,
         expiresAt: new Date(expiresAt).toISOString(),
         maxUses,
         createdBy: user?.displayName,
@@ -414,7 +416,7 @@ function GlobalAdminPage() {
 
               <section>
                 <h2 className="font-display text-2xl font-bold">Pilot codes</h2>
-                <p className="text-sm text-ink/60">Codes unlock Standard only. Default usage is one event.</p>
+                <p className="text-sm text-ink/60">Codes unlock the chosen plan. Default usage is one event.</p>
 
                 <form onSubmit={handleCreateCode} className="mt-4 space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
                   <div>
@@ -441,6 +443,21 @@ function GlobalAdminPage() {
                       placeholder="Alex's wedding test"
                       className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
                     />
+                  </div>
+                  <div>
+                    <label htmlFor="code-tier" className="text-sm font-medium">Plan this code unlocks</label>
+                    <select
+                      id="code-tier"
+                      value={codeTier}
+                      onChange={(e) => setCodeTier(e.target.value)}
+                      className="mt-1 w-full rounded-xl border border-ink/20 bg-white px-3 py-2.5 focus:border-accent focus:outline-none"
+                    >
+                      {PRICING_TIERS.map((tier) => (
+                        <option key={tier.id} value={tier.id}>
+                          {tier.name} — ${tier.price}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="grid grid-cols-[1fr_100px] gap-3">
                     <div>
@@ -471,7 +488,9 @@ function GlobalAdminPage() {
                     disabled={working === 'create-code'}
                     className="w-full rounded-full bg-ink py-2.5 font-medium text-white hover:bg-night disabled:opacity-50"
                   >
-                    {working === 'create-code' ? 'Creating…' : 'Create Standard pilot code'}
+                    {working === 'create-code'
+                      ? 'Creating…'
+                      : `Create ${getTier(codeTier)?.name ?? 'pilot'} pilot code`}
                   </button>
                 </form>
 
@@ -485,7 +504,9 @@ function GlobalAdminPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-mono font-bold text-ink">{item.code}</p>
-                            <p className="mt-1 truncate text-xs text-ink/60">{item.assignedTo || 'No note'}</p>
+                            <p className="mt-1 truncate text-xs text-ink/60">
+                              {getTier(item.appliesToTier)?.name ?? item.appliesToTier} · {item.assignedTo || 'No note'}
+                            </p>
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
                             {status}
