@@ -228,6 +228,20 @@ export async function startCheckout(tier: string): Promise<string> {
   return data.url;
 }
 
+/** Global-admin action on a user account: reset password, or enable/disable. */
+export async function manageUser(
+  email: string,
+  action: 'resetPassword' | 'enable' | 'disable',
+): Promise<string> {
+  const { data, errors } = await client.mutations.manageUser(
+    { email: email.trim().toLowerCase(), action },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The action could not be completed.');
+  return data.message ?? 'Done.';
+}
+
 /**
  * Admin self-test: how many photos the scoped secure query (listEventPhotos)
  * returns for an event. Used to confirm the secure path works before the broad
