@@ -1,5 +1,5 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { Function as LambdaFunction } from 'aws-cdk-lib/aws-lambda';
+import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
@@ -9,6 +9,7 @@ import { createEventPhoto } from './functions/create-event-photo/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
+import { stripeWebhook } from './functions/stripe-webhook/resource';
 
 const backend = defineBackend({
   auth,
@@ -19,10 +20,12 @@ const backend = defineBackend({
   stripeCheckout,
   listEventPhotos,
   adminUserActions,
+  stripeWebhook,
 });
 
 const eventTable = backend.data.resources.tables.Event;
 const photoTable = backend.data.resources.tables.Photo;
+const paymentTable = backend.data.resources.tables.Payment;
 const bucket = backend.storage.resources.bucket;
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
@@ -64,3 +67,20 @@ adminFn.addToRolePolicy(
     resources: [userPool.userPoolArn],
   }),
 );
+
+// Stripe webhook: a public Function URL Stripe calls when a checkout completes.
+// It verifies the signature, then writes a Payment row (table write only — no
+// broad data access). The URL is unauthenticated because Stripe can't send AWS
+// credentials; the Stripe signature check is what authenticates each request.
+const webhookFn = backend.stripeWebhook.resources.lambda as LambdaFunction;
+paymentTable.grantWriteData(webhookFn);
+webhookFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
+const webhookUrl = webhookFn.addFunctionUrl({
+  authType: FunctionUrlAuthType.NONE,
+});
+
+backend.addOutput({
+  custom: {
+    stripeWebhookUrl: webhookUrl.url,
+  },
+});

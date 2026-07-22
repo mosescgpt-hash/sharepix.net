@@ -13,6 +13,7 @@ import {
   listAllEvents,
   listAllPhotos,
   listDiscountCodes,
+  listPaymentsCount,
   manageUser,
   setDiscountCodeActive,
   startCheckout,
@@ -31,6 +32,7 @@ function GlobalAdminPage() {
   const [events, setEvents] = useState<QREvent[]>([]);
   const [codes, setCodes] = useState<DiscountCode[]>([]);
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
+  const [paymentsCount, setPaymentsCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -70,6 +72,14 @@ function GlobalAdminPage() {
       );
       setCodes(codeItems.sort((a, b) => b.expiresAt.localeCompare(a.expiresAt)));
       setPhotoCounts(counts);
+
+      // Payments count is best-effort: don't let a missing/empty Payment table
+      // (e.g. before the webhook has ever fired) blank out the whole dashboard.
+      try {
+        setPaymentsCount(await listPaymentsCount());
+      } catch {
+        setPaymentsCount(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The global dashboard could not be loaded.');
     } finally {
@@ -314,6 +324,12 @@ function GlobalAdminPage() {
                   Run a real Stripe checkout with the test card <span className="font-mono">4242 4242 4242 4242</span>{' '}
                   (any future date / any CVC). No real money moves. Events stay free during the pilot — this only
                   confirms the payment flow works.
+                </p>
+                <p className="text-sm text-ink/70">
+                  Payments recorded by the webhook:{' '}
+                  <span className="font-display text-base font-bold text-ink">
+                    {paymentsCount === null ? '—' : paymentsCount.toLocaleString()}
+                  </span>
                 </p>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
