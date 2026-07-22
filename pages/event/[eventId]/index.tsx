@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import PhotoGrid from '@/components/PhotoGrid';
 import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
+import { isGlobalAdmin } from '@/lib/admin';
 import { isGalleryActive } from '@/lib/validation';
 import { canDownloadEventMedia, isEventHost } from '@/lib/gallery';
 import { DisplayPhoto, QREvent } from '@/lib/types';
@@ -17,6 +18,7 @@ export default function EventGalleryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState(false);
+  const [admin, setAdmin] = useState(false);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -29,8 +31,12 @@ export default function EventGalleryPage() {
         return;
       }
       setEvent(ev);
-      const user = await getCurrentUserInfo();
+      const [user, isAdmin] = await Promise.all([
+        getCurrentUserInfo(),
+        isGlobalAdmin().catch(() => false),
+      ]);
       setHost(isEventHost(ev, user));
+      setAdmin(isAdmin);
       if (isGalleryActive(ev.accessExpiresAt)) {
         const items = await fetchEventPhotos(eventId);
         setPhotos(items);
@@ -87,7 +93,7 @@ export default function EventGalleryPage() {
                 <PhotoGrid
                   photos={photos}
                   canDownload={canDownload}
-                  canViewOriginal={host}
+                  canViewOriginal={host || admin}
                   eventName={event.name}
                   downloadMessage="Guest downloads are included with Premium. Event hosts can sign in to download on any plan."
                 />
