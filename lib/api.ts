@@ -228,6 +228,26 @@ export async function startCheckout(tier: string): Promise<string> {
   return data.url;
 }
 
+/**
+ * Global-admin: total number of recorded payments. Confirms the Stripe webhook
+ * is landing checkout.session.completed events into the Payment table.
+ */
+export async function listPaymentsCount(): Promise<number> {
+  let count = 0;
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await client.models.Payment.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    count += data?.length ?? 0;
+    nextToken = next;
+  } while (nextToken);
+  return count;
+}
+
 /** Global-admin action on a user account: reset password, or enable/disable. */
 export async function manageUser(
   email: string,

@@ -82,6 +82,20 @@ const schema = a.schema({
       allow.guest().to(['get']),
     ]),
 
+  // Recorded by the Stripe webhook when a checkout completes. Admins read these
+  // to confirm payments landed; the webhook writes them directly (via the table
+  // grant in backend.ts), so no model-level create/update is granted here.
+  Payment: a
+    .model({
+      stripeSessionId: a.string(),
+      amountTotal: a.integer(),
+      currency: a.string(),
+      tier: a.string(),
+      customerEmail: a.string(),
+      status: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   DiscountCode: a
     .model({
       code: a.string().required(),
