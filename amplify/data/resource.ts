@@ -3,6 +3,7 @@ import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-even
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
+import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 
 /**
  * SharePix data models.
@@ -141,6 +142,19 @@ const schema = a.schema({
     .returns(a.ref('EventPhoto').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listEventPhotosFn)),
+
+  UserActionResult: a.customType({
+    success: a.boolean().required(),
+    message: a.string(),
+  }),
+
+  // Global-admin only: reset a user's password or enable/disable their account.
+  manageUser: a
+    .mutation()
+    .arguments({ email: a.string().required(), action: a.string().required() })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(adminUserActionsFn)),
 
   CheckoutSession: a.customType({
     url: a.string().required(),

@@ -1,5 +1,6 @@
 import { defineBackend } from '@aws-amplify/backend';
 import { Function as LambdaFunction } from 'aws-cdk-lib/aws-lambda';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -7,6 +8,7 @@ import { deleteEventPhoto } from './functions/delete-event-photo/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
+import { adminUserActions } from './functions/admin-user-actions/resource';
 
 const backend = defineBackend({
   auth,
@@ -16,6 +18,7 @@ const backend = defineBackend({
   createEventPhoto,
   stripeCheckout,
   listEventPhotos,
+  adminUserActions,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -44,3 +47,20 @@ createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
 photoTable.grantReadData(listFn);
 listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// Admin user-actions function: reset passwords and enable/disable accounts in
+// the Cognito user pool. Scoped to just these admin operations on this pool.
+const userPool = backend.auth.resources.userPool;
+const adminFn = backend.adminUserActions.resources.lambda as LambdaFunction;
+adminFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+adminFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: [
+      'cognito-idp:ListUsers',
+      'cognito-idp:AdminResetUserPassword',
+      'cognito-idp:AdminEnableUser',
+      'cognito-idp:AdminDisableUser',
+    ],
+    resources: [userPool.userPoolArn],
+  }),
+);

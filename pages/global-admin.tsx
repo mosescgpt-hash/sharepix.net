@@ -13,6 +13,7 @@ import {
   listAllEvents,
   listAllPhotos,
   listDiscountCodes,
+  manageUser,
   setDiscountCodeActive,
   startCheckout,
 } from '@/lib/api';
@@ -37,6 +38,8 @@ function GlobalAdminPage() {
   const [selfTest, setSelfTest] = useState<
     { name: string; secure: number; approved: number; ok: boolean; error?: string }[] | null
   >(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -150,6 +153,26 @@ function GlobalAdminPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The code could not be removed.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleUserAction(action: 'resetPassword' | 'enable' | 'disable') {
+    if (!userEmail.trim()) {
+      setUserMessage({ text: 'Enter the account email first.', ok: false });
+      return;
+    }
+    setWorking(`user-${action}`);
+    setUserMessage(null);
+    try {
+      const message = await manageUser(userEmail, action);
+      setUserMessage({ text: message, ok: true });
+    } catch (err) {
+      setUserMessage({
+        text: err instanceof Error ? err.message : 'The action could not be completed.',
+        ok: false,
+      });
     } finally {
       setWorking(null);
     }
@@ -306,6 +329,58 @@ function GlobalAdminPage() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+              <h2 className="font-display text-xl font-bold">User management</h2>
+              <p className="text-sm text-ink/70">
+                Reset a host&apos;s password (they get an email to set a new one — this also lets
+                them back in if they&apos;re locked out), or enable/disable an account.
+              </p>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="min-w-0 flex-1 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={working === 'user-resetPassword'}
+                    onClick={() => void handleUserAction('resetPassword')}
+                    className="rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                  >
+                    {working === 'user-resetPassword' ? 'Working…' : 'Reset password'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={working === 'user-enable'}
+                    onClick={() => void handleUserAction('enable')}
+                    className="rounded-full border border-ink/20 px-4 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                  >
+                    {working === 'user-enable' ? 'Working…' : 'Enable'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={working === 'user-disable'}
+                    onClick={() => void handleUserAction('disable')}
+                    className="rounded-full border border-red-200 px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    {working === 'user-disable' ? 'Working…' : 'Disable'}
+                  </button>
+                </div>
+              </div>
+              {userMessage ? (
+                <p
+                  className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                    userMessage.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {userMessage.text}
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-8 rounded-2xl border border-dashed border-ink/20 bg-white p-5">
