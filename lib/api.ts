@@ -16,6 +16,7 @@ import {
 import { buildPhotoKey, buildPreviewKey, generateEventCode } from '@/lib/validation';
 import { computeAccessExpiresAt, getTier } from '@/lib/pricing';
 import { createPhotoPreview } from '@/lib/mediaPreview';
+import { hashFileContent } from '@/lib/hash';
 
 const client = generateClient<Schema>();
 type DataAuthMode = 'userPool' | 'identityPool';
@@ -414,6 +415,33 @@ export async function prepareEventUpload(
 }
 
 /**
+ * Content hashes of the photos an event already holds, so the upload form can
+ * skip files the gallery has seen before without sending them. Returns an empty
+ * set if the list can't be read — duplicate detection is a convenience, and
+ * createEventPhoto still refuses to store the same bytes twice.
+ */
+export async function fetchEventPhotoHashes(eventId: string): Promise<Set<string>> {
+  try {
+    const { data, errors } = await client.queries.listEventPhotos(
+      { eventId },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length) return new Set();
+    const hashes = (data ?? [])
+      .map((photo) => photo?.contentHash)
+      .filter((hash): hash is string => Boolean(hash));
+    return new Set(hashes);
+  } catch {
+    return new Set();
+  }
+}
+
+/** A stored photo, plus whether the event already had these exact bytes. */
+export interface UploadedPhoto extends QRPhoto {
+  duplicate: boolean;
+}
+
+/**
  * Uploads one image to S3 and records its metadata.
  * Signed-in hosts are tagged with their name; guests are "Anonymous".
  * eventOwner is stamped so the host can moderate this photo later.
@@ -423,18 +451,25 @@ export async function uploadEventPhoto(
   file: File,
   onProgress?: (p: { loaded: number; total: number }) => void,
   uploaderName?: string,
-): Promise<QRPhoto> {
+): Promise<UploadedPhoto> {
   const context = await prepareEventUpload(eventId, uploaderName);
   return uploadEventPhotoWithContext(context, file, onProgress);
 }
 
+/**
+ * `contentHash` may be passed in when the caller already hashed the file (the
+ * upload form does, to flag duplicates before the guest taps Upload). Pass null
+ * to skip hashing entirely; leave it undefined to have the hash computed here.
+ */
 export async function uploadEventPhotoWithContext(
   context: EventUploadContext,
   file: File,
   onProgress?: (p: { loaded: number; total: number }) => void,
-): Promise<QRPhoto> {
+  contentHash?: string | null,
+): Promise<UploadedPhoto> {
   const { eventId } = context;
-  const key = buildPhotoKey(eventId, file.name);
+  const hash = contentHash === undefined ? await hashFileContent(file) : contentHash;
+  const key = buildPhotoKey(eventId, file.name, new Date(), hash);
   const preview = await createPhotoPreview(file);
   const previewKey = preview ? buildPreviewKey(key) : null;
 
@@ -472,6 +507,7 @@ export async function uploadEventPhotoWithContext(
         previewS3Key: previewKey ?? undefined,
         uploadedBy: context.uploadedBy,
         uploadedByUserId: context.uploadedByUserId,
+        contentHash: hash,
       },
       { authMode: context.authMode },
     );
@@ -484,7 +520,7 @@ export async function uploadEventPhotoWithContext(
   if (!photo) {
     throw new Error('Photo record could not be saved.');
   }
-  return photo as QRPhoto;
+  return { ...photo, duplicate: photo.duplicate ?? false } as UploadedPhoto;
 }
 
 /**

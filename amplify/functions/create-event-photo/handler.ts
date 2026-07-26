@@ -6,7 +6,7 @@ import {
   UpdateItemCommand,
   PutItemCommand,
 } from '@aws-sdk/client-dynamodb';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 
@@ -23,8 +23,56 @@ function toInt(value?: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Accept only a real SHA-256 hex digest; anything else is treated as absent. */
+function normalizeHash(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  return /^[0-9a-f]{64}$/.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * The record id for a hashed upload, derived from the event and the file's
+ * bytes. Two uploads of the same picture to the same event therefore compete
+ * for one id, and DynamoDB's conditional write lets exactly one of them win —
+ * no index scan and no race between guests uploading at the same moment.
+ */
+function photoIdForContent(eventId: string, contentHash: string): string {
+  const digest = createHash('sha256').update(`${eventId}:${contentHash}`).digest('hex');
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    digest.slice(12, 16),
+    digest.slice(16, 20),
+    digest.slice(20, 32),
+  ].join('-');
+}
+
+function readPhoto(item: Record<string, AttributeValue>, duplicate: boolean) {
+  return {
+    id: item.id?.S ?? '',
+    eventId: item.eventId?.S ?? '',
+    s3Key: item.s3Key?.S ?? '',
+    previewS3Key: item.previewS3Key?.S ?? null,
+    uploadedBy: item.uploadedBy?.S ?? null,
+    uploadedByUserId: item.uploadedByUserId?.S ?? null,
+    approved: item.approved?.BOOL ?? true,
+    eventOwner: item.eventOwner?.S ?? null,
+    contentHash: item.contentHash?.S ?? null,
+    duplicate,
+    createdAt: item.createdAt?.S ?? null,
+  };
+}
+
+async function fetchPhoto(id: string): Promise<Record<string, AttributeValue> | null> {
+  const found = await dynamo.send(
+    new GetItemCommand({ TableName: PHOTO_TABLE, Key: { id: { S: id } } }),
+  );
+  return found.Item ?? null;
+}
+
 export const handler: Handler = async (event) => {
   const { eventId, s3Key, previewS3Key, uploadedBy, uploadedByUserId } = event.arguments;
+  const contentHash = normalizeHash(event.arguments.contentHash);
 
   // The photo's files must live under this event's own storage prefix. This
   // stops a crafted request from creating a record that points at another
@@ -32,6 +80,15 @@ export const handler: Handler = async (event) => {
   const prefix = `events/${eventId}/`;
   if (!s3Key.startsWith(prefix) || (previewS3Key && !previewS3Key.startsWith(prefix))) {
     throw new Error('The photo path does not belong to this event.');
+  }
+
+  // Cheap pre-check: if this event already holds these exact bytes, hand back
+  // the record it already has. Nothing is counted and nothing is written, so a
+  // guest re-picking the same photo can't eat into the event's photo limit.
+  const id = contentHash ? photoIdForContent(eventId, contentHash) : randomUUID();
+  if (contentHash) {
+    const existing = await fetchPhoto(id);
+    if (existing) return readPhoto(existing, true);
   }
 
   const found = await dynamo.send(
@@ -76,8 +133,20 @@ export const handler: Handler = async (event) => {
     throw error;
   }
 
+  const releaseSlot = () =>
+    dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'ADD photoCount :neg',
+          ConditionExpression: 'attribute_exists(photoCount) AND photoCount > :zero',
+          ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
+        }),
+      )
+      .catch(() => undefined);
+
   const now = new Date().toISOString();
-  const id = randomUUID();
   const item: Record<string, AttributeValue> = {
     id: { S: id },
     __typename: { S: 'Photo' },
@@ -91,22 +160,26 @@ export const handler: Handler = async (event) => {
   if (previewS3Key) item.previewS3Key = { S: previewS3Key };
   if (uploadedBy) item.uploadedBy = { S: uploadedBy };
   if (uploadedByUserId) item.uploadedByUserId = { S: uploadedByUserId };
+  if (contentHash) item.contentHash = { S: contentHash };
 
   try {
-    await dynamo.send(new PutItemCommand({ TableName: PHOTO_TABLE, Item: item }));
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: PHOTO_TABLE,
+        Item: item,
+        // Only hashed uploads can collide on id, and losing that race means
+        // another upload of the same bytes landed first.
+        ...(contentHash ? { ConditionExpression: 'attribute_not_exists(id)' } : {}),
+      }),
+    );
   } catch (error) {
     // Give the reserved slot back if the record couldn't be written.
-    await dynamo
-      .send(
-        new UpdateItemCommand({
-          TableName: EVENT_TABLE,
-          Key: { id: { S: eventId } },
-          UpdateExpression: 'ADD photoCount :neg',
-          ConditionExpression: 'attribute_exists(photoCount) AND photoCount > :zero',
-          ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
-        }),
-      )
-      .catch(() => undefined);
+    await releaseSlot();
+
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
+      const winner = await fetchPhoto(id);
+      if (winner) return readPhoto(winner, true);
+    }
     throw error;
   }
 
@@ -119,6 +192,8 @@ export const handler: Handler = async (event) => {
     uploadedByUserId: uploadedByUserId ?? null,
     approved: true,
     eventOwner,
+    contentHash,
+    duplicate: false,
     createdAt: now,
   };
 };

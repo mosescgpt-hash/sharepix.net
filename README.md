@@ -52,6 +52,7 @@ Group membership is included in the user's token, so sign out and back in after 
 
 1. **Create an event** → sign up with an email (Cognito sends a verification code) → you get the QR code screen.
 2. **Upload as a guest**: open `/event/{id}/upload` in an incognito window. Photos from guests tag as "Anonymous"; host uploads tag with the email name (e.g. `seth`).
+   Pick one of the same photos again — it should read "Already added" and stay out of the upload.
 3. **Gallery** at `/event/{id}`: "Uploaded by" + download button per photo.
 4. **Admin** at `/event/{id}/admin` as the host: hide/approve and delete photos. Non-owners are turned away.
 5. **Global admin** at `/global-admin` as an `ADMINS` user: monitor all events and manage pilot codes.
@@ -83,7 +84,7 @@ amplify.yml                Amplify Hosting build spec (backend + frontend)
 pages/                     Homepage, pricing, create-event, event gallery/upload/admin
 components/                Logo, EventQRCode, UploadForm, PhotoGrid, PhotoCard,
                            AdminPhotoGrid, PricingCards, Layout, Navbar
-lib/                       api.ts (all AWS calls), pricing.ts, validation.ts, types.ts
+lib/                       api.ts (all AWS calls), pricing.ts, validation.ts, hash.ts, types.ts
 __tests__/                 Jest tests
 ```
 
@@ -92,6 +93,30 @@ __tests__/                 Jest tests
 - **Hosts** sign in with email (user pool). Events are `owner`-protected: only the creator can update/delete.
 - **Guests** never sign in; the identity pool's unauthenticated role lets them read events and create/read photos, and upload to `events/*` in S3.
 - **Moderation**: every photo is stamped with `eventOwner` (the host's owner id) at upload, and the `ownerDefinedIn('eventOwner')` rule lets the host update/delete any photo in their event — enforced server-side, not just in the UI.
+
+## Duplicate uploads
+
+Guests re-pick the same pictures constantly, so every file is identified by a
+SHA-256 of its bytes (`lib/hash.ts`) rather than by its name. There are two
+layers:
+
+- **In the browser**, `UploadForm` hashes each picked file and compares it
+  against the hashes already in the gallery and the rest of the batch. Matches
+  are marked "Already added" and never leave the phone, so a duplicate costs no
+  data and no time.
+- **In `createEventPhoto`**, a photo's record id is derived from
+  `eventId + contentHash`, and the write is conditional on that id being free.
+  Two guests uploading the same picture at the same moment therefore compete for
+  one id: the loser gets the existing record back (`duplicate: true`) instead of
+  creating a second copy, and the event's photo count is left alone.
+
+S3 keys are content-addressed too (`events/{id}/photos/{hash}-{name}`), so a
+re-upload overwrites its own object rather than leaving an orphan behind.
+
+A file that can't be hashed — no WebCrypto, or a video too large to fit in
+memory on an old phone — uploads normally, just without the duplicate check.
+Photos uploaded before this shipped have no stored hash, so they aren't matched
+against; dedupe applies from their first re-upload onward.
 
 ## Design notes
 

@@ -22,6 +22,8 @@ export interface QRPhoto {
   uploadedByUserId?: string | null;
   approved?: boolean | null;
   eventOwner?: string | null;
+  /** SHA-256 of the original file's bytes, used to skip duplicate uploads. */
+  contentHash?: string | null;
   createdAt?: string | null;
 }
 

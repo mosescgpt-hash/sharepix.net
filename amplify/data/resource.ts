@@ -52,6 +52,9 @@ const schema = a.schema({
       uploadedByUserId: a.string(),
       approved: a.boolean(),
       eventOwner: a.string(),
+      // SHA-256 of the original file. createEventPhoto derives the record's id
+      // from it so the same bytes can only ever occupy one slot in an event.
+      contentHash: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create` (photos come only from createEventPhoto) and no
@@ -133,6 +136,10 @@ const schema = a.schema({
     uploadedByUserId: a.string(),
     approved: a.boolean(),
     eventOwner: a.string(),
+    contentHash: a.string(),
+    // True when this upload matched a photo the event already had, so the
+    // existing record was returned instead of a second copy being created.
+    duplicate: a.boolean(),
     createdAt: a.string(),
   }),
 
@@ -145,6 +152,7 @@ const schema = a.schema({
     uploadedByUserId: a.string(),
     approved: a.boolean(),
     eventOwner: a.string(),
+    contentHash: a.string(),
     createdAt: a.string(),
   }),
 
@@ -184,6 +192,8 @@ const schema = a.schema({
 
   // Creates a photo record after stamping eventOwner from the event and
   // enforcing the event's photo limit (plan limit + purchased extra credits).
+  // Passing contentHash makes the call idempotent: the same bytes uploaded to
+  // the same event return the original record instead of a duplicate.
   createEventPhoto: a
     .mutation()
     .arguments({
@@ -192,6 +202,7 @@ const schema = a.schema({
       previewS3Key: a.string(),
       uploadedBy: a.string(),
       uploadedByUserId: a.string(),
+      contentHash: a.string(),
     })
     .returns(a.ref('PhotoUploadResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])

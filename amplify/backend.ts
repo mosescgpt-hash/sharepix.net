@@ -40,9 +40,11 @@ deleteFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 
 // Create function: stamp ownership from the event and enforce the photo limit
 // atomically. Needs to read the event, bump its counter, and write the photo.
+// Photo reads are for the duplicate check — it looks up the content-derived id
+// before writing, and again if it loses a race for it.
 const createFn = backend.createEventPhoto.resources.lambda as LambdaFunction;
 eventTable.grantReadWriteData(createFn);
-photoTable.grantWriteData(createFn);
+photoTable.grantReadWriteData(createFn);
 createFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 
