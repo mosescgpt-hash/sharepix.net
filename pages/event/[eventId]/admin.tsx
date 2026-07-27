@@ -7,6 +7,7 @@ import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import EventQRCode from '@/components/EventQRCode';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import {
+  deleteEventWithPhotos,
   fetchEvent,
   fetchEventPhotos,
   getCurrentUserInfo,
@@ -39,6 +40,7 @@ function AdminDashboardPage() {
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [corporateActive, setCorporateActive] = useState(false);
   const [addOnWorking, setAddOnWorking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -156,6 +158,28 @@ function AdminDashboardPage() {
         ok: false,
       });
       setAddOnWorking(false);
+    }
+  }
+
+  async function handleDeleteEvent() {
+    if (!event) return;
+    const count = photoCount;
+    const warning =
+      count > 0
+        ? `Delete "${event.name}" and permanently remove its ${count} photo${count === 1 ? '' : 's'}? This can't be undone.`
+        : `Delete "${event.name}"? This can't be undone.`;
+    if (!window.confirm(warning)) return;
+    setDeleting(true);
+    setSettingsMsg(null);
+    try {
+      await deleteEventWithPhotos(event.id);
+      await router.push('/my-events');
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The event could not be deleted.',
+        ok: false,
+      });
+      setDeleting(false);
     }
   }
 
@@ -353,6 +377,23 @@ function AdminDashboardPage() {
                   {settingsMsg.text}
                 </p>
               ) : null}
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
+                <div>
+                  <p className="text-sm font-medium text-red-700">Delete event</p>
+                  <p className="text-xs text-ink/55">
+                    Permanently removes this event and all of its photos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteEvent()}
+                  disabled={deleting}
+                  className="rounded-full border border-red-500 px-5 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting…' : 'Delete event'}
+                </button>
+              </div>
             </div>
 
             <div className="mt-8">
