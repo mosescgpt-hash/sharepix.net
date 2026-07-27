@@ -116,3 +116,17 @@ export function isGalleryActive(accessExpiresAt?: string | null, now: Date = new
   const expires = new Date(accessExpiresAt);
   return Number.isFinite(expires.getTime()) ? now < expires : true;
 }
+
+/**
+ * Whether guests can still upload: the access window must be open AND the host
+ * must not have closed the event. Server-side enforcement lives in
+ * createEventPhoto; this mirrors it for the guest UI.
+ */
+export function isUploadOpen(
+  event: { accessExpiresAt?: string | null; uploadsClosed?: boolean | null } | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!event) return false;
+  if (event.uploadsClosed) return false;
+  return isGalleryActive(event.accessExpiresAt, now);
+}

@@ -300,6 +300,50 @@ export async function addEventPhotoCredits(
   return nextCredits;
 }
 
+/**
+ * Update an event's name and/or date. Allowed only until the first photo is
+ * uploaded — once guests have contributed, the event's identity is locked so
+ * the name/date on their memories can't change under them. The photo-count
+ * guard is re-checked here against the live record, not just the UI.
+ */
+export async function updateEventDetails(
+  eventId: string,
+  changes: { name?: string; date?: string | null },
+): Promise<QREvent> {
+  const { data: existing, errors: readErrors } = await client.models.Event.get(
+    { id: eventId },
+    { authMode: 'userPool' },
+  );
+  if (readErrors?.length || !existing) throw new Error('The event could not be loaded.');
+  if ((existing.photoCount ?? 0) > 0) {
+    throw new Error('This event already has photos, so its name and date are locked.');
+  }
+
+  const patch: { id: string; name?: string; date?: string | null } = { id: eventId };
+  if (changes.name !== undefined) {
+    const trimmed = changes.name.trim();
+    if (!trimmed) throw new Error('Enter an event name.');
+    patch.name = trimmed;
+  }
+  if (changes.date !== undefined) patch.date = changes.date || null;
+
+  const { data, errors } = await client.models.Event.update(patch, { authMode: 'userPool' });
+  if (errors?.length || !data) throw new Error('The event could not be updated.');
+  return data as QREvent;
+}
+
+/** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
+export async function setEventUploadsClosed(
+  eventId: string,
+  closed: boolean,
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, uploadsClosed: closed },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The event could not be updated.');
+}
+
 export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
   const { data: photos, errors: photoListErrors } = await client.models.Photo.listPhotoByEventId(
     { eventId },

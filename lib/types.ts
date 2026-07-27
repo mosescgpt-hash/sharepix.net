@@ -8,6 +8,7 @@ export interface QREvent {
   extraPhotoCredits?: number | null;
   photoCount?: number | null;
   accessExpiresAt?: string | null;
+  uploadsClosed?: boolean | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;

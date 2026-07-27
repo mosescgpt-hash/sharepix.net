@@ -42,6 +42,12 @@ export const handler: Handler = async (event) => {
     throw new Error('This event no longer exists or cannot accept uploads.');
   }
 
+  // The host can close an event to stop new uploads while keeping the gallery
+  // viewable. Enforce it here so a crafted request can't bypass the UI.
+  if (ev.uploadsClosed?.BOOL === true) {
+    throw new Error('This event is closed and is no longer accepting uploads.');
+  }
+
   const eventOwner = ev.owner?.S ?? '';
   const photoLimit = toInt(ev.photoLimit?.N);
   const extraCredits = toInt(ev.extraPhotoCredits?.N) ?? 0;

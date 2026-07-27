@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import UploadForm from '@/components/UploadForm';
 import { fetchEvent } from '@/lib/api';
-import { isGalleryActive } from '@/lib/validation';
+import { isUploadOpen } from '@/lib/validation';
 import { QREvent } from '@/lib/types';
 
 export default function GuestUploadPage() {
@@ -39,7 +39,7 @@ export default function GuestUploadPage() {
     };
   }, [eventId]);
 
-  const active = isGalleryActive(event?.accessExpiresAt);
+  const canUpload = isUploadOpen(event);
 
   return (
     <Layout title={event ? `Upload to ${event.name}` : 'Upload photos and videos'}>
@@ -63,8 +63,13 @@ export default function GuestUploadPage() {
             ) : null}
 
             <div className="mt-8">
-              {active ? (
+              {canUpload ? (
                 <UploadForm eventId={event.id} />
+              ) : event.uploadsClosed ? (
+                <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
+                  The host has closed this event, so it&apos;s no longer accepting
+                  new photos. You can still view the gallery below.
+                </p>
               ) : (
                 <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
                   This event&apos;s upload window has closed.
