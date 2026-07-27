@@ -102,6 +102,9 @@ function AdminDashboardPage() {
   // server-maintained counter, falling back to what we loaded.
   const photoCount = event?.photoCount ?? photos.length;
   const detailsLocked = photoCount > 0;
+  // The guest-download add-on is offered on Premium events and to Corporate
+  // subscribers only.
+  const addOnEligible = tier?.id === 'premium' || corporateActive;
 
   async function handleSaveDetails() {
     if (!event) return;
@@ -342,7 +345,7 @@ function AdminDashboardPage() {
                   <p className="mt-1 text-sm text-green-700">
                     ✓ Enabled — guests can download photos and videos from this event.
                   </p>
-                ) : corporateActive ? (
+                ) : addOnEligible ? (
                   <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs text-ink/60">
                       Off by default. Turn on guest downloads for this one event as a
@@ -361,7 +364,8 @@ function AdminDashboardPage() {
                   </div>
                 ) : (
                   <p className="mt-1 text-xs text-ink/60">
-                    Guest downloads are available as a per-event add-on on the{' '}
+                    Guest downloads are available as a per-event add-on on Premium events
+                    and the{' '}
                     <Link href="/corporate" className="text-accent underline">
                       Corporate plan
                     </Link>
@@ -397,11 +401,13 @@ function AdminDashboardPage() {
             </div>
 
             <div className="mt-8">
-              {tier?.id === 'premium' ? (
+              {event.guestDownloadEnabled ? (
                 <DownloadShareBuilder event={event} photos={photos} />
               ) : (
                 <div className="rounded-xl border border-dashed border-ink/20 bg-white px-4 py-5 text-sm text-ink/60">
-                  Download-sharing QR codes with a host-selected collection are available on Premium events.
+                  Download-sharing QR codes let guests download a set of photos you
+                  choose. They require guest downloads, which you can enable per event
+                  as an add-on above (Premium and Corporate).
                 </div>
               )}
             </div>

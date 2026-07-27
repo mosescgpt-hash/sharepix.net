@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import PhotoGrid from '@/components/PhotoGrid';
-import { fetchDownloadShare, fetchEventPhotos } from '@/lib/api';
+import { fetchDownloadShare, fetchEvent, fetchEventPhotos } from '@/lib/api';
 import { DisplayPhoto, DownloadShare } from '@/lib/types';
 import { isGalleryActive } from '@/lib/validation';
 
@@ -11,6 +11,7 @@ export default function DownloadSharePage() {
   const shareId = typeof router.query.shareId === 'string' ? router.query.shareId : null;
   const [share, setShare] = useState<DownloadShare | null>(null);
   const [photos, setPhotos] = useState<DisplayPhoto[]>([]);
+  const [downloadsEnabled, setDownloadsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,9 +27,13 @@ export default function DownloadSharePage() {
           return;
         }
         const allowedIds = new Set(loadedShare.photoIds);
-        const eventPhotos = await fetchEventPhotos(loadedShare.eventId);
+        const [event, eventPhotos] = await Promise.all([
+          fetchEvent(loadedShare.eventId),
+          fetchEventPhotos(loadedShare.eventId),
+        ]);
         if (!cancelled) {
           setShare(loadedShare);
+          setDownloadsEnabled(event?.guestDownloadEnabled === true);
           setPhotos(eventPhotos.filter((photo) => allowedIds.has(photo.id)));
         }
       } catch {
@@ -59,8 +64,9 @@ export default function DownloadSharePage() {
             <div className="mt-8">
               <PhotoGrid
                 photos={photos}
-                canDownload
+                canDownload={downloadsEnabled}
                 eventName={share.eventName}
+                downloadMessage="Downloads aren't currently enabled for this event."
                 emptyMessage="The host has not included any currently available media in this link."
               />
             </div>
