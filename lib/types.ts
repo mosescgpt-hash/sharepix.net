@@ -23,6 +23,7 @@ export interface QRPhoto {
   uploadedByUserId?: string | null;
   approved?: boolean | null;
   eventOwner?: string | null;
+  contentHash?: string | null;
   createdAt?: string | null;
 }
 

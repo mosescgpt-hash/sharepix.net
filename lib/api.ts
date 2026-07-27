@@ -457,6 +457,37 @@ export async function prepareEventUpload(
   };
 }
 
+/** SHA-256 of a file's bytes as a lowercase hex string, for duplicate detection. */
+export async function computeContentHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Content hashes of the photos already in an event, so the uploader can skip
+ * re-uploading identical files. Best-effort: if the read fails, we return an
+ * empty set and simply upload everything (dedup is a convenience, not a gate).
+ */
+export async function fetchEventPhotoHashes(eventId: string): Promise<Set<string>> {
+  try {
+    const { data, errors } = await client.queries.listEventPhotos(
+      { eventId },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length) return new Set();
+    const hashes = new Set<string>();
+    for (const photo of data ?? []) {
+      if (photo?.contentHash) hashes.add(photo.contentHash);
+    }
+    return hashes;
+  } catch {
+    return new Set();
+  }
+}
+
 /**
  * Uploads one image to S3 and records its metadata.
  * Signed-in hosts are tagged with their name; guests are "Anonymous".
@@ -476,6 +507,7 @@ export async function uploadEventPhotoWithContext(
   context: EventUploadContext,
   file: File,
   onProgress?: (p: { loaded: number; total: number }) => void,
+  contentHash?: string,
 ): Promise<QRPhoto> {
   const { eventId } = context;
   const key = buildPhotoKey(eventId, file.name);
@@ -516,6 +548,7 @@ export async function uploadEventPhotoWithContext(
         previewS3Key: previewKey ?? undefined,
         uploadedBy: context.uploadedBy,
         uploadedByUserId: context.uploadedByUserId,
+        contentHash: contentHash ?? undefined,
       },
       { authMode: context.authMode },
     );
