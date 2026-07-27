@@ -5,6 +5,7 @@ import {
   isAllowedImageType,
   isAllowedVideoType,
   isGalleryActive,
+  isUploadOpen,
   isVideoFilename,
   sanitizeFilename,
   validateImageFile,
@@ -127,6 +128,29 @@ describe('gallery access windows', () => {
 
   it('treats missing expiry as active', () => {
     expect(isGalleryActive(null)).toBe(true);
+  });
+});
+
+describe('upload open state', () => {
+  const now = new Date('2026-06-01T00:00:00Z');
+
+  it('is open when within the window and not closed', () => {
+    expect(isUploadOpen({ accessExpiresAt: '2026-07-01T00:00:00Z' }, now)).toBe(true);
+    expect(isUploadOpen({ accessExpiresAt: null, uploadsClosed: false }, now)).toBe(true);
+  });
+
+  it('is closed when the host closed the event, even inside the window', () => {
+    expect(
+      isUploadOpen({ accessExpiresAt: '2026-07-01T00:00:00Z', uploadsClosed: true }, now),
+    ).toBe(false);
+  });
+
+  it('is closed when the access window has ended', () => {
+    expect(isUploadOpen({ accessExpiresAt: '2026-05-01T00:00:00Z' }, now)).toBe(false);
+  });
+
+  it('is closed for a missing event', () => {
+    expect(isUploadOpen(null, now)).toBe(false);
   });
 });
 

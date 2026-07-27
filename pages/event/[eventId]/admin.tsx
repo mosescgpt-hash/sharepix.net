@@ -6,7 +6,13 @@ import Layout from '@/components/Layout';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import EventQRCode from '@/components/EventQRCode';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
-import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
+import {
+  fetchEvent,
+  fetchEventPhotos,
+  getCurrentUserInfo,
+  setEventUploadsClosed,
+  updateEventDetails,
+} from '@/lib/api';
 import { getTier } from '@/lib/pricing';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -21,6 +27,13 @@ function AdminDashboardPage() {
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(true);
+
+  // Event-settings panel state (edit name/date, close/reopen uploads).
+  const [editName, setEditName] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -67,8 +80,61 @@ function AdminDashboardPage() {
     return () => window.clearTimeout(timer);
   }, [event, router.asPath]);
 
+  // Keep the edit fields in sync with the loaded event.
+  useEffect(() => {
+    if (!event) return;
+    setEditName(event.name ?? '');
+    setEditDate(event.date ?? '');
+  }, [event]);
+
   const tier = event ? getTier(event.tier) : undefined;
   const hiddenCount = photos.filter((p) => p.approved === false).length;
+  // Name/date can be edited only until the first photo lands. Prefer the
+  // server-maintained counter, falling back to what we loaded.
+  const photoCount = event?.photoCount ?? photos.length;
+  const detailsLocked = photoCount > 0;
+
+  async function handleSaveDetails() {
+    if (!event) return;
+    setSavingDetails(true);
+    setSettingsMsg(null);
+    try {
+      const updated = await updateEventDetails(event.id, { name: editName, date: editDate });
+      setEvent(updated);
+      setSettingsMsg({ text: 'Event details updated.', ok: true });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The event could not be updated.',
+        ok: false,
+      });
+    } finally {
+      setSavingDetails(false);
+    }
+  }
+
+  async function handleToggleClosed() {
+    if (!event) return;
+    const next = !event.uploadsClosed;
+    setClosing(true);
+    setSettingsMsg(null);
+    try {
+      await setEventUploadsClosed(event.id, next);
+      setEvent({ ...event, uploadsClosed: next });
+      setSettingsMsg({
+        text: next
+          ? 'Event closed — guests can no longer upload.'
+          : 'Event reopened — guests can upload again.',
+        ok: true,
+      });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The event could not be updated.',
+        ok: false,
+      });
+    } finally {
+      setClosing(false);
+    }
+  }
 
   return (
     <Layout title={event ? `Admin — ${event.name}` : 'Admin dashboard'}>
@@ -139,6 +205,97 @@ function AdminDashboardPage() {
                 <p className="font-display text-2xl font-bold">{hiddenCount}</p>
                 <p className="text-xs text-ink/60">Hidden from gallery</p>
               </div>
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-display text-xl font-bold">Event settings</h2>
+                <Link
+                  href={`/event/${event.id}/brochure`}
+                  target="_blank"
+                  className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent"
+                >
+                  Printable brochure →
+                </Link>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-sm font-medium">Event name</span>
+                  <input
+                    type="text"
+                    value={editName}
+                    disabled={detailsLocked || savingDetails}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-ink/50"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-medium">Event date</span>
+                  <input
+                    type="date"
+                    value={editDate}
+                    disabled={detailsLocked || savingDetails}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-ink/50"
+                  />
+                </label>
+              </div>
+
+              {detailsLocked ? (
+                <p className="mt-2 text-xs text-ink/55">
+                  The name and date lock once the first photo is uploaded, so guests&apos;
+                  memories keep the details they saw.
+                </p>
+              ) : (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveDetails}
+                    disabled={savingDetails}
+                    className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                  >
+                    {savingDetails ? 'Saving…' : 'Save details'}
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
+                <div>
+                  <p className="text-sm font-medium">
+                    Uploads are {event.uploadsClosed ? 'closed' : 'open'}
+                  </p>
+                  <p className="text-xs text-ink/55">
+                    {event.uploadsClosed
+                      ? 'Guests cannot add new photos. The gallery stays viewable.'
+                      : 'Close the event when you have all the photos you want.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleClosed}
+                  disabled={closing}
+                  className={`rounded-full px-5 py-2.5 text-sm font-medium disabled:opacity-50 ${
+                    event.uploadsClosed
+                      ? 'bg-accent text-white hover:bg-accent/90'
+                      : 'border border-red-500 text-red-700 hover:bg-red-50'
+                  }`}
+                >
+                  {closing
+                    ? 'Working…'
+                    : event.uploadsClosed
+                      ? 'Reopen uploads'
+                      : 'Close event'}
+                </button>
+              </div>
+
+              {settingsMsg ? (
+                <p
+                  className={`mt-3 text-sm ${settingsMsg.ok ? 'text-green-700' : 'text-red-700'}`}
+                >
+                  {settingsMsg.text}
+                </p>
+              ) : null}
             </div>
 
             <div className="mt-8">

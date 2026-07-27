@@ -28,6 +28,9 @@ const schema = a.schema({
       // the limit can be enforced atomically without scanning the table.
       photoCount: a.integer(),
       accessExpiresAt: a.datetime(),
+      // When true, the host has closed the event: guests can no longer upload,
+      // but the gallery stays viewable. Enforced server-side in createEventPhoto.
+      uploadsClosed: a.boolean(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })
