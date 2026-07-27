@@ -22,6 +22,52 @@ export const handler: Handler = async (event) => {
     );
   }
 
+  const appBaseUrl = process.env.APP_URL ?? 'https://www.sharepix.net';
+
+  // Corporate: a recurring $149/month subscription rather than a one-time event
+  // payment. We stamp the caller's id (and owner string) into metadata so the
+  // webhook can attach the subscription to their account.
+  if ((event.arguments.kind ?? '') === 'corporate') {
+    const identity = event.identity as
+      | { sub?: string; username?: string; claims?: { email?: string } }
+      | undefined;
+    const sub = identity?.sub;
+    if (!sub) {
+      throw new Error('You must be signed in to subscribe.');
+    }
+    const owner = `${sub}::${identity?.username ?? ''}`;
+    const email = identity?.claims?.email;
+    const metadata = { kind: 'corporate', userId: sub, owner };
+    try {
+      const stripe = new Stripe(secretKey);
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        customer_email: email || undefined,
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: 14900,
+              recurring: { interval: 'month' },
+              product_data: { name: 'SharePix Corporate (monthly)' },
+            },
+          },
+        ],
+        success_url: `${appBaseUrl}/corporate?subscribed=1`,
+        cancel_url: `${appBaseUrl}/corporate?checkout=cancelled`,
+        metadata,
+        subscription_data: { metadata },
+      });
+      if (!session.url) throw new Error('Stripe did not return a checkout URL.');
+      return { url: session.url };
+    } catch (error) {
+      throw new Error(
+        `Stripe subscription checkout failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   const tier = (event.arguments.tier ?? '').toLowerCase();
   const pricing = TIER_PRICING[tier];
   if (!pricing) {

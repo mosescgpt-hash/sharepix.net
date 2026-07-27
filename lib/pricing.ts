@@ -62,14 +62,20 @@ export const PRICING_TIERS: PricingTier[] = [
 
 export const CORPORATE_PLAN = {
   name: 'Corporate',
-  priceLabel: 'Monthly plan',
+  price: 149, // USD per month
+  interval: 'month' as const,
+  priceLabel: '$149 / month',
+  // One-time cost to enable guest downloads on a single corporate event
+  // (guest downloads are off by default on corporate events).
+  guestDownloadAddOnPrice: 15,
   accessLabel: 'Multiple events under one account',
   features: [
     'Multiple active events',
     'Central event and storage dashboard',
-    'Team access and permissions',
+    'Guest downloads available per event ($15 each)',
     'Custom company branding',
-    'Guest downloads and bulk ZIP downloads',
+    'Host and bulk ZIP downloads',
+    '30 days to download after your last paid month',
     'Priority support',
   ],
 };

@@ -4,6 +4,7 @@ import { createEventPhoto as createEventPhotoFn } from '../functions/create-even
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
+import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 
 /**
  * SharePix data models.
@@ -107,6 +108,25 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // A host's Corporate subscription state, keyed by their Cognito user id.
+  // The Stripe webhook writes this directly (owner is stamped from the checkout
+  // metadata); the host reads their own row via owner auth to see their status.
+  CorporateSubscription: a
+    .model({
+      userId: a.string().required(),
+      email: a.string(),
+      status: a.string(), // active | canceled | past_due | ...
+      stripeCustomerId: a.string(),
+      stripeSubscriptionId: a.string(),
+      currentPeriodEnd: a.datetime(),
+      cancelAtPeriodEnd: a.boolean(),
+      // When the subscription ends, downloads stay available until this date
+      // (30 days past the last paid period).
+      downloadGraceEndsAt: a.datetime(),
+    })
+    .identifier(['userId'])
+    .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
+
   DiscountCode: a
     .model({
       code: a.string().required(),
@@ -187,15 +207,25 @@ const schema = a.schema({
     url: a.string().required(),
   }),
 
-  // Starts a Stripe Checkout Session for a plan and returns the hosted URL.
-  // eventId (optional) ties the payment to a pending event so the webhook can
-  // activate it once payment completes.
+  // Starts a Stripe Checkout Session and returns the hosted URL.
+  // - kind 'corporate' → a recurring $149/month subscription checkout.
+  // - otherwise → a one-time event payment; eventId (optional) ties it to a
+  //   pending event so the webhook can activate it once payment completes.
   createCheckoutSession: a
     .mutation()
-    .arguments({ tier: a.string().required(), eventId: a.string() })
+    .arguments({ tier: a.string().required(), eventId: a.string(), kind: a.string() })
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(stripeCheckoutFn)),
+
+  // Opens the Stripe billing portal so a corporate host can manage or cancel
+  // their subscription themselves. Returns the hosted portal URL.
+  openBillingPortal: a
+    .mutation()
+    .arguments({})
+    .returns(a.ref('CheckoutSession'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(corporatePortalFn)),
 
   // Creates a photo record after stamping eventOwner from the event and
   // enforcing the event's photo limit (plan limit + purchased extra credits).

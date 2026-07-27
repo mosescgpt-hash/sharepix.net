@@ -7,6 +7,40 @@ import { randomUUID } from 'node:crypto';
 const dynamo = new DynamoDBClient({});
 const PAYMENT_TABLE = process.env.PAYMENT_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Upsert a corporate subscription row from a Stripe subscription object. Owner is
+// stamped from the checkout metadata so the host can read their own row.
+async function upsertCorporateSubscription(subscription: Stripe.Subscription) {
+  const userId = subscription.metadata?.userId;
+  if (!userId) return; // not one of ours
+  const owner = subscription.metadata?.owner ?? '';
+  const now = new Date().toISOString();
+  const periodEndMs = (subscription.current_period_end ?? 0) * 1000;
+  const currentPeriodEnd = periodEndMs ? new Date(periodEndMs).toISOString() : '';
+  // Downloads stay available until 30 days past the current period end.
+  const graceEndsAt = periodEndMs ? new Date(periodEndMs + 30 * DAY_MS).toISOString() : '';
+
+  const item: Record<string, { S: string } | { BOOL: boolean }> = {
+    userId: { S: userId },
+    __typename: { S: 'CorporateSubscription' },
+    status: { S: subscription.status ?? 'active' },
+    stripeSubscriptionId: { S: subscription.id },
+    cancelAtPeriodEnd: { BOOL: Boolean(subscription.cancel_at_period_end) },
+    updatedAt: { S: now },
+    createdAt: { S: now },
+  };
+  if (owner) item.owner = { S: owner };
+  if (typeof subscription.customer === 'string') {
+    item.stripeCustomerId = { S: subscription.customer };
+  }
+  if (currentPeriodEnd) item.currentPeriodEnd = { S: currentPeriodEnd };
+  if (graceEndsAt) item.downloadGraceEndsAt = { S: graceEndsAt };
+
+  await dynamo.send(new PutItemCommand({ TableName: CORPORATE_TABLE, Item: item }));
+}
 
 // constructEvent only needs the signing secret to verify the payload — the API
 // key isn't used, but the Stripe client requires one to instantiate.
@@ -102,6 +136,22 @@ export const handler = async (event: {
           return { statusCode: 500, body: 'Failed to activate event.' };
         }
       }
+    }
+  }
+
+  // Corporate subscription lifecycle: keep the CorporateSubscription row in sync
+  // so the app knows who is an active corporate customer and when their download
+  // grace ends.
+  if (
+    stripeEvent.type === 'customer.subscription.created' ||
+    stripeEvent.type === 'customer.subscription.updated' ||
+    stripeEvent.type === 'customer.subscription.deleted'
+  ) {
+    try {
+      await upsertCorporateSubscription(stripeEvent.data.object as Stripe.Subscription);
+    } catch (err) {
+      console.error('Failed to update corporate subscription', err);
+      return { statusCode: 500, body: 'Failed to update subscription.' };
     }
   }
 
