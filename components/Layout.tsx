@@ -32,6 +32,10 @@ export default function Layout({ title, children }: LayoutProps) {
           <Link href="/privacy" className="text-white/70 underline hover:text-white">
             Privacy Policy
           </Link>
+          <span className="mx-2 text-white/30">·</span>
+          <Link href="/terms" className="text-white/70 underline hover:text-white">
+            Terms of Service
+          </Link>
         </p>
       </footer>
     </div>

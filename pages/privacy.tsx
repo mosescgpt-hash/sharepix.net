@@ -15,8 +15,9 @@ export default function PrivacyPage() {
         <div className="mt-8 space-y-8 text-ink/80 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_h3]:font-semibold [&_h3]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
-              SharePix (&ldquo;SharePix,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or
-              &ldquo;our&rdquo;) provides an event photo-sharing service at{' '}
+              SharePix, a product of Calvin Solutions LLC (&ldquo;SharePix,&rdquo;
+              &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), provides an event
+              photo-sharing service at{' '}
               <a href="https://www.sharepix.net">sharepix.net</a> (the
               &ldquo;Service&rdquo;). This Privacy Policy explains what information we
               collect, how we use and share it, and the choices you have. By using the
