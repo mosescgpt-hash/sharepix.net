@@ -5,7 +5,6 @@ import Layout from '@/components/Layout';
 import { isGlobalAdmin } from '@/lib/admin';
 import {
   addEventPhotoCredits,
-  countPhotosViaSecureQuery,
   createDiscountCode,
   deleteDiscountCode,
   deleteEventAsGlobalAdmin,
@@ -37,9 +36,6 @@ function GlobalAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [selfTest, setSelfTest] = useState<
-    { name: string; secure: number; approved: number; ok: boolean; error?: string }[] | null
-  >(null);
   const [userEmail, setUserEmail] = useState('');
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -183,34 +179,6 @@ function GlobalAdminPage() {
         text: err instanceof Error ? err.message : 'The action could not be completed.',
         ok: false,
       });
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleSelfTest() {
-    setWorking('selftest');
-    setError(null);
-    setSelfTest(null);
-    try {
-      const results = await Promise.all(
-        events.map(async (event) => {
-          const approved = photoCounts[event.id] ?? 0;
-          try {
-            const secure = await countPhotosViaSecureQuery(event.id);
-            return { name: event.name, secure, approved, ok: true };
-          } catch (err) {
-            return {
-              name: event.name,
-              secure: -1,
-              approved,
-              ok: false,
-              error: err instanceof Error ? err.message : 'query failed',
-            };
-          }
-        }),
-      );
-      setSelfTest(results);
     } finally {
       setWorking(null);
     }
@@ -396,44 +364,6 @@ function GlobalAdminPage() {
                 >
                   {userMessage.text}
                 </p>
-              ) : null}
-            </div>
-
-            <div className="mt-8 rounded-2xl border border-dashed border-ink/20 bg-white p-5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="font-display text-xl font-bold">Photo security self-test</h2>
-                  <p className="text-sm text-ink/70">
-                    Checks the new scoped photo query returns each event&apos;s photos. When every
-                    row is ✓, the broad guest photo access can be safely removed.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={working === 'selftest'}
-                  onClick={() => void handleSelfTest()}
-                  className="shrink-0 rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
-                >
-                  {working === 'selftest' ? 'Testing…' : 'Run self-test'}
-                </button>
-              </div>
-              {selfTest ? (
-                <ul className="mt-4 space-y-2 text-sm">
-                  {selfTest.map((row, index) => (
-                    <li key={`${row.name}-${index}`} className="rounded-lg bg-smoke px-3 py-2">
-                      {row.ok ? (
-                        <span>
-                          {row.secure >= row.approved ? '✓' : '⚠️'} <strong>{row.name}</strong> —
-                          secure query returned {row.secure} of {row.approved} photos
-                        </span>
-                      ) : (
-                        <span className="text-red-700">
-                          ✗ <strong>{row.name}</strong> — {row.error}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
               ) : null}
             </div>
 
