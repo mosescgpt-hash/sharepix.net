@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import { signOut } from 'aws-amplify/auth';
 import Layout from '@/components/Layout';
-import { listMyEvents } from '@/lib/api';
+import { deleteMyEvent, listMyEvents, startCheckout } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
@@ -21,6 +21,7 @@ function MyEventsPage() {
   const [admin, setAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([listMyEvents(), isGlobalAdmin().catch(() => false)])
@@ -35,6 +36,32 @@ function MyEventsPage() {
   async function handleSignOut() {
     await signOut();
     await router.replace('/');
+  }
+
+  async function handleCompletePayment(event: QREvent) {
+    setWorking(event.id);
+    setError(null);
+    try {
+      const url = await startCheckout(event.tier, event.id);
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Checkout could not be started.');
+      setWorking(null);
+    }
+  }
+
+  async function handleCancelEvent(event: QREvent) {
+    if (!window.confirm(`Cancel and remove "${event.name}"? This can't be undone.`)) return;
+    setWorking(event.id);
+    setError(null);
+    try {
+      await deleteMyEvent(event.id);
+      setEvents((prev) => prev.filter((e) => e.id !== event.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The event could not be removed.');
+    } finally {
+      setWorking(null);
+    }
   }
 
   return (
@@ -90,8 +117,14 @@ function MyEventsPage() {
           <div className="mt-8 grid gap-5 sm:grid-cols-2">
             {events.map((event) => {
               const tier = getTier(event.tier);
+              const pending = event.paid === false;
               return (
-                <article key={event.id} className="rounded-2xl border border-ink/10 bg-white p-5 shadow-sm">
+                <article
+                  key={event.id}
+                  className={`rounded-2xl border p-5 shadow-sm ${
+                    pending ? 'border-amber-300 bg-amber-50/60' : 'border-ink/10 bg-white'
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <h2 className="font-display text-xl font-bold">{event.name}</h2>
@@ -103,31 +136,64 @@ function MyEventsPage() {
                       {event.eventCode}
                     </span>
                   </div>
-                  {event.accessExpiresAt ? (
-                    <p className="mt-4 text-sm text-ink/55">
-                      Gallery access through {new Date(event.accessExpiresAt).toLocaleDateString()}
-                    </p>
-                  ) : null}
-                  <div className="mt-5 grid gap-2 sm:grid-cols-3">
-                    <Link
-                      href={`/event/${event.id}/admin#event-qr-code`}
-                      className="rounded-full bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-accent/90"
-                    >
-                      QR code
-                    </Link>
-                    <Link
-                      href={`/event/${event.id}/admin`}
-                      className="rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night"
-                    >
-                      Manage event
-                    </Link>
-                    <Link
-                      href={`/event/${event.id}`}
-                      className="rounded-full border border-ink/20 px-4 py-2.5 text-center text-sm font-medium hover:border-accent hover:text-accent"
-                    >
-                      View gallery
-                    </Link>
-                  </div>
+
+                  {pending ? (
+                    <>
+                      <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
+                        Payment incomplete — this event isn&apos;t active and can&apos;t
+                        collect photos until payment is finished.
+                      </p>
+                      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={working === event.id}
+                          onClick={() => void handleCompletePayment(event)}
+                          className="rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                        >
+                          {working === event.id
+                            ? 'Working…'
+                            : `Complete payment · $${tier?.price ?? ''}`}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={working === event.id}
+                          onClick={() => void handleCancelEvent(event)}
+                          className="rounded-full border border-red-300 px-4 py-2.5 text-center text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Cancel event
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {event.accessExpiresAt ? (
+                        <p className="mt-4 text-sm text-ink/55">
+                          Gallery access through{' '}
+                          {new Date(event.accessExpiresAt).toLocaleDateString()}
+                        </p>
+                      ) : null}
+                      <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                        <Link
+                          href={`/event/${event.id}/admin#event-qr-code`}
+                          className="rounded-full bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-accent/90"
+                        >
+                          QR code
+                        </Link>
+                        <Link
+                          href={`/event/${event.id}/admin`}
+                          className="rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night"
+                        >
+                          Manage event
+                        </Link>
+                        <Link
+                          href={`/event/${event.id}`}
+                          className="rounded-full border border-ink/20 px-4 py-2.5 text-center text-sm font-medium hover:border-accent hover:text-accent"
+                        >
+                          View gallery
+                        </Link>
+                      </div>
+                    </>
+                  )}
                 </article>
               );
             })}

@@ -43,6 +43,13 @@ export const handler: Handler = async (event) => {
     throw new Error('This event no longer exists or cannot accept uploads.');
   }
 
+  // An event created but not yet paid for is inactive — reject uploads until
+  // payment completes (the Stripe webhook flips `paid` to true). Missing `paid`
+  // (older events) is treated as active.
+  if (ev.paid?.BOOL === false) {
+    throw new Error('This event is not active yet. Please complete payment first.');
+  }
+
   // The host can close an event to stop new uploads while keeping the gallery
   // viewable. Enforce it here so a crafted request can't bypass the UI.
   if (ev.uploadsClosed?.BOOL === true) {

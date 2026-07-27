@@ -63,7 +63,12 @@ export default function GuestUploadPage() {
             ) : null}
 
             <div className="mt-8">
-              {canUpload ? (
+              {event.paid === false ? (
+                <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
+                  This event isn&apos;t active yet. The host needs to finish setting it up
+                  before photos can be added.
+                </p>
+              ) : canUpload ? (
                 <UploadForm eventId={event.id} />
               ) : event.uploadsClosed ? (
                 <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
