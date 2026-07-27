@@ -57,6 +57,17 @@ export interface DownloadShare {
   createdAt?: string | null;
 }
 
+export interface CorporateSubscription {
+  userId: string;
+  email?: string | null;
+  status?: string | null;
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
+  downloadGraceEndsAt?: string | null;
+}
+
 export interface DiscountRedemption {
   valid: boolean;
   message?: string | null;

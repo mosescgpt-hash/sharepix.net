@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
+import { CORPORATE_PLAN } from '@/lib/pricing';
 
 export default function PricingPage() {
   return (
@@ -14,6 +16,24 @@ export default function PricingPage() {
         </p>
         <div className="mt-10">
           <PricingCards />
+        </div>
+
+        <div className="mx-auto mt-10 max-w-2xl rounded-2xl border border-ink/10 bg-ink px-6 py-6 text-white sm:flex sm:items-center sm:justify-between sm:gap-6">
+          <div>
+            <h2 className="font-display text-xl font-bold">
+              Running multiple events? {CORPORATE_PLAN.name} plan
+            </h2>
+            <p className="mt-1 text-sm text-white/75">
+              {CORPORATE_PLAN.priceLabel} — one subscription for teams, with a central
+              dashboard and per-event guest downloads.
+            </p>
+          </div>
+          <Link
+            href="/corporate"
+            className="mt-4 inline-block shrink-0 rounded-full bg-accent px-6 py-3 text-center font-medium text-white hover:bg-accent/90 sm:mt-0"
+          >
+            See Corporate
+          </Link>
         </div>
         <div className="mx-auto mt-12 max-w-2xl rounded-2xl border border-ink/10 bg-white p-6 text-sm text-ink/70">
           <h2 className="font-display text-lg font-bold text-ink">Common questions</h2>

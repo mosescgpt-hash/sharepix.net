@@ -6,6 +6,7 @@ import { uploadData, getUrl, downloadData } from 'aws-amplify/storage';
 import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
 import {
+  CorporateSubscription,
   DiscountCode,
   DiscountRedemption,
   DownloadShare,
@@ -258,6 +259,46 @@ export async function listPaymentsCount(): Promise<number> {
     nextToken = next;
   } while (nextToken);
   return count;
+}
+
+/**
+ * Starts the Corporate ($149/month) subscription checkout and returns the
+ * hosted Stripe URL. The webhook attaches the subscription to this account.
+ */
+export async function startCorporateSubscription(): Promise<string> {
+  const { data, errors } = await client.mutations.createCheckoutSession(
+    { tier: 'corporate', kind: 'corporate' },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.url) throw new Error('Checkout did not return a URL.');
+  return data.url;
+}
+
+/** The current host's corporate subscription row, or null if they have none. */
+export async function getMyCorporateSubscription(): Promise<CorporateSubscription | null> {
+  const { data, errors } = await client.models.CorporateSubscription.list({
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return (data?.[0] as CorporateSubscription) ?? null;
+}
+
+/** Whether a corporate subscription counts as active right now. */
+export function isCorporateActive(sub: CorporateSubscription | null): boolean {
+  if (!sub) return false;
+  return sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
+}
+
+/** Opens the Stripe billing portal so a corporate host can manage/cancel. */
+export async function openBillingPortal(): Promise<string> {
+  const { data, errors } = await client.mutations.openBillingPortal(
+    {},
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.url) throw new Error('The billing portal could not be opened.');
+  return data.url;
 }
 
 /** Global-admin action on a user account: reset password, or enable/disable. */

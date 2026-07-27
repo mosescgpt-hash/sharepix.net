@@ -10,6 +10,7 @@ import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
+import { corporatePortal } from './functions/corporate-portal/resource';
 
 const backend = defineBackend({
   auth,
@@ -21,11 +22,13 @@ const backend = defineBackend({
   listEventPhotos,
   adminUserActions,
   stripeWebhook,
+  corporatePortal,
 });
 
 const eventTable = backend.data.resources.tables.Event;
 const photoTable = backend.data.resources.tables.Photo;
 const paymentTable = backend.data.resources.tables.Payment;
+const corporateTable = backend.data.resources.tables.CorporateSubscription;
 const bucket = backend.storage.resources.bucket;
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
@@ -75,11 +78,19 @@ adminFn.addToRolePolicy(
 const webhookFn = backend.stripeWebhook.resources.lambda as LambdaFunction;
 paymentTable.grantWriteData(webhookFn);
 eventTable.grantWriteData(webhookFn);
+corporateTable.grantWriteData(webhookFn);
 webhookFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
 webhookFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+webhookFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 const webhookUrl = webhookFn.addFunctionUrl({
   authType: FunctionUrlAuthType.NONE,
 });
+
+// Corporate billing portal: reads the caller's Stripe customer id from their
+// subscription row, then opens Stripe's hosted portal to manage/cancel.
+const corporatePortalFn = backend.corporatePortal.resources.lambda as LambdaFunction;
+corporateTable.grantReadData(corporatePortalFn);
+corporatePortalFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 
 backend.addOutput({
   custom: {
