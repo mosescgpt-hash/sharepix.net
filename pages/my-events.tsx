@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import { signOut } from 'aws-amplify/auth';
 import Layout from '@/components/Layout';
-import { deleteMyEvent, listMyEvents, startCheckout } from '@/lib/api';
+import { deleteMyEvent, downloadEventsAsZip, listMyEvents, startCheckout } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
@@ -22,6 +22,10 @@ function MyEventsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
+  // Multi-event bulk download.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState('');
 
   useEffect(() => {
     Promise.all([listMyEvents(), isGlobalAdmin().catch(() => false)])
@@ -57,10 +61,53 @@ function MyEventsPage() {
     try {
       await deleteMyEvent(event.id);
       setEvents((prev) => prev.filter((e) => e.id !== event.id));
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(event.id);
+        return next;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The event could not be removed.');
     } finally {
       setWorking(null);
+    }
+  }
+
+  // Only active (paid) events have photos to download.
+  const downloadableEvents = events.filter((event) => event.paid !== false);
+  const allSelected =
+    downloadableEvents.length > 0 && selected.size >= downloadableEvents.length;
+
+  function toggleSelect(eventId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected(allSelected ? new Set() : new Set(downloadableEvents.map((e) => e.id)));
+  }
+
+  async function handleDownloadSelected() {
+    const chosen = downloadableEvents
+      .filter((event) => selected.has(event.id))
+      .map((event) => ({ id: event.id, name: event.name }));
+    if (chosen.length === 0) return;
+    setZipping(true);
+    setError(null);
+    setZipProgress('Preparing…');
+    try {
+      await downloadEventsAsZip(chosen, (completed, total) => {
+        setZipProgress(`Adding ${completed} of ${total}…`);
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The download could not be created.');
+    } finally {
+      setZipping(false);
+      setZipProgress('');
     }
   }
 
@@ -114,10 +161,43 @@ function MyEventsPage() {
             </Link>
           </div>
         ) : (
-          <div className="mt-8 grid gap-5 sm:grid-cols-2">
+          <>
+            {downloadableEvents.length > 0 ? (
+              <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-display font-bold">Download photos</p>
+                  <p className="text-sm text-ink/60">
+                    Check one or more events, then download them together as a ZIP (each
+                    event in its own folder).
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <button
+                    type="button"
+                    onClick={toggleSelectAll}
+                    className="rounded-full border border-ink/20 px-3 py-2 font-medium hover:border-accent"
+                  >
+                    {allSelected ? 'Unselect all' : 'Select all'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadSelected()}
+                    disabled={zipping || selected.size === 0}
+                    className="rounded-full bg-ink px-4 py-2 font-medium text-white hover:bg-night disabled:opacity-50"
+                  >
+                    {zipping
+                      ? zipProgress || 'Preparing…'
+                      : `Download selected (${selected.size})`}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
             {events.map((event) => {
               const tier = getTier(event.tier);
               const pending = event.paid === false;
+              const isSelected = selected.has(event.id);
               return (
                 <article
                   key={event.id}
@@ -126,11 +206,22 @@ function MyEventsPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="font-display text-xl font-bold">{event.name}</h2>
-                      <p className="mt-1 text-sm text-ink/60">
-                        {formatDate(event.date)} · {tier?.name ?? event.tier} plan
-                      </p>
+                    <div className="flex items-start gap-3">
+                      {!pending ? (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(event.id)}
+                          aria-label={`Select ${event.name} for download`}
+                          className="mt-1.5 h-5 w-5 shrink-0 accent-accent"
+                        />
+                      ) : null}
+                      <div>
+                        <h2 className="font-display text-xl font-bold">{event.name}</h2>
+                        <p className="mt-1 text-sm text-ink/60">
+                          {formatDate(event.date)} · {tier?.name ?? event.tier} plan
+                        </p>
+                      </div>
                     </div>
                     <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-accent">
                       {event.eventCode}
@@ -197,7 +288,8 @@ function MyEventsPage() {
                 </article>
               );
             })}
-          </div>
+            </div>
+          </>
         )}
       </section>
     </Layout>

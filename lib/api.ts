@@ -750,3 +750,57 @@ export async function downloadPhotosAsZip(
   link.remove();
   URL.revokeObjectURL(blobUrl);
 }
+
+/**
+ * One ZIP containing several events' photos, each in its own subfolder. Used by
+ * the multi-event bulk download in the host dashboard (check several events →
+ * download them together).
+ */
+export async function downloadEventsAsZip(
+  events: { id: string; name: string }[],
+  onProgress?: (completed: number, total: number) => void,
+): Promise<void> {
+  // Gather each event's photos first so we know the grand total for progress.
+  const groups: { name: string; photos: QRPhoto[] }[] = [];
+  for (const ev of events) {
+    const photos = await fetchEventPhotos(ev.id, { includeUnapproved: true });
+    groups.push({ name: ev.name, photos });
+  }
+  const total = groups.reduce((sum, group) => sum + group.photos.length, 0);
+  if (total === 0) throw new Error('The selected events have no photos to download.');
+
+  const zip = new JSZip();
+  const usedFolders = new Set<string>();
+  let completed = 0;
+  for (const group of groups) {
+    // A safe, unique subfolder name per event.
+    const base =
+      group.name.replace(/[^a-z0-9-_ ]+/gi, '').trim().replace(/\s+/g, '-') || 'event';
+    let folderName = base;
+    let suffix = 2;
+    while (usedFolders.has(folderName.toLowerCase())) folderName = `${base}-${suffix++}`;
+    usedFolders.add(folderName.toLowerCase());
+    const folder = zip.folder(folderName);
+    if (!folder) continue;
+
+    for (let index = 0; index < group.photos.length; index += 1) {
+      const photo = group.photos[index];
+      const { body } = await downloadData({ path: photo.s3Key }).result;
+      const blob = await body.blob();
+      const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
+      folder.file(`${String(index + 1).padStart(3, '0')}-${originalName}`, blob);
+      completed += 1;
+      onProgress?.(completed, total);
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = 'sharepix-events.zip';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
+}
