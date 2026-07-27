@@ -4,7 +4,7 @@ import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import EventQRCode from '@/components/EventQRCode';
 import { PRICING_TIERS, getTier } from '@/lib/pricing';
-import { createNewEvent, redeemDiscountCode, validateDiscountCode } from '@/lib/api';
+import { createNewEvent, redeemDiscountCode, startCheckout, validateDiscountCode } from '@/lib/api';
 import { QREvent } from '@/lib/types';
 
 function CreateEventPage() {
@@ -58,12 +58,10 @@ function CreateEventPage() {
     }
   }
 
+  const isComped = pilotCodeStatus === 'valid';
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (pilotCodeStatus !== 'valid') {
-      setError('Apply a valid pilot code to create your event free during the pilot.');
-      return;
-    }
     if (!name.trim()) {
       setError('Give your event a name.');
       return;
@@ -71,18 +69,28 @@ function CreateEventPage() {
     setBusy(true);
     setError(null);
     try {
-      const redemption = await redeemDiscountCode(pilotCode, tierId);
-      if (!redemption.valid) {
-        setPilotCodeStatus('invalid');
-        setPilotCodeMessage(redemption.message ?? 'That pilot code can no longer be used.');
-        throw new Error(redemption.message ?? 'That pilot code can no longer be used.');
+      if (isComped) {
+        // Pilot/discount code path: redeem the code and create an active event.
+        const redemption = await redeemDiscountCode(pilotCode, tierId);
+        if (!redemption.valid) {
+          setPilotCodeStatus('invalid');
+          setPilotCodeMessage(redemption.message ?? 'That pilot code can no longer be used.');
+          throw new Error(redemption.message ?? 'That pilot code can no longer be used.');
+        }
+        const event = await createNewEvent({ name: name.trim(), date, tier: tierId, paid: true });
+        setCreatedEvent(event);
+        return;
       }
-      const event = await createNewEvent({ name: name.trim(), date, tier: tierId });
-      setCreatedEvent(event);
+
+      // Paid path: create the event as pending, then send the host to Stripe.
+      // The webhook flips `paid` to true when the payment completes, activating
+      // it. Uploads are blocked until then, so nothing is usable without payment.
+      const event = await createNewEvent({ name: name.trim(), date, tier: tierId, paid: false });
+      const url = await startCheckout(tierId, event.id);
+      window.location.assign(url);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong creating the event.';
       setError(message);
-    } finally {
       setBusy(false);
     }
   }
@@ -131,7 +139,8 @@ function CreateEventPage() {
       <section className="mx-auto max-w-lg py-10">
         <h1 className="font-display text-3xl font-extrabold">Create your event</h1>
         <p className="mt-2 text-ink/70">
-          Name your event, choose a plan, and get your QR code instantly.
+          Name your event and choose a plan. Pay securely on Stripe — or apply a pilot
+          code — and your QR code is ready right after.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -264,15 +273,23 @@ function CreateEventPage() {
 
           <button
             type="submit"
-            disabled={busy || pilotCodeStatus !== 'valid'}
+            disabled={busy}
             className="w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
           >
             {busy
-              ? 'Creating…'
-              : pilotCodeStatus === 'valid'
+              ? isComped
+                ? 'Creating…'
+                : 'Sending you to checkout…'
+              : isComped
                 ? 'Create free event & get QR code'
-                : 'Apply pilot code to continue'}
+                : `Continue to payment · $${getTier(tierId)?.price ?? ''}`}
           </button>
+          {!isComped ? (
+            <p className="text-center text-xs text-ink/50">
+              You&apos;ll enter payment on Stripe&apos;s secure checkout. Your event activates
+              as soon as payment is confirmed.
+            </p>
+          ) : null}
         </form>
       </section>
     </Layout>

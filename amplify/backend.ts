@@ -74,7 +74,9 @@ adminFn.addToRolePolicy(
 // credentials; the Stripe signature check is what authenticates each request.
 const webhookFn = backend.stripeWebhook.resources.lambda as LambdaFunction;
 paymentTable.grantWriteData(webhookFn);
+eventTable.grantWriteData(webhookFn);
 webhookFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
+webhookFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 const webhookUrl = webhookFn.addFunctionUrl({
   authType: FunctionUrlAuthType.NONE,
 });

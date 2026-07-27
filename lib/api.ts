@@ -78,6 +78,8 @@ export async function createNewEvent(input: {
   name: string;
   date?: string;
   tier: string;
+  /** true = paid/comped and active now; false = pending until the webhook activates it. */
+  paid?: boolean;
 }): Promise<QREvent> {
   const tier = getTier(input.tier);
   const user = await getCurrentUserInfo();
@@ -89,6 +91,7 @@ export async function createNewEvent(input: {
     eventCode: generateEventCode(),
     photoLimit: tier?.photoLimit ?? null,
     accessExpiresAt: computeAccessExpiresAt(input.tier),
+    paid: input.paid ?? true,
     createdBy: user?.displayName ?? 'Unknown',
   });
 
@@ -96,6 +99,15 @@ export async function createNewEvent(input: {
     throw new Error('Event creation failed. Please try again.');
   }
   return event as QREvent;
+}
+
+/** Delete one of the current host's own events (used to cancel an unpaid one). */
+export async function deleteMyEvent(eventId: string): Promise<void> {
+  const { errors } = await client.models.Event.delete(
+    { id: eventId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The event could not be removed.');
 }
 
 export async function validateDiscountCode(
@@ -214,9 +226,9 @@ export async function deleteDiscountCode(code: string): Promise<void> {
  * The caller redirects the browser there; card details are entered on Stripe,
  * never in this app.
  */
-export async function startCheckout(tier: string): Promise<string> {
+export async function startCheckout(tier: string, eventId?: string): Promise<string> {
   const { data, errors } = await client.mutations.createCheckoutSession(
-    { tier: tier.trim().toLowerCase() },
+    { tier: tier.trim().toLowerCase(), eventId: eventId || undefined },
     { authMode: 'userPool' },
   );
   if (errors?.length) {

@@ -1,11 +1,12 @@
 // @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
 // dependency, so it's excluded from the backend type-check.
 import Stripe from 'stripe';
-import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { randomUUID } from 'node:crypto';
 
 const dynamo = new DynamoDBClient({});
 const PAYMENT_TABLE = process.env.PAYMENT_TABLE_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 
 // constructEvent only needs the signing secret to verify the payload — the API
 // key isn't used, but the Stripe client requires one to instantiate.
@@ -51,6 +52,7 @@ export const handler = async (event: {
   if (stripeEvent.type === 'checkout.session.completed') {
     const session = stripeEvent.data.object as Stripe.Checkout.Session;
     const now = new Date().toISOString();
+    const eventId = session.metadata?.eventId ?? '';
     try {
       await dynamo.send(
         new PutItemCommand({
@@ -62,6 +64,7 @@ export const handler = async (event: {
             amountTotal: { N: String(session.amount_total ?? 0) },
             currency: { S: session.currency ?? 'usd' },
             tier: { S: session.metadata?.tier ?? 'unknown' },
+            eventId: { S: eventId },
             customerEmail: {
               S: session.customer_details?.email ?? session.customer_email ?? '',
             },
@@ -75,6 +78,30 @@ export const handler = async (event: {
       // Log and return 500 so Stripe retries — better than silently dropping.
       console.error('Failed to record payment', err);
       return { statusCode: 500, body: 'Failed to record payment.' };
+    }
+
+    // Activate the event this payment was for, if any. Guarded so we only touch
+    // an event that exists and is actually awaiting payment.
+    if (eventId) {
+      try {
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: EVENT_TABLE,
+            Key: { id: { S: eventId } },
+            UpdateExpression: 'SET #paid = :true, #updatedAt = :now',
+            ConditionExpression: 'attribute_exists(id)',
+            ExpressionAttributeNames: { '#paid': 'paid', '#updatedAt': 'updatedAt' },
+            ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: now } },
+          }),
+        );
+      } catch (err) {
+        // A missing event (e.g. deleted before payment) shouldn't fail the
+        // webhook — the payment is still recorded. Retry-worthy errors surface.
+        if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') {
+          console.error('Failed to activate event', err);
+          return { statusCode: 500, body: 'Failed to activate event.' };
+        }
+      }
     }
   }
 

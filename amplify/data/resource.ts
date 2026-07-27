@@ -31,6 +31,10 @@ const schema = a.schema({
       // When true, the host has closed the event: guests can no longer upload,
       // but the gallery stays viewable. Enforced server-side in createEventPhoto.
       uploadsClosed: a.boolean(),
+      // Payment gate. `false` = created but awaiting payment (not active); `true`
+      // = paid or comped (active). A missing value (older events) is treated as
+      // active for backward compatibility. Flipped to true by the Stripe webhook.
+      paid: a.boolean(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })
@@ -97,6 +101,7 @@ const schema = a.schema({
       amountTotal: a.integer(),
       currency: a.string(),
       tier: a.string(),
+      eventId: a.string(),
       customerEmail: a.string(),
       status: a.string(),
     })
@@ -183,9 +188,11 @@ const schema = a.schema({
   }),
 
   // Starts a Stripe Checkout Session for a plan and returns the hosted URL.
+  // eventId (optional) ties the payment to a pending event so the webhook can
+  // activate it once payment completes.
   createCheckoutSession: a
     .mutation()
-    .arguments({ tier: a.string().required() })
+    .arguments({ tier: a.string().required(), eventId: a.string() })
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(stripeCheckoutFn)),
