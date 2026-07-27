@@ -263,20 +263,6 @@ export async function manageUser(
 }
 
 /**
- * Admin self-test: how many photos the scoped secure query (listEventPhotos)
- * returns for an event. Used to confirm the secure path works before the broad
- * Photo read is removed. Throws with the real error if the query fails.
- */
-export async function countPhotosViaSecureQuery(eventId: string): Promise<number> {
-  const { data, errors } = await client.queries.listEventPhotos(
-    { eventId },
-    { authMode: 'userPool' },
-  );
-  if (errors?.length) throw new Error(errors.map((error) => error.message).join(' · '));
-  return (data ?? []).filter((photo) => photo !== null).length;
-}
-
-/**
  * Global-admin grant of extra photo capacity to one event (the pilot version of
  * the "buy more storage" add-on). `additionalCredits` is added to whatever the
  * event already has; the effective limit becomes photoLimit + extraPhotoCredits.
