@@ -55,6 +55,9 @@ const schema = a.schema({
       uploadedByUserId: a.string(),
       approved: a.boolean(),
       eventOwner: a.string(),
+      // SHA-256 of the file's bytes, used to skip duplicate uploads within an
+      // event. Same photo (identical bytes) → same hash.
+      contentHash: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create` (photos come only from createEventPhoto) and no
@@ -136,6 +139,7 @@ const schema = a.schema({
     uploadedByUserId: a.string(),
     approved: a.boolean(),
     eventOwner: a.string(),
+    contentHash: a.string(),
     createdAt: a.string(),
   }),
 
@@ -148,6 +152,7 @@ const schema = a.schema({
     uploadedByUserId: a.string(),
     approved: a.boolean(),
     eventOwner: a.string(),
+    contentHash: a.string(),
     createdAt: a.string(),
   }),
 
@@ -195,6 +200,7 @@ const schema = a.schema({
       previewS3Key: a.string(),
       uploadedBy: a.string(),
       uploadedByUserId: a.string(),
+      contentHash: a.string(),
     })
     .returns(a.ref('PhotoUploadResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])

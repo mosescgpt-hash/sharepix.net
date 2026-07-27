@@ -1,5 +1,10 @@
 import { ChangeEvent, useEffect, useState } from 'react';
-import { prepareEventUpload, uploadEventPhotoWithContext } from '@/lib/api';
+import {
+  computeContentHash,
+  fetchEventPhotoHashes,
+  prepareEventUpload,
+  uploadEventPhotoWithContext,
+} from '@/lib/api';
 import { validateMediaFile } from '@/lib/validation';
 
 interface UploadFormProps {
@@ -7,7 +12,7 @@ interface UploadFormProps {
   onUploaded?: () => void;
 }
 
-type FileStatus = 'pending' | 'uploading' | 'done' | 'error';
+type FileStatus = 'pending' | 'uploading' | 'done' | 'error' | 'duplicate';
 
 interface QueuedFile {
   file: File;
@@ -20,6 +25,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [uploaderName, setUploaderName] = useState('');
 
   useEffect(() => {
@@ -50,6 +56,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
     });
     setQueue((previous) => [...previous, ...next]);
     setSuccessCount(0);
+    setDuplicateCount(0);
     e.target.value = '';
   }
 
@@ -60,6 +67,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
   async function handleUpload() {
     setBusy(true);
     let uploaded = 0;
+    let duplicates = 0;
     const uploadedBy = uploaderLabel();
     let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
 
@@ -74,15 +82,38 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
       return;
     }
 
+    // Hashes already in this event, plus hashes we upload during this run, so we
+    // skip both photos already stored and the same file picked twice in a batch.
+    const seenHashes = await fetchEventPhotoHashes(eventId);
+
     for (let i = 0; i < queue.length; i += 1) {
       const item = queue[i];
       if (item.status !== 'pending') continue;
 
+      // Fingerprint the file and skip it if an identical one is already here.
+      let hash: string | undefined;
+      try {
+        hash = await computeContentHash(item.file);
+      } catch {
+        hash = undefined; // hashing failed — fall through and upload normally
+      }
+      if (hash && seenHashes.has(hash)) {
+        updateItem(i, { status: 'duplicate', percent: 0 });
+        duplicates += 1;
+        continue;
+      }
+
       updateItem(i, { status: 'uploading', percent: 0 });
       try {
-        await uploadEventPhotoWithContext(uploadContext, item.file, ({ loaded, total }) => {
-          updateItem(i, { percent: total ? Math.round((loaded / total) * 100) : 0 });
-        });
+        await uploadEventPhotoWithContext(
+          uploadContext,
+          item.file,
+          ({ loaded, total }) => {
+            updateItem(i, { percent: total ? Math.round((loaded / total) * 100) : 0 });
+          },
+          hash,
+        );
+        if (hash) seenHashes.add(hash);
         updateItem(i, { status: 'done', percent: 100 });
         uploaded += 1;
         await new Promise((resolve) => window.setTimeout(resolve, 150));
@@ -97,6 +128,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
 
     setBusy(false);
     setSuccessCount(uploaded);
+    setDuplicateCount(duplicates);
     if (uploaded > 0) onUploaded?.();
   }
 
@@ -179,6 +211,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
                   {item.status === 'pending' && 'Ready'}
                   {item.status === 'uploading' && `${item.percent}%`}
                   {item.status === 'done' && '✓ Uploaded'}
+                  {item.status === 'duplicate' && 'Already added'}
                   {item.status === 'error' && 'Failed'}
                 </span>
               </div>
@@ -226,6 +259,12 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
       {successCount > 0 && !busy ? (
         <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-center text-sm text-green-700">
           {successCount} file{successCount === 1 ? '' : 's'} uploaded. Thanks for sharing! 🎉
+        </p>
+      ) : null}
+
+      {duplicateCount > 0 && !busy ? (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
+          Skipped {duplicateCount} file{duplicateCount === 1 ? '' : 's'} already in this event.
         </p>
       ) : null}
     </div>

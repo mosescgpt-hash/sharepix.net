@@ -24,7 +24,8 @@ function toInt(value?: string): number | null {
 }
 
 export const handler: Handler = async (event) => {
-  const { eventId, s3Key, previewS3Key, uploadedBy, uploadedByUserId } = event.arguments;
+  const { eventId, s3Key, previewS3Key, uploadedBy, uploadedByUserId, contentHash } =
+    event.arguments;
 
   // The photo's files must live under this event's own storage prefix. This
   // stops a crafted request from creating a record that points at another
@@ -97,6 +98,7 @@ export const handler: Handler = async (event) => {
   if (previewS3Key) item.previewS3Key = { S: previewS3Key };
   if (uploadedBy) item.uploadedBy = { S: uploadedBy };
   if (uploadedByUserId) item.uploadedByUserId = { S: uploadedByUserId };
+  if (contentHash) item.contentHash = { S: contentHash };
 
   try {
     await dynamo.send(new PutItemCommand({ TableName: PHOTO_TABLE, Item: item }));
@@ -125,6 +127,7 @@ export const handler: Handler = async (event) => {
     uploadedByUserId: uploadedByUserId ?? null,
     approved: true,
     eventOwner,
+    contentHash: contentHash ?? null,
     createdAt: now,
   };
 };

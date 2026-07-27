@@ -41,6 +41,7 @@ export const handler: Handler = async (event) => {
       uploadedByUserId: item.uploadedByUserId?.S ?? null,
       approved: item.approved?.BOOL ?? true,
       eventOwner: item.eventOwner?.S ?? null,
+      contentHash: item.contentHash?.S ?? null,
       createdAt: item.createdAt?.S ?? null,
     }));
 };
