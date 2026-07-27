@@ -41,6 +41,8 @@ export default function PhotoGrid({
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const sortedPhotos = useMemo(() => sortGalleryPhotos(photos, sort), [photos, sort]);
+  // True when every photo is currently selected — flips "Select all" to "Unselect all".
+  const allSelected = sortedPhotos.length > 0 && selected.size >= sortedPhotos.length;
 
   async function openEnlarge(photo: DisplayPhoto) {
     setEnlarged(photo);
@@ -145,18 +147,22 @@ export default function PhotoGrid({
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <button
               type="button"
-              onClick={() => setSelected(new Set(sortedPhotos.map((photo) => photo.id)))}
+              onClick={() =>
+                setSelected(
+                  allSelected ? new Set() : new Set(sortedPhotos.map((photo) => photo.id)),
+                )
+              }
               className="rounded-full border border-ink/20 px-3 py-2 font-medium hover:border-accent"
             >
-              Select all
+              {allSelected ? 'Unselect all' : 'Select all'}
             </button>
-            {selected.size ? (
+            {selected.size && !allSelected ? (
               <button
                 type="button"
                 onClick={() => setSelected(new Set())}
                 className="px-2 py-2 text-ink/60 underline"
               >
-                Clear ({selected.size})
+                Deselect all ({selected.size})
               </button>
             ) : null}
             <button
