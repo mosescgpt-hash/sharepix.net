@@ -140,6 +140,42 @@ export const handler = async (event: {
         }
       }
     }
+
+    // Corporate subscription: activate the account as soon as the subscription
+    // checkout completes, even if the customer.subscription.* events aren't yet
+    // configured on the webhook. The subscription.* events (once enabled) then
+    // fill in period end / cancellation. Merge with UpdateItem so we never wipe
+    // fields a subscription.* event may have already written.
+    if (session.metadata?.kind === 'corporate' && session.metadata?.userId) {
+      try {
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: CORPORATE_TABLE,
+            Key: { userId: { S: session.metadata.userId } },
+            UpdateExpression:
+              'SET #status = :active, #owner = :owner, stripeCustomerId = :cust, stripeSubscriptionId = :subId, updatedAt = :now, createdAt = if_not_exists(createdAt, :now), #typename = :typename',
+            ExpressionAttributeNames: {
+              '#status': 'status',
+              '#owner': 'owner',
+              '#typename': '__typename',
+            },
+            ExpressionAttributeValues: {
+              ':active': { S: 'active' },
+              ':owner': { S: session.metadata.owner ?? '' },
+              ':cust': { S: typeof session.customer === 'string' ? session.customer : '' },
+              ':subId': {
+                S: typeof session.subscription === 'string' ? session.subscription : '',
+              },
+              ':now': { S: now },
+              ':typename': { S: 'CorporateSubscription' },
+            },
+          }),
+        );
+      } catch (err) {
+        console.error('Failed to activate corporate subscription', err);
+        return { statusCode: 500, body: 'Failed to activate subscription.' };
+      }
+    }
   }
 
   // Corporate subscription lifecycle: keep the CorporateSubscription row in sync

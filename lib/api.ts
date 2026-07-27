@@ -397,7 +397,12 @@ export async function setEventUploadsClosed(
   if (errors?.length) throw new Error('The event could not be updated.');
 }
 
-export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
+/**
+ * Fully remove an event: delete each photo's S3 objects + record (through the
+ * ownership-checked function), then the event itself. Works for the event's
+ * host (owner) and for global admins.
+ */
+export async function deleteEventWithPhotos(eventId: string): Promise<void> {
   const { data: photos, errors: photoListErrors } = await client.models.Photo.listPhotoByEventId(
     { eventId },
     { limit: 1000, authMode: 'userPool' },
@@ -419,6 +424,11 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error('The event could not be removed.');
+}
+
+/** Backwards-compatible alias used by the global-admin dashboard. */
+export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
+  return deleteEventWithPhotos(eventId);
 }
 
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {
