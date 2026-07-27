@@ -36,6 +36,9 @@ const schema = a.schema({
       // = paid or comped (active). A missing value (older events) is treated as
       // active for backward compatibility. Flipped to true by the Stripe webhook.
       paid: a.boolean(),
+      // Guest downloads are off by default on every plan. Corporate hosts can
+      // buy a per-event add-on that flips this to true (via the Stripe webhook).
+      guestDownloadEnabled: a.boolean(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })

@@ -68,6 +68,38 @@ export const handler: Handler = async (event) => {
     }
   }
 
+  // Guest-download add-on: a one-time $15 charge that enables guest downloads on
+  // a single event. The webhook flips the event's guestDownloadEnabled flag.
+  if ((event.arguments.kind ?? '') === 'guest_download') {
+    const addOnEventId = event.arguments.eventId ?? '';
+    if (!addOnEventId) throw new Error('Missing event for the download add-on.');
+    try {
+      const stripe = new Stripe(secretKey);
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: 1500,
+              product_data: { name: 'SharePix guest-download add-on (one event)' },
+            },
+          },
+        ],
+        success_url: `${appBaseUrl}/event/${addOnEventId}/admin?addon=guestdownload`,
+        cancel_url: `${appBaseUrl}/event/${addOnEventId}/admin?addon=cancelled`,
+        metadata: { kind: 'guest_download', eventId: addOnEventId },
+      });
+      if (!session.url) throw new Error('Stripe did not return a checkout URL.');
+      return { url: session.url };
+    } catch (error) {
+      throw new Error(
+        `Stripe add-on checkout failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   const tier = (event.arguments.tier ?? '').toLowerCase();
   const pricing = TIER_PRICING[tier];
   if (!pricing) {
