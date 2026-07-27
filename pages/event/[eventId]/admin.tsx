@@ -10,10 +10,13 @@ import {
   fetchEvent,
   fetchEventPhotos,
   getCurrentUserInfo,
+  getMyCorporateSubscription,
+  isCorporateActive,
   setEventUploadsClosed,
+  startGuestDownloadAddOn,
   updateEventDetails,
 } from '@/lib/api';
-import { getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, getTier } from '@/lib/pricing';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
 
@@ -34,6 +37,8 @@ function AdminDashboardPage() {
   const [savingDetails, setSavingDetails] = useState(false);
   const [closing, setClosing] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [corporateActive, setCorporateActive] = useState(false);
+  const [addOnWorking, setAddOnWorking] = useState(false);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -41,11 +46,13 @@ function AdminDashboardPage() {
     setError(null);
     setDenied(false);
     try {
-      const [ev, user, globalAdmin] = await Promise.all([
+      const [ev, user, globalAdmin, corporateSub] = await Promise.all([
         fetchEvent(eventId),
         getCurrentUserInfo(),
         isGlobalAdmin(),
+        getMyCorporateSubscription().catch(() => null),
       ]);
+      setCorporateActive(isCorporateActive(corporateSub));
       if (!ev) {
         setError('We couldn\u2019t find that event.');
         return;
@@ -133,6 +140,22 @@ function AdminDashboardPage() {
       });
     } finally {
       setClosing(false);
+    }
+  }
+
+  async function handleEnableGuestDownloads() {
+    if (!event) return;
+    setAddOnWorking(true);
+    setSettingsMsg(null);
+    try {
+      const url = await startGuestDownloadAddOn(event.id);
+      window.location.assign(url);
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'Checkout could not be started.',
+        ok: false,
+      });
+      setAddOnWorking(false);
     }
   }
 
@@ -287,6 +310,40 @@ function AdminDashboardPage() {
                       ? 'Reopen uploads'
                       : 'Close event'}
                 </button>
+              </div>
+
+              <div className="mt-5 border-t border-ink/10 pt-5">
+                <p className="text-sm font-medium">Guest downloads</p>
+                {event.guestDownloadEnabled ? (
+                  <p className="mt-1 text-sm text-green-700">
+                    ✓ Enabled — guests can download photos and videos from this event.
+                  </p>
+                ) : corporateActive ? (
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-ink/60">
+                      Off by default. Turn on guest downloads for this one event as a
+                      one-time add-on.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleEnableGuestDownloads()}
+                      disabled={addOnWorking}
+                      className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                    >
+                      {addOnWorking
+                        ? 'Opening…'
+                        : `Enable guest downloads · $${CORPORATE_PLAN.guestDownloadAddOnPrice}`}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-ink/60">
+                    Guest downloads are available as a per-event add-on on the{' '}
+                    <Link href="/corporate" className="text-accent underline">
+                      Corporate plan
+                    </Link>
+                    . Hosts can always download their own events.
+                  </p>
+                )}
               </div>
 
               {settingsMsg ? (

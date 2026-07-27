@@ -290,6 +290,20 @@ export function isCorporateActive(sub: CorporateSubscription | null): boolean {
   return sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
 }
 
+/**
+ * Starts the one-time $15 guest-download add-on checkout for one event and
+ * returns the hosted Stripe URL. The webhook enables guest downloads on success.
+ */
+export async function startGuestDownloadAddOn(eventId: string): Promise<string> {
+  const { data, errors } = await client.mutations.createCheckoutSession(
+    { tier: 'addon', kind: 'guest_download', eventId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.url) throw new Error('Checkout did not return a URL.');
+  return data.url;
+}
+
 /** Opens the Stripe billing portal so a corporate host can manage/cancel. */
 export async function openBillingPortal(): Promise<string> {
   const { data, errors } = await client.mutations.openBillingPortal(

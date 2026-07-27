@@ -53,7 +53,7 @@ export default function EventGalleryPage() {
   }, [load]);
 
   const active = isGalleryActive(event?.accessExpiresAt);
-  const canDownload = event ? canDownloadEventMedia(event.tier, host) : false;
+  const canDownload = event ? canDownloadEventMedia(event, host || admin) : false;
 
   return (
     <Layout title={event ? event.name : 'Event gallery'}>
@@ -95,7 +95,7 @@ export default function EventGalleryPage() {
                   canDownload={canDownload}
                   canViewOriginal={host || admin}
                   eventName={event.name}
-                  downloadMessage="Guest downloads are included with Premium. Event hosts can sign in to download on any plan."
+                  downloadMessage="The host has the photos. Guest downloads aren't enabled for this event."
                 />
               ) : (
                 <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">

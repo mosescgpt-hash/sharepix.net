@@ -114,17 +114,20 @@ export const handler = async (event: {
       return { statusCode: 500, body: 'Failed to record payment.' };
     }
 
-    // Activate the event this payment was for, if any. Guarded so we only touch
-    // an event that exists and is actually awaiting payment.
+    // Apply the event side effect of this payment, if any:
+    //  - guest_download add-on → enable guest downloads on the event
+    //  - otherwise (event payment) → activate the pending event
     if (eventId) {
+      const kind = session.metadata?.kind ?? '';
+      const field = kind === 'guest_download' ? 'guestDownloadEnabled' : 'paid';
       try {
         await dynamo.send(
           new UpdateItemCommand({
             TableName: EVENT_TABLE,
             Key: { id: { S: eventId } },
-            UpdateExpression: 'SET #paid = :true, #updatedAt = :now',
+            UpdateExpression: 'SET #field = :true, #updatedAt = :now',
             ConditionExpression: 'attribute_exists(id)',
-            ExpressionAttributeNames: { '#paid': 'paid', '#updatedAt': 'updatedAt' },
+            ExpressionAttributeNames: { '#field': field, '#updatedAt': 'updatedAt' },
             ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: now } },
           }),
         );
@@ -132,8 +135,8 @@ export const handler = async (event: {
         // A missing event (e.g. deleted before payment) shouldn't fail the
         // webhook — the payment is still recorded. Retry-worthy errors surface.
         if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') {
-          console.error('Failed to activate event', err);
-          return { statusCode: 500, body: 'Failed to activate event.' };
+          console.error('Failed to apply event payment', err);
+          return { statusCode: 500, body: 'Failed to apply event payment.' };
         }
       }
     }

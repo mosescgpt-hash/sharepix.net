@@ -10,6 +10,7 @@ export interface QREvent {
   accessExpiresAt?: string | null;
   uploadsClosed?: boolean | null;
   paid?: boolean | null;
+  guestDownloadEnabled?: boolean | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;

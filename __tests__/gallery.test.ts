@@ -15,15 +15,15 @@ const photos: DisplayPhoto[] = [
 ];
 
 describe('gallery permissions', () => {
-  test('hosts can download on every plan', () => {
-    expect(canDownloadEventMedia('starter', true)).toBe(true);
-    expect(canDownloadEventMedia('standard', true)).toBe(true);
+  test('hosts can download regardless of the guest-download add-on', () => {
+    expect(canDownloadEventMedia({ ...event }, true)).toBe(true);
+    expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: false }, true)).toBe(true);
   });
 
-  test('guests can download only on premium', () => {
-    expect(canDownloadEventMedia('starter', false)).toBe(false);
-    expect(canDownloadEventMedia('standard', false)).toBe(false);
-    expect(canDownloadEventMedia('premium', false)).toBe(true);
+  test('guests can download only when the add-on is enabled', () => {
+    expect(canDownloadEventMedia({ ...event }, false)).toBe(false);
+    expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: false }, false)).toBe(false);
+    expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: true }, false)).toBe(true);
   });
 
   test('matches an Amplify owner value to the signed-in host', () => {

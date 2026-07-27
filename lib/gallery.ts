@@ -12,9 +12,13 @@ export function isEventHost(event: QREvent, user: CurrentUser | null): boolean {
   return !!user && !!event.owner && event.owner.includes(user.userId);
 }
 
-/** Hosts may download on every plan. Guests may download only on Premium. */
-export function canDownloadEventMedia(tier: string, host: boolean): boolean {
-  return host || tier.toLowerCase() === 'premium';
+/**
+ * Hosts (and admins) may always download their own event. Guests may download
+ * only when the event has the guest-download add-on enabled — a Corporate-only,
+ * per-event purchase. Off by default on every plan.
+ */
+export function canDownloadEventMedia(event: QREvent, host: boolean): boolean {
+  return host || event.guestDownloadEnabled === true;
 }
 
 function createdAt(photo: DisplayPhoto): string {
