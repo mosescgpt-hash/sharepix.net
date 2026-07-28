@@ -446,6 +446,19 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
   return deleteEventWithPhotos(eventId);
 }
 
+/**
+ * Global-admin recovery: restore host access to an archived/expired event by
+ * resetting its upload window to now. The host regains their full retention
+ * period, and guests re-enter the low-res phase.
+ */
+export async function restoreEventAccess(eventId: string): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, uploadWindowEndsAt: new Date().toISOString() },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The event could not be restored.');
+}
+
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {
   const { data } = await client.models.Event.get(
     { id: eventId },
