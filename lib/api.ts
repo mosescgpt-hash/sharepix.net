@@ -2,7 +2,7 @@
 // Gen 2 / aws-amplify v6: typed data client + path-based storage.
 import { generateClient } from 'aws-amplify/data';
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
-import { uploadData, getUrl, downloadData } from 'aws-amplify/storage';
+import { uploadData, getUrl, downloadData, getProperties } from 'aws-amplify/storage';
 import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
 import {
@@ -620,6 +620,12 @@ export async function uploadEventPhotoWithContext(
       },
     }).result,
   );
+
+  // Confirm the original actually landed in storage before we create any record.
+  // This prevents "orphan" photo records that point at a missing original (which
+  // then can't be downloaded). If the object isn't there, fail the upload — no
+  // record is created, and the guest can retry.
+  await retryTransient(() => getProperties({ path: key }));
 
   if (preview && previewKey) {
     await retryTransient(() =>
