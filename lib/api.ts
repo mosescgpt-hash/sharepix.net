@@ -14,9 +14,9 @@ import {
   QRPhoto,
   DisplayPhoto,
 } from '@/lib/types';
-import { buildPhotoKey, buildPreviewKey, generateEventCode } from '@/lib/validation';
+import { buildPhotoKey, buildPreviewKey, buildThumbKey, generateEventCode } from '@/lib/validation';
 import { computeAccessExpiresAt, computeUploadWindowEndsAt, getTier } from '@/lib/pricing';
-import { createPhotoPreview } from '@/lib/mediaPreview';
+import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
 type DataAuthMode = 'userPool' | 'identityPool';
@@ -591,6 +591,8 @@ export async function uploadEventPhotoWithContext(
   const key = buildPhotoKey(eventId, file.name);
   const preview = await createPhotoPreview(file);
   const previewKey = preview ? buildPreviewKey(key) : null;
+  const thumb = await createPhotoThumb(file);
+  const thumbKey = thumb ? buildThumbKey(key) : null;
 
   await retryTransient(() =>
     uploadData({
@@ -615,6 +617,16 @@ export async function uploadEventPhotoWithContext(
     );
   }
 
+  if (thumb && thumbKey) {
+    await retryTransient(() =>
+      uploadData({
+        path: thumbKey,
+        data: thumb,
+        options: { contentType: 'image/jpeg' },
+      }).result,
+    );
+  }
+
   // Creation goes through the function so eventOwner is stamped from the event
   // and the photo limit is enforced server-side — the client can no longer set
   // ownership/approval or exceed the limit.
@@ -624,6 +636,7 @@ export async function uploadEventPhotoWithContext(
         eventId,
         s3Key: key,
         previewS3Key: previewKey ?? undefined,
+        thumbS3Key: thumbKey ?? undefined,
         uploadedBy: context.uploadedBy,
         uploadedByUserId: context.uploadedByUserId,
         contentHash: contentHash ?? undefined,
@@ -657,7 +670,7 @@ async function listEventPhotosViaModel(eventId: string): Promise<QRPhoto[]> {
 /** Fetch photos for an event and resolve signed URLs for display. */
 export async function fetchEventPhotos(
   eventId: string,
-  opts: { includeUnapproved?: boolean; useOriginals?: boolean } = {}
+  opts: { includeUnapproved?: boolean; useOriginals?: boolean; useThumbs?: boolean } = {}
 ): Promise<DisplayPhoto[]> {
   let photos: QRPhoto[];
   if (opts.includeUnapproved) {
@@ -681,7 +694,11 @@ export async function fetchEventPhotos(
 
   const withUrls = await Promise.all(
     photos.map(async (p) => {
-      const displayPath = opts.useOriginals ? p.s3Key : p.previewS3Key || p.s3Key;
+      const displayPath = opts.useOriginals
+        ? p.s3Key
+        : opts.useThumbs
+          ? p.thumbS3Key || p.previewS3Key || p.s3Key
+          : p.previewS3Key || p.s3Key;
       const { url } = await getUrl({ path: displayPath });
       return { ...p, url: url.toString() };
     })

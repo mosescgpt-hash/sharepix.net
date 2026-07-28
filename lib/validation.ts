@@ -100,6 +100,12 @@ export function buildPreviewKey(originalKey: string): string {
   return `${withoutExtension.replace('/photos/', '/previews/')}-preview.jpg`;
 }
 
+/** Small low-res thumbnail key beside the original (for the post-window low-res phase). */
+export function buildThumbKey(originalKey: string): string {
+  const withoutExtension = originalKey.replace(/\.[^/.]+$/, '');
+  return `${withoutExtension.replace('/photos/', '/thumbs/')}-thumb.jpg`;
+}
+
 /** Generate a short human-friendly event code, e.g. "K7MPQ2". */
 export function generateEventCode(length = 6): string {
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no confusing 0/O, 1/I/L

@@ -37,6 +37,7 @@ export const handler: Handler = async (event) => {
       eventId: item.eventId?.S ?? '',
       s3Key: item.s3Key?.S ?? '',
       previewS3Key: item.previewS3Key?.S ?? null,
+      thumbS3Key: item.thumbS3Key?.S ?? null,
       uploadedBy: item.uploadedBy?.S ?? null,
       uploadedByUserId: item.uploadedByUserId?.S ?? null,
       approved: item.approved?.BOOL ?? true,

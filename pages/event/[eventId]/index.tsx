@@ -39,10 +39,14 @@ export default function EventGalleryPage() {
       setHost(isHost);
       setAdmin(isAdmin);
       // Fetch photos when someone is allowed to see them: the host/admin always,
-      // guests only while the gallery is still showing something.
-      const guestSees = eventLifecycle(ev).guestResolution !== 'none';
-      if (isHost || isAdmin || guestSees) {
-        const items = await fetchEventPhotos(eventId);
+      // guests only while the gallery is still showing something. Guests in the
+      // post-window low-res phase get the small thumbnails.
+      const lc = eventLifecycle(ev);
+      const privilegedViewer = isHost || isAdmin;
+      if (privilegedViewer || lc.guestResolution !== 'none') {
+        const items = await fetchEventPhotos(eventId, {
+          useThumbs: !privilegedViewer && lc.guestResolution === 'small',
+        });
         setPhotos(items);
       }
     } catch {

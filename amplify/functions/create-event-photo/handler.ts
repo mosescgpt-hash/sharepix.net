@@ -24,14 +24,25 @@ function toInt(value?: string): number | null {
 }
 
 export const handler: Handler = async (event) => {
-  const { eventId, s3Key, previewS3Key, uploadedBy, uploadedByUserId, contentHash } =
-    event.arguments;
+  const {
+    eventId,
+    s3Key,
+    previewS3Key,
+    thumbS3Key,
+    uploadedBy,
+    uploadedByUserId,
+    contentHash,
+  } = event.arguments;
 
   // The photo's files must live under this event's own storage prefix. This
   // stops a crafted request from creating a record that points at another
   // event's files or an arbitrary object elsewhere in the bucket.
   const prefix = `events/${eventId}/`;
-  if (!s3Key.startsWith(prefix) || (previewS3Key && !previewS3Key.startsWith(prefix))) {
+  if (
+    !s3Key.startsWith(prefix) ||
+    (previewS3Key && !previewS3Key.startsWith(prefix)) ||
+    (thumbS3Key && !thumbS3Key.startsWith(prefix))
+  ) {
     throw new Error('The photo path does not belong to this event.');
   }
 
@@ -103,6 +114,7 @@ export const handler: Handler = async (event) => {
     updatedAt: { S: now },
   };
   if (previewS3Key) item.previewS3Key = { S: previewS3Key };
+  if (thumbS3Key) item.thumbS3Key = { S: thumbS3Key };
   if (uploadedBy) item.uploadedBy = { S: uploadedBy };
   if (uploadedByUserId) item.uploadedByUserId = { S: uploadedByUserId };
   if (contentHash) item.contentHash = { S: contentHash };
@@ -130,6 +142,7 @@ export const handler: Handler = async (event) => {
     eventId,
     s3Key,
     previewS3Key: previewS3Key ?? null,
+    thumbS3Key: thumbS3Key ?? null,
     uploadedBy: uploadedBy ?? null,
     uploadedByUserId: uploadedByUserId ?? null,
     approved: true,
