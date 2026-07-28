@@ -98,7 +98,8 @@ export async function createNewEvent(input: {
   });
 
   if (errors?.length || !event) {
-    throw new Error('Event creation failed. Please try again.');
+    const detail = errors?.map((e) => e.message).join(' · ');
+    throw new Error(detail || 'Event creation failed. Please try again.');
   }
   return event as QREvent;
 }
