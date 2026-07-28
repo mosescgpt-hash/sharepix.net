@@ -106,9 +106,14 @@ export default function PhotoGrid({
     setError(null);
     setDownloadProgress(`Preparing 0 of ${target.length}`);
     try {
-      await downloadPhotosAsZip(target, eventName, (completed, total) => {
+      const { skipped } = await downloadPhotosAsZip(target, eventName, (completed, total) => {
         setDownloadProgress(`Preparing ${completed} of ${total}`);
       });
+      if (skipped > 0) {
+        setError(
+          `Downloaded ${target.length - skipped} of ${target.length}. ${skipped} file${skipped === 1 ? '' : 's'} could not be found and ${skipped === 1 ? 'was' : 'were'} skipped.`,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The download could not be prepared.');
     } finally {

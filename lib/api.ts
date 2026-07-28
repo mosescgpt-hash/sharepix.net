@@ -830,23 +830,38 @@ export async function downloadPhoto(photo: QRPhoto): Promise<void> {
   URL.revokeObjectURL(blobUrl);
 }
 
-/** Creates one ZIP download from selected photos and videos. */
+/**
+ * Creates one ZIP download from selected photos and videos. Files that can't be
+ * fetched (e.g. a missing S3 object) are skipped so one bad file doesn't fail
+ * the whole download; the number skipped is returned.
+ */
 export async function downloadPhotosAsZip(
   photos: QRPhoto[],
   archiveName: string,
   onProgress?: (completed: number, total: number) => void,
-): Promise<void> {
+): Promise<{ skipped: number }> {
   if (photos.length === 0) throw new Error('Select at least one photo or video.');
 
   const zip = new JSZip();
+  let added = 0;
+  let skipped = 0;
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
-    const { body } = await downloadData({ path: photo.s3Key }).result;
-    const blob = await body.blob();
-    const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
-    const numberedName = `${String(index + 1).padStart(3, '0')}-${originalName}`;
-    zip.file(numberedName, blob);
+    try {
+      const { body } = await downloadData({ path: photo.s3Key }).result;
+      const blob = await body.blob();
+      const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
+      const numberedName = `${String(index + 1).padStart(3, '0')}-${originalName}`;
+      zip.file(numberedName, blob);
+      added += 1;
+    } catch {
+      skipped += 1; // missing/unavailable file — skip and keep going
+    }
     onProgress?.(index + 1, photos.length);
+  }
+
+  if (added === 0) {
+    throw new Error('None of the selected files could be downloaded.');
   }
 
   // Photos and videos are already compressed, so STORE is faster and uses less memory.
@@ -860,6 +875,7 @@ export async function downloadPhotosAsZip(
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
+  return { skipped };
 }
 
 /**
@@ -870,7 +886,7 @@ export async function downloadPhotosAsZip(
 export async function downloadEventsAsZip(
   events: { id: string; name: string }[],
   onProgress?: (completed: number, total: number) => void,
-): Promise<void> {
+): Promise<{ skipped: number }> {
   // Gather each event's photos first so we know the grand total for progress.
   const groups: { name: string; photos: QRPhoto[] }[] = [];
   for (const ev of events) {
@@ -883,6 +899,8 @@ export async function downloadEventsAsZip(
   const zip = new JSZip();
   const usedFolders = new Set<string>();
   let completed = 0;
+  let added = 0;
+  let skipped = 0;
   for (const group of groups) {
     // A safe, unique subfolder name per event.
     const base =
@@ -896,13 +914,22 @@ export async function downloadEventsAsZip(
 
     for (let index = 0; index < group.photos.length; index += 1) {
       const photo = group.photos[index];
-      const { body } = await downloadData({ path: photo.s3Key }).result;
-      const blob = await body.blob();
-      const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
-      folder.file(`${String(index + 1).padStart(3, '0')}-${originalName}`, blob);
+      try {
+        const { body } = await downloadData({ path: photo.s3Key }).result;
+        const blob = await body.blob();
+        const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
+        folder.file(`${String(index + 1).padStart(3, '0')}-${originalName}`, blob);
+        added += 1;
+      } catch {
+        skipped += 1; // missing/unavailable file — skip and keep going
+      }
       completed += 1;
       onProgress?.(completed, total);
     }
+  }
+
+  if (added === 0) {
+    throw new Error('None of the selected files could be downloaded.');
   }
 
   const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
@@ -914,4 +941,5 @@ export async function downloadEventsAsZip(
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
+  return { skipped };
 }
