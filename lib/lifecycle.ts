@@ -1,4 +1,4 @@
-import { ARCHIVE_DAYS, getTier } from './pricing';
+import { ARCHIVE_DAYS, CORPORATE_PLAN, getTier } from './pricing';
 import type { QREvent } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -60,8 +60,13 @@ export function eventLifecycle(
   }
 
   const tier = getTier(event.tier);
-  const lowResDays = tier?.guestLowResDays ?? 30;
-  const retentionDays = tier?.retentionDays ?? 90;
+  const isCorporate = event.tier === 'corporate';
+  const lowResDays = isCorporate
+    ? CORPORATE_PLAN.guestLowResDays
+    : tier?.guestLowResDays ?? 30;
+  const retentionDays = isCorporate
+    ? CORPORATE_PLAN.retentionDays
+    : tier?.retentionDays ?? 90;
   const guestNothingAt = new Date(windowEnd.getTime() + lowResDays * DAY_MS);
   const retentionEnd = new Date(windowEnd.getTime() + retentionDays * DAY_MS);
   const archiveEnd = new Date(retentionEnd.getTime() + ARCHIVE_DAYS * DAY_MS);
