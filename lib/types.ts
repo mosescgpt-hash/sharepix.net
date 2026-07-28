@@ -22,6 +22,7 @@ export interface QRPhoto {
   eventId: string;
   s3Key: string;
   previewS3Key?: string | null;
+  thumbS3Key?: string | null;
   uploadedBy?: string | null;
   uploadedByUserId?: string | null;
   approved?: boolean | null;
