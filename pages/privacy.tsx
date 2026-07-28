@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'July 23, 2026';
+const LAST_UPDATED = 'July 28, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
@@ -157,14 +157,33 @@ export default function PrivacyPage() {
           </div>
 
           <div>
-            <h2>How long we keep information</h2>
+            <h2>How long we keep photos and events</h2>
+            <p>Each event moves through a lifecycle:</p>
+            <ul>
+              <li>
+                <strong>Upload window — 30 days</strong> from creation (extendable in 30-day
+                blocks). Guests can upload and view the photos.
+              </li>
+              <li>
+                <strong>After the window closes,</strong> guests can view reduced-resolution
+                photos for a limited time (about 3 weeks on Starter, 30 days on Standard and
+                Premium), then guest access ends.
+              </li>
+              <li>
+                <strong>Host retention</strong> — the host keeps full access and downloads for a
+                period set by the plan (about 3 weeks on Starter, 3 months on Standard, 1 year on
+                Premium) measured from when the upload window closes.
+              </li>
+              <li>
+                <strong>Archive</strong> — after retention, photos move to a private archive that
+                hosts can&rsquo;t see, kept for up to 90 days (a global administrator can restore
+                them on request), and are then permanently deleted.
+              </li>
+            </ul>
             <p>
-              We keep account and event information for as long as your account is active or as
-              needed to provide the Service. Each event gallery has an access window tied to its
-              plan; after that window ends the gallery becomes read-only, and event content may
-              be deleted after the window closes. Hosts can delete photos and events at any time.
-              We may retain limited records (such as payment confirmations) as required for
-              accounting, legal, or fraud-prevention purposes.
+              Hosts can delete their photos and events at any time. We may retain limited records
+              (such as payment confirmations) as required for accounting, legal, or
+              fraud-prevention purposes.
             </p>
           </div>
 

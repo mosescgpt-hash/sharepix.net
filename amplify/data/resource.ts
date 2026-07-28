@@ -29,6 +29,10 @@ const schema = a.schema({
       // the limit can be enforced atomically without scanning the table.
       photoCount: a.integer(),
       accessExpiresAt: a.datetime(),
+      // When the 30-day upload window closes (creation + 30 days, plus any paid
+      // extensions). Drives the whole lifecycle: uploads, guest view resolution,
+      // host retention, and archival. Extended by the Stripe webhook.
+      uploadWindowEndsAt: a.datetime(),
       // When true, the host has closed the event: guests can no longer upload,
       // but the gallery stays viewable. Enforced server-side in createEventPhoto.
       uploadsClosed: a.boolean(),

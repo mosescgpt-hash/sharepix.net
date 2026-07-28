@@ -68,6 +68,42 @@ export const handler: Handler = async (event) => {
     }
   }
 
+  // Extend upload window: a one-time charge (half the plan price) that pushes the
+  // event's 30-day upload window out by 30 more days. The webhook does the math.
+  if ((event.arguments.kind ?? '') === 'extend_window') {
+    const extEventId = event.arguments.eventId ?? '';
+    if (!extEventId) throw new Error('Missing event for the extension.');
+    const extTier = (event.arguments.tier ?? '').toLowerCase();
+    const planPrice = TIER_PRICING[extTier]?.amount;
+    if (!planPrice) throw new Error('Unknown plan for the extension.');
+    const amount = Math.max(100, Math.round(planPrice / 2)); // half price, min $1
+    try {
+      const stripe = new Stripe(secretKey);
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: amount,
+              product_data: { name: 'SharePix upload-window extension (+30 days)' },
+            },
+          },
+        ],
+        success_url: `${appBaseUrl}/event/${extEventId}/admin?extend=1`,
+        cancel_url: `${appBaseUrl}/event/${extEventId}/admin?extend=cancelled`,
+        metadata: { kind: 'extend_window', eventId: extEventId },
+      });
+      if (!session.url) throw new Error('Stripe did not return a checkout URL.');
+      return { url: session.url };
+    } catch (error) {
+      throw new Error(
+        `Stripe extension checkout failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   // Guest-download add-on: a one-time $15 charge that enables guest downloads on
   // a single event. The webhook flips the event's guestDownloadEnabled flag.
   if ((event.arguments.kind ?? '') === 'guest_download') {

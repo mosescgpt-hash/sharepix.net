@@ -1,7 +1,7 @@
 import Layout from '@/components/Layout';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'July 27, 2026';
+const LAST_UPDATED = 'July 28, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where Calvin Solutions
 // LLC is registered.
@@ -121,10 +121,14 @@ export default function TermsPage() {
                 Card details are entered on Stripe and are never stored by SharePix.
               </li>
               <li>
-                Each plan includes the features and the gallery access window described at
-                checkout or on our <a href="/pricing">pricing page</a>. When an event&rsquo;s access
-                window ends, the gallery may become read-only and content may later be deleted, so
-                download what you want to keep before it closes.
+                Every event includes a <strong>30-day upload window</strong> (extendable in
+                30-day blocks for half the plan price). After it closes, guests keep limited,
+                reduced-resolution viewing for a while, and the host keeps full access and
+                downloads for the plan&rsquo;s retention period (Starter ~3 weeks, Standard 3
+                months, Premium 1 year). After retention, photos move to a private archive for up
+                to 90 days and are then permanently deleted. Download what you want to keep before
+                your retention period ends. Full details are on our{' '}
+                <a href="/pricing">pricing page</a>.
               </li>
               <li>
                 Prices and plan features may change; changes apply to future purchases. Except where
@@ -139,8 +143,8 @@ export default function TermsPage() {
             <p>
               We work to keep the Service available and reliable, but we provide it on an
               as-available basis and may modify, suspend, or discontinue features. We are not
-              responsible for content that is lost because you did not download it before an
-              event&rsquo;s access window ended.
+              responsible for content that is lost because you did not download it before your
+              event&rsquo;s retention period ended.
             </p>
           </div>
 

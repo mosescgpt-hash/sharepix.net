@@ -14,10 +14,12 @@ import {
   getMyCorporateSubscription,
   isCorporateActive,
   setEventUploadsClosed,
+  startExtendUploadWindow,
   startGuestDownloadAddOn,
   updateEventDetails,
 } from '@/lib/api';
-import { CORPORATE_PLAN, getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, extensionPrice, getTier } from '@/lib/pricing';
+import { eventLifecycle } from '@/lib/lifecycle';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
 
@@ -40,6 +42,7 @@ function AdminDashboardPage() {
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [corporateActive, setCorporateActive] = useState(false);
   const [addOnWorking, setAddOnWorking] = useState(false);
+  const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
@@ -105,6 +108,7 @@ function AdminDashboardPage() {
   // The guest-download add-on is offered on Premium events and to Corporate
   // subscribers only.
   const addOnEligible = tier?.id === 'premium' || corporateActive;
+  const lifecycle = eventLifecycle(event);
 
   async function handleSaveDetails() {
     if (!event) return;
@@ -161,6 +165,22 @@ function AdminDashboardPage() {
         ok: false,
       });
       setAddOnWorking(false);
+    }
+  }
+
+  async function handleExtendWindow() {
+    if (!event) return;
+    setExtendWorking(true);
+    setSettingsMsg(null);
+    try {
+      const url = await startExtendUploadWindow(event.id, event.tier);
+      window.location.assign(url);
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'Checkout could not be started.',
+        ok: false,
+      });
+      setExtendWorking(false);
     }
   }
 
@@ -336,6 +356,29 @@ function AdminDashboardPage() {
                     : event.uploadsClosed
                       ? 'Reopen uploads'
                       : 'Close event'}
+                </button>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
+                <div>
+                  <p className="text-sm font-medium">Upload window</p>
+                  <p className="text-xs text-ink/55">
+                    {lifecycle.uploadWindowEndsAt
+                      ? lifecycle.uploadOpen
+                        ? `Guests can upload until ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}.`
+                        : `The upload window closed on ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}. Extend it to accept photos again.`
+                      : 'Guests can upload while the event is open.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleExtendWindow()}
+                  disabled={extendWorking}
+                  className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                >
+                  {extendWorking
+                    ? 'Opening…'
+                    : `Extend +30 days · $${extensionPrice(event.tier)}`}
                 </button>
               </div>
 

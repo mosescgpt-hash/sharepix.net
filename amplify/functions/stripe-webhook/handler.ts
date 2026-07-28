@@ -1,7 +1,12 @@
 // @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
 // dependency, so it's excluded from the backend type-check.
 import Stripe from 'stripe';
-import { DynamoDBClient, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+  UpdateItemCommand,
+} from '@aws-sdk/client-dynamodb';
 import { randomUUID } from 'node:crypto';
 
 const dynamo = new DynamoDBClient({});
@@ -115,22 +120,45 @@ export const handler = async (event: {
     }
 
     // Apply the event side effect of this payment, if any:
+    //  - extend_window → push the upload window out by 30 days
     //  - guest_download add-on → enable guest downloads on the event
     //  - otherwise (event payment) → activate the pending event
     if (eventId) {
       const kind = session.metadata?.kind ?? '';
-      const field = kind === 'guest_download' ? 'guestDownloadEnabled' : 'paid';
       try {
-        await dynamo.send(
-          new UpdateItemCommand({
-            TableName: EVENT_TABLE,
-            Key: { id: { S: eventId } },
-            UpdateExpression: 'SET #field = :true, #updatedAt = :now',
-            ConditionExpression: 'attribute_exists(id)',
-            ExpressionAttributeNames: { '#field': field, '#updatedAt': 'updatedAt' },
-            ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: now } },
-          }),
-        );
+        if (kind === 'extend_window') {
+          const DAY_MS = 24 * 60 * 60 * 1000;
+          const found = await dynamo.send(
+            new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
+          );
+          if (found.Item) {
+            const current = found.Item.uploadWindowEndsAt?.S;
+            const base = current ? new Date(current).getTime() : Date.now();
+            // Extend from the later of now / current end, so extensions stack.
+            const from = Math.max(base, Date.now());
+            const next = new Date(from + 30 * DAY_MS).toISOString();
+            await dynamo.send(
+              new UpdateItemCommand({
+                TableName: EVENT_TABLE,
+                Key: { id: { S: eventId } },
+                UpdateExpression: 'SET uploadWindowEndsAt = :next, updatedAt = :now',
+                ExpressionAttributeValues: { ':next': { S: next }, ':now': { S: now } },
+              }),
+            );
+          }
+        } else {
+          const field = kind === 'guest_download' ? 'guestDownloadEnabled' : 'paid';
+          await dynamo.send(
+            new UpdateItemCommand({
+              TableName: EVENT_TABLE,
+              Key: { id: { S: eventId } },
+              UpdateExpression: 'SET #field = :true, #updatedAt = :now',
+              ConditionExpression: 'attribute_exists(id)',
+              ExpressionAttributeNames: { '#field': field, '#updatedAt': 'updatedAt' },
+              ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: now } },
+            }),
+          );
+        }
       } catch (err) {
         // A missing event (e.g. deleted before payment) shouldn't fail the
         // webhook — the payment is still recorded. Retry-worthy errors surface.

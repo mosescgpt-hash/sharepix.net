@@ -8,6 +8,7 @@ export interface QREvent {
   extraPhotoCredits?: number | null;
   photoCount?: number | null;
   accessExpiresAt?: string | null;
+  uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;
   paid?: boolean | null;
   guestDownloadEnabled?: boolean | null;
