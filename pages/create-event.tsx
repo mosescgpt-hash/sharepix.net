@@ -1,10 +1,17 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import EventQRCode from '@/components/EventQRCode';
-import { PRICING_TIERS, getTier } from '@/lib/pricing';
-import { createNewEvent, redeemDiscountCode, startCheckout, validateDiscountCode } from '@/lib/api';
+import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
+import {
+  createNewEvent,
+  getMyCorporateSubscription,
+  isCorporateActive,
+  redeemDiscountCode,
+  startCheckout,
+  validateDiscountCode,
+} from '@/lib/api';
 import { QREvent } from '@/lib/types';
 
 function CreateEventPage() {
@@ -17,11 +24,19 @@ function CreateEventPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdEvent, setCreatedEvent] = useState<QREvent | null>(null);
+  const [corporateActive, setCorporateActive] = useState(false);
   const [pilotCode, setPilotCode] = useState('');
   const [pilotCodeStatus, setPilotCodeStatus] = useState<
     'idle' | 'checking' | 'valid' | 'invalid'
   >('idle');
   const [pilotCodeMessage, setPilotCodeMessage] = useState<string | null>(null);
+
+  // Active Corporate subscribers can create events included in their plan (free).
+  useEffect(() => {
+    getMyCorporateSubscription()
+      .then((sub) => setCorporateActive(isCorporateActive(sub)))
+      .catch(() => setCorporateActive(false));
+  }, []);
 
   async function applyPilotCode() {
     if (!pilotCode.trim()) {
@@ -69,6 +84,16 @@ function CreateEventPage() {
     setBusy(true);
     setError(null);
     try {
+      if (tierId === 'corporate') {
+        // Included in the active Corporate subscription — create it free.
+        if (!corporateActive) {
+          throw new Error('An active Corporate subscription is required for corporate events.');
+        }
+        const event = await createNewEvent({ name: name.trim(), date, tier: 'corporate', paid: true });
+        setCreatedEvent(event);
+        return;
+      }
+
       if (isComped) {
         // Pilot/discount code path: redeem the code and create an active event.
         const redemption = await redeemDiscountCode(pilotCode, tierId);
@@ -206,6 +231,40 @@ function CreateEventPage() {
                 </label>
               ))}
             </div>
+
+            {corporateActive ? (
+              <label
+                className={`mt-3 flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm ${
+                  tierId === 'corporate' ? 'border-accent bg-accent/5' : 'border-ink/20 bg-white'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="tier"
+                  value="corporate"
+                  checked={tierId === 'corporate'}
+                  onChange={() => {
+                    setTierId('corporate');
+                    if (pilotCodeStatus !== 'idle') {
+                      setPilotCodeStatus('idle');
+                      setPilotCodeMessage(null);
+                    }
+                  }}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block font-display font-bold">
+                    {CORPORATE_PLAN.name} event · included
+                  </span>
+                  <span className="block text-emerald-700">
+                    Free with your subscription — no per-event charge
+                  </span>
+                  <span className="block text-xs text-ink/50">
+                    Unlimited photos · 1-year host access
+                  </span>
+                </span>
+              </label>
+            ) : null}
           </fieldset>
 
           <div className="rounded-2xl border border-ink/10 bg-white p-4">
@@ -277,14 +336,16 @@ function CreateEventPage() {
             className="w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
           >
             {busy
-              ? isComped
+              ? tierId === 'corporate' || isComped
                 ? 'Creating…'
                 : 'Sending you to checkout…'
-              : isComped
-                ? 'Create free event & get QR code'
-                : `Continue to payment · $${getTier(tierId)?.price ?? ''}`}
+              : tierId === 'corporate'
+                ? 'Create corporate event & get QR code'
+                : isComped
+                  ? 'Create free event & get QR code'
+                  : `Continue to payment · $${getTier(tierId)?.price ?? ''}`}
           </button>
-          {!isComped ? (
+          {tierId !== 'corporate' && !isComped ? (
             <p className="text-center text-xs text-ink/50">
               You&apos;ll enter payment on Stripe&apos;s secure checkout. Your event activates
               as soon as payment is confirmed.

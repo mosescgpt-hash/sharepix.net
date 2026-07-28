@@ -86,6 +86,10 @@ export const CORPORATE_PLAN = {
   price: 149, // USD per month
   interval: 'month' as const,
   priceLabel: '$149 / month',
+  // Lifecycle for events created under a Corporate subscription (premium-like:
+  // unlimited photos, 1-year host retention, 30-day guest low-res).
+  retentionDays: 365,
+  guestLowResDays: 30,
   // One-time cost to enable guest downloads on a single corporate event
   // (guest downloads are off by default on corporate events).
   guestDownloadAddOnPrice: 15,
@@ -121,7 +125,13 @@ export function computeUploadWindowEndsAt(from: Date = new Date()): string {
 /** Compute the gallery expiry timestamp for a tier, starting now. */
 export function computeAccessExpiresAt(tierId: string, from: Date = new Date()): string {
   const tier = getTier(tierId);
-  const days = tier ? tier.accessDays : 14;
+  // Corporate events (no per-event tier row) get the full upload window + host
+  // retention so the displayed access date isn't the 14-day fallback.
+  const days = tier
+    ? tier.accessDays
+    : tierId === 'corporate'
+      ? UPLOAD_WINDOW_DAYS + CORPORATE_PLAN.retentionDays
+      : 14;
   const expires = new Date(from.getTime() + days * DAY_MS).toISOString();
   return expires;
 }
