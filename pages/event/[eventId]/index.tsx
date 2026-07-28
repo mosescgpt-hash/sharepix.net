@@ -5,7 +5,7 @@ import Layout from '@/components/Layout';
 import PhotoGrid from '@/components/PhotoGrid';
 import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
-import { isGalleryActive } from '@/lib/validation';
+import { eventLifecycle } from '@/lib/lifecycle';
 import { canDownloadEventMedia, isEventHost } from '@/lib/gallery';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 
@@ -35,9 +35,13 @@ export default function EventGalleryPage() {
         getCurrentUserInfo(),
         isGlobalAdmin().catch(() => false),
       ]);
-      setHost(isEventHost(ev, user));
+      const isHost = isEventHost(ev, user);
+      setHost(isHost);
       setAdmin(isAdmin);
-      if (isGalleryActive(ev.accessExpiresAt)) {
+      // Fetch photos when someone is allowed to see them: the host/admin always,
+      // guests only while the gallery is still showing something.
+      const guestSees = eventLifecycle(ev).guestResolution !== 'none';
+      if (isHost || isAdmin || guestSees) {
         const items = await fetchEventPhotos(eventId);
         setPhotos(items);
       }
@@ -52,8 +56,12 @@ export default function EventGalleryPage() {
     load();
   }, [load]);
 
-  const active = isGalleryActive(event?.accessExpiresAt);
-  const canDownload = event ? canDownloadEventMedia(event, host || admin) : false;
+  const privileged = host || admin;
+  const lifecycle = eventLifecycle(event);
+  // The host/admin can always see the gallery; guests can while it's not closed.
+  const canSee = privileged || lifecycle.guestResolution !== 'none';
+  const lowResOnly = !privileged && lifecycle.guestResolution === 'small';
+  const canDownload = event ? canDownloadEventMedia(event, privileged) : false;
 
   return (
     <Layout title={event ? event.name : 'Event gallery'}>
@@ -72,12 +80,14 @@ export default function EventGalleryPage() {
                 {photos.length} item{photos.length === 1 ? '' : 's'} shared by guests
               </p>
               <div className="mt-2 flex gap-3 text-sm">
-                <Link
-                  href={`/event/${event.id}/upload`}
-                  className="rounded-full bg-ink px-5 py-2 font-medium text-white hover:bg-night"
-                >
-                  Add your photos
-                </Link>
+                {lifecycle.uploadOpen ? (
+                  <Link
+                    href={`/event/${event.id}/upload`}
+                    className="rounded-full bg-ink px-5 py-2 font-medium text-white hover:bg-night"
+                  >
+                    Add your photos
+                  </Link>
+                ) : null}
                 <button
                   type="button"
                   onClick={load}
@@ -88,8 +98,15 @@ export default function EventGalleryPage() {
               </div>
             </div>
 
+            {lowResOnly ? (
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
+                Uploads for this event have closed. These previews stay available for a
+                little longer before the gallery closes.
+              </p>
+            ) : null}
+
             <div className="mt-8">
-              {active ? (
+              {canSee ? (
                 <PhotoGrid
                   photos={photos}
                   canDownload={canDownload}
@@ -99,8 +116,7 @@ export default function EventGalleryPage() {
                 />
               ) : (
                 <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
-                  This gallery&apos;s access window has ended. Hosts can still reach it
-                  from the admin dashboard.
+                  This gallery has closed. Hosts can still reach it from the admin dashboard.
                 </p>
               )}
             </div>

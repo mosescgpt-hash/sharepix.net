@@ -15,7 +15,7 @@ import {
   DisplayPhoto,
 } from '@/lib/types';
 import { buildPhotoKey, buildPreviewKey, generateEventCode } from '@/lib/validation';
-import { computeAccessExpiresAt, getTier } from '@/lib/pricing';
+import { computeAccessExpiresAt, computeUploadWindowEndsAt, getTier } from '@/lib/pricing';
 import { createPhotoPreview } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
@@ -92,6 +92,7 @@ export async function createNewEvent(input: {
     eventCode: generateEventCode(),
     photoLimit: tier?.photoLimit ?? null,
     accessExpiresAt: computeAccessExpiresAt(input.tier),
+    uploadWindowEndsAt: computeUploadWindowEndsAt(),
     paid: input.paid ?? true,
     createdBy: user?.displayName ?? 'Unknown',
   });
@@ -288,6 +289,20 @@ export async function getMyCorporateSubscription(): Promise<CorporateSubscriptio
 export function isCorporateActive(sub: CorporateSubscription | null): boolean {
   if (!sub) return false;
   return sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
+}
+
+/**
+ * Starts the one-time checkout to extend an event's upload window by 30 days
+ * (half the plan price). The webhook pushes uploadWindowEndsAt out on success.
+ */
+export async function startExtendUploadWindow(eventId: string, tier: string): Promise<string> {
+  const { data, errors } = await client.mutations.createCheckoutSession(
+    { tier, kind: 'extend_window', eventId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.url) throw new Error('Checkout did not return a URL.');
+  return data.url;
 }
 
 /**

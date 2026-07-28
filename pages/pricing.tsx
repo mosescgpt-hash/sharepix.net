@@ -42,9 +42,17 @@ export default function PricingPage() {
             Guests scan the QR code and upload for free — no account or app required.
           </p>
           <p className="mt-3">
-            <strong className="text-ink">What happens when access expires?</strong>{' '}
-            The gallery becomes read-only for you as the host; download everything
-            before the window closes, or upgrade the event.
+            <strong className="text-ink">How long is my event open?</strong> Guests can
+            upload for <strong>30 days</strong> on every plan. You can extend the upload
+            window by 30 more days anytime for half the plan price.
+          </p>
+          <p className="mt-3">
+            <strong className="text-ink">What happens after the upload window?</strong>{' '}
+            Guests keep reduced-resolution viewing for a short time (3 weeks on Starter, 30
+            days on Standard/Premium), then it ends. As the host you keep full access and
+            downloads for your plan&apos;s retention — 3 weeks (Starter), 3 months (Standard),
+            or 1 year (Premium) — after which photos are archived and later deleted. Download
+            what you want to keep before retention ends.
           </p>
           <p className="mt-3">
             <strong className="text-ink">Can I moderate photos?</strong> Every plan

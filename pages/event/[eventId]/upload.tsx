@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import UploadForm from '@/components/UploadForm';
 import { fetchEvent } from '@/lib/api';
-import { isUploadOpen } from '@/lib/validation';
+import { eventLifecycle } from '@/lib/lifecycle';
 import { QREvent } from '@/lib/types';
 
 export default function GuestUploadPage() {
@@ -39,7 +39,7 @@ export default function GuestUploadPage() {
     };
   }, [eventId]);
 
-  const canUpload = isUploadOpen(event);
+  const canUpload = eventLifecycle(event).uploadOpen;
 
   return (
     <Layout title={event ? `Upload to ${event.name}` : 'Upload photos and videos'}>
