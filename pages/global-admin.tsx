@@ -14,11 +14,27 @@ import {
   listDiscountCodes,
   listPaymentsCount,
   manageUser,
+  restoreEventAccess,
   setDiscountCodeActive,
   startCheckout,
 } from '@/lib/api';
 import { PRICING_TIERS, getTier } from '@/lib/pricing';
+import { eventLifecycle } from '@/lib/lifecycle';
 import { DiscountCode, QREvent } from '@/lib/types';
+
+/** Short human label for where an event sits in its lifecycle. */
+function lifecyclePhase(event: QREvent): { label: string; recover: boolean } {
+  const lc = eventLifecycle(event);
+  if (!lc.uploadWindowEndsAt) return { label: 'Active', recover: false };
+  if (lc.uploadOpen) return { label: 'Open · uploads', recover: false };
+  if (lc.hostAccess) {
+    return {
+      label: lc.guestResolution === 'small' ? 'Post-window · guests low-res' : 'Host retention',
+      recover: false,
+    };
+  }
+  return { label: lc.archived ? 'Archived · recoverable' : 'Past archive', recover: true };
+}
 
 function defaultExpiryValue(): string {
   const date = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -239,6 +255,25 @@ function GlobalAdminPage() {
     }
   }
 
+  async function handleRestoreEvent(event: QREvent) {
+    if (
+      !window.confirm(
+        `Restore host access to “${event.name}”? This resets the upload window to today, giving the host their full retention period again.`,
+      )
+    ) return;
+
+    setWorking(`restore-${event.id}`);
+    setError(null);
+    try {
+      await restoreEventAccess(event.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The event could not be restored.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
   return (
     <Layout title="Global admin">
       <section className="py-8">
@@ -402,6 +437,20 @@ function GlobalAdminPage() {
                           <p className="mt-1 text-xs text-ink/50">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
                           </p>
+                          {(() => {
+                            const phase = lifecyclePhase(event);
+                            return (
+                              <span
+                                className={`mt-2 inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                  phase.recover
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-ink/5 text-ink/60'
+                                }`}
+                              >
+                                {phase.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
                           <Link href={`/event/${event.id}`} className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent">
@@ -418,6 +467,16 @@ function GlobalAdminPage() {
                               className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent disabled:opacity-50"
                             >
                               Add photos
+                            </button>
+                          ) : null}
+                          {lifecyclePhase(event).recover ? (
+                            <button
+                              type="button"
+                              disabled={working === `restore-${event.id}`}
+                              onClick={() => void handleRestoreEvent(event)}
+                              className="rounded-full border border-accent px-3 py-1.5 text-accent hover:bg-accent hover:text-white disabled:opacity-50"
+                            >
+                              Restore access
                             </button>
                           ) : null}
                           <button
