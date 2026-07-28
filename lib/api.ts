@@ -839,12 +839,12 @@ export async function downloadPhotosAsZip(
   photos: QRPhoto[],
   archiveName: string,
   onProgress?: (completed: number, total: number) => void,
-): Promise<{ skipped: number }> {
+): Promise<{ skipped: number; failedIds: string[] }> {
   if (photos.length === 0) throw new Error('Select at least one photo or video.');
 
   const zip = new JSZip();
   let added = 0;
-  let skipped = 0;
+  const failedIds: string[] = [];
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
     try {
@@ -855,7 +855,7 @@ export async function downloadPhotosAsZip(
       zip.file(numberedName, blob);
       added += 1;
     } catch {
-      skipped += 1; // missing/unavailable file — skip and keep going
+      failedIds.push(photo.id); // missing/unavailable file — skip and keep going
     }
     onProgress?.(index + 1, photos.length);
   }
@@ -875,7 +875,7 @@ export async function downloadPhotosAsZip(
   link.click();
   link.remove();
   URL.revokeObjectURL(blobUrl);
-  return { skipped };
+  return { skipped: failedIds.length, failedIds };
 }
 
 /**
