@@ -100,9 +100,14 @@ function MyEventsPage() {
     setError(null);
     setZipProgress('Preparing…');
     try {
-      await downloadEventsAsZip(chosen, (completed, total) => {
+      const { skipped } = await downloadEventsAsZip(chosen, (completed, total) => {
         setZipProgress(`Adding ${completed} of ${total}…`);
       });
+      if (skipped > 0) {
+        setError(
+          `${skipped} file${skipped === 1 ? '' : 's'} could not be found and ${skipped === 1 ? 'was' : 'were'} skipped; the rest downloaded.`,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The download could not be created.');
     } finally {
