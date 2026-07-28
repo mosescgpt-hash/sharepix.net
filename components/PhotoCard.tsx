@@ -8,6 +8,8 @@ interface PhotoCardProps {
   canDownload?: boolean;
   selectable?: boolean;
   selected?: boolean;
+  /** True when a bulk download couldn't fetch this file (missing original). */
+  failed?: boolean;
   onToggleSelected?: () => void;
   /** When set (hosts only), clicking the photo opens the full-quality view. */
   onEnlarge?: () => void;
@@ -18,6 +20,7 @@ export default function PhotoCard({
   canDownload = false,
   selectable = false,
   selected = false,
+  failed = false,
   onToggleSelected,
   onEnlarge,
 }: PhotoCardProps) {
@@ -38,7 +41,11 @@ export default function PhotoCard({
   return (
     <figure
       className={`relative overflow-hidden rounded-xl border bg-white transition ${
-        selected ? 'border-accent ring-2 ring-accent' : 'border-ink/10'
+        failed
+          ? 'border-red-500 ring-2 ring-red-500'
+          : selected
+            ? 'border-accent ring-2 ring-accent'
+            : 'border-ink/10'
       }`}
     >
       <div className="relative">
@@ -77,6 +84,12 @@ export default function PhotoCard({
             className="aspect-square w-full object-cover"
           />
         )}
+
+        {failed ? (
+          <span className="absolute right-2 top-2 rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow">
+            Unavailable
+          </span>
+        ) : null}
 
         {selectable ? (
           <button

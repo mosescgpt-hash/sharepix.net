@@ -36,6 +36,7 @@ export default function PhotoGrid({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState('');
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [enlarged, setEnlarged] = useState<DisplayPhoto | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
@@ -104,14 +105,20 @@ export default function PhotoGrid({
       : sortedPhotos;
     setDownloading(true);
     setError(null);
+    setFailedIds(new Set());
     setDownloadProgress(`Preparing 0 of ${target.length}`);
     try {
-      const { skipped } = await downloadPhotosAsZip(target, eventName, (completed, total) => {
-        setDownloadProgress(`Preparing ${completed} of ${total}`);
-      });
+      const { skipped, failedIds: failed } = await downloadPhotosAsZip(
+        target,
+        eventName,
+        (completed, total) => {
+          setDownloadProgress(`Preparing ${completed} of ${total}`);
+        },
+      );
       if (skipped > 0) {
+        setFailedIds(new Set(failed));
         setError(
-          `Downloaded ${target.length - skipped} of ${target.length}. ${skipped} file${skipped === 1 ? '' : 's'} could not be found and ${skipped === 1 ? 'was' : 'were'} skipped.`,
+          `Downloaded ${target.length - skipped} of ${target.length}. ${skipped} file${skipped === 1 ? '' : 's'} (highlighted in red) could not be found and ${skipped === 1 ? 'was' : 'were'} skipped.`,
         );
       }
     } catch (err) {
@@ -200,6 +207,7 @@ export default function PhotoGrid({
             canDownload={canDownload}
             selectable={canDownload}
             selected={selected.has(photo.id)}
+            failed={failedIds.has(photo.id)}
             onToggleSelected={() => toggleSelected(photo.id)}
             onEnlarge={
               canViewOriginal && !isVideoFilename(photo.s3Key)
