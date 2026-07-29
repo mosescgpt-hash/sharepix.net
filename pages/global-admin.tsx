@@ -16,11 +16,35 @@ import {
   manageUser,
   restoreEventAccess,
   setDiscountCodeActive,
+  setEventUploadWindowEnd,
   startCheckout,
 } from '@/lib/api';
-import { PRICING_TIERS, getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { DiscountCode, QREvent } from '@/lib/types';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Upload-window end date that lands an event in a chosen lifecycle phase (testing). */
+function simulateWindowEnd(event: QREvent, phase: string): string | null {
+  const now = Date.now();
+  const isCorp = event.tier === 'corporate';
+  const tier = getTier(event.tier);
+  const lowRes = isCorp ? CORPORATE_PLAN.guestLowResDays : tier?.guestLowResDays ?? 30;
+  const retention = isCorp ? CORPORATE_PLAN.retentionDays : tier?.retentionDays ?? 90;
+  switch (phase) {
+    case 'open':
+      return new Date(now + 30 * DAY_MS).toISOString();
+    case 'lowres':
+      return new Date(now - 2 * DAY_MS).toISOString();
+    case 'gone':
+      return new Date(now - (lowRes + 2) * DAY_MS).toISOString();
+    case 'archived':
+      return new Date(now - (retention + 2) * DAY_MS).toISOString();
+    default:
+      return null;
+  }
+}
 
 /** Short human label for where an event sits in its lifecycle. */
 function lifecyclePhase(event: QREvent): { label: string; recover: boolean } {
@@ -255,6 +279,21 @@ function GlobalAdminPage() {
     }
   }
 
+  async function handleSimulatePhase(event: QREvent, phase: string) {
+    const iso = simulateWindowEnd(event, phase);
+    if (!iso) return;
+    setWorking(`sim-${event.id}`);
+    setError(null);
+    try {
+      await setEventUploadWindowEnd(event.id, iso);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The event window could not be updated.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleRestoreEvent(event: QREvent) {
     if (
       !window.confirm(
@@ -479,6 +518,23 @@ function GlobalAdminPage() {
                               Restore access
                             </button>
                           ) : null}
+                          <select
+                            aria-label="Simulate lifecycle phase (testing)"
+                            disabled={working === `sim-${event.id}`}
+                            value=""
+                            onChange={(e) => {
+                              const phase = e.target.value;
+                              e.target.value = '';
+                              if (phase) void handleSimulatePhase(event, phase);
+                            }}
+                            className="rounded-full border border-dashed border-ink/30 px-2 py-1.5 text-ink/60 disabled:opacity-50"
+                          >
+                            <option value="">Simulate…</option>
+                            <option value="open">Open (uploads)</option>
+                            <option value="lowres">Guests low-res</option>
+                            <option value="gone">Guests gone</option>
+                            <option value="archived">Archived</option>
+                          </select>
                           <button
                             type="button"
                             disabled={working === `event-${event.id}`}

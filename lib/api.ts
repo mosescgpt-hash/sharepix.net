@@ -453,11 +453,17 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
  * period, and guests re-enter the low-res phase.
  */
 export async function restoreEventAccess(eventId: string): Promise<void> {
+  return setEventUploadWindowEnd(eventId, new Date().toISOString());
+}
+
+/** Global-admin: set an event's upload-window end date directly (also used to
+ * simulate lifecycle phases for testing). */
+export async function setEventUploadWindowEnd(eventId: string, iso: string): Promise<void> {
   const { errors } = await client.models.Event.update(
-    { id: eventId, uploadWindowEndsAt: new Date().toISOString() },
+    { id: eventId, uploadWindowEndsAt: iso },
     { authMode: 'userPool' },
   );
-  if (errors?.length) throw new Error('The event could not be restored.');
+  if (errors?.length) throw new Error('The event window could not be updated.');
 }
 
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {
