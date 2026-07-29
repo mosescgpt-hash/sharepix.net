@@ -1,7 +1,10 @@
+import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
 import HomepageEventAccess from '@/components/HomepageEventAccess';
+import { getCurrentUserInfo } from '@/lib/api';
 
 const steps = [
   {
@@ -23,6 +26,17 @@ const steps = [
 ];
 
 export default function HomePage() {
+  const router = useRouter();
+
+  // Signed-in hosts go straight to their account page; guests see the homepage.
+  useEffect(() => {
+    getCurrentUserInfo()
+      .then((user) => {
+        if (user) void router.replace('/my-events');
+      })
+      .catch(() => undefined);
+  }, [router]);
+
   return (
     <Layout>
       {/* Hero */}

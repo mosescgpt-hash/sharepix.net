@@ -226,9 +226,10 @@ function AdminDashboardPage() {
                 <p className="text-sm uppercase tracking-wide text-ink/50">Admin dashboard</p>
                 <h1 className="font-display text-3xl font-extrabold">{event.name}</h1>
                 <p className="mt-1 text-sm text-ink/60">
-                  {tier?.name ?? event.tier} plan · Event code {event.eventCode}
-                  {event.accessExpiresAt
-                    ? ` · Access until ${new Date(event.accessExpiresAt).toLocaleDateString()}`
+                  {event.tier === 'corporate' ? 'Corporate' : tier?.name ?? event.tier} plan ·
+                  Event code {event.eventCode}
+                  {lifecycle.uploadWindowEndsAt
+                    ? ` · Uploads ${lifecycle.uploadOpen ? 'open until' : 'closed'} ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}`
                     : ''}
                 </p>
               </div>

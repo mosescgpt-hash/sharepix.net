@@ -32,11 +32,16 @@ function CreateEventPage() {
   const [pilotCodeMessage, setPilotCodeMessage] = useState<string | null>(null);
 
   // Active Corporate subscribers can create events included in their plan (free).
+  // Default them to the corporate option unless they arrived with a specific plan.
   useEffect(() => {
     getMyCorporateSubscription()
-      .then((sub) => setCorporateActive(isCorporateActive(sub)))
+      .then((sub) => {
+        const active = isCorporateActive(sub);
+        setCorporateActive(active);
+        if (active && typeof router.query.tier !== 'string') setTierId('corporate');
+      })
       .catch(() => setCorporateActive(false));
-  }, []);
+  }, [router.query.tier]);
 
   async function applyPilotCode() {
     if (!pilotCode.trim()) {
