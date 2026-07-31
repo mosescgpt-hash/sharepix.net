@@ -175,6 +175,9 @@ const schema = a.schema({
     approved: a.boolean(),
     eventOwner: a.string(),
     contentHash: a.string(),
+    // True when this upload matched a photo the event already had, so the
+    // existing record was returned instead of a second copy being created.
+    duplicate: a.boolean(),
     createdAt: a.string(),
   }),
 

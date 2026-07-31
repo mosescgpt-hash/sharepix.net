@@ -105,7 +105,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
 
       updateItem(i, { status: 'uploading', percent: 0 });
       try {
-        await uploadEventPhotoWithContext(
+        const photo = await uploadEventPhotoWithContext(
           uploadContext,
           item.file,
           ({ loaded, total }) => {
@@ -114,8 +114,15 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
           hash,
         );
         if (hash) seenHashes.add(hash);
-        updateItem(i, { status: 'done', percent: 100 });
-        uploaded += 1;
+        // Another guest can upload the same photo between our check and this
+        // call; the server dedups it and tells us the record already existed.
+        if (photo.duplicate) {
+          updateItem(i, { status: 'duplicate', percent: 0 });
+          duplicates += 1;
+        } else {
+          updateItem(i, { status: 'done', percent: 100 });
+          uploaded += 1;
+        }
         await new Promise((resolve) => window.setTimeout(resolve, 150));
       } catch (err) {
         const rawMessage = err instanceof Error ? err.message : '';
