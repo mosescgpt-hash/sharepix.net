@@ -89,9 +89,21 @@ export function sanitizeFilename(name: string): string {
     .toLowerCase();
 }
 
-/** Build the S3 key for a photo: events/{eventId}/photos/{timestamp}-{filename} */
-export function buildPhotoKey(eventId: string, filename: string, now: Date = new Date()): string {
-  return `events/${eventId}/photos/${now.getTime()}-${sanitizeFilename(filename)}`;
+/**
+ * Build the S3 key for a photo: events/{eventId}/photos/{stamp}-{filename}
+ *
+ * When the file's content hash is known it becomes the stamp, so re-uploading
+ * the same bytes overwrites the same object instead of orphaning a second copy.
+ * Without a hash the key falls back to a timestamp, exactly as before.
+ */
+export function buildPhotoKey(
+  eventId: string,
+  filename: string,
+  now: Date = new Date(),
+  contentHash?: string | null,
+): string {
+  const stamp = contentHash ? contentHash.slice(0, 32) : String(now.getTime());
+  return `events/${eventId}/photos/${stamp}-${sanitizeFilename(filename)}`;
 }
 
 /** Put a reduced-quality JPEG beside the original without exposing it as a download filename. */

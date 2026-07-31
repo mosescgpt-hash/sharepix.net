@@ -104,6 +104,21 @@ describe('S3 keys', () => {
     expect(key).toBe(`events/abc123/photos/${now.getTime()}-party-pic.png`);
   });
 
+  it('content-addresses the key when a hash is given, so re-uploads overwrite', () => {
+    const hash = 'f'.repeat(64);
+    const monday = buildPhotoKey('evt', 'party.jpg', new Date('2026-01-01T00:00:00Z'), hash);
+    const friday = buildPhotoKey('evt', 'party.jpg', new Date('2026-01-05T00:00:00Z'), hash);
+    expect(monday).toBe(friday);
+    expect(monday).toBe(`events/evt/photos/${'f'.repeat(32)}-party.jpg`);
+  });
+
+  it('falls back to a timestamp key when the file could not be hashed', () => {
+    const now = new Date('2026-01-01T00:00:00Z');
+    expect(buildPhotoKey('evt', 'party.jpg', now, null)).toBe(
+      `events/evt/photos/${now.getTime()}-party.jpg`,
+    );
+  });
+
   it('builds a separate JPEG preview key', () => {
     expect(buildPreviewKey('events/evt/photos/1234-camera.heic')).toBe(
       'events/evt/previews/1234-camera-preview.jpg',

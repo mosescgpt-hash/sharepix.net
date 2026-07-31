@@ -555,6 +555,11 @@ export async function prepareEventUpload(
   };
 }
 
+/** A stored photo, plus whether the event already had these exact bytes. */
+export interface UploadedPhoto extends QRPhoto {
+  duplicate: boolean;
+}
+
 /** SHA-256 of a file's bytes as a lowercase hex string, for duplicate detection. */
 export async function computeContentHash(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -596,7 +601,7 @@ export async function uploadEventPhoto(
   file: File,
   onProgress?: (p: { loaded: number; total: number }) => void,
   uploaderName?: string,
-): Promise<QRPhoto> {
+): Promise<UploadedPhoto> {
   const context = await prepareEventUpload(eventId, uploaderName);
   return uploadEventPhotoWithContext(context, file, onProgress);
 }
@@ -606,9 +611,11 @@ export async function uploadEventPhotoWithContext(
   file: File,
   onProgress?: (p: { loaded: number; total: number }) => void,
   contentHash?: string,
-): Promise<QRPhoto> {
+): Promise<UploadedPhoto> {
   const { eventId } = context;
-  const key = buildPhotoKey(eventId, file.name);
+  // Content-address the key so a re-upload overwrites its own object rather than
+  // orphaning a second copy; falls back to a timestamp when there's no hash.
+  const key = buildPhotoKey(eventId, file.name, new Date(), contentHash);
   const preview = await createPhotoPreview(file);
   const previewKey = preview ? buildPreviewKey(key) : null;
   const thumb = await createPhotoThumb(file);
@@ -678,7 +685,7 @@ export async function uploadEventPhotoWithContext(
   if (!photo) {
     throw new Error('Photo record could not be saved.');
   }
-  return photo as QRPhoto;
+  return { ...(photo as QRPhoto), duplicate: photo.duplicate ?? false };
 }
 
 /**
