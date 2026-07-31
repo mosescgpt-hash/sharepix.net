@@ -46,9 +46,9 @@ export const handler: Handler = async (event) => {
   const eventId = (event.arguments.eventId ?? '').trim();
   if (!eventId) throw new Error('Missing event for the print order.');
 
-  // Gate: prints are only available on an event whose guest-download add-on has
-  // been purchased — the same gate that unlocks downloads. This also confirms
-  // the event exists and is paid (active) before we take any money.
+  // Gate. The host can order prints on any plan; guests can only once the
+  // event's guest-download add-on has been purchased. Also confirm the event
+  // exists and is paid (active) before we take any money.
   const found = await dynamo.send(
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
@@ -57,7 +57,13 @@ export const handler: Handler = async (event) => {
   if (eventItem.paid?.BOOL === false) {
     throw new Error('This event isn’t active yet.');
   }
-  if (eventItem.guestDownloadEnabled?.BOOL !== true) {
+  // Is the caller the event's host? Match their Cognito sub against the event
+  // owner, the same way the gallery's isEventHost does. Guests (identityPool)
+  // have no sub, so they never match — they need the add-on.
+  const identity = event.identity as { sub?: string } | undefined;
+  const callerSub = identity?.sub ?? '';
+  const isHost = callerSub !== '' && (eventItem.owner?.S ?? '').includes(callerSub);
+  if (!isHost && eventItem.guestDownloadEnabled?.BOOL !== true) {
     throw new Error('Prints aren’t enabled for this event.');
   }
   const eventName = eventItem.name?.S ?? 'SharePix event';
