@@ -10,5 +10,10 @@ export const stripeWebhook = defineFunction({
   resourceGroupName: 'data',
   environment: {
     STRIPE_WEBHOOK_SECRET: secret('STRIPE_WEBHOOK_SECRET'),
+    // Prints fulfillment: after a print checkout completes, the webhook submits
+    // the order to Prodigi with this key. PRODIGI_ENV selects the API host:
+    // `live` → api.prodigi.com, anything else → api.sandbox.prodigi.com.
+    PRODIGI_API_KEY: secret('PRODIGI_API_KEY'),
+    PRODIGI_ENV: 'sandbox',
   },
 });

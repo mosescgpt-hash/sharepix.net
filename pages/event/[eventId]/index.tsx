@@ -102,6 +102,16 @@ export default function EventGalleryPage() {
               </div>
             </div>
 
+            {router.query.prints === 'success' ? (
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-mint/40 px-4 py-3 text-center text-sm text-ink">
+                Thanks! Your print order is confirmed — you’ll get a shipping email from us.
+              </p>
+            ) : router.query.prints === 'cancelled' ? (
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
+                Print order cancelled — nothing was charged.
+              </p>
+            ) : null}
+
             {lowResOnly ? (
               <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
                 Uploads for this event have closed. These previews stay available for a
@@ -116,6 +126,7 @@ export default function EventGalleryPage() {
                   canDownload={canDownload}
                   canViewOriginal={host || admin}
                   eventName={event.name}
+                  eventId={event.id}
                   downloadMessage="The host has the photos. Guest downloads aren't enabled for this event."
                 />
               ) : (
