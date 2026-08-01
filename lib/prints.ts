@@ -8,10 +8,15 @@
  * Profit per print (SharePix's margin) follows these rules:
  *   - Target 50% of the Prodigi base cost, but
  *   - never less than PRINT_MIN_PROFIT — enough that even the cheapest single
- *     print clears Stripe's fee, so an order never loses money — and
+ *     print clears Stripe's fixed fee, so an order never loses money — and
  *   - never more than PRINT_MAX_PROFIT ($10), unless the print's base cost is
  *     over PRINT_HIGH_BASE ($100), where the cap rises to PRINT_MAX_PROFIT_HIGH
  *     ($20).
+ *
+ * The profit above is the NET target. The buyer price grosses it up by Stripe's
+ * percentage fee (STRIPE_PCT) so the profit survives the fee — i.e. the buyer
+ * transparently covers card processing. Shipping is Prodigi's real cost, passed
+ * straight through; SharePix's margin lives only in the per-print profit.
  *
  * All values are USD for US fulfilment (Prodigi "made in USA", Standard tracked
  * shipping), pulled from the Prodigi US price sheet. This file is the single
@@ -29,6 +34,8 @@ export const PRINT_MAX_PROFIT = 10;
 export const PRINT_HIGH_BASE = 100;
 /** Maximum profit per print when the base cost is over PRINT_HIGH_BASE. */
 export const PRINT_MAX_PROFIT_HIGH = 20;
+/** Stripe's percentage fee, grossed into the price so profit lands net of it. */
+export const STRIPE_PCT = 0.029;
 
 export interface PrintProduct {
   /** Prodigi catalogue SKU (US made). */
@@ -55,7 +62,10 @@ export const PRINT_PRODUCTS: PrintProduct[] = [
   { sku: 'GLOBAL-CFP-12X16', name: 'Framed print', size: '12×16 in', baseCost: 39.0, shipFirst: 20.0, shipAdd: 12.0 },
 ];
 
-/** Profit per print in USD: 50% of base, clamped to [min, cap] (cap depends on base). */
+/**
+ * Net profit per print in USD (what SharePix keeps after Stripe's percentage
+ * fee): 50% of base, clamped to [min, cap] (cap depends on base).
+ */
 export function printProfit(baseCost: number): number {
   const cap = baseCost > PRINT_HIGH_BASE ? PRINT_MAX_PROFIT_HIGH : PRINT_MAX_PROFIT;
   const target = baseCost * PRINT_MARGIN_TARGET;
@@ -63,12 +73,13 @@ export function printProfit(baseCost: number): number {
 }
 
 /**
- * Buyer price per copy in USD: base + profit, rounded to the nearest $0.05 so
- * line items stay tidy. Rounding is up-biased (nearest nickel) so it never
- * pushes the profit below the floor.
+ * Buyer price per copy in USD: (base + net profit) grossed up by Stripe's
+ * percentage fee so the profit lands net of it, then rounded to the nearest
+ * $0.05. The gross-up has the buyer cover card processing.
  */
 export function printUnitPrice(baseCost: number): number {
-  return Math.round((baseCost + printProfit(baseCost)) * 20) / 20;
+  const grossed = (baseCost + printProfit(baseCost)) / (1 - STRIPE_PCT);
+  return Math.round(grossed * 20) / 20;
 }
 
 /** Buyer price per copy in whole cents, for Stripe line items. */

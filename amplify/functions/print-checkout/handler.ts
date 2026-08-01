@@ -18,6 +18,7 @@ const PRINT_MIN_PROFIT = 1.5;
 const PRINT_MAX_PROFIT = 10;
 const PRINT_HIGH_BASE = 100;
 const PRINT_MAX_PROFIT_HIGH = 20;
+const STRIPE_PCT = 0.029;
 type Prod = { name: string; size: string; baseCost: number; shipFirst: number; shipAdd: number };
 const PRINT_PRODUCTS: Record<string, Prod> = {
   'GLOBAL-PHO-4X6': { name: 'Photo print', size: '4×6 in', baseCost: 0.15, shipFirst: 8.95, shipAdd: 0 },
@@ -27,15 +28,17 @@ const PRINT_PRODUCTS: Record<string, Prod> = {
   'GLOBAL-CFP-12X16': { name: 'Framed print', size: '12×16 in', baseCost: 39.0, shipFirst: 20.0, shipAdd: 12.0 },
 };
 
-// Profit per print: 50% of base, clamped so a single cheap print never loses
-// money and profit never exceeds $10 ($20 for base over $100).
+// Net profit per print: 50% of base, clamped so a single cheap print never
+// loses money and profit never exceeds $10 ($20 for base over $100).
 function profit(baseCost: number): number {
   const cap = baseCost > PRINT_HIGH_BASE ? PRINT_MAX_PROFIT_HIGH : PRINT_MAX_PROFIT;
   return Math.min(cap, Math.max(PRINT_MIN_PROFIT, baseCost * PRINT_MARGIN_TARGET));
 }
 
+// Price grosses the net profit up by Stripe's percentage so it survives the fee.
 function unitPriceCents(baseCost: number): number {
-  return Math.round((Math.round((baseCost + profit(baseCost)) * 20) / 20) * 100);
+  const grossed = (baseCost + profit(baseCost)) / (1 - STRIPE_PCT);
+  return Math.round((Math.round(grossed * 20) / 20) * 100);
 }
 
 // Order shipping at Prodigi's real cost: first-item + plus-one per extra item.

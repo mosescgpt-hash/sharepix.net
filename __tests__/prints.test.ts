@@ -3,6 +3,7 @@ import {
   PRINT_MAX_PROFIT_HIGH,
   PRINT_MIN_PROFIT,
   PRINT_PRODUCTS,
+  STRIPE_PCT,
   findPrintProduct,
   printProfit,
   printShipping,
@@ -37,11 +38,20 @@ describe('print profit rules', () => {
     expect(printProfit(300)).toBe(PRINT_MAX_PROFIT_HIGH);
   });
 
-  it('prices a print as base + profit, in integer cents for Stripe', () => {
-    expect(printUnitPrice(12)).toBeCloseTo(18, 5); // 12 + 6
-    expect(printUnitPrice(39)).toBeCloseTo(49, 5); // 39 + 10 (capped)
+  it('grosses the price up for Stripe so the net profit survives the fee', () => {
+    // (base + profit) / (1 - 2.9%), nickel-rounded.
+    expect(printUnitPrice(12)).toBeCloseTo(18.55, 2); // (12 + 6) / 0.971
+    expect(printUnitPrice(39)).toBeCloseTo(50.45, 2); // (39 + 10) / 0.971
     for (const product of PRINT_PRODUCTS) {
       expect(Number.isInteger(printUnitPriceCents(product.baseCost))).toBe(true);
+    }
+  });
+
+  it('recovers close to the target net profit after the percentage fee', () => {
+    for (const product of PRINT_PRODUCTS) {
+      const afterPct = printUnitPrice(product.baseCost) * (1 - STRIPE_PCT) - product.baseCost;
+      // Within a nickel of the target (rounding), and never short of it.
+      expect(afterPct).toBeGreaterThanOrEqual(printProfit(product.baseCost) - 0.05);
     }
   });
 });
