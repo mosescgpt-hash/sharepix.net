@@ -52,9 +52,14 @@ function shippingCents(maxShipFirst: number, maxShipAdd: number, totalCopies: nu
 // Videos can't be printed; reject them so an order never references one.
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|avi|mkv|3gp|hevc)$/i;
 
-// Sane caps so a crafted request can't create a giant order.
-const MAX_LINE_ITEMS = 25;
+// Guardrails. These aren't about profit (bigger orders are more profitable —
+// extra prints ship free); they bound worst-case exposure on a single order,
+// since a fraudulent/disputed order means physical goods already printed and
+// shipped that can't be recovered. The order-total cap is the real financial
+// ceiling; the photo/copy caps stop a crafted request building an absurd order.
+const MAX_PHOTOS_PER_ORDER = 100;
 const MAX_COPIES_PER_ITEM = 50;
+const MAX_ORDER_TOTAL_CENTS = 50000; // $500 — raise if you sell large wall-art sets
 
 export const handler: Handler = async (event) => {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -100,12 +105,11 @@ export const handler: Handler = async (event) => {
   if (!Array.isArray(requested) || requested.length === 0) {
     throw new Error('Choose at least one photo to print.');
   }
-  if (requested.length > MAX_LINE_ITEMS) {
-    throw new Error(`A single order can include up to ${MAX_LINE_ITEMS} photos.`);
+  if (requested.length > MAX_PHOTOS_PER_ORDER) {
+    throw new Error(`A single order can include up to ${MAX_PHOTOS_PER_ORDER} photos.`);
   }
 
   const prefix = `events/${eventId}/`;
-  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
   const snapshot: Array<{
     sku: string;
     name: string;
@@ -115,7 +119,13 @@ export const handler: Handler = async (event) => {
     photoId: string;
     unitPriceCents: number;
   }> = [];
+  // Group copies by SKU so each distinct size is one Stripe line item (quantity =
+  // total copies), rather than one line item per photo — that keeps the Stripe
+  // session small no matter how many photos are ordered. Per-photo detail still
+  // rides in `snapshot` for the Prodigi order.
+  const bySku = new Map<string, { product: Prod; qty: number; priceCents: number }>();
   let totalCopies = 0;
+  let itemsSubtotalCents = 0;
   let maxShipFirst = 0;
   let maxShipAdd = 0;
 
@@ -139,14 +149,9 @@ export const handler: Handler = async (event) => {
     }
 
     const priceCents = unitPriceCents(product.baseCost);
-    lineItems.push({
-      quantity: copies,
-      price_data: {
-        currency: 'usd',
-        unit_amount: priceCents,
-        product_data: { name: `${product.name} ${product.size} — ${eventName}` },
-      },
-    });
+    const group = bySku.get(item.sku) ?? { product, qty: 0, priceCents };
+    group.qty += copies;
+    bySku.set(item.sku, group);
     snapshot.push({
       sku: item.sku,
       name: product.name,
@@ -157,11 +162,32 @@ export const handler: Handler = async (event) => {
       unitPriceCents: priceCents,
     });
     totalCopies += copies;
+    itemsSubtotalCents += priceCents * copies;
     maxShipFirst = Math.max(maxShipFirst, product.shipFirst);
     maxShipAdd = Math.max(maxShipAdd, product.shipAdd);
   }
 
   const shipCents = shippingCents(maxShipFirst, maxShipAdd, totalCopies);
+
+  // Financial guardrail: bound worst-case loss on a single (possibly fraudulent)
+  // order of physical goods.
+  if (itemsSubtotalCents + shipCents > MAX_ORDER_TOTAL_CENTS) {
+    throw new Error(
+      `This order exceeds the $${MAX_ORDER_TOTAL_CENTS / 100} per-order limit. Please split it into smaller orders.`,
+    );
+  }
+
+  // One Stripe line item per distinct size (collapsed), quantity = total copies.
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [...bySku.values()].map(
+    ({ product, qty, priceCents }) => ({
+      quantity: qty,
+      price_data: {
+        currency: 'usd',
+        unit_amount: priceCents,
+        product_data: { name: `${product.name} ${product.size} — ${eventName}` },
+      },
+    }),
+  );
 
   const printOrderId = randomUUID();
   const now = new Date().toISOString();
