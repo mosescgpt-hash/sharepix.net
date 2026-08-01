@@ -1,52 +1,88 @@
 import {
-  PRINT_MARGIN,
+  PRINT_MAX_PROFIT,
+  PRINT_MAX_PROFIT_HIGH,
+  PRINT_MIN_PROFIT,
   PRINT_PRODUCTS,
-  PRINT_SHIPPING_CENTS,
-  PRINT_SHIPPING_USD,
   findPrintProduct,
+  printProfit,
+  printShipping,
   printUnitPrice,
   printUnitPriceCents,
 } from '../lib/prints';
 
-describe('print pricing', () => {
-  it('charges the guest a 50% margin over the Prodigi base cost', () => {
-    // The whole point of the model: profit is half the base cost.
-    expect(PRINT_MARGIN).toBe(1.5);
-    expect(printUnitPrice(2)).toBeCloseTo(3, 5); // base $2 → guest $3, $1 profit
-    expect(printUnitPrice(4)).toBeCloseTo(6, 5);
-    expect(printUnitPrice(30)).toBeCloseTo(45, 5);
+describe('print profit rules', () => {
+  it('targets 50% of base between the floor and the cap', () => {
+    expect(printProfit(12)).toBeCloseTo(6, 5); // $12 base → $6 profit
+    expect(printProfit(8)).toBeCloseTo(4, 5);
   });
 
-  it('rounds to the nearest nickel without eating the margin', () => {
-    // base $2.20 → 3.30 already on a nickel; base $1.60 → 2.40.
-    expect(printUnitPrice(2.2)).toBeCloseTo(3.3, 5);
-    expect(printUnitPrice(1.6)).toBeCloseTo(2.4, 5);
-    // The rounded price is always >= the raw marked-up price (never rounds below).
+  it('never drops below the minimum profit (so cheap prints do not lose money)', () => {
+    expect(printProfit(0.15)).toBe(PRINT_MIN_PROFIT); // 50% would be $0.075
+    expect(printProfit(0.65)).toBe(PRINT_MIN_PROFIT);
     for (const product of PRINT_PRODUCTS) {
-      expect(printUnitPrice(product.baseCost)).toBeGreaterThanOrEqual(
-        product.baseCost * PRINT_MARGIN - 0.025,
-      );
+      expect(printProfit(product.baseCost)).toBeGreaterThanOrEqual(PRINT_MIN_PROFIT);
     }
   });
 
-  it('exposes prices in whole cents for Stripe', () => {
-    expect(printUnitPriceCents(4)).toBe(600);
-    expect(printUnitPriceCents(1.6)).toBe(240);
-    expect(PRINT_SHIPPING_CENTS).toBe(Math.round(PRINT_SHIPPING_USD * 100));
-    // Cents must be integers so Stripe never rejects a fractional amount.
+  it('caps profit at $10 for a normal print', () => {
+    expect(printProfit(39)).toBe(PRINT_MAX_PROFIT); // 50% would be $19.50
+    expect(printProfit(100)).toBe(PRINT_MAX_PROFIT); // exactly $100 is not "over"
+    for (const product of PRINT_PRODUCTS) {
+      expect(printProfit(product.baseCost)).toBeLessThanOrEqual(PRINT_MAX_PROFIT);
+    }
+  });
+
+  it('caps profit at $20 only when the base cost is over $100', () => {
+    expect(printProfit(101)).toBe(PRINT_MAX_PROFIT_HIGH); // 50% would be $50.50
+    expect(printProfit(300)).toBe(PRINT_MAX_PROFIT_HIGH);
+  });
+
+  it('prices a print as base + profit, in integer cents for Stripe', () => {
+    expect(printUnitPrice(12)).toBeCloseTo(18, 5); // 12 + 6
+    expect(printUnitPrice(39)).toBeCloseTo(49, 5); // 39 + 10 (capped)
     for (const product of PRINT_PRODUCTS) {
       expect(Number.isInteger(printUnitPriceCents(product.baseCost))).toBe(true);
     }
   });
+});
 
-  it('looks products up by SKU and has a non-empty catalog', () => {
+describe('print shipping (pure Prodigi pass-through)', () => {
+  const photo = findPrintProduct('GLOBAL-PHO-8X10')!;
+  const framed = findPrintProduct('GLOBAL-CFP-12X16')!;
+
+  it('charges Prodigi first-item shipping with no markup', () => {
+    expect(printShipping(photo, 1)).toBeCloseTo(photo.shipFirst, 5);
+  });
+
+  it('ships additional photo prints free (plus-one is $0)', () => {
+    expect(printShipping(photo, 5)).toBeCloseTo(printShipping(photo, 1), 5);
+  });
+
+  it('charges plus-one shipping for each extra framed print', () => {
+    expect(printShipping(framed, 3)).toBeCloseTo(framed.shipFirst + framed.shipAdd * 2, 5);
+  });
+});
+
+describe('no order loses money after Stripe fees', () => {
+  // Even the single cheapest print must net positive after Stripe's 2.9% + $0.30.
+  it.each(PRINT_PRODUCTS.map((p) => [p.sku, p]))('%s, one copy', (_sku, product) => {
+    const p = product as (typeof PRINT_PRODUCTS)[number];
+    const buyerPays = printUnitPrice(p.baseCost) + printShipping(p, 1);
+    const prodigiCost = p.baseCost + p.shipFirst;
+    const stripeFee = buyerPays * 0.029 + 0.3;
+    expect(buyerPays - prodigiCost - stripeFee).toBeGreaterThan(0);
+  });
+});
+
+describe('print catalog', () => {
+  it('looks products up by SKU and is non-empty', () => {
     expect(PRINT_PRODUCTS.length).toBeGreaterThan(0);
     const first = PRINT_PRODUCTS[0];
     expect(findPrintProduct(first.sku)).toEqual(first);
     expect(findPrintProduct('NOPE-000')).toBeUndefined();
   });
 
-  it('keeps every catalog SKU unique', () => {
+  it('keeps every SKU unique', () => {
     const skus = PRINT_PRODUCTS.map((product) => product.sku);
     expect(new Set(skus).size).toBe(skus.length);
   });

@@ -1,12 +1,7 @@
 import { useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { startPrintCheckout } from '@/lib/api';
-import {
-  PRINT_PRODUCTS,
-  PRINT_SHIPPING_USD,
-  findPrintProduct,
-  printUnitPrice,
-} from '@/lib/prints';
+import { PRINT_PRODUCTS, findPrintProduct, printShipping, printUnitPrice } from '@/lib/prints';
 import { isVideoFilename } from '@/lib/validation';
 
 interface PrintOrderModalProps {
@@ -32,8 +27,10 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
 
   const product = findPrintProduct(sku) ?? PRINT_PRODUCTS[0];
   const unit = printUnitPrice(product.baseCost);
-  const itemsTotal = unit * copies * printable.length;
-  const total = itemsTotal + PRINT_SHIPPING_USD;
+  const totalCopies = copies * printable.length;
+  const itemsTotal = unit * totalCopies;
+  const shipping = printShipping(product, totalCopies);
+  const total = itemsTotal + shipping;
 
   async function handleContinue() {
     if (printable.length === 0) return;
@@ -164,7 +161,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
               </div>
               <div className="flex justify-between">
                 <dt className="text-ink/60">Shipping</dt>
-                <dd>{money(PRINT_SHIPPING_USD)}</dd>
+                <dd>{money(shipping)}</dd>
               </div>
               <div className="flex justify-between pt-1 font-semibold">
                 <dt>Total</dt>
