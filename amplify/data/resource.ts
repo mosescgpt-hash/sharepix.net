@@ -2,6 +2,7 @@ import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
+import { printCheckout as printCheckoutFn } from '../functions/print-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
@@ -114,6 +115,33 @@ const schema = a.schema({
       eventId: a.string(),
       customerEmail: a.string(),
       status: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // A guest's print order. Written directly by the print-checkout function
+  // (status `pending`) and updated by the Stripe webhook once payment completes
+  // and the order is submitted to Prodigi (via table grants in backend.ts), so
+  // no model-level create/update is granted here. Admins read to track orders.
+  PrintOrder: a
+    .model({
+      eventId: a.string(),
+      // pending → checkout started; submitted → sent to Prodigi; failed → paid
+      // but Prodigi rejected it (needs manual follow-up).
+      status: a.string(),
+      // JSON snapshot of the ordered items: [{ sku, name, size, copies, s3Key,
+      // photoId, unitPriceCents }]. The webhook regenerates signed URLs from the
+      // s3Keys at submission time.
+      itemsJson: a.string(),
+      stripeSessionId: a.string(),
+      prodigiOrderId: a.string(),
+      amountTotal: a.integer(),
+      currency: a.string(),
+      customerEmail: a.string(),
+      shippingName: a.string(),
+      // JSON snapshot of the shipping address Stripe collected.
+      shippingJson: a.string(),
+      // Prodigi error detail when status is `failed`.
+      error: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
@@ -231,6 +259,17 @@ const schema = a.schema({
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(stripeCheckoutFn)),
+
+  // Guest-facing: starts a Stripe Checkout Session for a print order of one or
+  // more of an event's photos. Guests may call it (no account needed); the
+  // function enforces the guest-download gate and validates every photo belongs
+  // to the event. itemsJson is [{ sku, copies, s3Key, photoId }].
+  createPrintCheckout: a
+    .mutation()
+    .arguments({ eventId: a.string().required(), itemsJson: a.string().required() })
+    .returns(a.ref('CheckoutSession'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(printCheckoutFn)),
 
   // Opens the Stripe billing portal so a corporate host can manage or cancel
   // their subscription themselves. Returns the hosted portal URL.

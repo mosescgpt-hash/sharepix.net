@@ -7,6 +7,7 @@ import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
+import { printCheckout } from './functions/print-checkout/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
@@ -19,6 +20,7 @@ const backend = defineBackend({
   deleteEventPhoto,
   createEventPhoto,
   stripeCheckout,
+  printCheckout,
   listEventPhotos,
   adminUserActions,
   stripeWebhook,
@@ -29,6 +31,7 @@ const eventTable = backend.data.resources.tables.Event;
 const photoTable = backend.data.resources.tables.Photo;
 const paymentTable = backend.data.resources.tables.Payment;
 const corporateTable = backend.data.resources.tables.CorporateSubscription;
+const printOrderTable = backend.data.resources.tables.PrintOrder;
 const bucket = backend.storage.resources.bucket;
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
@@ -50,6 +53,16 @@ eventTable.grantReadWriteData(createFn);
 photoTable.grantReadWriteData(createFn);
 createFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// Print-checkout function: guest-facing print order → Stripe checkout. Reads the
+// event to enforce the guest-download gate and writes a pending PrintOrder row
+// the webhook later submits to Prodigi. No S3 or photo-table access needed — it
+// validates photo ownership by the s3Key prefix, like createEventPhoto.
+const printCheckoutFn = backend.printCheckout.resources.lambda as LambdaFunction;
+eventTable.grantReadData(printCheckoutFn);
+printOrderTable.grantWriteData(printCheckoutFn);
+printCheckoutFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+printCheckoutFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
 
 // List function: read one event's photos for the public gallery (read-only).
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
@@ -81,9 +94,15 @@ const webhookFn = backend.stripeWebhook.resources.lambda as LambdaFunction;
 paymentTable.grantWriteData(webhookFn);
 eventTable.grantWriteData(webhookFn);
 corporateTable.grantWriteData(webhookFn);
+// Prints fulfillment: read/update the PrintOrder row and read the photo objects
+// to mint signed URLs Prodigi pulls the originals from.
+printOrderTable.grantReadWriteData(webhookFn);
+bucket.grantRead(webhookFn);
 webhookFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
 webhookFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 webhookFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
+webhookFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
+webhookFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 const webhookUrl = webhookFn.addFunctionUrl({
   authType: FunctionUrlAuthType.NONE,
 });

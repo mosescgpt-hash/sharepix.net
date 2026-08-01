@@ -320,6 +320,33 @@ export async function startGuestDownloadAddOn(eventId: string): Promise<string> 
   return data.url;
 }
 
+/** One line of a print order: which photo, which product, how many copies. */
+export interface PrintOrderItemInput {
+  sku: string;
+  copies: number;
+  s3Key: string;
+  photoId: string;
+}
+
+/**
+ * Starts a guest print-order checkout for one or more of an event's photos and
+ * returns the hosted Stripe URL. Works for guests (identityPool) and signed-in
+ * hosts (userPool); the function enforces the guest-download gate. The webhook
+ * submits the order to Prodigi once payment completes.
+ */
+export async function startPrintCheckout(
+  eventId: string,
+  items: PrintOrderItemInput[],
+): Promise<string> {
+  const { data, errors } = await client.mutations.createPrintCheckout(
+    { eventId, itemsJson: JSON.stringify(items) },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.url) throw new Error('Checkout did not return a URL.');
+  return data.url;
+}
+
 /** Opens the Stripe billing portal so a corporate host can manage/cancel. */
 export async function openBillingPortal(): Promise<string> {
   const { data, errors } = await client.mutations.openBillingPortal(

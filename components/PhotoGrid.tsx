@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import PhotoCard from '@/components/PhotoCard';
+import PrintOrderModal from '@/components/PrintOrderModal';
 import { downloadPhoto, downloadPhotosAsZip, getOriginalMediaUrl } from '@/lib/api';
 import { GallerySort, sortGalleryPhotos } from '@/lib/gallery';
 import { isVideoFilename } from '@/lib/validation';
@@ -13,6 +14,13 @@ interface PhotoGridProps {
   downloadMessage?: string;
   /** Hosts only: click a photo to open the full-quality original. */
   canViewOriginal?: boolean;
+  /**
+   * When set (and downloads are unlocked), guests can order prints of photos.
+   * Falls back to the photos' own eventId so the gallery page can omit it.
+   */
+  eventId?: string;
+  /** Whether print ordering is offered (defaults to the same gate as downloads). */
+  canOrderPrints?: boolean;
 }
 
 const SORT_STORAGE_KEY = 'sharepix-gallery-sort';
@@ -31,6 +39,8 @@ export default function PhotoGrid({
   eventName = 'sharepix-event',
   downloadMessage,
   canViewOriginal = false,
+  eventId,
+  canOrderPrints,
 }: PhotoGridProps) {
   const [sort, setSort] = useState<GallerySort>('time-newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -39,11 +49,26 @@ export default function PhotoGrid({
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [enlarged, setEnlarged] = useState<DisplayPhoto | null>(null);
+  const [printPhotos, setPrintPhotos] = useState<DisplayPhoto[] | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const sortedPhotos = useMemo(() => sortGalleryPhotos(photos, sort), [photos, sort]);
   // True when every photo is currently selected — flips "Select all" to "Unselect all".
   const allSelected = sortedPhotos.length > 0 && selected.size >= sortedPhotos.length;
+
+  // Prints ride the same gate as downloads unless a caller says otherwise, and
+  // are only offered where the caller opts in by passing an eventId (the public
+  // gallery), not on the share/admin views that reuse this grid.
+  const orderEventId = eventId ?? '';
+  const printsEnabled = (canOrderPrints ?? canDownload) && !!orderEventId;
+
+  function openPrints() {
+    // Order the current selection, or everything when nothing is selected.
+    const target = selected.size
+      ? sortedPhotos.filter((photo) => selected.has(photo.id))
+      : sortedPhotos;
+    setPrintPhotos(target);
+  }
 
   async function openEnlarge(photo: DisplayPhoto) {
     setEnlarged(photo);
@@ -155,7 +180,7 @@ export default function PhotoGrid({
           </select>
         </label>
 
-        {canDownload ? (
+        {canDownload || printsEnabled ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <button
               type="button"
@@ -177,18 +202,29 @@ export default function PhotoGrid({
                 Deselect all ({selected.size})
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={handleBulkDownload}
-              disabled={downloading}
-              className="rounded-full bg-ink px-4 py-2 font-medium text-white hover:bg-night disabled:opacity-50"
-            >
-              {downloading
-                ? downloadProgress
-                : selected.size
-                  ? `Download selected (${selected.size})`
-                  : `Download all (${photos.length})`}
-            </button>
+            {printsEnabled ? (
+              <button
+                type="button"
+                onClick={openPrints}
+                className="rounded-full border border-accent px-4 py-2 font-medium text-accent hover:bg-accent/5"
+              >
+                {selected.size ? `Order prints (${selected.size})` : 'Order prints'}
+              </button>
+            ) : null}
+            {canDownload ? (
+              <button
+                type="button"
+                onClick={handleBulkDownload}
+                disabled={downloading}
+                className="rounded-full bg-ink px-4 py-2 font-medium text-white hover:bg-night disabled:opacity-50"
+              >
+                {downloading
+                  ? downloadProgress
+                  : selected.size
+                    ? `Download selected (${selected.size})`
+                    : `Download all (${photos.length})`}
+              </button>
+            ) : null}
           </div>
         ) : (
           <p className="text-sm text-ink/60">{downloadMessage}</p>
@@ -254,9 +290,22 @@ export default function PhotoGrid({
             ) : null}
           </div>
           <div
-            className="flex justify-center px-4 py-3"
+            className="flex justify-center gap-3 px-4 py-3"
             onClick={(event) => event.stopPropagation()}
           >
+            {printsEnabled ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const photo = enlarged;
+                  closeEnlarge();
+                  setPrintPhotos([photo]);
+                }}
+                className="rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white hover:bg-accent/90"
+              >
+                Order print
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => downloadPhoto(enlarged)}
@@ -266,6 +315,14 @@ export default function PhotoGrid({
             </button>
           </div>
         </div>
+      ) : null}
+
+      {printPhotos && orderEventId ? (
+        <PrintOrderModal
+          photos={printPhotos}
+          eventId={orderEventId}
+          onClose={() => setPrintPhotos(null)}
+        />
       ) : null}
     </div>
   );
