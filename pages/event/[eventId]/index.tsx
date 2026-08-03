@@ -104,7 +104,8 @@ export default function EventGalleryPage() {
 
             {router.query.prints === 'success' ? (
               <p className="mx-auto mt-6 max-w-lg rounded-xl bg-mint/40 px-4 py-3 text-center text-sm text-ink">
-                Thanks! Your print order is confirmed — you’ll get a shipping email from us.
+                Thanks! Your print order is confirmed — we’re sending it to print and it’ll
+                ship to the address you provided.
               </p>
             ) : router.query.prints === 'cancelled' ? (
               <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
