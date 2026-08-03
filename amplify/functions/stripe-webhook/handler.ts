@@ -31,6 +31,20 @@ function prodigiBaseUrl(): string {
     : 'https://api.sandbox.prodigi.com';
 }
 
+// Prodigi requires product-specific attributes on each order item, keyed by SKU.
+// Photo prints (C-type) require a paper `finish` — verified from Prodigi's
+// ValidationFailed response (valid values: "lustre" | "gloss"). Looked up here
+// (not from the stored order) so resending an older order still gets them.
+// NOTE: only the photo prints below are verified. Fine-art/framed SKUs may
+// require their own attributes (frame color, mount, glaze, …) — confirm against
+// Prodigi's product detail API before relying on those sizes.
+const PRODUCT_ATTRIBUTES: Record<string, Record<string, string>> = {
+  'GLOBAL-PHO-4X6': { finish: 'lustre' },
+  'GLOBAL-PHO-5X7': { finish: 'lustre' },
+  'GLOBAL-PHO-8X10': { finish: 'lustre' },
+  'GLOBAL-CFP-12X16': { color: 'black' },
+};
+
 /**
  * Submit a paid print order to Prodigi. Reads the pending PrintOrder row by id,
  * regenerates a signed URL for each photo from its stored s3Key, and posts the
@@ -84,6 +98,7 @@ async function fulfillPrintOrder(session: Stripe.Checkout.Session) {
         sku: item.sku,
         copies: item.copies,
         sizing: 'fillPrintArea',
+        attributes: PRODUCT_ATTRIBUTES[item.sku] ?? {},
         assets: [{ printArea: 'default', url }],
       };
     }),
