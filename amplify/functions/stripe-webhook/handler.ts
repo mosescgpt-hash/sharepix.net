@@ -124,10 +124,14 @@ async function fulfillPrintOrder(session: Stripe.Checkout.Session) {
     throw new Error('PRODIGI_API_KEY is missing; cannot submit the print order.');
   }
 
+  // Bound the call so a slow/hung Prodigi never lets the Lambda hit its own
+  // timeout (which surfaces as an opaque 502) — this throws a catchable error
+  // that the handler turns into a clean, logged 500 instead.
   const response = await fetch(`${prodigiBaseUrl()}/v4.0/Orders`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
   });
 
   if (!response.ok) {
@@ -171,6 +175,7 @@ async function fulfillPrintOrder(session: Stripe.Checkout.Session) {
       },
     }),
   );
+  console.log('Prodigi order submitted', printOrderId, 'prodigiOrderId:', prodigiOrderId);
 }
 
 // Upsert a corporate subscription row from a Stripe subscription object. Owner is
