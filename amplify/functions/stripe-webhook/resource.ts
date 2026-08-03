@@ -8,6 +8,10 @@ import { defineFunction, secret } from '@aws-amplify/backend';
 export const stripeWebhook = defineFunction({
   name: 'stripe-webhook',
   resourceGroupName: 'data',
+  // Submitting a print order to Prodigi (sign the image URL, create the order,
+  // write back) takes longer than the default 3s Lambda timeout — which surfaces
+  // as a 502 from the Function URL. Give it room.
+  timeoutSeconds: 30,
   environment: {
     STRIPE_WEBHOOK_SECRET: secret('STRIPE_WEBHOOK_SECRET'),
     // Prints fulfillment: after a print checkout completes, the webhook submits
