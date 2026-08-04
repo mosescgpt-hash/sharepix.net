@@ -787,8 +787,13 @@ export async function createDownloadShare(
   event: QREvent,
   requestedPhotoIds: string[],
 ): Promise<DownloadShare> {
-  if (event.tier.toLowerCase() !== 'premium') {
-    throw new Error('Download-sharing QR codes are available on Premium events.');
+  // Gated on the guest-download add-on (what the host actually buys), not on the
+  // plan tier — so it works on any event with guest downloads enabled (Premium
+  // or Corporate), matching the admin UI that unlocks the builder on the add-on.
+  if (event.guestDownloadEnabled !== true) {
+    throw new Error(
+      'Enable guest downloads for this event to create a download-sharing QR code.',
+    );
   }
 
   const user = await getCurrentUserInfo();

@@ -66,6 +66,12 @@ printOrderTable.grantWriteData(printCheckoutFn);
 printCheckoutFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 printCheckoutFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
 
+// Stripe checkout function: reads the event's tier to enforce that only
+// Premium/Corporate events can buy the guest-download add-on.
+const stripeCheckoutFn = backend.stripeCheckout.resources.lambda as LambdaFunction;
+eventTable.grantReadData(stripeCheckoutFn);
+stripeCheckoutFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+
 // Print-fulfill function: the background worker that submits a paid order to
 // Prodigi (invoked async by the webhook). It reads/updates the PrintOrder row
 // and reads the photo objects to mint the signed URLs Prodigi pulls from.
