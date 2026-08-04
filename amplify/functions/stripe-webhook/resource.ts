@@ -9,10 +9,10 @@ export const stripeWebhook = defineFunction({
   name: 'stripe-webhook',
   resourceGroupName: 'data',
   // Submitting a print order to Prodigi (sign the image URL, create the order,
-  // write back) can take 20s+ — longer than the default 3s Lambda timeout, which
-  // surfaces as a 502 from the Function URL. Give Prodigi ample room, above the
-  // 45s cutoff on the Prodigi fetch itself so an abort is a clean logged 500.
-  timeoutSeconds: 60,
+  // write back) can take a long time — Prodigi appears to fetch/validate the
+  // photo asset synchronously. Give it generous room, above the 100s cutoff on
+  // the Prodigi fetch itself so an abort is a clean logged 500, not a 502.
+  timeoutSeconds: 120,
   environment: {
     STRIPE_WEBHOOK_SECRET: secret('STRIPE_WEBHOOK_SECRET'),
     // Prints fulfillment: after a print checkout completes, the webhook submits
