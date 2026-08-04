@@ -8,17 +8,12 @@ import { defineFunction, secret } from '@aws-amplify/backend';
 export const stripeWebhook = defineFunction({
   name: 'stripe-webhook',
   resourceGroupName: 'data',
-  // Submitting a print order to Prodigi (sign the image URL, create the order,
-  // write back) can take a long time — Prodigi appears to fetch/validate the
-  // photo asset synchronously. Give it generous room, above the 100s cutoff on
-  // the Prodigi fetch itself so an abort is a clean logged 500, not a 502.
-  timeoutSeconds: 120,
+  // The webhook only verifies the event, records the payment, and hands print
+  // fulfilment to the background print-fulfill function — all fast, so it acks
+  // Stripe well within Stripe's own timeout. Prodigi's slowness lives in
+  // print-fulfill now, not here.
+  timeoutSeconds: 15,
   environment: {
     STRIPE_WEBHOOK_SECRET: secret('STRIPE_WEBHOOK_SECRET'),
-    // Prints fulfillment: after a print checkout completes, the webhook submits
-    // the order to Prodigi with this key. PRODIGI_ENV selects the API host:
-    // `live` → api.prodigi.com, anything else → api.sandbox.prodigi.com.
-    PRODIGI_API_KEY: secret('PRODIGI_API_KEY'),
-    PRODIGI_ENV: 'sandbox',
   },
 });
