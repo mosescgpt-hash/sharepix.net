@@ -8,6 +8,7 @@ import { deleteEventPhoto } from './functions/delete-event-photo/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { printCheckout } from './functions/print-checkout/resource';
+import { printFulfill } from './functions/print-fulfill/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
@@ -21,6 +22,7 @@ const backend = defineBackend({
   createEventPhoto,
   stripeCheckout,
   printCheckout,
+  printFulfill,
   listEventPhotos,
   adminUserActions,
   stripeWebhook,
@@ -64,6 +66,15 @@ printOrderTable.grantWriteData(printCheckoutFn);
 printCheckoutFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 printCheckoutFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
 
+// Print-fulfill function: the background worker that submits a paid order to
+// Prodigi (invoked async by the webhook). It reads/updates the PrintOrder row
+// and reads the photo objects to mint the signed URLs Prodigi pulls from.
+const printFulfillFn = backend.printFulfill.resources.lambda as LambdaFunction;
+printOrderTable.grantReadWriteData(printFulfillFn);
+bucket.grantRead(printFulfillFn);
+printFulfillFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
+printFulfillFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+
 // List function: read one event's photos for the public gallery (read-only).
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
 photoTable.grantReadData(listFn);
@@ -94,15 +105,13 @@ const webhookFn = backend.stripeWebhook.resources.lambda as LambdaFunction;
 paymentTable.grantWriteData(webhookFn);
 eventTable.grantWriteData(webhookFn);
 corporateTable.grantWriteData(webhookFn);
-// Prints fulfillment: read/update the PrintOrder row and read the photo objects
-// to mint signed URLs Prodigi pulls the originals from.
-printOrderTable.grantReadWriteData(webhookFn);
-bucket.grantRead(webhookFn);
+// Prints: the webhook only hands the order off to print-fulfill (async), so it
+// needs invoke permission on it — not PrintOrder/bucket access anymore.
+printFulfillFn.grantInvoke(webhookFn);
 webhookFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
 webhookFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 webhookFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
-webhookFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
-webhookFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+webhookFn.addEnvironment('PRINT_FULFILL_FUNCTION_NAME', printFulfillFn.functionName);
 const webhookUrl = webhookFn.addFunctionUrl({
   authType: FunctionUrlAuthType.NONE,
 });
