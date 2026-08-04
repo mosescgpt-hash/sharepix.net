@@ -81,12 +81,23 @@ export function validateMediaFile(file: { type: string; size: number; name: stri
   return validateImageFile(file);
 }
 
-/** Strip characters that are unsafe in S3 keys. */
+/**
+ * Reduce an untrusted filename to a safe S3-key suffix. Path separators, control
+ * chars, and anything outside [a-z0-9._-] become '-'; consecutive dots (which
+ * form `..` traversal sequences) collapse to one; and leading dots/dashes are
+ * stripped so the result can never be `..`, a dotfile, or start a path segment.
+ * The full key is always prefixed server-side, so this is defense-in-depth.
+ */
 export function sanitizeFilename(name: string): string {
-  return name
+  const cleaned = name
+    // Drop the directory portion of any path the browser/OS may have included.
+    .replace(/^.*[\\/]/, '')
     .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/\.{2,}/g, '.') // no `..`
     .replace(/-{2,}/g, '-')
+    .replace(/^[.-]+/, '') // no leading dot (dotfile) or dash
     .toLowerCase();
+  return cleaned || 'file';
 }
 
 /**
