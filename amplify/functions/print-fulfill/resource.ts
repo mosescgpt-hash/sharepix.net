@@ -12,6 +12,11 @@ export const printFulfill = defineFunction({
   timeoutSeconds: 120,
   environment: {
     PRODIGI_API_KEY: secret('PRODIGI_API_KEY'),
+    // >>> GO-LIVE TOGGLE <<< The only code change needed to switch Prodigi from
+    // testing to real fulfilment. 'sandbox' → api.sandbox.prodigi.com (no real
+    // orders/charges); 'live' → api.prodigi.com (real prints + charges).
+    // When flipping to 'live', also set PRODIGI_API_KEY to the LIVE key and move
+    // Stripe to live mode — see docs/go-live-prints.md.
     PRODIGI_ENV: 'sandbox',
   },
 });
