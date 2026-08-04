@@ -17,6 +17,6 @@ export const printFulfill = defineFunction({
     // orders/charges); 'live' → api.prodigi.com (real prints + charges).
     // When flipping to 'live', also set PRODIGI_API_KEY to the LIVE key and move
     // Stripe to live mode — see docs/go-live-prints.md.
-    PRODIGI_ENV: 'sandbox',
+    PRODIGI_ENV: 'live',
   },
 });
