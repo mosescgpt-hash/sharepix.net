@@ -96,6 +96,30 @@ export const handler: Handler = async (event) => {
     throw new Error('The photo path does not belong to this event.');
   }
 
+  // Defense-in-depth on the (client-built) keys: reject traversal sequences,
+  // unsafe characters, and known-dangerous/executable file types — so a crafted
+  // request can't register an .svg/.html/.js/.exe object or escape the event
+  // folder even though the prefix passed above. Legitimate image/video clients
+  // never send these, so this only trips bypass attempts.
+  const SAFE_KEY = /^[a-zA-Z0-9._/-]+$/;
+  const DANGEROUS_EXT =
+    /\.(svg|svgz|html|htm|xhtml|xml|js|mjs|exe|dll|bat|cmd|com|msi|scr|sh|ps1|vbs|php|phtml|jsp|asp|aspx|cgi|pl|py|rb|zip|rar|7z|tar|gz|tgz|htaccess)$/i;
+  const badKey = [s3Key, previewS3Key, thumbS3Key]
+    .filter(Boolean)
+    .find((k) => k.includes('..') || !SAFE_KEY.test(k) || DANGEROUS_EXT.test(k));
+  if (badKey) {
+    const identity = event.identity as { sub?: string; sourceIp?: string[] } | undefined;
+    // Log for review without leaking bucket internals to the client.
+    console.error('Rejected suspicious photo key', {
+      at: new Date().toISOString(),
+      eventId,
+      key: badKey,
+      userId: uploadedByUserId ?? identity?.sub ?? null,
+      sourceIp: identity?.sourceIp ?? null,
+    });
+    throw new Error('That file type or name is not allowed.');
+  }
+
   // Cheap pre-check: if this event already holds these exact bytes, hand back the
   // record it already has. Nothing is counted and nothing is written, so a guest
   // (or a retry) re-sending the same photo can't eat into the event's limit.

@@ -98,6 +98,20 @@ describe('S3 keys', () => {
     expect(sanitizeFilename("My Photo (1)!.JPG")).toBe('my-photo-1-.jpg');
   });
 
+  it('neutralizes path traversal and separators (defense-in-depth)', () => {
+    expect(sanitizeFilename('../../etc/passwd')).toBe('passwd');
+    expect(sanitizeFilename('..\\..\\system32\\evil.jpg')).toBe('evil.jpg');
+    expect(sanitizeFilename('/etc/shadow')).toBe('shadow');
+    expect(sanitizeFilename('.htaccess')).toBe('htaccess');
+    expect(sanitizeFilename('..')).toBe('file');
+    // The result can never contain a `..` sequence or begin with a dot.
+    for (const evil of ['../x', '..\\x', 'a..b', '...jpg']) {
+      const out = sanitizeFilename(evil);
+      expect(out.includes('..')).toBe(false);
+      expect(out.startsWith('.')).toBe(false);
+    }
+  });
+
   it('builds keys under the expected event path', () => {
     const now = new Date('2026-01-01T00:00:00Z');
     const key = buildPhotoKey('abc123', 'party pic.png', now);
