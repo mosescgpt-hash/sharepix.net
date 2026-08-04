@@ -1,7 +1,23 @@
 import Stripe from 'stripe';
+// @ts-ignore -- @aws-sdk/* is provided by the Lambda runtime, not installed as a dep.
+import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 
 type Handler = Schema['createCheckoutSession']['functionHandler'];
+
+const dynamo = new DynamoDBClient({});
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+
+// The guest-download add-on is only sold on Premium and Corporate events — the
+// plans that can actually use guest downloads / the download-sharing QR. Read
+// the event's tier server-side so a Starter/Standard event can't buy it by
+// bypassing the UI gate.
+async function eventTier(eventId: string): Promise<string> {
+  const found = await dynamo.send(
+    new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
+  );
+  return (found.Item?.tier?.S ?? '').toLowerCase();
+}
 
 // Prices mirror lib/pricing.ts (dollars → cents). Kept in sync by hand so the
 // function has no cross-bundle imports.
@@ -109,6 +125,11 @@ export const handler: Handler = async (event) => {
   if ((event.arguments.kind ?? '') === 'guest_download') {
     const addOnEventId = event.arguments.eventId ?? '';
     if (!addOnEventId) throw new Error('Missing event for the download add-on.');
+    // Only Premium and Corporate events may buy guest downloads.
+    const tier = await eventTier(addOnEventId);
+    if (tier !== 'premium' && tier !== 'corporate') {
+      throw new Error('Guest downloads are available on Premium and Corporate events.');
+    }
     try {
       const stripe = new Stripe(secretKey);
       const session = await stripe.checkout.sessions.create({

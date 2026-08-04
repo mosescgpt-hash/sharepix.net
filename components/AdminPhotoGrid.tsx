@@ -6,9 +6,22 @@ import { isVideoFilename } from '@/lib/validation';
 interface AdminPhotoGridProps {
   photos: DisplayPhoto[];
   onChanged: () => void;
+  /**
+   * When true, approved photos show a "include in the download QR" toggle so the
+   * host builds the share selection right here — no separate selection grid.
+   */
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelected?: (id: string) => void;
 }
 
-export default function AdminPhotoGrid({ photos, onChanged }: AdminPhotoGridProps) {
+export default function AdminPhotoGrid({
+  photos,
+  onChanged,
+  selectable = false,
+  selectedIds,
+  onToggleSelected,
+}: AdminPhotoGridProps) {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,33 +71,51 @@ export default function AdminPhotoGrid({ photos, onChanged }: AdminPhotoGridProp
           const hidden = photo.approved === false;
           const busy = workingId === photo.id;
           const isVideo = isVideoFilename(photo.s3Key);
+          // Only approved photos can be shared, so the toggle is offered on them.
+          const canSelect = selectable && !hidden;
+          const isSelected = selectedIds?.has(photo.id) ?? false;
           return (
             <figure
               key={photo.id}
               className={`overflow-hidden rounded-xl border bg-white ${
-                hidden ? 'border-amber-400' : 'border-ink/10'
+                hidden ? 'border-amber-400' : isSelected ? 'border-accent' : 'border-ink/10'
               }`}
             >
-              {isVideo ? (
-                <video
-                  src={photo.url}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  aria-label={`Video uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
-                  className={`aspect-square w-full bg-black object-contain ${hidden ? 'opacity-50' : ''}`}
-                />
-              ) : (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+              <div className="relative">
+                {isVideo ? (
+                  <video
                     src={photo.url}
-                    alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
-                    loading="lazy"
-                    className={`aspect-square w-full object-cover ${hidden ? 'opacity-50' : ''}`}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    aria-label={`Video uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+                    className={`aspect-square w-full bg-black object-contain ${hidden ? 'opacity-50' : ''}`}
                   />
-                </>
-              )}
+                ) : (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.url}
+                      alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+                      loading="lazy"
+                      className={`aspect-square w-full object-cover ${hidden ? 'opacity-50' : ''}`}
+                    />
+                  </>
+                )}
+                {canSelect ? (
+                  <button
+                    type="button"
+                    onClick={() => onToggleSelected?.(photo.id)}
+                    aria-pressed={isSelected}
+                    aria-label={isSelected ? 'Remove from download QR' : 'Add to download QR'}
+                    className={`absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-full border-2 border-white text-sm font-bold shadow ${
+                      isSelected ? 'bg-accent text-white' : 'bg-black/40 text-white/90'
+                    }`}
+                  >
+                    {isSelected ? '✓' : ''}
+                  </button>
+                ) : null}
+              </div>
               <figcaption className="space-y-2 px-3 py-2 text-xs">
                 <p className="truncate font-medium">{photo.uploadedBy || 'Anonymous'}</p>
                 {photo.uploadedByUserId ? (

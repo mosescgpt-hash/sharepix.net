@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
@@ -44,6 +44,29 @@ function AdminDashboardPage() {
   const [addOnWorking, setAddOnWorking] = useState(false);
   const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Download-QR share selection, built by toggling photos in the gallery below.
+  const [shareSelected, setShareSelected] = useState<Set<string>>(new Set());
+  const approvedPhotoIds = useMemo(
+    () => photos.filter((photo) => photo.approved !== false).map((photo) => photo.id),
+    [photos],
+  );
+  const guestDownloadsOn = event?.guestDownloadEnabled === true;
+  // Default the selection to the whole (approved) event whenever the photo set
+  // changes, matching the old builder's behavior.
+  useEffect(() => {
+    if (!guestDownloadsOn) return;
+    setShareSelected(new Set(approvedPhotoIds));
+  }, [guestDownloadsOn, approvedPhotoIds]);
+  const toggleShare = useCallback((id: string) => {
+    setShareSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const selectedApprovedIds = approvedPhotoIds.filter((id) => shareSelected.has(id));
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -445,8 +468,14 @@ function AdminDashboardPage() {
             </div>
 
             <div className="mt-8">
-              {event.guestDownloadEnabled ? (
-                <DownloadShareBuilder event={event} photos={photos} />
+              {guestDownloadsOn ? (
+                <DownloadShareBuilder
+                  event={event}
+                  selectedIds={selectedApprovedIds}
+                  approvedCount={approvedPhotoIds.length}
+                  onSelectAll={() => setShareSelected(new Set(approvedPhotoIds))}
+                  onClear={() => setShareSelected(new Set())}
+                />
               ) : (
                 <div className="rounded-xl border border-dashed border-ink/20 bg-white px-4 py-5 text-sm text-ink/60">
                   Download-sharing QR codes let guests download a set of photos you
@@ -457,7 +486,13 @@ function AdminDashboardPage() {
             </div>
 
             <div className="mt-8">
-              <AdminPhotoGrid photos={photos} onChanged={load} />
+              <AdminPhotoGrid
+                photos={photos}
+                onChanged={load}
+                selectable={guestDownloadsOn}
+                selectedIds={shareSelected}
+                onToggleSelected={toggleShare}
+              />
             </div>
           </>
         ) : null}
