@@ -26,9 +26,9 @@ async function eventTier(eventId: string): Promise<string> {
 // crafted request can't apply a discount the admin didn't authorize. Throws a
 // guest-facing message when a code was supplied but can't be used.
 async function resolveDiscount(
-  rawCode: string | undefined,
+  rawCode: string | null | undefined,
   tier: string,
-): Promise<{ code: string; percentOff: number } | null> {
+): Promise<{ code: string; percentOff: number; duration: 'once' | 'forever' } | null> {
   const code = (rawCode ?? '').trim().toUpperCase();
   if (!code) return null;
 
@@ -59,13 +59,22 @@ async function resolveDiscount(
   if (!(percentOff >= 1 && percentOff <= 100)) {
     throw new Error('That discount code is misconfigured.');
   }
-  return { code, percentOff };
+  // Recurring duration matters only for the Corporate subscription: 'forever'
+  // discounts every month, 'once' (the default) only the first. Anything else is
+  // treated as 'once'.
+  const duration = item.recurringDuration?.S === 'forever' ? 'forever' : 'once';
+  return { code, percentOff, duration };
 }
 
-// Reuse one Stripe coupon per percentage (e.g. SPX-PCT-50), creating it on first
-// use. `duration: once` keeps a subscription discount to the first invoice.
-async function couponFor(stripe: Stripe, percentOff: number): Promise<string> {
-  const id = `SPX-PCT-${percentOff}`;
+// Reuse one Stripe coupon per percentage + duration, creating it on first use.
+// The id encodes the duration so a "50% forever" and a "50% once" coupon never
+// collide; the original once-coupons keep their plain SPX-PCT-{n} id.
+async function couponFor(
+  stripe: Stripe,
+  percentOff: number,
+  duration: 'once' | 'forever',
+): Promise<string> {
+  const id = duration === 'forever' ? `SPX-PCT-${percentOff}-FOREVER` : `SPX-PCT-${percentOff}`;
   try {
     await stripe.coupons.retrieve(id);
   } catch {
@@ -73,8 +82,8 @@ async function couponFor(stripe: Stripe, percentOff: number): Promise<string> {
       await stripe.coupons.create({
         id,
         percent_off: percentOff,
-        duration: 'once',
-        name: `SharePix ${percentOff}% off`,
+        duration,
+        name: `SharePix ${percentOff}% off${duration === 'forever' ? ' (recurring)' : ''}`,
       });
     } catch (error) {
       // A concurrent request may have created it between our retrieve and create.
@@ -90,12 +99,12 @@ async function couponFor(stripe: Stripe, percentOff: number): Promise<string> {
 // code was supplied.
 async function buildDiscount(
   stripe: Stripe,
-  rawCode: string | undefined,
+  rawCode: string | null | undefined,
   tier: string,
 ): Promise<{ discounts?: { coupon: string }[]; metadata: Record<string, string> }> {
   const resolved = await resolveDiscount(rawCode, tier);
   if (!resolved) return { metadata: {} };
-  const coupon = await couponFor(stripe, resolved.percentOff);
+  const coupon = await couponFor(stripe, resolved.percentOff, resolved.duration);
   return { discounts: [{ coupon }], metadata: { discountCode: resolved.code } };
 }
 

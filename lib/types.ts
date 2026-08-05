@@ -43,6 +43,8 @@ export interface DiscountCode {
   appliesToTier: string;
   /** How much the code takes off, 1–100. Missing (legacy codes) means 100 (free). */
   percentOff?: number | null;
+  /** Corporate subscriptions only: 'once' (default) or 'forever'. */
+  recurringDuration?: string | null;
   expiresAt: string;
   maxUses: number;
   usedCount: number;

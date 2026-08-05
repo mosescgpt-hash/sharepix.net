@@ -176,6 +176,10 @@ const schema = a.schema({
       // How much the code takes off, 1–100. A missing value (legacy codes) means
       // 100 — a fully comped, free purchase — so old codes keep working.
       percentOff: a.integer(),
+      // For recurring (Corporate) subscriptions only: 'once' discounts the first
+      // month, 'forever' discounts every month for as long as they stay
+      // subscribed. Ignored by one-time payments. Missing = 'once'.
+      recurringDuration: a.string(),
       expiresAt: a.datetime().required(),
       maxUses: a.integer().required(),
       usedCount: a.integer().required(),

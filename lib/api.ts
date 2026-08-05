@@ -189,6 +189,8 @@ export async function createDiscountCode(input: {
   assignedTo?: string;
   /** 1–100. 100 = a fully comped, free purchase. */
   percentOff: number;
+  /** Corporate subscriptions only: 'once' (first month) or 'forever' (every month). */
+  recurringDuration?: 'once' | 'forever';
   expiresAt: string;
   maxUses: number;
   createdBy?: string;
@@ -205,6 +207,7 @@ export async function createDiscountCode(input: {
       // New admin codes apply to anything paid on the site (except prints).
       appliesToTier: 'all',
       percentOff,
+      recurringDuration: input.recurringDuration === 'forever' ? 'forever' : 'once',
       expiresAt: input.expiresAt,
       maxUses: input.maxUses,
       usedCount: 0,

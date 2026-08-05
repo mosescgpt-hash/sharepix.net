@@ -84,6 +84,9 @@ function GlobalAdminPage() {
   // Discount amount: a preset (100/50/20) or a custom percentage.
   const [percentChoice, setPercentChoice] = useState<'100' | '50' | '20' | 'custom'>('100');
   const [customPercent, setCustomPercent] = useState(10);
+  // Corporate subscriptions only: does the discount apply to the first month or
+  // every month? Defaults to one month.
+  const [recurringDuration, setRecurringDuration] = useState<'once' | 'forever'>('once');
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
 
@@ -169,6 +172,7 @@ function GlobalAdminPage() {
         code,
         assignedTo,
         percentOff,
+        recurringDuration,
         expiresAt: new Date(expiresAt).toISOString(),
         maxUses,
         createdBy: user?.displayName,
@@ -177,6 +181,7 @@ function GlobalAdminPage() {
       setAssignedTo('');
       setMaxUses(1);
       setPercentChoice('100');
+      setRecurringDuration('once');
       setExpiresAt(defaultExpiryValue());
       await load();
     } catch (err) {
@@ -632,6 +637,32 @@ function GlobalAdminPage() {
                       </div>
                     ) : null}
                   </div>
+                  <div>
+                    <label className="text-sm font-medium">Corporate subscriptions</label>
+                    <p className="mt-0.5 text-xs text-ink/55">
+                      How long the discount lasts on a recurring Corporate plan. One-time purchases
+                      (events, extensions, add-on) are unaffected.
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {([
+                        ['once', 'One month'],
+                        ['forever', 'Ongoing'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setRecurringDuration(value)}
+                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                            recurringDuration === value
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-[1fr_100px] gap-3">
                     <div>
                       <label htmlFor="expires-at" className="text-sm font-medium">Expires</label>
@@ -681,6 +712,7 @@ function GlobalAdminPage() {
                               {(item.percentOff == null ? 100 : item.percentOff) >= 100
                                 ? 'Free (100% off)'
                                 : `${item.percentOff}% off`}
+                              {item.recurringDuration === 'forever' ? ' · ongoing (corp.)' : ''}
                               {item.appliesToTier && item.appliesToTier !== 'all'
                                 ? ` · ${getTier(item.appliesToTier)?.name ?? item.appliesToTier}`
                                 : ''}{' '}
