@@ -4,6 +4,16 @@ import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { CfnTable } from 'aws-cdk-lib/aws-dynamodb';
+import { Topic } from 'aws-cdk-lib/aws-sns';
+import { EmailSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
+import {
+  Alarm,
+  ComparisonOperator,
+  Metric,
+  TreatMissingData,
+} from 'aws-cdk-lib/aws-cloudwatch';
+import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
+import { LogGroup, MetricFilter, FilterPattern } from 'aws-cdk-lib/aws-logs';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -16,6 +26,7 @@ import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
+import { sanitizeUpload } from './functions/sanitize-upload/resource';
 
 const backend = defineBackend({
   auth,
@@ -30,6 +41,7 @@ const backend = defineBackend({
   adminUserActions,
   stripeWebhook,
   corporatePortal,
+  sanitizeUpload,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -71,6 +83,14 @@ s3Bucket.addLifecycleRule({
   prefix: 'events/',
   expiration: Duration.days(800),
 });
+
+// Upload sanitizer (storage onUpload trigger): reads each uploaded object's
+// leading bytes to validate its real type, and deletes anything that's disguised
+// or oversize. Needs read + delete on the bucket; the trigger wiring itself is
+// set up by defineStorage.
+const sanitizeFn = backend.sanitizeUpload.resources.lambda as LambdaFunction;
+bucket.grantRead(sanitizeFn);
+bucket.grantDelete(sanitizeFn);
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.
@@ -170,8 +190,83 @@ const corporatePortalFn = backend.corporatePortal.resources.lambda as LambdaFunc
 corporateTable.grantReadData(corporatePortalFn);
 corporatePortalFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 
+// ---------------------------------------------------------------------------
+// Alerting. A broken webhook means payments stop being recorded and events
+// stop activating — the kind of failure you don't want to hear about from a
+// customer. These CloudWatch alarms email an operator the moment a critical
+// function starts failing.
+//
+// Set an ALERT_EMAIL environment variable on the Amplify app to receive the
+// emails (then confirm the one-time SNS subscription email AWS sends). Without
+// it the topic and alarms still deploy; subscribe an endpoint in the SNS
+// console whenever you're ready.
+// ---------------------------------------------------------------------------
+const alertsTopic = new Topic(backend.stack, 'SharepixAlerts', {
+  displayName: 'SharePix alerts',
+});
+const alertEmail = process.env.ALERT_EMAIL;
+if (alertEmail) {
+  alertsTopic.addSubscription(new EmailSubscription(alertEmail));
+}
+
+// Fire when a function throws/times out (unhandled failures). checkout and
+// print-fulfill throw on error, so this covers their failures directly; the
+// sanitizer and webhook are covered for crashes and timeouts.
+function errorRateAlarm(id: string, fn: LambdaFunction, label: string) {
+  const alarm = new Alarm(backend.stack, id, {
+    alarmName: `sharepix-${id}`,
+    alarmDescription: `${label} is throwing errors.`,
+    metric: fn.metricErrors({ period: Duration.minutes(5) }),
+    threshold: 1,
+    evaluationPeriods: 1,
+    comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+    treatMissingData: TreatMissingData.NOT_BREACHING,
+  });
+  alarm.addAlarmAction(new SnsAction(alertsTopic));
+}
+errorRateAlarm('webhook-errors', webhookFn, 'Stripe webhook');
+errorRateAlarm('checkout-errors', stripeCheckoutFn, 'Stripe checkout');
+errorRateAlarm('print-fulfill-errors', printFulfillFn, 'Print fulfilment');
+errorRateAlarm('sanitize-errors', sanitizeFn, 'Upload sanitizer');
+
+// The webhook handles its own errors and returns HTTP 500 (so Stripe retries)
+// rather than throwing, so those money-critical failures never show up on the
+// Lambda Errors metric above. Turn its "Failed to …" error logs into a metric
+// and alarm on that too. The log group is imported by name so we don't alter
+// the function's own logging config.
+const webhookLogGroup = LogGroup.fromLogGroupName(
+  backend.stack,
+  'WebhookLogGroupRef',
+  `/aws/lambda/${webhookFn.functionName}`,
+);
+new MetricFilter(backend.stack, 'WebhookFailureFilter', {
+  logGroup: webhookLogGroup,
+  metricNamespace: 'SharePix/Webhook',
+  metricName: 'HandledFailures',
+  filterPattern: FilterPattern.literal('"Failed to"'),
+  metricValue: '1',
+  defaultValue: 0,
+});
+const webhookFailureAlarm = new Alarm(backend.stack, 'webhook-handled-failures', {
+  alarmName: 'sharepix-webhook-handled-failures',
+  alarmDescription:
+    'The Stripe webhook logged a failure — a payment or event side effect was not recorded.',
+  metric: new Metric({
+    namespace: 'SharePix/Webhook',
+    metricName: 'HandledFailures',
+    period: Duration.minutes(5),
+    statistic: 'Sum',
+  }),
+  threshold: 1,
+  evaluationPeriods: 1,
+  comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+  treatMissingData: TreatMissingData.NOT_BREACHING,
+});
+webhookFailureAlarm.addAlarmAction(new SnsAction(alertsTopic));
+
 backend.addOutput({
   custom: {
     stripeWebhookUrl: webhookUrl.url,
+    alertsTopicArn: alertsTopic.topicArn,
   },
 });
