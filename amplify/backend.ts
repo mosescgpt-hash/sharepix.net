@@ -16,6 +16,7 @@ import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
+import { sanitizeUpload } from './functions/sanitize-upload/resource';
 
 const backend = defineBackend({
   auth,
@@ -30,6 +31,7 @@ const backend = defineBackend({
   adminUserActions,
   stripeWebhook,
   corporatePortal,
+  sanitizeUpload,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -71,6 +73,14 @@ s3Bucket.addLifecycleRule({
   prefix: 'events/',
   expiration: Duration.days(800),
 });
+
+// Upload sanitizer (storage onUpload trigger): reads each uploaded object's
+// leading bytes to validate its real type, and deletes anything that's disguised
+// or oversize. Needs read + delete on the bucket; the trigger wiring itself is
+// set up by defineStorage.
+const sanitizeFn = backend.sanitizeUpload.resources.lambda as LambdaFunction;
+bucket.grantRead(sanitizeFn);
+bucket.grantDelete(sanitizeFn);
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.
