@@ -20,8 +20,10 @@ export function request(ctx) {
       }),
     },
     condition: {
+      // An 'all' code applies to any plan; a tier-scoped code must match the
+      // plan being redeemed.
       expression:
-        '#active = :active AND #tier = :requestedTier AND #expiresAt > :now AND #usedCount < #maxUses',
+        '#active = :active AND (#tier = :requestedTier OR #tier = :all) AND #expiresAt > :now AND #usedCount < #maxUses',
       expressionNames: {
         '#active': 'active',
         '#tier': 'appliesToTier',
@@ -32,6 +34,7 @@ export function request(ctx) {
       expressionValues: util.dynamodb.toMapValues({
         ':active': true,
         ':requestedTier': tier,
+        ':all': 'all',
         ':now': now,
       }),
     },
@@ -51,6 +54,7 @@ export function response(ctx) {
     message: 'Pilot access applied.',
     code: ctx.result.code,
     appliesToTier: ctx.result.appliesToTier,
+    percentOff: ctx.result.percentOff == null ? 100 : ctx.result.percentOff,
     remainingUses: ctx.result.maxUses - ctx.result.usedCount,
   };
 }

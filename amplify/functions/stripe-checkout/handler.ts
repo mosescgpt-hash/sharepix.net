@@ -7,6 +7,7 @@ type Handler = Schema['createCheckoutSession']['functionHandler'];
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 
 // The guest-download add-on is only sold on Premium and Corporate events — the
 // plans that can actually use guest downloads / the download-sharing QR. Read
@@ -17,6 +18,85 @@ async function eventTier(eventId: string): Promise<string> {
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
   return (found.Item?.tier?.S ?? '').toLowerCase();
+}
+
+// Validate a caller-supplied discount code against the DiscountCode table and
+// return how much it takes off (1–100), or null when no code was supplied. The
+// code, its expiry, remaining uses, and scope are all checked server-side — a
+// crafted request can't apply a discount the admin didn't authorize. Throws a
+// guest-facing message when a code was supplied but can't be used.
+async function resolveDiscount(
+  rawCode: string | undefined,
+  tier: string,
+): Promise<{ code: string; percentOff: number } | null> {
+  const code = (rawCode ?? '').trim().toUpperCase();
+  if (!code) return null;
+
+  const found = await dynamo.send(
+    new GetItemCommand({ TableName: DISCOUNT_TABLE, Key: { code: { S: code } } }),
+  );
+  const item = found.Item;
+  if (!item) throw new Error('That discount code is not valid.');
+  if (item.active?.BOOL !== true) throw new Error('That discount code is no longer active.');
+
+  const expiresAt = item.expiresAt?.S ?? '';
+  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+    throw new Error('That discount code has expired.');
+  }
+
+  const usedCount = Number(item.usedCount?.N ?? '0');
+  const maxUses = Number(item.maxUses?.N ?? '0');
+  if (usedCount >= maxUses) throw new Error('That discount code has no uses left.');
+
+  // 'all' codes apply to any paid flow; legacy tier-scoped codes must match.
+  const appliesTo = (item.appliesToTier?.S ?? '').toLowerCase();
+  if (appliesTo && appliesTo !== 'all' && appliesTo !== tier) {
+    throw new Error('That discount code does not apply to this purchase.');
+  }
+
+  // A missing percentOff (legacy codes) means a fully comped, free purchase.
+  const percentOff = item.percentOff?.N != null ? Number(item.percentOff.N) : 100;
+  if (!(percentOff >= 1 && percentOff <= 100)) {
+    throw new Error('That discount code is misconfigured.');
+  }
+  return { code, percentOff };
+}
+
+// Reuse one Stripe coupon per percentage (e.g. SPX-PCT-50), creating it on first
+// use. `duration: once` keeps a subscription discount to the first invoice.
+async function couponFor(stripe: Stripe, percentOff: number): Promise<string> {
+  const id = `SPX-PCT-${percentOff}`;
+  try {
+    await stripe.coupons.retrieve(id);
+  } catch {
+    try {
+      await stripe.coupons.create({
+        id,
+        percent_off: percentOff,
+        duration: 'once',
+        name: `SharePix ${percentOff}% off`,
+      });
+    } catch (error) {
+      // A concurrent request may have created it between our retrieve and create.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/already exists/i.test(message)) throw error;
+    }
+  }
+  return id;
+}
+
+// Build the Stripe `discounts` array and the metadata that lets the webhook
+// count the redemption, for a given code + tier. Returns empty pieces when no
+// code was supplied.
+async function buildDiscount(
+  stripe: Stripe,
+  rawCode: string | undefined,
+  tier: string,
+): Promise<{ discounts?: { coupon: string }[]; metadata: Record<string, string> }> {
+  const resolved = await resolveDiscount(rawCode, tier);
+  if (!resolved) return { metadata: {} };
+  const coupon = await couponFor(stripe, resolved.percentOff);
+  return { discounts: [{ coupon }], metadata: { discountCode: resolved.code } };
 }
 
 // Prices mirror lib/pricing.ts (dollars → cents). Kept in sync by hand so the
@@ -56,6 +136,7 @@ export const handler: Handler = async (event) => {
     const metadata = { kind: 'corporate', userId: sub, owner };
     try {
       const stripe = new Stripe(secretKey);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'corporate');
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         customer_email: email || undefined,
@@ -72,8 +153,9 @@ export const handler: Handler = async (event) => {
         ],
         success_url: `${appBaseUrl}/corporate?subscribed=1`,
         cancel_url: `${appBaseUrl}/corporate?checkout=cancelled`,
-        metadata,
+        metadata: { ...metadata, ...disc.metadata },
         subscription_data: { metadata },
+        discounts: disc.discounts,
       });
       if (!session.url) throw new Error('Stripe did not return a checkout URL.');
       return { url: session.url };
@@ -95,6 +177,7 @@ export const handler: Handler = async (event) => {
     const amount = Math.max(100, Math.round(planPrice / 2)); // half price, min $1
     try {
       const stripe = new Stripe(secretKey);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, extTier);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -109,7 +192,8 @@ export const handler: Handler = async (event) => {
         ],
         success_url: `${appBaseUrl}/event/${extEventId}/admin?extend=1`,
         cancel_url: `${appBaseUrl}/event/${extEventId}/admin?extend=cancelled`,
-        metadata: { kind: 'extend_window', eventId: extEventId },
+        metadata: { kind: 'extend_window', eventId: extEventId, ...disc.metadata },
+        discounts: disc.discounts,
       });
       if (!session.url) throw new Error('Stripe did not return a checkout URL.');
       return { url: session.url };
@@ -132,6 +216,7 @@ export const handler: Handler = async (event) => {
     }
     try {
       const stripe = new Stripe(secretKey);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'addon');
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -146,7 +231,8 @@ export const handler: Handler = async (event) => {
         ],
         success_url: `${appBaseUrl}/event/${addOnEventId}/admin?addon=guestdownload`,
         cancel_url: `${appBaseUrl}/event/${addOnEventId}/admin?addon=cancelled`,
-        metadata: { kind: 'guest_download', eventId: addOnEventId },
+        metadata: { kind: 'guest_download', eventId: addOnEventId, ...disc.metadata },
+        discounts: disc.discounts,
       });
       if (!session.url) throw new Error('Stripe did not return a checkout URL.');
       return { url: session.url };
@@ -177,6 +263,7 @@ export const handler: Handler = async (event) => {
     : `${appUrl}/global-admin?checkout=cancelled`;
   try {
     const stripe = new Stripe(secretKey);
+    const disc = await buildDiscount(stripe, event.arguments.discountCode, tier);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [
@@ -191,7 +278,8 @@ export const handler: Handler = async (event) => {
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: { tier, eventId },
+      metadata: { tier, eventId, ...disc.metadata },
+      discounts: disc.discounts,
     });
 
     if (!session.url) {

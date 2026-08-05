@@ -15,6 +15,7 @@ const lambda = new LambdaClient({});
 const PAYMENT_TABLE = process.env.PAYMENT_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
+const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 // Background function that talks to Prodigi. The webhook only hands off to it
 // (async) so a slow Prodigi never blocks the Stripe response.
 const PRINT_FULFILL_FUNCTION = process.env.PRINT_FULFILL_FUNCTION_NAME as string;
@@ -122,6 +123,29 @@ export const handler = async (event: {
       // Log and return 500 so Stripe retries — better than silently dropping.
       console.error('Failed to record payment', err);
       return { statusCode: 500, body: 'Failed to record payment.' };
+    }
+
+    // Count a discount-code redemption once the payment actually completes, so a
+    // started-but-abandoned checkout never burns a use. Best-effort: usage
+    // accounting must not fail the webhook (which would make Stripe retry and
+    // double-apply the real side effects above).
+    const discountCode = session.metadata?.discountCode ?? '';
+    if (discountCode) {
+      try {
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: DISCOUNT_TABLE,
+            Key: { code: { S: discountCode } },
+            UpdateExpression: 'ADD usedCount :one SET lastUsedAt = :now',
+            ConditionExpression: 'attribute_exists(code)',
+            ExpressionAttributeValues: { ':one': { N: '1' }, ':now': { S: now } },
+          }),
+        );
+      } catch (err) {
+        if ((err as { name?: string }).name !== 'ConditionalCheckFailedException') {
+          console.error('Failed to record discount-code use', err);
+        }
+      }
     }
 
     // Apply the event side effect of this payment, if any:

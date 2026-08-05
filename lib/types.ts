@@ -41,6 +41,8 @@ export interface DiscountCode {
   assignedTo?: string | null;
   active: boolean;
   appliesToTier: string;
+  /** How much the code takes off, 1–100. Missing (legacy codes) means 100 (free). */
+  percentOff?: number | null;
   expiresAt: string;
   maxUses: number;
   usedCount: number;
@@ -76,5 +78,6 @@ export interface DiscountRedemption {
   message?: string | null;
   code?: string | null;
   appliesToTier?: string | null;
+  percentOff?: number | null;
   remainingUses?: number | null;
 }

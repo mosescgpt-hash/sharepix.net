@@ -28,11 +28,15 @@ export function response(ctx) {
     };
   }
 
+  // A missing percentOff (legacy codes) means a fully comped, free purchase.
+  const percentOff = code.percentOff == null ? 100 : code.percentOff;
+
   return {
     valid: true,
     message: 'Pilot access applied.',
     code: code.code,
     appliesToTier: code.appliesToTier,
+    percentOff,
     remainingUses: code.maxUses - code.usedCount,
   };
 }
