@@ -44,6 +44,8 @@ function AdminDashboardPage() {
   const [addOnWorking, setAddOnWorking] = useState(false);
   const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Optional discount code applied to the extension / guest-download add-on.
+  const [discountCode, setDiscountCode] = useState('');
 
   // Download-QR share selection, built by toggling photos in the gallery below.
   const [shareSelected, setShareSelected] = useState<Set<string>>(new Set());
@@ -180,7 +182,7 @@ function AdminDashboardPage() {
     setAddOnWorking(true);
     setSettingsMsg(null);
     try {
-      const url = await startGuestDownloadAddOn(event.id);
+      const url = await startGuestDownloadAddOn(event.id, discountCode);
       window.location.assign(url);
     } catch (err) {
       setSettingsMsg({
@@ -196,7 +198,7 @@ function AdminDashboardPage() {
     setExtendWorking(true);
     setSettingsMsg(null);
     try {
-      const url = await startExtendUploadWindow(event.id, event.tier);
+      const url = await startExtendUploadWindow(event.id, event.tier, discountCode);
       window.location.assign(url);
     } catch (err) {
       setSettingsMsg({
@@ -381,6 +383,24 @@ function AdminDashboardPage() {
                       ? 'Reopen uploads'
                       : 'Close event'}
                 </button>
+              </div>
+
+              <div className="mt-5 border-t border-ink/10 pt-5">
+                <label htmlFor="addon-discount" className="text-sm font-medium">
+                  Discount code <span className="text-ink/50">(optional)</span>
+                </label>
+                <p className="text-xs text-ink/55">
+                  Applies to the extension and guest-download add-on below.
+                </p>
+                <input
+                  id="addon-discount"
+                  type="text"
+                  value={discountCode}
+                  onChange={(e) => setDiscountCode(e.target.value)}
+                  placeholder="Enter code"
+                  autoComplete="off"
+                  className="mt-1 w-full max-w-xs rounded-xl border border-ink/20 px-4 py-2.5 uppercase focus:border-accent focus:outline-none"
+                />
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">

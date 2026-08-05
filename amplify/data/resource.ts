@@ -169,7 +169,13 @@ const schema = a.schema({
       code: a.string().required(),
       assignedTo: a.string(),
       active: a.boolean().required(),
+      // The plan a code unlocks. 'all' (new admin codes) means it applies to any
+      // paid flow on the site (events, corporate, extend, guest-download add-on).
+      // Legacy codes carry a specific tier id.
       appliesToTier: a.string().required(),
+      // How much the code takes off, 1–100. A missing value (legacy codes) means
+      // 100 — a fully comped, free purchase — so old codes keep working.
+      percentOff: a.integer(),
       expiresAt: a.datetime().required(),
       maxUses: a.integer().required(),
       usedCount: a.integer().required(),
@@ -184,6 +190,7 @@ const schema = a.schema({
     message: a.string(),
     code: a.string(),
     appliesToTier: a.string(),
+    percentOff: a.integer(),
     remainingUses: a.integer(),
   }),
 
@@ -255,7 +262,13 @@ const schema = a.schema({
   //   pending event so the webhook can activate it once payment completes.
   createCheckoutSession: a
     .mutation()
-    .arguments({ tier: a.string().required(), eventId: a.string(), kind: a.string() })
+    .arguments({
+      tier: a.string().required(),
+      eventId: a.string(),
+      kind: a.string(),
+      // Optional admin discount code applied server-side as a Stripe coupon.
+      discountCode: a.string(),
+    })
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(stripeCheckoutFn)),

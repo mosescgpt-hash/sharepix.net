@@ -30,6 +30,14 @@ function CreateEventPage() {
     'idle' | 'checking' | 'valid' | 'invalid'
   >('idle');
   const [pilotCodeMessage, setPilotCodeMessage] = useState<string | null>(null);
+  // How much a valid code takes off (100 = free). Null until a code validates.
+  const [pilotPercentOff, setPilotPercentOff] = useState<number | null>(null);
+
+  function clearPilotCode() {
+    setPilotCodeStatus('idle');
+    setPilotCodeMessage(null);
+    setPilotPercentOff(null);
+  }
 
   // Active Corporate subscribers can create events included in their plan (free).
   // Default them to the corporate option unless they arrived with a specific plan.
@@ -64,13 +72,23 @@ function CreateEventPage() {
         return;
       }
 
-      // The code carries the plan it unlocks — switch the event to that plan.
+      // A legacy tier-scoped code carries the plan it unlocks — switch to it. A
+      // new 'all' code applies to whatever plan is already selected.
       const unlockedTier =
-        result.appliesToTier && getTier(result.appliesToTier) ? result.appliesToTier : tierId;
+        result.appliesToTier &&
+        result.appliesToTier !== 'all' &&
+        getTier(result.appliesToTier)
+          ? result.appliesToTier
+          : tierId;
       setTierId(unlockedTier);
+
+      const percentOff = result.percentOff == null ? 100 : result.percentOff;
+      setPilotPercentOff(percentOff);
       setPilotCodeStatus('valid');
       setPilotCodeMessage(
-        `Pilot access applied to the ${getTier(unlockedTier)?.name ?? 'selected'} plan.`,
+        percentOff >= 100
+          ? `Free event — 100% off applied to the ${getTier(unlockedTier)?.name ?? 'selected'} plan.`
+          : `${percentOff}% off applied to the ${getTier(unlockedTier)?.name ?? 'selected'} plan.`,
       );
     } catch {
       setPilotCodeStatus('invalid');
@@ -78,7 +96,16 @@ function CreateEventPage() {
     }
   }
 
-  const isComped = pilotCodeStatus === 'valid';
+  // A 100%-off code comps the event (created free, no Stripe). A partial code
+  // still goes through Stripe checkout with the discount applied there.
+  const isComped = pilotCodeStatus === 'valid' && (pilotPercentOff ?? 100) >= 100;
+  const isDiscounted =
+    pilotCodeStatus === 'valid' && pilotPercentOff != null && pilotPercentOff < 100;
+  const basePrice = getTier(tierId)?.price ?? 0;
+  const discountedPrice =
+    pilotPercentOff != null
+      ? Math.round(basePrice * (1 - pilotPercentOff / 100) * 100) / 100
+      : basePrice;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -115,8 +142,9 @@ function CreateEventPage() {
       // Paid path: create the event as pending, then send the host to Stripe.
       // The webhook flips `paid` to true when the payment completes, activating
       // it. Uploads are blocked until then, so nothing is usable without payment.
+      // A partial discount code rides along and is applied server-side at Stripe.
       const event = await createNewEvent({ name: name.trim(), date, tier: tierId, paid: false });
-      const url = await startCheckout(tierId, event.id);
+      const url = await startCheckout(tierId, event.id, isDiscounted ? pilotCode : undefined);
       window.location.assign(url);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong creating the event.';
@@ -219,11 +247,8 @@ function CreateEventPage() {
                     checked={tierId === tier.id}
                     onChange={() => {
                       setTierId(tier.id);
-                      // A code is tied to a plan, so switching plans clears it.
-                      if (pilotCodeStatus !== 'idle') {
-                        setPilotCodeStatus('idle');
-                        setPilotCodeMessage(null);
-                      }
+                      // Re-validate the discount against the newly chosen plan.
+                      if (pilotCodeStatus !== 'idle') clearPilotCode();
                     }}
                     className="sr-only"
                   />
@@ -250,10 +275,7 @@ function CreateEventPage() {
                   checked={tierId === 'corporate'}
                   onChange={() => {
                     setTierId('corporate');
-                    if (pilotCodeStatus !== 'idle') {
-                      setPilotCodeStatus('idle');
-                      setPilotCodeMessage(null);
-                    }
+                    if (pilotCodeStatus !== 'idle') clearPilotCode();
                   }}
                   className="mt-1"
                 />
@@ -274,10 +296,10 @@ function CreateEventPage() {
 
           <div className="rounded-2xl border border-ink/10 bg-white p-4">
             <label htmlFor="pilot-code" className="block font-display font-bold">
-              Have a pilot access code?
+              Have a discount code?
             </label>
             <p className="mt-1 text-sm text-ink/60">
-              Apply it to make your event free during the sharepix.net pilot. The code sets the plan.
+              Apply it to take a percentage off — or make your event free.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <input
@@ -286,10 +308,7 @@ function CreateEventPage() {
                 value={pilotCode}
                 onChange={(e) => {
                   setPilotCode(e.target.value);
-                  if (pilotCodeStatus !== 'idle') {
-                    setPilotCodeStatus('idle');
-                    setPilotCodeMessage(null);
-                  }
+                  if (pilotCodeStatus !== 'idle') clearPilotCode();
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -325,8 +344,10 @@ function CreateEventPage() {
             {pilotCodeStatus === 'valid' ? (
               <p className="mt-3 text-sm font-medium text-ink">
                 {getTier(tierId)?.name}:{' '}
-                <span className="text-ink/50 line-through">${getTier(tierId)?.price}</span>{' '}
-                <span className="text-accent">$0</span>
+                <span className="text-ink/50 line-through">${basePrice}</span>{' '}
+                <span className="text-accent">
+                  {isComped ? '$0' : `$${discountedPrice}`}
+                </span>
               </p>
             ) : null}
           </div>
@@ -348,7 +369,7 @@ function CreateEventPage() {
                 ? 'Create corporate event & get QR code'
                 : isComped
                   ? 'Create free event & get QR code'
-                  : `Continue to payment · $${getTier(tierId)?.price ?? ''}`}
+                  : `Continue to payment · $${isDiscounted ? discountedPrice : basePrice}`}
           </button>
           {tierId !== 'corporate' && !isComped ? (
             <p className="text-center text-xs text-ink/50">

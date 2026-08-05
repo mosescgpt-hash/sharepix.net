@@ -187,17 +187,24 @@ export async function listDiscountCodes(): Promise<DiscountCode[]> {
 export async function createDiscountCode(input: {
   code: string;
   assignedTo?: string;
-  tier: string;
+  /** 1–100. 100 = a fully comped, free purchase. */
+  percentOff: number;
   expiresAt: string;
   maxUses: number;
   createdBy?: string;
 }): Promise<void> {
+  const percentOff = Math.round(input.percentOff);
+  if (!(percentOff >= 1 && percentOff <= 100)) {
+    throw new Error('Choose a discount between 1% and 100%.');
+  }
   const { errors } = await client.models.DiscountCode.create(
     {
       code: input.code.trim().toUpperCase(),
       assignedTo: input.assignedTo?.trim() || null,
       active: true,
-      appliesToTier: input.tier.trim().toLowerCase(),
+      // New admin codes apply to anything paid on the site (except prints).
+      appliesToTier: 'all',
+      percentOff,
       expiresAt: input.expiresAt,
       maxUses: input.maxUses,
       usedCount: 0,
@@ -229,9 +236,17 @@ export async function deleteDiscountCode(code: string): Promise<void> {
  * The caller redirects the browser there; card details are entered on Stripe,
  * never in this app.
  */
-export async function startCheckout(tier: string, eventId?: string): Promise<string> {
+export async function startCheckout(
+  tier: string,
+  eventId?: string,
+  discountCode?: string,
+): Promise<string> {
   const { data, errors } = await client.mutations.createCheckoutSession(
-    { tier: tier.trim().toLowerCase(), eventId: eventId || undefined },
+    {
+      tier: tier.trim().toLowerCase(),
+      eventId: eventId || undefined,
+      discountCode: discountCode?.trim().toUpperCase() || undefined,
+    },
     { authMode: 'userPool' },
   );
   if (errors?.length) {
@@ -267,9 +282,13 @@ export async function listPaymentsCount(): Promise<number> {
  * Starts the Corporate ($149/month) subscription checkout and returns the
  * hosted Stripe URL. The webhook attaches the subscription to this account.
  */
-export async function startCorporateSubscription(): Promise<string> {
+export async function startCorporateSubscription(discountCode?: string): Promise<string> {
   const { data, errors } = await client.mutations.createCheckoutSession(
-    { tier: 'corporate', kind: 'corporate' },
+    {
+      tier: 'corporate',
+      kind: 'corporate',
+      discountCode: discountCode?.trim().toUpperCase() || undefined,
+    },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -296,9 +315,18 @@ export function isCorporateActive(sub: CorporateSubscription | null): boolean {
  * Starts the one-time checkout to extend an event's upload window by 30 days
  * (half the plan price). The webhook pushes uploadWindowEndsAt out on success.
  */
-export async function startExtendUploadWindow(eventId: string, tier: string): Promise<string> {
+export async function startExtendUploadWindow(
+  eventId: string,
+  tier: string,
+  discountCode?: string,
+): Promise<string> {
   const { data, errors } = await client.mutations.createCheckoutSession(
-    { tier, kind: 'extend_window', eventId },
+    {
+      tier,
+      kind: 'extend_window',
+      eventId,
+      discountCode: discountCode?.trim().toUpperCase() || undefined,
+    },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -310,9 +338,17 @@ export async function startExtendUploadWindow(eventId: string, tier: string): Pr
  * Starts the one-time $15 guest-download add-on checkout for one event and
  * returns the hosted Stripe URL. The webhook enables guest downloads on success.
  */
-export async function startGuestDownloadAddOn(eventId: string): Promise<string> {
+export async function startGuestDownloadAddOn(
+  eventId: string,
+  discountCode?: string,
+): Promise<string> {
   const { data, errors } = await client.mutations.createCheckoutSession(
-    { tier: 'addon', kind: 'guest_download', eventId },
+    {
+      tier: 'addon',
+      kind: 'guest_download',
+      eventId,
+      discountCode: discountCode?.trim().toUpperCase() || undefined,
+    },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

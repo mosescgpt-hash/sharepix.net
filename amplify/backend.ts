@@ -34,6 +34,7 @@ const photoTable = backend.data.resources.tables.Photo;
 const paymentTable = backend.data.resources.tables.Payment;
 const corporateTable = backend.data.resources.tables.CorporateSubscription;
 const printOrderTable = backend.data.resources.tables.PrintOrder;
+const discountTable = backend.data.resources.tables.DiscountCode;
 const bucket = backend.storage.resources.bucket;
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
@@ -67,10 +68,13 @@ printCheckoutFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 printCheckoutFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
 
 // Stripe checkout function: reads the event's tier to enforce that only
-// Premium/Corporate events can buy the guest-download add-on.
+// Premium/Corporate events can buy the guest-download add-on, and reads the
+// DiscountCode table to validate a code and apply it as a Stripe coupon.
 const stripeCheckoutFn = backend.stripeCheckout.resources.lambda as LambdaFunction;
 eventTable.grantReadData(stripeCheckoutFn);
+discountTable.grantReadData(stripeCheckoutFn);
 stripeCheckoutFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+stripeCheckoutFn.addEnvironment('DISCOUNT_TABLE_NAME', discountTable.tableName);
 
 // Print-fulfill function: the background worker that submits a paid order to
 // Prodigi (invoked async by the webhook). It reads/updates the PrintOrder row
@@ -111,6 +115,9 @@ const webhookFn = backend.stripeWebhook.resources.lambda as LambdaFunction;
 paymentTable.grantWriteData(webhookFn);
 eventTable.grantWriteData(webhookFn);
 corporateTable.grantWriteData(webhookFn);
+// Counts a discount-code redemption (usedCount) once payment completes.
+discountTable.grantWriteData(webhookFn);
+webhookFn.addEnvironment('DISCOUNT_TABLE_NAME', discountTable.tableName);
 // Prints: the webhook only hands the order off to print-fulfill (async), so it
 // needs invoke permission on it — not PrintOrder/bucket access anymore.
 printFulfillFn.grantInvoke(webhookFn);

@@ -81,9 +81,13 @@ function GlobalAdminPage() {
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
-  const [codeTier, setCodeTier] = useState('standard');
+  // Discount amount: a preset (100/50/20) or a custom percentage.
+  const [percentChoice, setPercentChoice] = useState<'100' | '50' | '20' | 'custom'>('100');
+  const [customPercent, setCustomPercent] = useState(10);
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
+
+  const percentOff = percentChoice === 'custom' ? customPercent : Number(percentChoice);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,6 +157,10 @@ function GlobalAdminPage() {
       setError('Enter a code, expiration date, and at least one use.');
       return;
     }
+    if (!(percentOff >= 1 && percentOff <= 100)) {
+      setError('Choose a discount between 1% and 100%.');
+      return;
+    }
     setWorking('create-code');
     setError(null);
     try {
@@ -160,7 +168,7 @@ function GlobalAdminPage() {
       await createDiscountCode({
         code,
         assignedTo,
-        tier: codeTier,
+        percentOff,
         expiresAt: new Date(expiresAt).toISOString(),
         maxUses,
         createdBy: user?.displayName,
@@ -168,6 +176,7 @@ function GlobalAdminPage() {
       setCode('');
       setAssignedTo('');
       setMaxUses(1);
+      setPercentChoice('100');
       setExpiresAt(defaultExpiryValue());
       await load();
     } catch (err) {
@@ -354,7 +363,7 @@ function GlobalAdminPage() {
                 <p className="font-display text-3xl font-bold">{totalPhotos.toLocaleString()}</p>
               </div>
               <div className="rounded-2xl border border-ink/10 bg-white p-5">
-                <p className="text-sm text-ink/60">Active pilot codes</p>
+                <p className="text-sm text-ink/60">Active discount codes</p>
                 <p className="font-display text-3xl font-bold">{activeCodes}</p>
               </div>
             </div>
@@ -551,8 +560,10 @@ function GlobalAdminPage() {
               </section>
 
               <section>
-                <h2 className="font-display text-2xl font-bold">Pilot codes</h2>
-                <p className="text-sm text-ink/60">Codes unlock the chosen plan. Default usage is one event.</p>
+                <h2 className="font-display text-2xl font-bold">Discount codes</h2>
+                <p className="text-sm text-ink/60">
+                  Take a percentage off anything paid on the site. Default usage is one redemption.
+                </p>
 
                 <form onSubmit={handleCreateCode} className="mt-4 space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
                   <div>
@@ -581,19 +592,45 @@ function GlobalAdminPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="code-tier" className="text-sm font-medium">Plan this code unlocks</label>
-                    <select
-                      id="code-tier"
-                      value={codeTier}
-                      onChange={(e) => setCodeTier(e.target.value)}
-                      className="mt-1 w-full rounded-xl border border-ink/20 bg-white px-3 py-2.5 focus:border-accent focus:outline-none"
-                    >
-                      {PRICING_TIERS.map((tier) => (
-                        <option key={tier.id} value={tier.id}>
-                          {tier.name} — ${tier.price}
-                        </option>
+                    <label className="text-sm font-medium">Discount</label>
+                    <p className="mt-0.5 text-xs text-ink/55">
+                      Applies to anything paid on the site (events, corporate, extensions, and the
+                      guest-download add-on) — prints excluded.
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {([
+                        ['100', 'Free (100%)'],
+                        ['20', '20% off'],
+                        ['50', '50% off'],
+                        ['custom', 'Custom'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setPercentChoice(value)}
+                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                            percentChoice === value
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                          }`}
+                        >
+                          {label}
+                        </button>
                       ))}
-                    </select>
+                    </div>
+                    {percentChoice === 'custom' ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={customPercent}
+                          onChange={(e) => setCustomPercent(Number(e.target.value))}
+                          className="w-24 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                        />
+                        <span className="text-sm text-ink/60">% off</span>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="grid grid-cols-[1fr_100px] gap-3">
                     <div>
@@ -626,7 +663,7 @@ function GlobalAdminPage() {
                   >
                     {working === 'create-code'
                       ? 'Creating…'
-                      : `Create ${getTier(codeTier)?.name ?? 'pilot'} pilot code`}
+                      : `Create ${percentOff >= 100 ? 'free' : `${percentOff}% off`} code`}
                   </button>
                 </form>
 
@@ -641,7 +678,13 @@ function GlobalAdminPage() {
                           <div className="min-w-0">
                             <p className="truncate font-mono font-bold text-ink">{item.code}</p>
                             <p className="mt-1 truncate text-xs text-ink/60">
-                              {getTier(item.appliesToTier)?.name ?? item.appliesToTier} · {item.assignedTo || 'No note'}
+                              {(item.percentOff == null ? 100 : item.percentOff) >= 100
+                                ? 'Free (100% off)'
+                                : `${item.percentOff}% off`}
+                              {item.appliesToTier && item.appliesToTier !== 'all'
+                                ? ` · ${getTier(item.appliesToTier)?.name ?? item.appliesToTier}`
+                                : ''}{' '}
+                              · {item.assignedTo || 'No note'}
                             </p>
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>

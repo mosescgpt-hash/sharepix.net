@@ -25,6 +25,7 @@ function CorporatePage() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState('');
   const attemptsRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -53,7 +54,7 @@ function CorporatePage() {
     setWorking(true);
     setError(null);
     try {
-      const url = await startCorporateSubscription();
+      const url = await startCorporateSubscription(discountCode);
       window.location.assign(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Checkout could not be started.');
@@ -142,11 +143,25 @@ function CorporatePage() {
                 </li>
               ))}
             </ul>
+            <div className="mt-6">
+              <label htmlFor="corp-discount" className="text-sm font-medium">
+                Discount code <span className="text-ink/50">(optional)</span>
+              </label>
+              <input
+                id="corp-discount"
+                type="text"
+                value={discountCode}
+                onChange={(e) => setDiscountCode(e.target.value)}
+                placeholder="Enter code"
+                autoComplete="off"
+                className="mt-1 w-full rounded-xl border border-ink/20 px-4 py-3 uppercase focus:border-accent focus:outline-none"
+              />
+            </div>
             <button
               type="button"
               onClick={() => void handleSubscribe()}
               disabled={working}
-              className="mt-6 w-full rounded-full bg-accent py-3 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              className="mt-4 w-full rounded-full bg-accent py-3 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
             >
               {working ? 'Sending you to checkout…' : `Subscribe · ${CORPORATE_PLAN.priceLabel}`}
             </button>
