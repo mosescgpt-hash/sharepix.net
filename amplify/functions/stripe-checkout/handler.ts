@@ -26,7 +26,7 @@ async function eventTier(eventId: string): Promise<string> {
 // crafted request can't apply a discount the admin didn't authorize. Throws a
 // guest-facing message when a code was supplied but can't be used.
 async function resolveDiscount(
-  rawCode: string | undefined,
+  rawCode: string | null | undefined,
   tier: string,
 ): Promise<{ code: string; percentOff: number; duration: 'once' | 'forever' } | null> {
   const code = (rawCode ?? '').trim().toUpperCase();
@@ -99,7 +99,7 @@ async function couponFor(
 // code was supplied.
 async function buildDiscount(
   stripe: Stripe,
-  rawCode: string | undefined,
+  rawCode: string | null | undefined,
   tier: string,
 ): Promise<{ discounts?: { coupon: string }[]; metadata: Record<string, string> }> {
   const resolved = await resolveDiscount(rawCode, tier);
