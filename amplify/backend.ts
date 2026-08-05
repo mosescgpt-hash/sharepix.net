@@ -3,7 +3,6 @@ import { Duration } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
-import { CfnTable } from 'aws-cdk-lib/aws-dynamodb';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { EmailSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
 import {
@@ -55,10 +54,11 @@ const bucket = backend.storage.resources.bucket;
 // Point-in-time recovery on every data table: continuous backups that let us
 // restore any table to any second within the last 35 days, so a bad write, a
 // bug, or an accidental bulk delete can be rolled back instead of lost.
-for (const table of Object.values(backend.data.resources.tables)) {
-  (table.node.defaultChild as CfnTable).pointInTimeRecoverySpecification = {
-    pointInTimeRecoveryEnabled: true,
-  };
+// Amplify Gen2 tables are managed AmplifyDynamoDbTable resources (not plain
+// CfnTables), so PITR is set through cfnResources.amplifyDynamoDbTables.
+const { amplifyDynamoDbTables } = backend.data.resources.cfnResources;
+for (const table of Object.values(amplifyDynamoDbTables)) {
+  table.pointInTimeRecoveryEnabled = true;
 }
 
 // Storage lifecycle. Without this, every photo/video stays in S3 forever —
