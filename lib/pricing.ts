@@ -117,6 +117,18 @@ export function extensionPrice(tierId: string): number {
   return Math.max(1, Math.round((tier?.price ?? 20) / 2));
 }
 
+/**
+ * Apply a percentage discount to a price, rounded to whole cents. `percentOff`
+ * is clamped to 0–100, so 100 makes the price $0 (a fully comped purchase) and
+ * anything out of range can't produce a negative or inflated total. This is the
+ * display-side mirror of the discount the stripe-checkout function applies as a
+ * Stripe coupon, so the price a host sees matches what they're charged.
+ */
+export function applyPercentOff(price: number, percentOff: number): number {
+  const pct = Math.min(100, Math.max(0, percentOff));
+  return Math.round(price * (1 - pct / 100) * 100) / 100;
+}
+
 /** When the initial 30-day upload window closes for a new event. */
 export function computeUploadWindowEndsAt(from: Date = new Date()): string {
   return new Date(from.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS).toISOString();

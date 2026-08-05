@@ -1,6 +1,9 @@
 import { defineBackend } from '@aws-amplify/backend';
+import { Duration } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { CfnTable } from 'aws-cdk-lib/aws-dynamodb';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -36,6 +39,38 @@ const corporateTable = backend.data.resources.tables.CorporateSubscription;
 const printOrderTable = backend.data.resources.tables.PrintOrder;
 const discountTable = backend.data.resources.tables.DiscountCode;
 const bucket = backend.storage.resources.bucket;
+
+// Point-in-time recovery on every data table: continuous backups that let us
+// restore any table to any second within the last 35 days, so a bad write, a
+// bug, or an accidental bulk delete can be rolled back instead of lost.
+for (const table of Object.values(backend.data.resources.tables)) {
+  (table.node.defaultChild as CfnTable).pointInTimeRecoverySpecification = {
+    pointInTimeRecoveryEnabled: true,
+  };
+}
+
+// Storage lifecycle. Without this, every photo/video stays in S3 forever —
+// the bill grows without bound and we hold guests' personal media long past
+// what any plan promises. Two rules:
+//   1. Clean up abandoned multipart uploads after 7 days (pure cost savings;
+//      never touches a completed object).
+//   2. A hard backstop that expires event media well beyond the longest
+//      legitimate event lifecycle (≈485 days: 30-day upload window + up to
+//      365-day host retention + 90-day archive). 800 days leaves comfortable
+//      margin for extensions, so no normal event is ever cut short — it only
+//      guarantees nothing lives in the bucket indefinitely.
+const s3Bucket = bucket as Bucket;
+s3Bucket.addLifecycleRule({
+  id: 'abort-incomplete-multipart-uploads',
+  enabled: true,
+  abortIncompleteMultipartUploadAfter: Duration.days(7),
+});
+s3Bucket.addLifecycleRule({
+  id: 'expire-event-media-backstop',
+  enabled: true,
+  prefix: 'events/',
+  expiration: Duration.days(800),
+});
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.

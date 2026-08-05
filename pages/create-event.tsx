@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import EventQRCode from '@/components/EventQRCode';
-import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, PRICING_TIERS, applyPercentOff, getTier } from '@/lib/pricing';
 import {
   createNewEvent,
   getMyCorporateSubscription,
@@ -103,9 +103,7 @@ function CreateEventPage() {
     pilotCodeStatus === 'valid' && pilotPercentOff != null && pilotPercentOff < 100;
   const basePrice = getTier(tierId)?.price ?? 0;
   const discountedPrice =
-    pilotPercentOff != null
-      ? Math.round(basePrice * (1 - pilotPercentOff / 100) * 100) / 100
-      : basePrice;
+    pilotPercentOff != null ? applyPercentOff(basePrice, pilotPercentOff) : basePrice;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
