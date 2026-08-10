@@ -48,11 +48,20 @@ export default function PhotoGrid({
   const [downloadProgress, setDownloadProgress] = useState('');
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
-  const [enlarged, setEnlarged] = useState<DisplayPhoto | null>(null);
+  const [enlargedIndex, setEnlargedIndex] = useState<number | null>(null);
   const [printPhotos, setPrintPhotos] = useState<DisplayPhoto[] | null>(null);
   const [originalUrl, setOriginalUrl] = useState<string | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const sortedPhotos = useMemo(() => sortGalleryPhotos(photos, sort), [photos, sort]);
+  // Only images open in the enlarged viewer (videos play inline), so the
+  // prev/next arrows step through the images and the index points into this set.
+  const enlargeablePhotos = useMemo(
+    () => sortedPhotos.filter((photo) => !isVideoFilename(photo.s3Key)),
+    [sortedPhotos],
+  );
+  const enlarged = enlargedIndex != null ? enlargeablePhotos[enlargedIndex] ?? null : null;
+  const hasPrevEnlarged = enlargedIndex != null && enlargedIndex > 0;
+  const hasNextEnlarged = enlargedIndex != null && enlargedIndex < enlargeablePhotos.length - 1;
   // True when every photo is currently selected — flips "Select all" to "Unselect all".
   const allSelected = sortedPhotos.length > 0 && selected.size >= sortedPhotos.length;
 
@@ -70,8 +79,7 @@ export default function PhotoGrid({
     setPrintPhotos(target);
   }
 
-  async function openEnlarge(photo: DisplayPhoto) {
-    setEnlarged(photo);
+  async function loadOriginal(photo: DisplayPhoto) {
     setOriginalUrl(null);
     setOriginalLoading(true);
     try {
@@ -83,19 +91,43 @@ export default function PhotoGrid({
     }
   }
 
+  function showEnlargedAt(index: number) {
+    const photo = enlargeablePhotos[index];
+    if (!photo) return;
+    setEnlargedIndex(index);
+    void loadOriginal(photo);
+  }
+
+  function openEnlarge(photo: DisplayPhoto) {
+    const index = enlargeablePhotos.findIndex((candidate) => candidate.id === photo.id);
+    if (index !== -1) showEnlargedAt(index);
+  }
+
   function closeEnlarge() {
-    setEnlarged(null);
+    setEnlargedIndex(null);
     setOriginalUrl(null);
   }
 
+  function showPrevEnlarged() {
+    if (enlargedIndex != null && enlargedIndex > 0) showEnlargedAt(enlargedIndex - 1);
+  }
+
+  function showNextEnlarged() {
+    if (enlargedIndex != null && enlargedIndex < enlargeablePhotos.length - 1) {
+      showEnlargedAt(enlargedIndex + 1);
+    }
+  }
+
   useEffect(() => {
-    if (!enlarged) return;
+    if (enlargedIndex == null) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeEnlarge();
+      else if (event.key === 'ArrowLeft') showPrevEnlarged();
+      else if (event.key === 'ArrowRight') showNextEnlarged();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [enlarged]);
+  }, [enlargedIndex, enlargeablePhotos]);
 
   // Restore the last chosen sort so it survives a gallery refresh.
   useEffect(() => {
@@ -263,6 +295,11 @@ export default function PhotoGrid({
         >
           <div className="flex items-center justify-between gap-3 px-4 py-3 text-white">
             <p className="truncate text-sm">
+              {enlargedIndex != null ? (
+                <span className="text-white/60">
+                  {enlargedIndex + 1} / {enlargeablePhotos.length} ·{' '}
+                </span>
+              ) : null}
               Full quality · uploaded by {enlarged.uploadedBy || 'Anonymous'}
             </p>
             <button
@@ -274,6 +311,57 @@ export default function PhotoGrid({
               Close ✕
             </button>
           </div>
+
+          {hasPrevEnlarged ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                showPrevEnlarged();
+              }}
+              aria-label="Previous photo"
+              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 sm:left-4"
+            >
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+          ) : null}
+          {hasNextEnlarged ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                showNextEnlarged();
+              }}
+              aria-label="Next photo"
+              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 sm:right-4"
+            >
+              <svg
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </button>
+          ) : null}
           <div
             className="flex flex-1 items-center justify-center overflow-auto p-4"
             onClick={(event) => event.stopPropagation()}
