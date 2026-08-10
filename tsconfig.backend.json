@@ -1,0 +1,9 @@
+{
+  // Type-checks the Amplify backend the way Amplify's deploy does — INCLUDING the
+  // Lambda handlers, which the root tsconfig excludes. Two of our deploy failures
+  // came from that blind spot (a handler type error the root config never saw).
+  // Run with `npm run typecheck:backend`.
+  "extends": "./tsconfig.json",
+  "include": ["amplify/**/*.ts"],
+  "exclude": ["node_modules"]
+}
