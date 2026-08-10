@@ -1,0 +1,36 @@
+name: CI
+
+# Runs the checks that must pass before merging. Deliberately scoped to what can
+# run without AWS credentials or a generated amplify_outputs.json:
+#   - typecheck:backend — type-checks the Amplify backend the way the deploy
+#     does, INCLUDING Lambda handlers (the root tsconfig excludes those, which is
+#     how a handler type error once slipped through to a failed deploy).
+#   - test — the Jest unit suite.
+# It does NOT run `next build` or the root typecheck, which need the deploy-time
+# amplify_outputs.json that only exists during an Amplify build.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A newer push to the same branch cancels an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Type-check backend (incl. Lambda handlers)
+        run: npm run typecheck:backend
+      - name: Unit tests
+        run: npm test
