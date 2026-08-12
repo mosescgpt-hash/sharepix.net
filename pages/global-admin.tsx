@@ -571,6 +571,22 @@ function GlobalAdminPage() {
                 </p>
 
                 <form onSubmit={handleCreateCode} className="mt-4 space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
+                    <p className="font-semibold">One code works on every paid item:</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {['Events', 'Corporate', 'Upload extensions', 'Guest downloads'].map((label) => (
+                        <span key={label} className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium">
+                          ✓ {label}
+                        </span>
+                      ))}
+                      <span className="rounded-full bg-ink/5 px-2 py-0.5 text-ink/50">Prints excluded</span>
+                    </div>
+                    <p className="mt-2 text-emerald-800/80">
+                      To use it on an <span className="font-medium">extension</span> or{' '}
+                      <span className="font-medium">guest-download add-on</span>, enter the code on that
+                      event&apos;s <span className="font-medium">Manage</span> page.
+                    </p>
+                  </div>
                   <div>
                     <label htmlFor="new-code" className="text-sm font-medium">Code</label>
                     <div className="mt-1 flex gap-2">
@@ -598,10 +614,7 @@ function GlobalAdminPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">Discount</label>
-                    <p className="mt-0.5 text-xs text-ink/55">
-                      Applies to anything paid on the site (events, corporate, extensions, and the
-                      guest-download add-on) — prints excluded.
-                    </p>
+                    <p className="mt-0.5 text-xs text-ink/55">How much to take off.</p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {([
                         ['100', 'Free (100%)'],
@@ -713,10 +726,12 @@ function GlobalAdminPage() {
                                 ? 'Free (100% off)'
                                 : `${item.percentOff}% off`}
                               {item.recurringDuration === 'forever' ? ' · ongoing (corp.)' : ''}
+                              {' · '}
                               {item.appliesToTier && item.appliesToTier !== 'all'
-                                ? ` · ${getTier(item.appliesToTier)?.name ?? item.appliesToTier}`
-                                : ''}{' '}
-                              · {item.assignedTo || 'No note'}
+                                ? `${getTier(item.appliesToTier)?.name ?? item.appliesToTier} plan only`
+                                : 'all paid items'}
+                              {' · '}
+                              {item.assignedTo || 'No note'}
                             </p>
                           </div>
                           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
