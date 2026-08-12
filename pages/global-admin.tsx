@@ -66,6 +66,36 @@ function defaultExpiryValue(): string {
   return local.toISOString().slice(0, 16);
 }
 
+// The paid flows a discount code can be scoped to. Adding a new paid feature
+// later means adding one entry here (and passing its key from that checkout
+// flow); codes scoped to "Everything" ('all') cover new flows automatically.
+const PAID_ITEM_SCOPES = [
+  { key: 'event', label: 'Events' },
+  { key: 'corporate', label: 'Corporate' },
+  { key: 'extend', label: 'Upload extensions' },
+  { key: 'guest_download', label: 'Guest downloads' },
+] as const;
+
+const SCOPE_LABELS: Record<string, string> = Object.fromEntries(
+  PAID_ITEM_SCOPES.map((scope) => [scope.key, scope.label]),
+);
+
+/** Human-readable summary of what a stored code applies to, for the list. */
+function scopeSummary(item: DiscountCode): string {
+  const scopes = (item.appliesToScopes ?? '').trim();
+  if (scopes && scopes !== 'all') {
+    return scopes
+      .split(',')
+      .map((key) => SCOPE_LABELS[key.trim()] ?? key.trim())
+      .join(', ');
+  }
+  // Legacy codes have no appliesToScopes: a tier means it was event-plan-only.
+  if (!scopes && item.appliesToTier && item.appliesToTier !== 'all') {
+    return `${getTier(item.appliesToTier)?.name ?? item.appliesToTier} plan only`;
+  }
+  return 'all paid items';
+}
+
 function GlobalAdminPage() {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [events, setEvents] = useState<QREvent[]>([]);
@@ -87,8 +117,21 @@ function GlobalAdminPage() {
   // Corporate subscriptions only: does the discount apply to the first month or
   // every month? Defaults to one month.
   const [recurringDuration, setRecurringDuration] = useState<'once' | 'forever'>('once');
+  // What the code can be redeemed against. 'all' covers every paid item now and
+  // in the future; 'custom' limits it to the checked items.
+  const [scopeMode, setScopeMode] = useState<'all' | 'custom'>('all');
+  const [customScopes, setCustomScopes] = useState<Set<string>>(new Set());
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
+
+  function toggleCustomScope(key: string) {
+    setCustomScopes((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const percentOff = percentChoice === 'custom' ? customPercent : Number(percentChoice);
 
@@ -164,6 +207,11 @@ function GlobalAdminPage() {
       setError('Choose a discount between 1% and 100%.');
       return;
     }
+    const scopes = scopeMode === 'all' ? ['all'] : [...customScopes];
+    if (scopes.length === 0) {
+      setError('Pick at least one item the code applies to, or choose Everything.');
+      return;
+    }
     setWorking('create-code');
     setError(null);
     try {
@@ -173,6 +221,7 @@ function GlobalAdminPage() {
         assignedTo,
         percentOff,
         recurringDuration,
+        scopes,
         expiresAt: new Date(expiresAt).toISOString(),
         maxUses,
         createdBy: user?.displayName,
@@ -182,6 +231,8 @@ function GlobalAdminPage() {
       setMaxUses(1);
       setPercentChoice('100');
       setRecurringDuration('once');
+      setScopeMode('all');
+      setCustomScopes(new Set());
       setExpiresAt(defaultExpiryValue());
       await load();
     } catch (err) {
@@ -571,22 +622,6 @@ function GlobalAdminPage() {
                 </p>
 
                 <form onSubmit={handleCreateCode} className="mt-4 space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
-                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900">
-                    <p className="font-semibold">One code works on every paid item:</p>
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {['Events', 'Corporate', 'Upload extensions', 'Guest downloads'].map((label) => (
-                        <span key={label} className="rounded-full bg-emerald-100 px-2 py-0.5 font-medium">
-                          ✓ {label}
-                        </span>
-                      ))}
-                      <span className="rounded-full bg-ink/5 px-2 py-0.5 text-ink/50">Prints excluded</span>
-                    </div>
-                    <p className="mt-2 text-emerald-800/80">
-                      To use it on an <span className="font-medium">extension</span> or{' '}
-                      <span className="font-medium">guest-download add-on</span>, enter the code on that
-                      event&apos;s <span className="font-medium">Manage</span> page.
-                    </p>
-                  </div>
                   <div>
                     <label htmlFor="new-code" className="text-sm font-medium">Code</label>
                     <div className="mt-1 flex gap-2">
@@ -611,6 +646,59 @@ function GlobalAdminPage() {
                       placeholder="Alex's wedding test"
                       className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
                     />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Applies to</label>
+                    <p className="mt-0.5 text-xs text-ink/55">
+                      Which paid items this code can be used on. Prints are excluded.
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      {([
+                        ['all', 'Everything (now & future)'],
+                        ['custom', 'Specific items…'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setScopeMode(value)}
+                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                            scopeMode === value
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {scopeMode === 'all' ? (
+                      <p className="mt-2 text-xs text-ink/55">
+                        Covers events, corporate, upload extensions, and the guest-download add-on —
+                        plus any paid features added later.
+                      </p>
+                    ) : (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {PAID_ITEM_SCOPES.map(({ key, label }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => toggleCustomScope(key)}
+                            className={`rounded-full border px-3 py-1.5 text-sm ${
+                              customScopes.has(key)
+                                ? 'border-accent bg-accent/10 text-accent'
+                                : 'border-ink/20 hover:border-accent hover:text-accent'
+                            }`}
+                          >
+                            {customScopes.has(key) ? '✓ ' : ''}
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-ink/55">
+                      Use the code on an event&apos;s <span className="font-medium">Manage</span> page to
+                      apply it to an extension or the guest-download add-on.
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium">Discount</label>
@@ -727,9 +815,7 @@ function GlobalAdminPage() {
                                 : `${item.percentOff}% off`}
                               {item.recurringDuration === 'forever' ? ' · ongoing (corp.)' : ''}
                               {' · '}
-                              {item.appliesToTier && item.appliesToTier !== 'all'
-                                ? `${getTier(item.appliesToTier)?.name ?? item.appliesToTier} plan only`
-                                : 'all paid items'}
+                              {scopeSummary(item)}
                               {' · '}
                               {item.assignedTo || 'No note'}
                             </p>

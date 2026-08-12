@@ -41,6 +41,12 @@ export interface DiscountCode {
   assignedTo?: string | null;
   active: boolean;
   appliesToTier: string;
+  /**
+   * Which paid flows the code can be redeemed against: 'all', or a
+   * comma-separated list of scope keys (event, corporate, extend,
+   * guest_download). Missing on legacy codes — fall back to appliesToTier.
+   */
+  appliesToScopes?: string | null;
   /** How much the code takes off, 1–100. Missing (legacy codes) means 100 (free). */
   percentOff?: number | null;
   /** Corporate subscriptions only: 'once' (default) or 'forever'. */

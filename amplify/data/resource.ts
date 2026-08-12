@@ -173,6 +173,11 @@ const schema = a.schema({
       // paid flow on the site (events, corporate, extend, guest-download add-on).
       // Legacy codes carry a specific tier id.
       appliesToTier: a.string().required(),
+      // Which paid flows the code can be redeemed against: 'all' (everything, now
+      // and future), or a comma-separated subset of scope keys (event, corporate,
+      // extend, guest_download). Missing on legacy codes → fall back to
+      // appliesToTier.
+      appliesToScopes: a.string(),
       // How much the code takes off, 1–100. A missing value (legacy codes) means
       // 100 — a fully comped, free purchase — so old codes keep working.
       percentOff: a.integer(),
