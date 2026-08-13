@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
@@ -76,6 +76,8 @@ const PAID_ITEM_SCOPES = [
   { key: 'guest_download', label: 'Guest downloads' },
 ] as const;
 
+const ALL_SCOPE_KEYS = PAID_ITEM_SCOPES.map((scope) => scope.key);
+
 const SCOPE_LABELS: Record<string, string> = Object.fromEntries(
   PAID_ITEM_SCOPES.map((scope) => [scope.key, scope.label]),
 );
@@ -117,21 +119,53 @@ function GlobalAdminPage() {
   // Corporate subscriptions only: does the discount apply to the first month or
   // every month? Defaults to one month.
   const [recurringDuration, setRecurringDuration] = useState<'once' | 'forever'>('once');
-  // What the code can be redeemed against. 'all' covers every paid item now and
-  // in the future; 'custom' limits it to the checked items.
-  const [scopeMode, setScopeMode] = useState<'all' | 'custom'>('all');
-  const [customScopes, setCustomScopes] = useState<Set<string>>(new Set());
+  // Which paid items the code can be redeemed against, chosen from a checklist
+  // dropdown. Everything is checked by default; checking all of them stores
+  // 'all', which also covers paid features added later.
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [checkedScopes, setCheckedScopes] = useState<Set<string>>(
+    () => new Set(ALL_SCOPE_KEYS),
+  );
+  const scopeMenuRef = useRef<HTMLDivElement | null>(null);
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
 
-  function toggleCustomScope(key: string) {
-    setCustomScopes((previous) => {
+  const allScopesChecked = checkedScopes.size === ALL_SCOPE_KEYS.length;
+
+  function toggleScope(key: string) {
+    setCheckedScopes((previous) => {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
   }
+
+  // Summary shown on the closed dropdown button.
+  const scopeButtonLabel = allScopesChecked
+    ? 'All paid items (now & future)'
+    : checkedScopes.size === 0
+      ? 'Select paid items…'
+      : PAID_ITEM_SCOPES.filter((scope) => checkedScopes.has(scope.key))
+          .map((scope) => scope.label)
+          .join(', ');
+
+  // Close the dropdown on an outside click or Escape.
+  useEffect(() => {
+    if (!scopeOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!scopeMenuRef.current?.contains(event.target as Node)) setScopeOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setScopeOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [scopeOpen]);
 
   const percentOff = percentChoice === 'custom' ? customPercent : Number(percentChoice);
 
@@ -207,9 +241,10 @@ function GlobalAdminPage() {
       setError('Choose a discount between 1% and 100%.');
       return;
     }
-    const scopes = scopeMode === 'all' ? ['all'] : [...customScopes];
+    // Every item checked → 'all', which also covers future paid features.
+    const scopes = allScopesChecked ? ['all'] : [...checkedScopes];
     if (scopes.length === 0) {
-      setError('Pick at least one item the code applies to, or choose Everything.');
+      setError('Choose at least one paid item the code applies to.');
       return;
     }
     setWorking('create-code');
@@ -231,8 +266,8 @@ function GlobalAdminPage() {
       setMaxUses(1);
       setPercentChoice('100');
       setRecurringDuration('once');
-      setScopeMode('all');
-      setCustomScopes(new Set());
+      setCheckedScopes(new Set(ALL_SCOPE_KEYS));
+      setScopeOpen(false);
       setExpiresAt(defaultExpiryValue());
       await load();
     } catch (err) {
@@ -652,52 +687,63 @@ function GlobalAdminPage() {
                     <p className="mt-0.5 text-xs text-ink/55">
                       Which paid items this code can be used on. Prints are excluded.
                     </p>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {([
-                        ['all', 'Everything (now & future)'],
-                        ['custom', 'Specific items…'],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setScopeMode(value)}
-                          className={`rounded-full border px-3 py-1.5 text-sm ${
-                            scopeMode === value
-                              ? 'border-accent bg-accent/10 text-accent'
-                              : 'border-ink/20 hover:border-accent hover:text-accent'
-                          }`}
+                    <div ref={scopeMenuRef} className="relative mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setScopeOpen((open) => !open)}
+                        aria-haspopup="listbox"
+                        aria-expanded={scopeOpen}
+                        className="flex w-full items-center justify-between gap-2 rounded-xl border border-ink/20 bg-white px-3 py-2.5 text-left text-sm focus:border-accent focus:outline-none"
+                      >
+                        <span className={checkedScopes.size === 0 ? 'text-ink/40' : ''}>
+                          {scopeButtonLabel}
+                        </span>
+                        <span aria-hidden="true" className="shrink-0 text-ink/40">
+                          {scopeOpen ? '▲' : '▼'}
+                        </span>
+                      </button>
+
+                      {scopeOpen ? (
+                        <div
+                          role="listbox"
+                          aria-multiselectable="true"
+                          className="absolute z-20 mt-1 w-full rounded-xl border border-ink/15 bg-white p-1 shadow-lg"
                         >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {scopeMode === 'all' ? (
-                      <p className="mt-2 text-xs text-ink/55">
-                        Covers events, corporate, upload extensions, and the guest-download add-on —
-                        plus any paid features added later.
-                      </p>
-                    ) : (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {PAID_ITEM_SCOPES.map(({ key, label }) => (
                           <button
-                            key={key}
                             type="button"
-                            onClick={() => toggleCustomScope(key)}
-                            className={`rounded-full border px-3 py-1.5 text-sm ${
-                              customScopes.has(key)
-                                ? 'border-accent bg-accent/10 text-accent'
-                                : 'border-ink/20 hover:border-accent hover:text-accent'
-                            }`}
+                            onClick={() =>
+                              setCheckedScopes(
+                                allScopesChecked ? new Set() : new Set(ALL_SCOPE_KEYS),
+                              )
+                            }
+                            className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-accent hover:bg-accent/5"
                           >
-                            {customScopes.has(key) ? '✓ ' : ''}
-                            {label}
+                            {allScopesChecked ? 'Clear all' : 'Select all'}
                           </button>
-                        ))}
-                      </div>
-                    )}
+                          <div className="my-1 border-t border-ink/10" />
+                          {PAID_ITEM_SCOPES.map(({ key, label }) => (
+                            <label
+                              key={key}
+                              role="option"
+                              aria-selected={checkedScopes.has(key)}
+                              className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink/5"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checkedScopes.has(key)}
+                                onChange={() => toggleScope(key)}
+                                className="h-4 w-4 shrink-0 accent-accent"
+                              />
+                              <span>{label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                     <p className="mt-2 text-xs text-ink/55">
-                      Use the code on an event&apos;s <span className="font-medium">Manage</span> page to
-                      apply it to an extension or the guest-download add-on.
+                      {allScopesChecked
+                        ? 'Checking every item also covers any paid features added later.'
+                        : 'Use the code on an event’s Manage page to apply it to an extension or the guest-download add-on.'}
                     </p>
                   </div>
                   <div>
