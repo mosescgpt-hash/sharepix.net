@@ -27,7 +27,7 @@ async function eventTier(eventId: string): Promise<string> {
 // guest-facing message when a code was supplied but can't be used.
 async function resolveDiscount(
   rawCode: string | null | undefined,
-  tier: string,
+  scope: string,
 ): Promise<{ code: string; percentOff: number; duration: 'once' | 'forever' } | null> {
   const code = (rawCode ?? '').trim().toUpperCase();
   if (!code) return null;
@@ -48,9 +48,20 @@ async function resolveDiscount(
   const maxUses = Number(item.maxUses?.N ?? '0');
   if (usedCount >= maxUses) throw new Error('That discount code has no uses left.');
 
-  // 'all' codes apply to any paid flow; legacy tier-scoped codes must match.
-  const appliesTo = (item.appliesToTier?.S ?? '').toLowerCase();
-  if (appliesTo && appliesTo !== 'all' && appliesTo !== tier) {
+  // Scope check. New codes carry appliesToScopes ('all' or a comma-separated
+  // list of flow keys); legacy codes have only appliesToTier, where 'all' is
+  // universal and a specific tier only ever applied to event creation.
+  const scopesRaw = (item.appliesToScopes?.S ?? '').toLowerCase().trim();
+  let allowed: boolean;
+  if (scopesRaw) {
+    allowed =
+      scopesRaw === 'all' ||
+      scopesRaw.split(',').map((entry) => entry.trim()).includes(scope);
+  } else {
+    const legacyTier = (item.appliesToTier?.S ?? '').toLowerCase();
+    allowed = legacyTier === '' || legacyTier === 'all' ? true : scope === 'event';
+  }
+  if (!allowed) {
     throw new Error('That discount code does not apply to this purchase.');
   }
 
@@ -100,9 +111,9 @@ async function couponFor(
 async function buildDiscount(
   stripe: Stripe,
   rawCode: string | null | undefined,
-  tier: string,
+  scope: string,
 ): Promise<{ discounts?: { coupon: string }[]; metadata: Record<string, string> }> {
-  const resolved = await resolveDiscount(rawCode, tier);
+  const resolved = await resolveDiscount(rawCode, scope);
   if (!resolved) return { metadata: {} };
   const coupon = await couponFor(stripe, resolved.percentOff, resolved.duration);
   return { discounts: [{ coupon }], metadata: { discountCode: resolved.code } };
@@ -186,7 +197,7 @@ export const handler: Handler = async (event) => {
     const amount = Math.max(100, Math.round(planPrice / 2)); // half price, min $1
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, extTier);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'extend');
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -225,7 +236,7 @@ export const handler: Handler = async (event) => {
     }
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'addon');
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'guest_download');
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -272,7 +283,7 @@ export const handler: Handler = async (event) => {
     : `${appUrl}/global-admin?checkout=cancelled`;
   try {
     const stripe = new Stripe(secretKey);
-    const disc = await buildDiscount(stripe, event.arguments.discountCode, tier);
+    const disc = await buildDiscount(stripe, event.arguments.discountCode, 'event');
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [

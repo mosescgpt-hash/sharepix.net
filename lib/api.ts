@@ -191,6 +191,11 @@ export async function createDiscountCode(input: {
   percentOff: number;
   /** Corporate subscriptions only: 'once' (first month) or 'forever' (every month). */
   recurringDuration?: 'once' | 'forever';
+  /**
+   * Paid flows the code applies to: ['all'] (everything, now and future), or a
+   * subset of scope keys (event, corporate, extend, guest_download).
+   */
+  scopes: string[];
   expiresAt: string;
   maxUses: number;
   createdBy?: string;
@@ -199,13 +204,20 @@ export async function createDiscountCode(input: {
   if (!(percentOff >= 1 && percentOff <= 100)) {
     throw new Error('Choose a discount between 1% and 100%.');
   }
+  const cleaned = input.scopes.map((scope) => scope.trim().toLowerCase()).filter(Boolean);
+  if (cleaned.length === 0) {
+    throw new Error('Choose at least one item the code applies to.');
+  }
+  const appliesToScopes = cleaned.includes('all') ? 'all' : cleaned.join(',');
   const { errors } = await client.models.DiscountCode.create(
     {
       code: input.code.trim().toUpperCase(),
       assignedTo: input.assignedTo?.trim() || null,
       active: true,
-      // New admin codes apply to anything paid on the site (except prints).
+      // appliesToTier stays 'all' so the create-event flow never treats a new
+      // code as tier-locked; appliesToScopes carries the real per-flow scope.
       appliesToTier: 'all',
+      appliesToScopes,
       percentOff,
       recurringDuration: input.recurringDuration === 'forever' ? 'forever' : 'once',
       expiresAt: input.expiresAt,
