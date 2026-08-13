@@ -272,6 +272,16 @@ function AdminDashboardPage() {
                 >
                   Public gallery
                 </Link>
+                {/* Opens in its own tab so the venue screen can run the
+                    slideshow while the host keeps managing the event here. */}
+                <Link
+                  href={`/event/${event.id}/live`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full border border-accent px-4 py-2 font-medium text-accent hover:bg-accent/5"
+                >
+                  Live slideshow ↗
+                </Link>
                 <button
                   type="button"
                   onClick={load}

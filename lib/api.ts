@@ -919,6 +919,33 @@ export async function getOriginalMediaUrl(photo: QRPhoto): Promise<string> {
   return url.toString();
 }
 
+/**
+ * One event's approved photo records WITHOUT resolving signed URLs. The live
+ * slideshow polls this every few seconds and signs URLs only for the frames it
+ * is about to show, so a long-running screen doesn't re-sign hundreds of photos
+ * on every poll.
+ */
+export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]> {
+  const { data, errors } = await client.queries.listEventPhotos(
+    { eventId },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return (data ?? [])
+    .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
+    .filter((photo) => photo.approved !== false) as QRPhoto[];
+}
+
+/**
+ * Signed URL for a photo at display quality (the preview, falling back to the
+ * original). Signed URLs are short-lived, so the slideshow re-resolves them
+ * periodically rather than holding one for the whole reception.
+ */
+export async function getPhotoDisplayUrl(photo: QRPhoto): Promise<string> {
+  const { url } = await getUrl({ path: photo.previewS3Key || photo.s3Key });
+  return url.toString();
+}
+
 /** Triggers a browser download of a photo. */
 export async function downloadPhoto(photo: QRPhoto): Promise<void> {
   const { body } = await downloadData({ path: photo.s3Key }).result;
