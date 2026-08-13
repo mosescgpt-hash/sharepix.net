@@ -192,8 +192,8 @@ export async function createDiscountCode(input: {
   /** Corporate subscriptions only: 'once' (first month) or 'forever' (every month). */
   recurringDuration?: 'once' | 'forever';
   /**
-   * Paid flows the code applies to: ['all'] (everything, now and future), or a
-   * subset of scope keys (event, corporate, extend, guest_download).
+   * The paid items the code applies to, e.g. ['event:premium', 'guest_download'].
+   * Stored verbatim — a code covers exactly what was chosen.
    */
   scopes: string[];
   expiresAt: string;
@@ -204,11 +204,13 @@ export async function createDiscountCode(input: {
   if (!(percentOff >= 1 && percentOff <= 100)) {
     throw new Error('Choose a discount between 1% and 100%.');
   }
-  const cleaned = input.scopes.map((scope) => scope.trim().toLowerCase()).filter(Boolean);
+  const cleaned = [
+    ...new Set(input.scopes.map((scope) => scope.trim().toLowerCase()).filter(Boolean)),
+  ];
   if (cleaned.length === 0) {
     throw new Error('Choose at least one item the code applies to.');
   }
-  const appliesToScopes = cleaned.includes('all') ? 'all' : cleaned.join(',');
+  const appliesToScopes = cleaned.join(',');
   const { errors } = await client.models.DiscountCode.create(
     {
       code: input.code.trim().toUpperCase(),
