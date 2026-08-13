@@ -66,12 +66,15 @@ function defaultExpiryValue(): string {
   return local.toISOString().slice(0, 16);
 }
 
-// The paid flows a discount code can be scoped to. Adding a new paid feature
-// later means adding one entry here (and passing its key from that checkout
-// flow); codes scoped to "Everything" ('all') cover new flows automatically.
+// Every paid item a discount code can be scoped to. Event plans are listed
+// individually so a code can target, say, Premium events only. Adding a new paid
+// feature later means adding one entry here and passing its key from that
+// checkout flow.
 const PAID_ITEM_SCOPES = [
-  { key: 'event', label: 'Events' },
-  { key: 'corporate', label: 'Corporate' },
+  { key: 'event:starter', label: 'Starter event' },
+  { key: 'event:standard', label: 'Standard event' },
+  { key: 'event:premium', label: 'Premium event' },
+  { key: 'corporate', label: 'Corporate subscription' },
   { key: 'extend', label: 'Upload extensions' },
   { key: 'guest_download', label: 'Guest downloads' },
 ] as const;
@@ -120,12 +123,10 @@ function GlobalAdminPage() {
   // every month? Defaults to one month.
   const [recurringDuration, setRecurringDuration] = useState<'once' | 'forever'>('once');
   // Which paid items the code can be redeemed against, chosen from a checklist
-  // dropdown. Everything is checked by default; checking all of them stores
-  // 'all', which also covers paid features added later.
+  // dropdown. Nothing is checked to start — the code covers exactly what's
+  // ticked, and only that.
   const [scopeOpen, setScopeOpen] = useState(false);
-  const [checkedScopes, setCheckedScopes] = useState<Set<string>>(
-    () => new Set(ALL_SCOPE_KEYS),
-  );
+  const [checkedScopes, setCheckedScopes] = useState<Set<string>>(() => new Set());
   const scopeMenuRef = useRef<HTMLDivElement | null>(null);
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
@@ -142,9 +143,8 @@ function GlobalAdminPage() {
   }
 
   // Summary shown on the closed dropdown button.
-  const scopeButtonLabel = allScopesChecked
-    ? 'All paid items (now & future)'
-    : checkedScopes.size === 0
+  const scopeButtonLabel =
+    checkedScopes.size === 0
       ? 'Select paid items…'
       : PAID_ITEM_SCOPES.filter((scope) => checkedScopes.has(scope.key))
           .map((scope) => scope.label)
@@ -241,8 +241,8 @@ function GlobalAdminPage() {
       setError('Choose a discount between 1% and 100%.');
       return;
     }
-    // Every item checked → 'all', which also covers future paid features.
-    const scopes = allScopesChecked ? ['all'] : [...checkedScopes];
+    // The code covers exactly the ticked items — no implicit "everything".
+    const scopes = [...checkedScopes];
     if (scopes.length === 0) {
       setError('Choose at least one paid item the code applies to.');
       return;
@@ -266,7 +266,7 @@ function GlobalAdminPage() {
       setMaxUses(1);
       setPercentChoice('100');
       setRecurringDuration('once');
-      setCheckedScopes(new Set(ALL_SCOPE_KEYS));
+      setCheckedScopes(new Set());
       setScopeOpen(false);
       setExpiresAt(defaultExpiryValue());
       await load();
@@ -741,9 +741,8 @@ function GlobalAdminPage() {
                       ) : null}
                     </div>
                     <p className="mt-2 text-xs text-ink/55">
-                      {allScopesChecked
-                        ? 'Checking every item also covers any paid features added later.'
-                        : 'Use the code on an event’s Manage page to apply it to an extension or the guest-download add-on.'}
+                      Upload extensions and guest downloads are redeemed on an event&apos;s{' '}
+                      <span className="font-medium">Manage</span> page.
                     </p>
                   </div>
                   <div>

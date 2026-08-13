@@ -48,18 +48,25 @@ async function resolveDiscount(
   const maxUses = Number(item.maxUses?.N ?? '0');
   if (usedCount >= maxUses) throw new Error('That discount code has no uses left.');
 
-  // Scope check. New codes carry appliesToScopes ('all' or a comma-separated
-  // list of flow keys); legacy codes have only appliesToTier, where 'all' is
-  // universal and a specific tier only ever applied to event creation.
+  // Scope check. New codes carry appliesToScopes: a comma-separated list of the
+  // paid items ticked when the code was made — event:starter, event:standard,
+  // event:premium, corporate, extend, guest_download. ('all' is still honored
+  // for codes created before plans were listed individually.) Legacy codes have
+  // only appliesToTier, where 'all'/blank was universal and a specific tier only
+  // ever applied to creating an event on that plan.
   const scopesRaw = (item.appliesToScopes?.S ?? '').toLowerCase().trim();
   let allowed: boolean;
   if (scopesRaw) {
+    const entries = scopesRaw.split(',').map((entry) => entry.trim());
     allowed =
       scopesRaw === 'all' ||
-      scopesRaw.split(',').map((entry) => entry.trim()).includes(scope);
+      entries.includes(scope) ||
+      // A pre-split 'event' scope covers every event plan.
+      (scope.startsWith('event:') && entries.includes('event'));
   } else {
     const legacyTier = (item.appliesToTier?.S ?? '').toLowerCase();
-    allowed = legacyTier === '' || legacyTier === 'all' ? true : scope === 'event';
+    allowed =
+      legacyTier === '' || legacyTier === 'all' ? true : scope === `event:${legacyTier}`;
   }
   if (!allowed) {
     throw new Error('That discount code does not apply to this purchase.');
@@ -283,7 +290,9 @@ export const handler: Handler = async (event) => {
     : `${appUrl}/global-admin?checkout=cancelled`;
   try {
     const stripe = new Stripe(secretKey);
-    const disc = await buildDiscount(stripe, event.arguments.discountCode, 'event');
+    // Event plans are scoped per tier (event:starter / :standard / :premium), so
+    // a code can be limited to one plan.
+    const disc = await buildDiscount(stripe, event.arguments.discountCode, `event:${tier}`);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [
