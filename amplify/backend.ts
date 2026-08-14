@@ -131,6 +131,17 @@ createFn.addToRolePolicy(
 // alert without signing in.
 reviewTable.grantWriteData(createFn);
 createFn.addEnvironment('REVIEW_TABLE_NAME', reviewTable.tableName);
+// Emails the host when a photo is held, with the preview embedded and buttons
+// linking to the review page. ALERT_FROM_ADDRESS must be a verified SES
+// identity; leaving it unset simply disables the emails (see docs/alerting.md).
+createFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+createFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+createFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['ses:SendEmail'],
+    resources: ['*'],
+  }),
+);
 
 // Moderate-photo function: decides a flagged photo from a review link. It reads
 // and closes the review, and flips the photo's status — nothing else.

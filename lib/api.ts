@@ -521,6 +521,23 @@ export async function setEventModerationMode(
   if (errors?.length) throw new Error('The screening setting could not be updated.');
 }
 
+/**
+ * Where to email the host when a photo is held for review. Pass an empty string
+ * to turn the emails off; held photos stay reviewable in the dashboard either
+ * way.
+ */
+export async function setEventAlertEmail(eventId: string, email: string): Promise<void> {
+  const trimmed = email.trim();
+  if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    throw new Error('Enter a valid email address.');
+  }
+  const { errors } = await client.models.Event.update(
+    { id: eventId, alertEmail: trimmed || null },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The alert email could not be saved.');
+}
+
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
 export async function setEventUploadsClosed(
   eventId: string,

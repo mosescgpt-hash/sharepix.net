@@ -15,6 +15,8 @@ export interface QREvent {
   liveSlideshowEnabled?: boolean | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
   moderationMode?: string | null;
+  /** Where to email the host when a photo is held for review. */
+  alertEmail?: string | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;

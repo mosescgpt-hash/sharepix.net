@@ -10,6 +10,9 @@ import {
   RekognitionClient,
   DetectModerationLabelsCommand,
 } from '@aws-sdk/client-rekognition';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { buildAlertEmail } from './alert-email';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
@@ -17,6 +20,8 @@ import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderatio
 
 const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
+const s3 = new S3Client({});
+const ses = new SESv2Client({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
@@ -137,12 +142,13 @@ async function openReview(input: {
   eventName: string;
   s3Key: string;
   reasons: string[];
-}): Promise<void> {
-  if (!REVIEW_TABLE) return;
+}): Promise<string | null> {
+  if (!REVIEW_TABLE) return null;
+  const token = randomBytes(32).toString('hex');
   const now = new Date();
   const expiresAt = new Date(now.getTime() + REVIEW_TTL_DAYS * 24 * 60 * 60 * 1000);
   const item: Record<string, AttributeValue> = {
-    token: { S: randomBytes(32).toString('hex') },
+    token: { S: token },
     __typename: { S: 'ModerationReview' },
     photoId: { S: input.photoId },
     eventId: { S: input.eventId },
@@ -157,10 +163,80 @@ async function openReview(input: {
 
   try {
     await dynamo.send(new PutItemCommand({ TableName: REVIEW_TABLE, Item: item }));
+    return token;
   } catch (error) {
     console.error('Could not open a moderation review', {
       at: new Date().toISOString(),
       photoId: input.photoId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Email the host that a photo is waiting, with the preview embedded and buttons
+ * that open the review link.
+ *
+ * Best-effort and only ever runs for a flagged photo — a rare path — so the
+ * cost of fetching the preview and building the message never lands on a normal
+ * upload. A send failure leaves the photo hidden and reviewable in the
+ * dashboard, which is the safe outcome.
+ */
+async function sendAlertEmail(input: {
+  to: string;
+  eventName: string;
+  reasons: string[];
+  token: string;
+  previewKey: string;
+}): Promise<void> {
+  const from = process.env.ALERT_FROM_ADDRESS;
+  if (!from || !input.to) return;
+
+  const appUrl = process.env.APP_URL ?? 'https://www.sharepix.net';
+  const reviewUrl = `${appUrl}/review/${input.token}`;
+
+  // Attach the preview rather than hotlinking it: our image URLs are
+  // short-lived signed links and would be broken by the time the host opens the
+  // message.
+  let image: { bytes: Uint8Array; contentType: string } | undefined;
+  try {
+    const object = await s3.send(
+      new GetObjectCommand({ Bucket: BUCKET_NAME, Key: input.previewKey }),
+    );
+    const chunks: Buffer[] = [];
+    for await (const chunk of object.Body as AsyncIterable<Buffer>) chunks.push(chunk);
+    const bytes = new Uint8Array(Buffer.concat(chunks));
+    // Keep the message comfortably inside SES's size limit.
+    if (bytes.byteLength <= 4 * 1024 * 1024) {
+      image = { bytes, contentType: object.ContentType ?? 'image/jpeg' };
+    }
+  } catch {
+    // Send without the preview; the review link still works.
+  }
+
+  try {
+    await ses.send(
+      new SendEmailCommand({
+        Content: {
+          Raw: {
+            Data: Buffer.from(
+              buildAlertEmail({
+                from,
+                to: input.to,
+                eventName: input.eventName,
+                reasons: input.reasons.join(', '),
+                reviewUrl,
+                image,
+              }),
+            ),
+          },
+        },
+      }),
+    );
+  } catch (error) {
+    console.error('Could not send the moderation alert email', {
+      at: new Date().toISOString(),
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -346,13 +422,25 @@ export const handler: Handler = async (event) => {
   // A held-back photo gets a review link so the host can decide on it without
   // signing in. Only after the record exists, so the link always resolves.
   if (screening.status === 'flagged') {
-    await openReview({
+    const eventName = ev.name?.S ?? '';
+    const token = await openReview({
       photoId: id,
       eventId,
-      eventName: ev.name?.S ?? '',
+      eventName,
       s3Key,
       reasons: screening.reasons,
     });
+    const alertEmail = ev.alertEmail?.S ?? '';
+    if (token && alertEmail) {
+      await sendAlertEmail({
+        to: alertEmail,
+        eventName,
+        reasons: screening.reasons,
+        token,
+        // Prefer the smaller preview for the email; fall back to the original.
+        previewKey: previewS3Key || s3Key,
+      });
+    }
   }
 
   return {
