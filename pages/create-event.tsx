@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import EventQRCode from '@/components/EventQRCode';
-import { CORPORATE_PLAN, PRICING_TIERS, applyPercentOff, getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, PRICING_TIERS, applyDiscount, getTier } from '@/lib/pricing';
 import {
   createNewEvent,
   getMyCorporateSubscription,
@@ -31,12 +31,17 @@ function CreateEventPage() {
   >('idle');
   const [pilotCodeMessage, setPilotCodeMessage] = useState<string | null>(null);
   // How much a valid code takes off (100 = free). Null until a code validates.
-  const [pilotPercentOff, setPilotPercentOff] = useState<number | null>(null);
+  // What a validated code takes off. Null until a code validates.
+  const [pilotDiscount, setPilotDiscount] = useState<{
+    discountType: string;
+    percentOff: number;
+    amountOffCents: number;
+  } | null>(null);
 
   function clearPilotCode() {
     setPilotCodeStatus('idle');
     setPilotCodeMessage(null);
-    setPilotPercentOff(null);
+    setPilotDiscount(null);
   }
 
   // Active Corporate subscribers can create events included in their plan (free).
@@ -82,13 +87,24 @@ function CreateEventPage() {
           : tierId;
       setTierId(unlockedTier);
 
-      const percentOff = result.percentOff == null ? 100 : result.percentOff;
-      setPilotPercentOff(percentOff);
+      const discount = {
+        discountType: result.discountType === 'amount' ? 'amount' : 'percent',
+        percentOff: result.percentOff == null ? 100 : result.percentOff,
+        amountOffCents: result.amountOffCents ?? 0,
+      };
+      setPilotDiscount(discount);
       setPilotCodeStatus('valid');
+
+      const planName = getTier(unlockedTier)?.name ?? 'selected';
+      const priceNow = applyDiscount(getTier(unlockedTier)?.price ?? 0, discount);
+      const label =
+        discount.discountType === 'amount'
+          ? `$${(discount.amountOffCents / 100).toFixed(2)} off`
+          : `${discount.percentOff}% off`;
       setPilotCodeMessage(
-        percentOff >= 100
-          ? `Free event — 100% off applied to the ${getTier(unlockedTier)?.name ?? 'selected'} plan.`
-          : `${percentOff}% off applied to the ${getTier(unlockedTier)?.name ?? 'selected'} plan.`,
+        priceNow <= 0
+          ? `Free event — ${label} covers the ${planName} plan.`
+          : `${label} applied to the ${planName} plan.`,
       );
     } catch {
       setPilotCodeStatus('invalid');
@@ -96,14 +112,14 @@ function CreateEventPage() {
     }
   }
 
-  // A 100%-off code comps the event (created free, no Stripe). A partial code
-  // still goes through Stripe checkout with the discount applied there.
-  const isComped = pilotCodeStatus === 'valid' && (pilotPercentOff ?? 100) >= 100;
-  const isDiscounted =
-    pilotCodeStatus === 'valid' && pilotPercentOff != null && pilotPercentOff < 100;
+  // A code that covers the whole price comps the event (created free, no
+  // Stripe). A partial code still goes through Stripe with the discount applied
+  // there. This works the same whether the code is a percentage or an amount.
   const basePrice = getTier(tierId)?.price ?? 0;
-  const discountedPrice =
-    pilotPercentOff != null ? applyPercentOff(basePrice, pilotPercentOff) : basePrice;
+  const discountedPrice = pilotDiscount ? applyDiscount(basePrice, pilotDiscount) : basePrice;
+  const isComped = pilotCodeStatus === 'valid' && discountedPrice <= 0;
+  const isDiscounted =
+    pilotCodeStatus === 'valid' && pilotDiscount != null && discountedPrice > 0;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

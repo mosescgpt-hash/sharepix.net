@@ -120,6 +120,9 @@ function GlobalAdminPage() {
   // Discount amount: a preset (100/50/20) or a custom percentage.
   const [percentChoice, setPercentChoice] = useState<'100' | '50' | '20' | 'custom'>('100');
   const [customPercent, setCustomPercent] = useState(10);
+  // A code takes off either a percentage or a fixed dollar amount.
+  const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
+  const [amountOffDollars, setAmountOffDollars] = useState(10);
   // Corporate subscriptions only: does the discount apply to the first month or
   // every month? Defaults to one month.
   const [recurringDuration, setRecurringDuration] = useState<'once' | 'forever'>('once');
@@ -170,6 +173,7 @@ function GlobalAdminPage() {
   }, [scopeOpen]);
 
   const percentOff = percentChoice === 'custom' ? customPercent : Number(percentChoice);
+  const amountOffCents = Math.round(amountOffDollars * 100);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -242,7 +246,12 @@ function GlobalAdminPage() {
       setError('Enter a code, expiration date, and at least one use.');
       return;
     }
-    if (!(percentOff >= 1 && percentOff <= 100)) {
+    if (discountType === 'amount') {
+      if (!(amountOffCents >= 1)) {
+        setError('Enter a discount amount above $0.');
+        return;
+      }
+    } else if (!(percentOff >= 1 && percentOff <= 100)) {
       setError('Choose a discount between 1% and 100%.');
       return;
     }
@@ -259,7 +268,9 @@ function GlobalAdminPage() {
       await createDiscountCode({
         code,
         assignedTo,
+        discountType,
         percentOff,
+        amountOffCents,
         recurringDuration,
         scopes,
         expiresAt: new Date(expiresAt).toISOString(),
@@ -274,6 +285,8 @@ function GlobalAdminPage() {
       setMaxUses(1);
       setUnlimitedUses(false);
       setPercentChoice('100');
+      setDiscountType('percent');
+      setAmountOffDollars(10);
       setRecurringDuration('once');
       setCheckedScopes(new Set());
       setScopeOpen(false);
@@ -759,6 +772,51 @@ function GlobalAdminPage() {
                     <p className="mt-0.5 text-xs text-ink/55">How much to take off.</p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {([
+                        ['percent', 'Percentage off'],
+                        ['amount', 'Dollar amount off'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setDiscountType(value)}
+                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                            discountType === value
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {discountType === 'amount' ? (
+                      <div className="mt-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-ink/60">$</span>
+                          <input
+                            type="number"
+                            min={1}
+                            step="0.01"
+                            value={amountOffDollars}
+                            onChange={(e) => setAmountOffDollars(Number(e.target.value))}
+                            className="w-28 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                          />
+                          <span className="text-sm text-ink/60">off</span>
+                        </div>
+                        <p className="mt-1 text-xs text-ink/55">
+                          Taken off each qualifying purchase. If it&apos;s more than the item
+                          costs, the item is simply free — never a negative total.
+                        </p>
+                      </div>
+                    ) : null}
+
+                    <div
+                      className={`mt-2 flex flex-wrap gap-2 ${
+                        discountType === 'amount' ? 'hidden' : ''
+                      }`}
+                    >
+                      {([
                         ['100', 'Free (100%)'],
                         ['20', '20% off'],
                         ['50', '50% off'],
@@ -866,7 +924,13 @@ function GlobalAdminPage() {
                   >
                     {working === 'create-code'
                       ? 'Creating…'
-                      : `Create ${percentOff >= 100 ? 'free' : `${percentOff}% off`} code`}
+                      : `Create ${
+                          discountType === 'amount'
+                            ? `$${amountOffDollars.toFixed(2)} off`
+                            : percentOff >= 100
+                              ? 'free'
+                              : `${percentOff}% off`
+                        } code`}
                   </button>
                 </form>
 
@@ -882,9 +946,11 @@ function GlobalAdminPage() {
                           <div className="min-w-0">
                             <p className="truncate font-mono font-bold text-ink">{item.code}</p>
                             <p className="mt-1 truncate text-xs text-ink/60">
-                              {(item.percentOff == null ? 100 : item.percentOff) >= 100
-                                ? 'Free (100% off)'
-                                : `${item.percentOff}% off`}
+                              {item.discountType === 'amount'
+                                ? `$${((item.amountOffCents ?? 0) / 100).toFixed(2)} off`
+                                : (item.percentOff == null ? 100 : item.percentOff) >= 100
+                                  ? 'Free (100% off)'
+                                  : `${item.percentOff}% off`}
                               {item.recurringDuration === 'forever' ? ' · ongoing (corp.)' : ''}
                               {' · '}
                               {scopeSummary(item)}

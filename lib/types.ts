@@ -58,8 +58,12 @@ export interface DiscountCode {
    * guest_download). Missing on legacy codes — fall back to appliesToTier.
    */
   appliesToScopes?: string | null;
+  /** 'percent' (default) or 'amount' for a fixed dollar discount. */
+  discountType?: string | null;
   /** How much the code takes off, 1–100. Missing (legacy codes) means 100 (free). */
   percentOff?: number | null;
+  /** Fixed discount in cents, used when discountType is 'amount'. */
+  amountOffCents?: number | null;
   /** Corporate subscriptions only: 'once' (default) or 'forever'. */
   recurringDuration?: string | null;
   expiresAt: string;
@@ -99,6 +103,8 @@ export interface DiscountRedemption {
   message?: string | null;
   code?: string | null;
   appliesToTier?: string | null;
+  discountType?: string | null;
   percentOff?: number | null;
+  amountOffCents?: number | null;
   remainingUses?: number | null;
 }

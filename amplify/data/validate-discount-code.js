@@ -37,7 +37,9 @@ export function response(ctx) {
     message: 'Pilot access applied.',
     code: code.code,
     appliesToTier: code.appliesToTier,
+    discountType: code.discountType === 'amount' ? 'amount' : 'percent',
     percentOff,
+    amountOffCents: code.amountOffCents == null ? null : code.amountOffCents,
     // Null means "no limit" rather than a number the caller would misread.
     remainingUses: code.unlimitedUses === true ? null : code.maxUses - code.usedCount,
   };
