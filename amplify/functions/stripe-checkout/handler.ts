@@ -44,9 +44,13 @@ async function resolveDiscount(
     throw new Error('That discount code has expired.');
   }
 
+  // An unlimited code has no ceiling — usedCount still counts up so redemptions
+  // can be measured. Anything else must have uses remaining.
   const usedCount = Number(item.usedCount?.N ?? '0');
   const maxUses = Number(item.maxUses?.N ?? '0');
-  if (usedCount >= maxUses) throw new Error('That discount code has no uses left.');
+  if (item.unlimitedUses?.BOOL !== true && usedCount >= maxUses) {
+    throw new Error('That discount code has no uses left.');
+  }
 
   // Scope check. New codes carry appliesToScopes: a comma-separated list of the
   // paid items ticked when the code was made — event:starter, event:standard,

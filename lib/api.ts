@@ -198,6 +198,8 @@ export async function createDiscountCode(input: {
   scopes: string[];
   expiresAt: string;
   maxUses: number;
+  /** When true the code never runs out; redemptions are still counted. */
+  unlimitedUses?: boolean;
   createdBy?: string;
 }): Promise<void> {
   const percentOff = Math.round(input.percentOff);
@@ -224,6 +226,7 @@ export async function createDiscountCode(input: {
       recurringDuration: input.recurringDuration === 'forever' ? 'forever' : 'once',
       expiresAt: input.expiresAt,
       maxUses: input.maxUses,
+      unlimitedUses: input.unlimitedUses === true,
       usedCount: 0,
       createdBy: input.createdBy ?? null,
     },

@@ -64,6 +64,8 @@ export interface DiscountCode {
   recurringDuration?: string | null;
   expiresAt: string;
   maxUses: number;
+  /** When true the code never runs out; usedCount still counts redemptions. */
+  unlimitedUses?: boolean | null;
   usedCount: number;
   lastUsedAt?: string | null;
   createdBy?: string | null;

@@ -15,11 +15,12 @@ export function response(ctx) {
   const code = ctx.result;
   // The code carries the plan it unlocks (appliesToTier); it is valid as long
   // as it is active, unexpired, and has uses left — whichever plan it's for.
+  // An unlimited code never runs out; every other check still applies.
   const valid =
     code &&
     code.active === true &&
     code.expiresAt > ctx.stash.now &&
-    code.usedCount < code.maxUses;
+    (code.unlimitedUses === true || code.usedCount < code.maxUses);
 
   if (!valid) {
     return {
@@ -37,6 +38,7 @@ export function response(ctx) {
     code: code.code,
     appliesToTier: code.appliesToTier,
     percentOff,
-    remainingUses: code.maxUses - code.usedCount,
+    // Null means "no limit" rather than a number the caller would misread.
+    remainingUses: code.unlimitedUses === true ? null : code.maxUses - code.usedCount,
   };
 }
