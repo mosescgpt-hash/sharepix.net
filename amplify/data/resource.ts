@@ -53,6 +53,9 @@ const schema = a.schema({
       // host; 'allow_all' skips screening entirely and shows everything
       // immediately. The host chooses on the event dashboard.
       moderationMode: a.string(),
+      // Where to email the host when a photo is held for review. Optional — a
+      // held photo is always reviewable from the dashboard regardless.
+      alertEmail: a.string(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })

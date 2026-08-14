@@ -19,6 +19,13 @@ import {
 export default function ModerationReviewPage() {
   const router = useRouter();
   const token = typeof router.query.token === 'string' ? router.query.token : null;
+  // The email's buttons carry which action was tapped. It only pre-selects and
+  // never acts on its own: mail scanners follow links, and a GET that released a
+  // photo would let a scanner approve it before a human ever saw it.
+  const intent =
+    router.query.intent === 'release' || router.query.intent === 'dismiss'
+      ? router.query.intent
+      : null;
 
   const [review, setReview] = useState<ModerationReviewView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,6 +128,15 @@ export default function ModerationReviewPage() {
                 }`}
               >
                 {outcome.text}
+              </p>
+            ) : null}
+
+            {actionable && intent ? (
+              <p className="mt-6 rounded-xl bg-ink/5 px-4 py-3 text-sm text-ink/70">
+                You tapped{' '}
+                <strong>{intent === 'release' ? 'Approve' : 'Deny'}</strong> in your email —
+                confirm below. (Email apps sometimes open links on their own, so nothing
+                happens until you tap here.)
               </p>
             ) : null}
 

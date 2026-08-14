@@ -13,6 +13,7 @@ import {
   getCurrentUserInfo,
   getMyCorporateSubscription,
   isCorporateActive,
+  setEventAlertEmail,
   setEventModerationMode,
   setEventUploadsClosed,
   startExtendUploadWindow,
@@ -51,6 +52,8 @@ function AdminDashboardPage() {
   const [addOnWorking, setAddOnWorking] = useState(false);
   const [slideshowWorking, setSlideshowWorking] = useState(false);
   const [moderationWorking, setModerationWorking] = useState(false);
+  const [alertEmail, setAlertEmail] = useState('');
+  const [alertWorking, setAlertWorking] = useState(false);
   const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension / guest-download add-on.
@@ -131,6 +134,7 @@ function AdminDashboardPage() {
     if (!event) return;
     setEditName(event.name ?? '');
     setEditDate(event.date ?? '');
+    setAlertEmail(event.alertEmail ?? '');
   }, [event]);
 
   const tier = event ? getTier(event.tier) : undefined;
@@ -199,6 +203,29 @@ function AdminDashboardPage() {
         ok: false,
       });
       setAddOnWorking(false);
+    }
+  }
+
+  async function handleSaveAlertEmail() {
+    if (!event) return;
+    setAlertWorking(true);
+    setSettingsMsg(null);
+    try {
+      await setEventAlertEmail(event.id, alertEmail);
+      setEvent({ ...event, alertEmail: alertEmail.trim() || null });
+      setSettingsMsg({
+        text: alertEmail.trim()
+          ? `Alerts will go to ${alertEmail.trim()}.`
+          : 'Alert emails turned off. Held photos are still in your dashboard.',
+        ok: true,
+      });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The alert email could not be saved.',
+        ok: false,
+      });
+    } finally {
+      setAlertWorking(false);
     }
   }
 
@@ -556,6 +583,37 @@ function AdminDashboardPage() {
                     ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
                     : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
                 </p>
+
+                {(event.moderationMode ?? 'review') === 'review' ? (
+                  <div className="mt-3">
+                    <label htmlFor="alert-email" className="text-sm font-medium">
+                      Email me when a photo is held{' '}
+                      <span className="text-ink/50">(optional)</span>
+                    </label>
+                    <p className="text-xs text-ink/55">
+                      You&apos;ll get the photo and Approve / Deny buttons, so you don&apos;t have
+                      to watch your phone.
+                    </p>
+                    <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                      <input
+                        id="alert-email"
+                        type="email"
+                        value={alertEmail}
+                        onChange={(e) => setAlertEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="min-w-0 flex-1 rounded-xl border border-ink/20 px-4 py-2.5 focus:border-accent focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={alertWorking}
+                        onClick={() => void handleSaveAlertEmail()}
+                        className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                      >
+                        {alertWorking ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-5 border-t border-ink/10 pt-5">

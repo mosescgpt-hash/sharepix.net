@@ -59,6 +59,47 @@ host visibility still apply. **To fail closed instead** — hold everything for
 review when screening is down — change the `catch` in `screenPhoto()` to return
 `{ status: 'flagged' }`.
 
+## Host settings
+
+Each event's dashboard has:
+
+- **Photo screening** — *Hold flagged photos for review* (default) or *Show all
+  photos immediately*. In the second mode no Rekognition call is made at all, so
+  the host isn't paying for screening they turned off. Switching to it does
+  **not** auto-release photos already held.
+- **Email me when a photo is held** — an optional address for the alert below.
+
+## Alert emails (SES)
+
+When a photo is held and the event has an alert email, the host gets a message
+with the **preview embedded** and **Approve / Deny** buttons.
+
+The preview is attached inline (`multipart/related`, referenced by `Content-ID`)
+rather than hotlinked, because the app's image URLs are short-lived signed links
+that would be broken by the time the message is opened.
+
+**The buttons do not act on their own.** They open `/review/{token}?intent=...`,
+which pre-selects the choice and waits for one confirming tap. Mail scanners and
+link prefetchers follow URLs in email, so a GET that released a photo would let a
+scanner approve it before a human ever looked.
+
+### Setup
+
+1. Verify a domain (or address) in **Amazon SES** and request **production
+   access** — a new account is sandboxed and can only send to verified addresses.
+2. Set **`ALERT_FROM_ADDRESS`** on the Amplify app to a verified sender, e.g.
+   `alerts@sharepix.net`, and redeploy.
+
+Leaving `ALERT_FROM_ADDRESS` unset simply disables the emails — held photos are
+still reviewable in the dashboard. Send failures are logged and never block an
+upload.
+
+### Why not SMS?
+
+US A2P messaging requires 10DLC brand/campaign registration before any send, and
+MMS is needed to include a picture. Email delivers the preview and the buttons
+today with no registration; SMS can be added later using the same review link.
+
 ## Cost
 
 Roughly **$1 per 1,000 images** (confirm current Rekognition pricing). A
