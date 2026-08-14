@@ -6,12 +6,15 @@ import { defineFunction } from '@aws-amplify/backend';
  *   - verifies the ACTUAL bytes are a real image/video (defeats a disguised
  *     HTML/SVG/script/executable that slipped past the client's MIME check), and
  *   - enforces the server-side size ceiling.
- * Anything that fails validation is deleted from the bucket. It only reads each
- * object's first bytes (a ranged GET), so it stays cheap even for large videos.
+ * Anything that fails validation is deleted from the bucket. It then strips
+ * location metadata from JPEG originals, keeping their orientation.
+ *
+ * Type checks read only the first bytes (a ranged GET), so videos stay cheap;
+ * only a JPEG is ever downloaded in full, and those are capped at 25 MB.
  */
 export const sanitizeUpload = defineFunction({
   name: 'sanitize-upload',
   resourceGroupName: 'storage',
-  memoryMB: 256,
-  timeoutSeconds: 30,
+  memoryMB: 512,
+  timeoutSeconds: 60,
 });

@@ -4,9 +4,11 @@ import {
   S3Client,
   HeadObjectCommand,
   GetObjectCommand,
+  PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { sniffMediaKind, maxBytesForKind } from './safety';
+import { isJpeg, stripJpegMetadata } from './exif';
 
 const s3 = new S3Client({});
 
@@ -78,6 +80,58 @@ async function processRecord(record) {
   }
   if (size > maxBytesForKind(kind)) {
     await reject(bucket, key, 'oversize', { size, kind });
+    return;
+  }
+
+  await stripMetadata(bucket, key, header, headerObj.Metadata);
+}
+
+/**
+ * Remove location and other metadata from a JPEG original, keeping only its
+ * orientation so the photo still displays the right way up.
+ *
+ * Best-effort throughout: the photo is already validated and visible, so a
+ * failure here leaves it exactly as uploaded rather than breaking the gallery.
+ */
+async function stripMetadata(
+  bucket: string,
+  key: string,
+  header: Uint8Array,
+  metadata: Record<string, string> | undefined,
+) {
+  // Our own rewrite fires another ObjectCreated event. The marker below is how
+  // that second pass knows to stop, so this never loops.
+  if (metadata?.sanitized === 'true') return;
+  if (!isJpeg(header)) return; // only JPEG is handled — see docs/moderation.md
+
+  try {
+    const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const bytes = await readBytes(object.Body);
+    const stripped = stripJpegMetadata(bytes);
+    if (!stripped) return; // nothing to remove, or the file looked malformed
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: Buffer.from(stripped),
+        ContentType: object.ContentType ?? 'image/jpeg',
+        Metadata: { ...(object.Metadata ?? {}), sanitized: 'true' },
+        MetadataDirective: 'REPLACE',
+      }),
+    );
+    console.log('Stripped photo metadata', {
+      at: new Date().toISOString(),
+      key,
+      before: bytes.length,
+      after: stripped.length,
+    });
+  } catch (error) {
+    console.error('Could not strip photo metadata', {
+      at: new Date().toISOString(),
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
