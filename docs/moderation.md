@@ -100,6 +100,42 @@ US A2P messaging requires 10DLC brand/campaign registration before any send, and
 MMS is needed to include a picture. Email delivers the preview and the buttons
 today with no registration; SMS can be added later using the same review link.
 
+## Location metadata (EXIF/GPS)
+
+Phone photos routinely carry the exact GPS coordinates where they were taken,
+and that travels with the file whenever an original is downloaded or sent to a
+print lab. The `sanitize-upload` trigger strips it.
+
+**Previews and thumbnails were already clean** — the browser re-draws those
+through a canvas, which produces a fresh file with no metadata. Only the
+**original** needed handling.
+
+### How, and why not the obvious way
+
+Deleting the EXIF block also deletes the **Orientation** tag, and phones rely on
+that tag rather than rotating the pixels — drop it and portrait photos display
+sideways. Editing the block in place means recomputing every TIFF offset, and one
+wrong offset corrupts the file.
+
+So `exif.ts` reads the orientation, discards the entire metadata block, and
+rebuilds a **32-byte EXIF containing only that value**. GPS, timestamps, camera
+and lens, serial numbers, embedded thumbnails, XMP, IPTC, and comments are gone
+*by construction* rather than by blocklist. The compressed image data is copied
+through untouched, so there is **no re-encode and no quality loss**.
+
+A photo already upright (orientation 1) gets no EXIF block at all. A file that
+looks malformed is left exactly as uploaded.
+
+### Known gap: JPEG only
+
+Only JPEG originals are stripped. **HEIC is not** — that's the iPhone default
+unless the phone is set to "Most Compatible", and HEIC stores metadata in ISO
+BMFF boxes that need a separate parser. PNG and WebP can also carry metadata and
+are likewise untouched.
+
+So coverage today is Android, cameras, and iPhones set to JPEG. Extending it to
+HEIC is a worthwhile follow-up, not a small one.
+
 ## Cost
 
 Roughly **$1 per 1,000 images** (confirm current Rekognition pricing). A

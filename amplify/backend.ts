@@ -87,12 +87,12 @@ s3Bucket.addLifecycleRule({
   expiration: Duration.days(800),
 });
 
-// Upload sanitizer (storage onUpload trigger): reads each uploaded object's
-// leading bytes to validate its real type, and deletes anything that's disguised
-// or oversize. Needs read + delete on the bucket; the trigger wiring itself is
-// set up by defineStorage.
+// Upload sanitizer (storage onUpload trigger): validates each uploaded object's
+// real type, deletes anything disguised or oversize, and rewrites JPEG originals
+// with their location metadata removed. Needs read + write + delete on the
+// bucket; the trigger wiring itself is set up by defineStorage.
 const sanitizeFn = backend.sanitizeUpload.resources.lambda as LambdaFunction;
-bucket.grantRead(sanitizeFn);
+bucket.grantReadWrite(sanitizeFn);
 bucket.grantDelete(sanitizeFn);
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
