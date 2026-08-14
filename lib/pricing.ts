@@ -137,6 +137,31 @@ export function applyPercentOff(price: number, percentOff: number): number {
   return Math.round(price * (1 - pct / 100) * 100) / 100;
 }
 
+/**
+ * Price after a discount code, for display. Mirrors what the checkout function
+ * asks Stripe to charge, so the figure a host sees matches their card.
+ *
+ * A fixed amount is capped at the price (never negative) and rounded up to
+ * cover the whole thing when the remainder would be too small for Stripe to
+ * charge — the same rule the server applies.
+ */
+export function applyDiscount(
+  price: number,
+  discount: {
+    discountType?: string | null;
+    percentOff?: number | null;
+    amountOffCents?: number | null;
+  },
+): number {
+  if (discount.discountType === 'amount') {
+    const off = Math.max(0, (discount.amountOffCents ?? 0) / 100);
+    const remaining = Math.round((price - off) * 100) / 100;
+    if (remaining <= 0 || remaining < 0.5) return 0;
+    return remaining;
+  }
+  return applyPercentOff(price, discount.percentOff ?? 0);
+}
+
 /** When the initial 30-day upload window closes for a new event. */
 export function computeUploadWindowEndsAt(from: Date = new Date()): string {
   return new Date(from.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS).toISOString();

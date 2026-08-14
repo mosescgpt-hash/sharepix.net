@@ -187,8 +187,12 @@ export async function listDiscountCodes(): Promise<DiscountCode[]> {
 export async function createDiscountCode(input: {
   code: string;
   assignedTo?: string;
-  /** 1–100. 100 = a fully comped, free purchase. */
+  /** 'percent' (default) or 'amount' for a fixed dollar discount. */
+  discountType?: 'percent' | 'amount';
+  /** 1–100. 100 = a fully comped, free purchase. Used when type is 'percent'. */
   percentOff: number;
+  /** Fixed discount in cents. Used when type is 'amount'. */
+  amountOffCents?: number;
   /** Corporate subscriptions only: 'once' (first month) or 'forever' (every month). */
   recurringDuration?: 'once' | 'forever';
   /**
@@ -202,8 +206,12 @@ export async function createDiscountCode(input: {
   unlimitedUses?: boolean;
   createdBy?: string;
 }): Promise<void> {
+  const isAmount = input.discountType === 'amount';
   const percentOff = Math.round(input.percentOff);
-  if (!(percentOff >= 1 && percentOff <= 100)) {
+  const amountOffCents = Math.round(input.amountOffCents ?? 0);
+  if (isAmount) {
+    if (!(amountOffCents >= 1)) throw new Error('Enter a discount amount above $0.');
+  } else if (!(percentOff >= 1 && percentOff <= 100)) {
     throw new Error('Choose a discount between 1% and 100%.');
   }
   const cleaned = [
@@ -222,7 +230,9 @@ export async function createDiscountCode(input: {
       // code as tier-locked; appliesToScopes carries the real per-flow scope.
       appliesToTier: 'all',
       appliesToScopes,
+      discountType: isAmount ? 'amount' : 'percent',
       percentOff,
+      amountOffCents: isAmount ? amountOffCents : null,
       recurringDuration: input.recurringDuration === 'forever' ? 'forever' : 'once',
       expiresAt: input.expiresAt,
       maxUses: input.maxUses,

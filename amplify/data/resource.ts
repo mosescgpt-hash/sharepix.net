@@ -235,9 +235,14 @@ const schema = a.schema({
       // bare 'event' are still honored for codes created earlier.) Missing on
       // legacy codes → fall back to appliesToTier.
       appliesToScopes: a.string(),
+      // 'percent' (the default, and what a missing value means) or 'amount' for
+      // a fixed dollar discount.
+      discountType: a.string(),
       // How much the code takes off, 1–100. A missing value (legacy codes) means
       // 100 — a fully comped, free purchase — so old codes keep working.
       percentOff: a.integer(),
+      // Fixed discount in cents, used when discountType is 'amount'.
+      amountOffCents: a.integer(),
       // For recurring (Corporate) subscriptions only: 'once' discounts the first
       // month, 'forever' discounts every month for as long as they stay
       // subscribed. Ignored by one-time payments. Missing = 'once'.
@@ -260,7 +265,9 @@ const schema = a.schema({
     message: a.string(),
     code: a.string(),
     appliesToTier: a.string(),
+    discountType: a.string(),
     percentOff: a.integer(),
+    amountOffCents: a.integer(),
     remainingUses: a.integer(),
   }),
 

@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 // @ts-ignore -- @aws-sdk/* is provided by the Lambda runtime, not installed as a dep.
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
+import { effectiveAmountOffCents } from './discount-math';
 
 type Handler = Schema['createCheckoutSession']['functionHandler'];
 
@@ -28,7 +29,13 @@ async function eventTier(eventId: string): Promise<string> {
 async function resolveDiscount(
   rawCode: string | null | undefined,
   scope: string,
-): Promise<{ code: string; percentOff: number; duration: 'once' | 'forever' } | null> {
+): Promise<{
+  code: string;
+  discountType: 'percent' | 'amount';
+  percentOff: number;
+  amountOffCents: number;
+  duration: 'once' | 'forever';
+} | null> {
   const code = (rawCode ?? '').trim().toUpperCase();
   if (!code) return null;
 
@@ -76,36 +83,55 @@ async function resolveDiscount(
     throw new Error('That discount code does not apply to this purchase.');
   }
 
+  // A code is either a percentage or a fixed dollar amount. Missing type means
+  // percent, so legacy codes are unchanged.
+  const discountType = item.discountType?.S === 'amount' ? 'amount' : 'percent';
   // A missing percentOff (legacy codes) means a fully comped, free purchase.
   const percentOff = item.percentOff?.N != null ? Number(item.percentOff.N) : 100;
-  if (!(percentOff >= 1 && percentOff <= 100)) {
+  const amountOffCents = item.amountOffCents?.N != null ? Number(item.amountOffCents.N) : 0;
+
+  if (discountType === 'amount') {
+    if (!(amountOffCents >= 1)) throw new Error('That discount code is misconfigured.');
+  } else if (!(percentOff >= 1 && percentOff <= 100)) {
     throw new Error('That discount code is misconfigured.');
   }
   // Recurring duration matters only for the Corporate subscription: 'forever'
   // discounts every month, 'once' (the default) only the first. Anything else is
   // treated as 'once'.
   const duration = item.recurringDuration?.S === 'forever' ? 'forever' : 'once';
-  return { code, percentOff, duration };
+  return { code, discountType, percentOff, amountOffCents, duration };
 }
 
-// Reuse one Stripe coupon per percentage + duration, creating it on first use.
-// The id encodes the duration so a "50% forever" and a "50% once" coupon never
-// collide; the original once-coupons keep their plain SPX-PCT-{n} id.
+// Reuse one Stripe coupon per (kind, value, duration), creating it on first use.
+// The id encodes all three so a "50% forever" and a "50% once" — or a "$50 off"
+// and a "50% off" — never collide. Percentage once-coupons keep their original
+// SPX-PCT-{n} id, so coupons already created stay in use.
 async function couponFor(
   stripe: Stripe,
-  percentOff: number,
+  discount: { discountType: 'percent' | 'amount'; percentOff: number; amountOffCents: number },
   duration: 'once' | 'forever',
 ): Promise<string> {
-  const id = duration === 'forever' ? `SPX-PCT-${percentOff}-FOREVER` : `SPX-PCT-${percentOff}`;
+  const suffix = duration === 'forever' ? '-FOREVER' : '';
+  const isAmount = discount.discountType === 'amount';
+  const id = isAmount
+    ? `SPX-AMT-${discount.amountOffCents}${suffix}`
+    : `SPX-PCT-${discount.percentOff}${suffix}`;
+
   try {
     await stripe.coupons.retrieve(id);
   } catch {
+    const label = isAmount
+      ? `$${(discount.amountOffCents / 100).toFixed(2)} off`
+      : `${discount.percentOff}% off`;
     try {
       await stripe.coupons.create({
         id,
-        percent_off: percentOff,
         duration,
-        name: `SharePix ${percentOff}% off${duration === 'forever' ? ' (recurring)' : ''}`,
+        name: `SharePix ${label}${duration === 'forever' ? ' (recurring)' : ''}`,
+        // A fixed amount needs a currency; percentages must not carry one.
+        ...(isAmount
+          ? { amount_off: discount.amountOffCents, currency: 'usd' }
+          : { percent_off: discount.percentOff }),
       });
     } catch (error) {
       // A concurrent request may have created it between our retrieve and create.
@@ -123,10 +149,22 @@ async function buildDiscount(
   stripe: Stripe,
   rawCode: string | null | undefined,
   scope: string,
+  baseAmountCents: number,
 ): Promise<{ discounts?: { coupon: string }[]; metadata: Record<string, string> }> {
   const resolved = await resolveDiscount(rawCode, scope);
   if (!resolved) return { metadata: {} };
-  const coupon = await couponFor(stripe, resolved.percentOff, resolved.duration);
+
+  // A fixed amount is measured against this purchase's price: capped so the
+  // total can't go negative, and rounded up to cover the lot when what's left
+  // would be too small for Stripe to charge.
+  let discount = resolved;
+  if (resolved.discountType === 'amount') {
+    const effective = effectiveAmountOffCents(resolved.amountOffCents, baseAmountCents);
+    if (effective <= 0) return { metadata: { discountCode: resolved.code } };
+    discount = { ...resolved, amountOffCents: effective };
+  }
+
+  const coupon = await couponFor(stripe, discount, resolved.duration);
   return { discounts: [{ coupon }], metadata: { discountCode: resolved.code } };
 }
 
@@ -170,7 +208,7 @@ export const handler: Handler = async (event) => {
     const metadata = { kind: 'corporate', userId: sub, owner };
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'corporate');
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'corporate', 14900);
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         customer_email: email || undefined,
@@ -211,7 +249,7 @@ export const handler: Handler = async (event) => {
     const amount = Math.max(100, Math.round(planPrice / 2)); // half price, min $1
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'extend');
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'extend', amount);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -250,7 +288,7 @@ export const handler: Handler = async (event) => {
     }
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'guest_download');
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'guest_download', 1500);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -285,7 +323,7 @@ export const handler: Handler = async (event) => {
     if (!showEventId) throw new Error('Missing event for the live slideshow.');
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'live_slideshow');
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'live_slideshow', LIVE_SLIDESHOW_ADDON_CENTS);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -334,7 +372,7 @@ export const handler: Handler = async (event) => {
     const stripe = new Stripe(secretKey);
     // Event plans are scoped per tier (event:starter / :standard / :premium), so
     // a code can be limited to one plan.
-    const disc = await buildDiscount(stripe, event.arguments.discountCode, `event:${tier}`);
+    const disc = await buildDiscount(stripe, event.arguments.discountCode, `event:${tier}`, pricing.amount);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [

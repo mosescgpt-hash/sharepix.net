@@ -59,7 +59,10 @@ export function response(ctx) {
     message: 'Pilot access applied.',
     code: ctx.result.code,
     appliesToTier: ctx.result.appliesToTier,
+    discountType: ctx.result.discountType === 'amount' ? 'amount' : 'percent',
     percentOff: ctx.result.percentOff == null ? 100 : ctx.result.percentOff,
+    amountOffCents:
+      ctx.result.amountOffCents == null ? null : ctx.result.amountOffCents,
     remainingUses:
       ctx.result.unlimitedUses === true
         ? null
