@@ -111,6 +111,19 @@ eventTable.grantReadWriteData(createFn);
 photoTable.grantReadWriteData(createFn);
 createFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// Content screening: Rekognition reads the uploaded object straight from S3, so
+// the function needs bucket read plus the single detection action. Photos held
+// for review are hidden from guests until the host releases them.
+bucket.grantRead(createFn);
+createFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+createFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['rekognition:DetectModerationLabels'],
+    // DetectModerationLabels acts on the image passed in the request, not on a
+    // named resource ARN, so it can't be scoped further than '*'.
+    resources: ['*'],
+  }),
+);
 
 // Print-checkout function: guest-facing print order → Stripe checkout. Reads the
 // event to enforce the guest-download gate and writes a pending PrintOrder row

@@ -30,8 +30,13 @@ export const handler: Handler = async (event) => {
     startKey = result.LastEvaluatedKey;
   } while (startKey);
 
+  // This query serves guests — the public gallery and the live slideshow — so it
+  // is where content screening is enforced. A photo held for review is withheld
+  // here; the host reads the Photo model directly (owner auth) and still sees
+  // everything, which is how flagged photos stay reviewable.
   return items
     .filter((item) => item.approved?.BOOL !== false)
+    .filter((item) => item.moderationStatus?.S !== 'flagged')
     .map((item) => ({
       id: item.id?.S ?? '',
       eventId: item.eventId?.S ?? '',

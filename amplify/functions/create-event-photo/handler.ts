@@ -6,14 +6,59 @@ import {
   UpdateItemCommand,
   PutItemCommand,
 } from '@aws-sdk/client-dynamodb';
+import {
+  RekognitionClient,
+  DetectModerationLabelsCommand,
+} from '@aws-sdk/client-rekognition';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
+import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
 
 const dynamo = new DynamoDBClient({});
+const rekognition = new RekognitionClient({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
+const BUCKET_NAME = process.env.BUCKET_NAME as string;
+
+/** Videos aren't screened here — image moderation only covers stills. */
+const VIDEO_KEY = /\.(mp4|mov|webm|m4v|3gp)$/i;
+
+/**
+ * Screen an uploaded still for explicit content. Runs before the photo record is
+ * written, so the verdict is stored with the photo and there's no window where
+ * an unscreened image is already visible.
+ *
+ * Screening failures do NOT block the upload: an outage would otherwise break
+ * every guest's gallery. The photo is recorded as 'skipped' and the error is
+ * logged, which trips the function's CloudWatch error alarm so the operator
+ * finds out. See docs/moderation.md for the trade-off.
+ */
+async function screenPhoto(
+  s3Key: string,
+): Promise<{ status: string; reasons: string[] }> {
+  if (VIDEO_KEY.test(s3Key)) return { status: 'skipped', reasons: [] };
+  if (!BUCKET_NAME) return { status: 'skipped', reasons: [] };
+
+  try {
+    const result = await rekognition.send(
+      new DetectModerationLabelsCommand({
+        Image: { S3Object: { Bucket: BUCKET_NAME, Name: s3Key } },
+        MinConfidence: MODERATION_CONFIDENCE_THRESHOLD,
+      }),
+    );
+    const { flagged, reasons } = evaluateModeration(result.ModerationLabels);
+    return { status: flagged ? 'flagged' : 'ok', reasons };
+  } catch (error) {
+    console.error('Content screening failed; recording photo as unscreened', {
+      at: new Date().toISOString(),
+      s3Key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { status: 'skipped', reasons: [] };
+  }
+}
 
 type Handler = Schema['createEventPhoto']['functionHandler'];
 
@@ -197,6 +242,10 @@ export const handler: Handler = async (event) => {
       )
       .catch(() => undefined);
 
+  // Screen the image before the record exists, so a flagged photo is never
+  // briefly visible to guests.
+  const screening = await screenPhoto(s3Key);
+
   const now = new Date().toISOString();
   const item: Record<string, AttributeValue> = {
     id: { S: id },
@@ -205,9 +254,13 @@ export const handler: Handler = async (event) => {
     s3Key: { S: s3Key },
     approved: { BOOL: true },
     eventOwner: { S: eventOwner },
+    moderationStatus: { S: screening.status },
     createdAt: { S: now },
     updatedAt: { S: now },
   };
+  if (screening.reasons.length > 0) {
+    item.moderationReasons = { S: screening.reasons.join(', ') };
+  }
   if (previewS3Key) item.previewS3Key = { S: previewS3Key };
   if (thumbS3Key) item.thumbS3Key = { S: thumbS3Key };
   if (uploadedBy) item.uploadedBy = { S: uploadedBy };
