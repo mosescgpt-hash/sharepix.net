@@ -10,7 +10,7 @@ import {
   RekognitionClient,
   DetectModerationLabelsCommand,
 } from '@aws-sdk/client-rekognition';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
@@ -21,6 +21,10 @@ const rekognition = new RekognitionClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET_NAME = process.env.BUCKET_NAME as string;
+const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME as string;
+
+/** How long a review link stays usable before the host must use the dashboard. */
+const REVIEW_TTL_DAYS = 14;
 
 /** Videos aren't screened here — image moderation only covers stills. */
 const VIDEO_KEY = /\.(mp4|mov|webm|m4v|3gp)$/i;
@@ -116,6 +120,50 @@ async function fetchPhoto(id: string): Promise<Record<string, AttributeValue> | 
     new GetItemCommand({ TableName: PHOTO_TABLE, Key: { id: { S: id } } }),
   );
   return found.Item ?? null;
+}
+
+/**
+ * Open a review for a photo the screener held back, so the host can decide on it
+ * from a link without signing in. The token is the credential, so it comes from
+ * the CSPRNG at full width rather than a guessable id.
+ *
+ * Best-effort: a photo is already hidden by its own flagged status, so failing
+ * to create the review link must not fail the guest's upload. The host can
+ * still review it in the dashboard.
+ */
+async function openReview(input: {
+  photoId: string;
+  eventId: string;
+  eventName: string;
+  s3Key: string;
+  reasons: string[];
+}): Promise<void> {
+  if (!REVIEW_TABLE) return;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + REVIEW_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const item: Record<string, AttributeValue> = {
+    token: { S: randomBytes(32).toString('hex') },
+    __typename: { S: 'ModerationReview' },
+    photoId: { S: input.photoId },
+    eventId: { S: input.eventId },
+    photoS3Key: { S: input.s3Key },
+    status: { S: 'pending' },
+    expiresAt: { S: expiresAt.toISOString() },
+    createdAt: { S: now.toISOString() },
+    updatedAt: { S: now.toISOString() },
+  };
+  if (input.eventName) item.eventName = { S: input.eventName };
+  if (input.reasons.length > 0) item.reasons = { S: input.reasons.join(', ') };
+
+  try {
+    await dynamo.send(new PutItemCommand({ TableName: REVIEW_TABLE, Item: item }));
+  } catch (error) {
+    console.error('Could not open a moderation review', {
+      at: new Date().toISOString(),
+      photoId: input.photoId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export const handler: Handler = async (event) => {
@@ -288,6 +336,18 @@ export const handler: Handler = async (event) => {
       if (winner) return readPhoto(winner, true);
     }
     throw error;
+  }
+
+  // A held-back photo gets a review link so the host can decide on it without
+  // signing in. Only after the record exists, so the link always resolves.
+  if (screening.status === 'flagged') {
+    await openReview({
+      photoId: id,
+      eventId,
+      eventName: ev.name?.S ?? '',
+      s3Key,
+      reasons: screening.reasons,
+    });
   }
 
   return {

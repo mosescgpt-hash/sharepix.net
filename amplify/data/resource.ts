@@ -6,6 +6,7 @@ import { printCheckout as printCheckoutFn } from '../functions/print-checkout/re
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
+import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
 
 /**
  * SharePix data models.
@@ -175,6 +176,38 @@ const schema = a.schema({
     .identifier(['userId'])
     .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
 
+  // A one-photo review link for a flagged upload. The token IS the credential —
+  // the host opens it from an alert without signing in — so it is generated as
+  // 64 hex chars of CSPRNG output, scoped to a single photo, and expires.
+  //
+  // Deliberately, neither outcome is destructive: a review can release a photo
+  // or leave it hidden, never delete it. A leaked link therefore can't destroy a
+  // couple's photos; permanent deletion stays behind the host's signed-in
+  // dashboard.
+  ModerationReview: a
+    .model({
+      token: a.string().required(),
+      photoId: a.string().required(),
+      eventId: a.string().required(),
+      eventName: a.string(),
+      photoS3Key: a.string().required(),
+      // What the screener detected, shown to whoever reviews it.
+      reasons: a.string(),
+      // pending → awaiting a decision; released → shown to guests; dismissed →
+      // left hidden.
+      status: a.string().required(),
+      expiresAt: a.datetime().required(),
+      decidedAt: a.datetime(),
+    })
+    .identifier(['token'])
+    // Fetch a single review by its token (never list — that would enumerate
+    // every pending review). Same shape as DownloadShare.
+    .authorization((allow) => [
+      allow.group('ADMINS'),
+      allow.authenticated().to(['get']),
+      allow.guest().to(['get']),
+    ]),
+
   DiscountCode: a
     .model({
       code: a.string().required(),
@@ -339,6 +372,16 @@ const schema = a.schema({
     .returns(a.ref('PhotoDeletionResult'))
     .authorization((allow) => [allow.authenticated(), allow.group('ADMINS')])
     .handler(a.handler.function(deleteEventPhotoFn)),
+
+  // Acts on a flagged photo from a review link, with no sign-in — the token is
+  // the authorization, and the function re-validates it (exists, pending,
+  // unexpired) before touching anything. `action` is 'release' or 'dismiss'.
+  reviewFlaggedPhoto: a
+    .mutation()
+    .arguments({ token: a.string().required(), action: a.string().required() })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(moderatePhotoFn)),
 
   validateDiscountCode: a
     .query()
