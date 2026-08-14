@@ -17,6 +17,8 @@ export interface QREvent {
   moderationMode?: string | null;
   /** Where to email the host when a photo is held for review. */
   alertEmail?: string | null;
+  /** False when the host has turned video uploads off. Missing means allowed. */
+  videoUploadsEnabled?: boolean | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;

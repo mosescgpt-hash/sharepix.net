@@ -91,6 +91,26 @@ describe('video validation', () => {
   it('accepts an iPhone MOV when the browser omits its MIME type', () => {
     expect(validateMediaFile({ type: '', size: 20 * 1024 * 1024, name: 'IMG_1234.MOV' })).toBeNull();
   });
+
+  it('rejects video for an event whose host turned videos off', () => {
+    const options = { allowVideo: false };
+    expect(
+      validateMediaFile({ type: 'video/mp4', size: 5 * 1024 * 1024, name: 'clip.mp4' }, options),
+    ).toContain('photos only');
+    // Also catches a video the browser reported no MIME type for.
+    expect(
+      validateMediaFile({ type: '', size: 5 * 1024 * 1024, name: 'IMG_9.MOV' }, options),
+    ).toContain('photos only');
+  });
+
+  it('still accepts photos when videos are off', () => {
+    expect(
+      validateMediaFile(
+        { type: 'image/jpeg', size: 2 * 1024 * 1024, name: 'photo.jpg' },
+        { allowVideo: false },
+      ),
+    ).toBeNull();
+  });
 });
 
 describe('S3 keys', () => {

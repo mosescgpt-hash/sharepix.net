@@ -16,6 +16,7 @@ import {
   setEventAlertEmail,
   setEventModerationMode,
   setEventUploadsClosed,
+  setEventVideoUploads,
   startExtendUploadWindow,
   startGuestDownloadAddOn,
   startLiveSlideshowAddOn,
@@ -54,6 +55,7 @@ function AdminDashboardPage() {
   const [moderationWorking, setModerationWorking] = useState(false);
   const [alertEmail, setAlertEmail] = useState('');
   const [alertWorking, setAlertWorking] = useState(false);
+  const [videoWorking, setVideoWorking] = useState(false);
   const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension / guest-download add-on.
@@ -203,6 +205,29 @@ function AdminDashboardPage() {
         ok: false,
       });
       setAddOnWorking(false);
+    }
+  }
+
+  async function handleVideoUploads(enabled: boolean) {
+    if (!event) return;
+    setVideoWorking(true);
+    setSettingsMsg(null);
+    try {
+      await setEventVideoUploads(event.id, enabled);
+      setEvent({ ...event, videoUploadsEnabled: enabled });
+      setSettingsMsg({
+        text: enabled
+          ? 'Guests can upload videos again.'
+          : 'Videos are off — guests can add photos only. Videos already uploaded stay in the gallery.',
+        ok: true,
+      });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The setting could not be updated.',
+        ok: false,
+      });
+    } finally {
+      setVideoWorking(false);
     }
   }
 
@@ -583,6 +608,29 @@ function AdminDashboardPage() {
                     ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
                     : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
                 </p>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Guest videos</p>
+                    <p className="text-xs text-ink/55">
+                      {event.videoUploadsEnabled === false
+                        ? 'Off — guests can add photos only.'
+                        : 'On. Screening checks photos but not videos, so turn this off if you want screened media only.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={videoWorking}
+                    onClick={() => void handleVideoUploads(event.videoUploadsEnabled === false)}
+                    className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                  >
+                    {videoWorking
+                      ? 'Saving…'
+                      : event.videoUploadsEnabled === false
+                        ? 'Allow videos'
+                        : 'Photos only'}
+                  </button>
+                </div>
 
                 {(event.moderationMode ?? 'review') === 'review' ? (
                   <div className="mt-3">

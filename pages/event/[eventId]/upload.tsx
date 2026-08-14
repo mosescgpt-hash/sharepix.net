@@ -51,7 +51,7 @@ export default function GuestUploadPage() {
         ) : event ? (
           <>
             <p className="text-center text-sm uppercase tracking-wide text-ink/50">
-              You&apos;re adding photos and videos to
+              You&apos;re adding {event.videoUploadsEnabled === false ? 'photos' : 'photos and videos'} to
             </p>
             <h1 className="mt-1 text-center font-display text-3xl font-extrabold">
               {event.name}
@@ -69,7 +69,10 @@ export default function GuestUploadPage() {
                   before photos can be added.
                 </p>
               ) : canUpload ? (
-                <UploadForm eventId={event.id} />
+                <UploadForm
+                  eventId={event.id}
+                  allowVideo={event.videoUploadsEnabled !== false}
+                />
               ) : event.uploadsClosed ? (
                 <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
                   The host has closed this event, so it&apos;s no longer accepting

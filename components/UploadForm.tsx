@@ -10,6 +10,8 @@ import { validateMediaFile } from '@/lib/validation';
 interface UploadFormProps {
   eventId: string;
   onUploaded?: () => void;
+  /** False when the host has turned video off for this event. */
+  allowVideo?: boolean;
 }
 
 type FileStatus = 'pending' | 'uploading' | 'done' | 'error' | 'duplicate';
@@ -21,7 +23,11 @@ interface QueuedFile {
   error?: string;
 }
 
-export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
+export default function UploadForm({
+  eventId,
+  onUploaded,
+  allowVideo = true,
+}: UploadFormProps) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
@@ -49,7 +55,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     const next: QueuedFile[] = files.map((file) => {
-      const problem = validateMediaFile(file);
+      const problem = validateMediaFile(file, { allowVideo });
       return problem
         ? { file, status: 'error', percent: 0, error: problem }
         : { file, status: 'pending', percent: 0 };
@@ -194,7 +200,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
       <input
         id="photo-camera-input"
         type="file"
-        accept="image/*,video/*,.heic,.heif,.mov,.m4v"
+        accept={allowVideo ? 'image/*,video/*,.heic,.heif,.mov,.m4v' : 'image/*,.heic,.heif'}
         capture="environment"
         className="sr-only"
         onChange={handleFileSelect}
@@ -202,7 +208,7 @@ export default function UploadForm({ eventId, onUploaded }: UploadFormProps) {
       <input
         id="photo-library-input"
         type="file"
-        accept="image/*,video/*,.heic,.heif,.mov,.m4v"
+        accept={allowVideo ? 'image/*,video/*,.heic,.heif,.mov,.m4v' : 'image/*,.heic,.heif'}
         multiple
         className="sr-only"
         onChange={handleFileSelect}

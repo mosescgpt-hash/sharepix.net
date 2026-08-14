@@ -538,6 +538,22 @@ export async function setEventAlertEmail(eventId: string, email: string): Promis
   if (errors?.length) throw new Error('The alert email could not be saved.');
 }
 
+/**
+ * Allow or block guest video uploads for one event. Automated screening covers
+ * stills but not video, so a host who wants only screened media can turn video
+ * off. Enforced server-side in createEventPhoto as well.
+ */
+export async function setEventVideoUploads(
+  eventId: string,
+  enabled: boolean,
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, videoUploadsEnabled: enabled },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The video setting could not be updated.');
+}
+
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
 export async function setEventUploadsClosed(
   eventId: string,

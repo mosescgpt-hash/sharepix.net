@@ -64,14 +64,25 @@ export function validateImageFile(file: { type: string; size: number; name: stri
   return null;
 }
 
-/** Human-readable reason an event photo or short video was rejected, or null if it is fine. */
-export function validateMediaFile(file: { type: string; size: number; name: string }): string | null {
+/**
+ * Human-readable reason an event photo or short video was rejected, or null if
+ * it is fine. Pass `allowVideo: false` for an event whose host has turned video
+ * off; the server enforces the same rule, this just explains it up front.
+ */
+export function validateMediaFile(
+  file: { type: string; size: number; name: string },
+  options: { allowVideo?: boolean } = {},
+): string | null {
+  const { allowVideo = true } = options;
   const lowerName = file.name.toLowerCase();
   const browserOmittedType = file.type.trim() === '';
   const hasVideoExtension = ALLOWED_VIDEO_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
   const isVideo = isAllowedVideoType(file.type) || (browserOmittedType && hasVideoExtension);
 
   if (isVideo) {
+    if (!allowVideo) {
+      return `"${file.name}" is a video, and this event accepts photos only.`;
+    }
     if (file.size <= 0 || file.size > MAX_VIDEO_SIZE_BYTES) {
       return `"${file.name}" is larger than 100 MB. Choose a shorter video and try again.`;
     }

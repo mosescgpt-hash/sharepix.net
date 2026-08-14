@@ -319,6 +319,13 @@ export const handler: Handler = async (event) => {
     throw new Error('This event is closed and is no longer accepting uploads.');
   }
 
+  // A host can turn video off — automated screening covers stills but not
+  // video, so this is how they keep an event to screened media only. Checked
+  // server-side because the upload form's file picker is only a convenience.
+  if (ev.videoUploadsEnabled?.BOOL === false && VIDEO_KEY.test(s3Key)) {
+    throw new Error('This event accepts photos only.');
+  }
+
   const eventOwner = ev.owner?.S ?? '';
   const photoLimit = toInt(ev.photoLimit?.N);
   const extraCredits = toInt(ev.extraPhotoCredits?.N) ?? 0;

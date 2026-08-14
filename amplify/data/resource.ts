@@ -56,6 +56,10 @@ const schema = a.schema({
       // Where to email the host when a photo is held for review. Optional — a
       // held photo is always reviewable from the dashboard regardless.
       alertEmail: a.string(),
+      // Whether guests may upload video. Missing means allowed, so existing
+      // events are unchanged. Hosts who want only screened media can turn it
+      // off, since automated screening covers stills but not video.
+      videoUploadsEnabled: a.boolean(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })
