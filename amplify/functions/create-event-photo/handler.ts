@@ -291,8 +291,13 @@ export const handler: Handler = async (event) => {
       .catch(() => undefined);
 
   // Screen the image before the record exists, so a flagged photo is never
-  // briefly visible to guests.
-  const screening = await screenPhoto(s3Key);
+  // briefly visible to guests. A host who has chosen to allow everything skips
+  // screening altogether — nothing is held back, and no Rekognition call is
+  // made or paid for.
+  const screening =
+    (ev.moderationMode?.S ?? 'review') === 'allow_all'
+      ? { status: 'skipped', reasons: [] as string[] }
+      : await screenPhoto(s3Key);
 
   const now = new Date().toISOString();
   const item: Record<string, AttributeValue> = {

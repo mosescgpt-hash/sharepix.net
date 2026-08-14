@@ -48,6 +48,11 @@ const schema = a.schema({
       // The live slideshow (a venue screen showing uploads as they arrive) is a
       // per-event paid add-on, available on any plan. Flipped by the webhook.
       liveSlideshowEnabled: a.boolean(),
+      // How uploads are screened for this event. 'review' (the default, and what
+      // a missing value means) holds potentially explicit photos back for the
+      // host; 'allow_all' skips screening entirely and shows everything
+      // immediately. The host chooses on the event dashboard.
+      moderationMode: a.string(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })

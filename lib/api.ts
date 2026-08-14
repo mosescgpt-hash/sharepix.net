@@ -504,6 +504,23 @@ export async function updateEventDetails(
   return data as QREvent;
 }
 
+/**
+ * Choose how uploads to this event are screened: 'review' holds potentially
+ * explicit photos back for the host, 'allow_all' shows everything immediately.
+ * Applies to photos uploaded from here on; anything already held stays held
+ * until the host releases it.
+ */
+export async function setEventModerationMode(
+  eventId: string,
+  mode: 'review' | 'allow_all',
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, moderationMode: mode },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The screening setting could not be updated.');
+}
+
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
 export async function setEventUploadsClosed(
   eventId: string,

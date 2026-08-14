@@ -13,6 +13,8 @@ export interface QREvent {
   paid?: boolean | null;
   guestDownloadEnabled?: boolean | null;
   liveSlideshowEnabled?: boolean | null;
+  /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
+  moderationMode?: string | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;
