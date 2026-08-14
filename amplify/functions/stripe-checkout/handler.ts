@@ -28,7 +28,7 @@ async function eventTier(eventId: string): Promise<string> {
 // guest-facing message when a code was supplied but can't be used.
 async function resolveDiscount(
   rawCode: string | null | undefined,
-  scope: string,
+  scopes: string[],
 ): Promise<{
   code: string;
   discountType: 'percent' | 'amount';
@@ -66,21 +66,35 @@ async function resolveDiscount(
   // only appliesToTier, where 'all'/blank was universal and a specific tier only
   // ever applied to creating an event on that plan.
   const scopesRaw = (item.appliesToScopes?.S ?? '').toLowerCase().trim();
-  let allowed: boolean;
-  if (scopesRaw) {
-    const entries = scopesRaw.split(',').map((entry) => entry.trim());
-    allowed =
-      scopesRaw === 'all' ||
-      entries.includes(scope) ||
-      // A pre-split 'event' scope covers every event plan.
-      (scope.startsWith('event:') && entries.includes('event'));
-  } else {
-    const legacyTier = (item.appliesToTier?.S ?? '').toLowerCase();
-    allowed =
-      legacyTier === '' || legacyTier === 'all' ? true : scope === `event:${legacyTier}`;
-  }
-  if (!allowed) {
-    throw new Error('That discount code does not apply to this purchase.');
+  const entries = scopesRaw ? scopesRaw.split(',').map((entry) => entry.trim()) : [];
+  const legacyTier = (item.appliesToTier?.S ?? '').toLowerCase();
+
+  const covers = (scope: string): boolean => {
+    if (scopesRaw) {
+      return (
+        scopesRaw === 'all' ||
+        entries.includes(scope) ||
+        // A pre-split 'event' scope covers every event plan.
+        (scope.startsWith('event:') && entries.includes('event'))
+      );
+    }
+    // Legacy codes carry only appliesToTier: 'all'/blank was universal, a
+    // specific tier only ever applied to creating an event on that plan.
+    return legacyTier === '' || legacyTier === 'all' ? true : scope === `event:${legacyTier}`;
+  };
+
+  // Buying several add-ons together is one Stripe session, and a Stripe coupon
+  // applies to the whole session — there is no way to discount one line only.
+  // So a code must cover every item being bought, or it would silently discount
+  // things the admin never scoped it to. Rejecting with a clear message is the
+  // only option that keeps the scope guarantee intact.
+  const uncovered = scopes.filter((scope) => !covers(scope));
+  if (uncovered.length > 0) {
+    throw new Error(
+      scopes.length === 1
+        ? 'That discount code does not apply to this purchase.'
+        : 'That discount code does not cover everything selected. Uncheck the items it does not apply to, or buy them separately.',
+    );
   }
 
   // A code is either a percentage or a fixed dollar amount. Missing type means
@@ -148,10 +162,10 @@ async function couponFor(
 async function buildDiscount(
   stripe: Stripe,
   rawCode: string | null | undefined,
-  scope: string,
+  scopes: string[],
   baseAmountCents: number,
 ): Promise<{ discounts?: { coupon: string }[]; metadata: Record<string, string> }> {
-  const resolved = await resolveDiscount(rawCode, scope);
+  const resolved = await resolveDiscount(rawCode, scopes);
   if (!resolved) return { metadata: {} };
 
   // A fixed amount is measured against this purchase's price: capped so the
@@ -208,7 +222,7 @@ export const handler: Handler = async (event) => {
     const metadata = { kind: 'corporate', userId: sub, owner };
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'corporate', 14900);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['corporate'], 14900);
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         customer_email: email || undefined,
@@ -249,7 +263,7 @@ export const handler: Handler = async (event) => {
     const amount = Math.max(100, Math.round(planPrice / 2)); // half price, min $1
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'extend', amount);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['extend'], amount);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -288,7 +302,7 @@ export const handler: Handler = async (event) => {
     }
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'guest_download', 1500);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['guest_download'], 1500);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -323,7 +337,7 @@ export const handler: Handler = async (event) => {
     if (!showEventId) throw new Error('Missing event for the live slideshow.');
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'live_slideshow', LIVE_SLIDESHOW_ADDON_CENTS);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['live_slideshow'], LIVE_SLIDESHOW_ADDON_CENTS);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: [
@@ -350,6 +364,123 @@ export const handler: Handler = async (event) => {
     }
   }
 
+  // Several per-event add-ons bought together as one checkout, so the host picks
+  // what they want and pays once. Each selection is re-derived and re-priced
+  // here from the event's own record — the client only says which keys it wants,
+  // never what they cost or whether it's allowed to buy them.
+  if ((event.arguments.kind ?? '') === 'addons') {
+    const addonEventId = event.arguments.eventId ?? '';
+    if (!addonEventId) throw new Error('Missing event for the add-ons.');
+
+    const requested = [
+      ...new Set(
+        (event.arguments.addons ?? '')
+          .split(',')
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
+    if (requested.length === 0) throw new Error('Choose at least one add-on.');
+
+    const found = await dynamo.send(
+      new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: addonEventId } } }),
+    );
+    const ev = found.Item;
+    if (!ev) throw new Error('This event no longer exists.');
+    const evTier = (ev.tier?.S ?? '').toLowerCase();
+
+    const lineItems: {
+      quantity: number;
+      price_data: {
+        currency: string;
+        unit_amount: number;
+        product_data: { name: string };
+      };
+    }[] = [];
+    const scopes: string[] = [];
+    let subtotal = 0;
+
+    for (const key of requested) {
+      if (key === 'extend') {
+        const planPrice = TIER_PRICING[evTier]?.amount;
+        if (!planPrice) throw new Error('This plan cannot be extended.');
+        const amount = Math.max(100, Math.round(planPrice / 2));
+        lineItems.push({
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: amount,
+            product_data: { name: 'SharePix upload-window extension (+30 days)' },
+          },
+        });
+        scopes.push('extend');
+        subtotal += amount;
+      } else if (key === 'guest_download') {
+        // Already on? Don't charge for it again.
+        if (ev.guestDownloadEnabled?.BOOL === true) continue;
+        if (evTier !== 'premium' && evTier !== 'corporate') {
+          throw new Error('Guest downloads are available on Premium and Corporate events.');
+        }
+        lineItems.push({
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: 1500,
+            product_data: { name: 'SharePix guest-download add-on (one event)' },
+          },
+        });
+        scopes.push('guest_download');
+        subtotal += 1500;
+      } else if (key === 'live_slideshow') {
+        if (ev.liveSlideshowEnabled?.BOOL === true) continue;
+        lineItems.push({
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: LIVE_SLIDESHOW_ADDON_CENTS,
+            product_data: { name: 'SharePix live slideshow (one event)' },
+          },
+        });
+        scopes.push('live_slideshow');
+        subtotal += LIVE_SLIDESHOW_ADDON_CENTS;
+      } else {
+        throw new Error('That add-on is not recognized.');
+      }
+    }
+
+    if (lineItems.length === 0) {
+      throw new Error('Everything selected is already active on this event.');
+    }
+
+    try {
+      const stripe = new Stripe(secretKey);
+      // The code must cover every selected item — a Stripe coupon applies to the
+      // whole session, so a partially-scoped code would discount things it was
+      // never meant to.
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, scopes, subtotal);
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: lineItems,
+        success_url: `${appBaseUrl}/event/${addonEventId}/admin?addon=done`,
+        cancel_url: `${appBaseUrl}/event/${addonEventId}/admin?addon=cancelled`,
+        // The webhook applies one side effect per key listed here.
+        metadata: {
+          kind: 'addons',
+          eventId: addonEventId,
+          addons: scopes.join(','),
+          ...disc.metadata,
+        },
+        discounts: disc.discounts,
+      });
+      if (!session.url) throw new Error('Stripe did not return a checkout URL.');
+      return { url: session.url };
+    } catch (error) {
+      throw new Error(
+        `Stripe add-on checkout failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   const tier = (event.arguments.tier ?? '').toLowerCase();
   const pricing = TIER_PRICING[tier];
   if (!pricing) {
@@ -372,7 +503,7 @@ export const handler: Handler = async (event) => {
     const stripe = new Stripe(secretKey);
     // Event plans are scoped per tier (event:starter / :standard / :premium), so
     // a code can be limited to one plan.
-    const disc = await buildDiscount(stripe, event.arguments.discountCode, `event:${tier}`, pricing.amount);
+    const disc = await buildDiscount(stripe, event.arguments.discountCode, [`event:${tier}`], pricing.amount);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [

@@ -17,9 +17,8 @@ import {
   setEventModerationMode,
   setEventUploadsClosed,
   setEventVideoUploads,
-  startExtendUploadWindow,
-  startGuestDownloadAddOn,
-  startLiveSlideshowAddOn,
+  startAddOnCheckout,
+  type EventAddOnKey,
   updateEventDetails,
 } from '@/lib/api';
 import {
@@ -50,13 +49,13 @@ function AdminDashboardPage() {
   const [closing, setClosing] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [corporateActive, setCorporateActive] = useState(false);
-  const [addOnWorking, setAddOnWorking] = useState(false);
-  const [slideshowWorking, setSlideshowWorking] = useState(false);
+  // One cart for the paid add-ons: tick what you want, pay once.
+  const [selectedAddOns, setSelectedAddOns] = useState<Set<EventAddOnKey>>(new Set());
+  const [checkoutWorking, setCheckoutWorking] = useState(false);
   const [moderationWorking, setModerationWorking] = useState(false);
   const [alertEmail, setAlertEmail] = useState('');
   const [alertWorking, setAlertWorking] = useState(false);
   const [videoWorking, setVideoWorking] = useState(false);
-  const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension / guest-download add-on.
   const [discountCode, setDiscountCode] = useState('');
@@ -148,6 +147,43 @@ function AdminDashboardPage() {
   // The guest-download add-on is offered on Premium events and to Corporate
   // subscribers only.
   const addOnEligible = tier?.id === 'premium' || corporateActive;
+  // What this event can still buy. Extensions only apply to the fixed-length
+  // plans (a corporate event has no plan price to halve), and each add-on drops
+  // off the list once it's active.
+  const availableAddOns = useMemo(() => {
+    if (!event) return [];
+    const items: { key: EventAddOnKey; label: string; price: number; description: string }[] = [];
+    if (getTier(event.tier)) {
+      items.push({
+        key: 'extend',
+        label: 'Extend upload window (+30 days)',
+        price: extensionPrice(event.tier),
+        description: 'Give guests another 30 days to add photos.',
+      });
+    }
+    if (!event.guestDownloadEnabled && addOnEligible) {
+      items.push({
+        key: 'guest_download',
+        label: 'Guest downloads',
+        price: CORPORATE_PLAN.guestDownloadAddOnPrice,
+        description: 'Let guests download photos and videos, and share a download QR code.',
+      });
+    }
+    if (!event.liveSlideshowEnabled) {
+      items.push({
+        key: 'live_slideshow',
+        label: 'Live slideshow',
+        price: LIVE_SLIDESHOW_ADDON_PRICE,
+        description: 'Show photos on a screen at your venue as guests upload them.',
+      });
+    }
+    return items;
+  }, [event, addOnEligible]);
+
+  const addOnTotal = availableAddOns
+    .filter((addon) => selectedAddOns.has(addon.key))
+    .reduce((sum, addon) => sum + addon.price, 0);
+
   const lifecycle = eventLifecycle(event);
 
   async function handleSaveDetails() {
@@ -189,22 +225,6 @@ function AdminDashboardPage() {
       });
     } finally {
       setClosing(false);
-    }
-  }
-
-  async function handleEnableGuestDownloads() {
-    if (!event) return;
-    setAddOnWorking(true);
-    setSettingsMsg(null);
-    try {
-      const url = await startGuestDownloadAddOn(event.id, discountCode);
-      window.location.assign(url);
-    } catch (err) {
-      setSettingsMsg({
-        text: err instanceof Error ? err.message : 'Checkout could not be started.',
-        ok: false,
-      });
-      setAddOnWorking(false);
     }
   }
 
@@ -278,35 +298,28 @@ function AdminDashboardPage() {
     }
   }
 
-  async function handleEnableLiveSlideshow() {
-    if (!event) return;
-    setSlideshowWorking(true);
-    setSettingsMsg(null);
-    try {
-      const url = await startLiveSlideshowAddOn(event.id, discountCode);
-      window.location.assign(url);
-    } catch (err) {
-      setSettingsMsg({
-        text: err instanceof Error ? err.message : 'Checkout could not be started.',
-        ok: false,
-      });
-      setSlideshowWorking(false);
-    }
+  function toggleAddOn(key: EventAddOnKey) {
+    setSelectedAddOns((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
-  async function handleExtendWindow() {
-    if (!event) return;
-    setExtendWorking(true);
+  async function handleAddOnCheckout() {
+    if (!event || selectedAddOns.size === 0) return;
+    setCheckoutWorking(true);
     setSettingsMsg(null);
     try {
-      const url = await startExtendUploadWindow(event.id, event.tier, discountCode);
+      const url = await startAddOnCheckout(event.id, [...selectedAddOns], discountCode);
       window.location.assign(url);
     } catch (err) {
       setSettingsMsg({
         text: err instanceof Error ? err.message : 'Checkout could not be started.',
         ok: false,
       });
-      setExtendWorking(false);
+      setCheckoutWorking(false);
     }
   }
 
@@ -498,82 +511,8 @@ function AdminDashboardPage() {
                 </button>
               </div>
 
-              <div className="mt-5 border-t border-ink/10 pt-5">
-                <label htmlFor="addon-discount" className="text-sm font-medium">
-                  Discount code <span className="text-ink/50">(optional)</span>
-                </label>
-                <p className="text-xs text-ink/55">
-                  Applies to the extension and guest-download add-on below.
-                </p>
-                <input
-                  id="addon-discount"
-                  type="text"
-                  value={discountCode}
-                  onChange={(e) => setDiscountCode(e.target.value)}
-                  placeholder="Enter code"
-                  autoComplete="off"
-                  className="mt-1 w-full max-w-xs rounded-xl border border-ink/20 px-4 py-2.5 uppercase focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
-                <div>
-                  <p className="text-sm font-medium">Upload window</p>
-                  <p className="text-xs text-ink/55">
-                    {lifecycle.uploadWindowEndsAt
-                      ? lifecycle.uploadOpen
-                        ? `Guests can upload until ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}.`
-                        : `The upload window closed on ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}. Extend it to accept photos again.`
-                      : 'Guests can upload while the event is open.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleExtendWindow()}
-                  disabled={extendWorking}
-                  className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
-                >
-                  {extendWorking
-                    ? 'Opening…'
-                    : `Extend +30 days · $${extensionPrice(event.tier)}`}
-                </button>
-              </div>
-
-              <div className="mt-5 border-t border-ink/10 pt-5">
-                <p className="text-sm font-medium">Guest downloads</p>
-                {event.guestDownloadEnabled ? (
-                  <p className="mt-1 text-sm text-green-700">
-                    ✓ Enabled — guests can download photos and videos from this event.
-                  </p>
-                ) : addOnEligible ? (
-                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-ink/60">
-                      Off by default. Turn on guest downloads for this one event as a
-                      one-time add-on.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void handleEnableGuestDownloads()}
-                      disabled={addOnWorking}
-                      className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
-                    >
-                      {addOnWorking
-                        ? 'Opening…'
-                        : `Enable guest downloads · $${CORPORATE_PLAN.guestDownloadAddOnPrice}`}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="mt-1 text-xs text-ink/60">
-                    Guest downloads are available as a per-event add-on on Premium events
-                    and the{' '}
-                    <Link href="/corporate" className="text-accent underline">
-                      Corporate plan
-                    </Link>
-                    . Hosts can always download their own events.
-                  </p>
-                )}
-              </div>
-
+              {/* Free settings first, then everything purchasable in one place at
+                  the bottom — the discount field used to sit between them. */}
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Photo screening</p>
                 <p className="text-xs text-ink/55">
@@ -665,38 +604,114 @@ function AdminDashboardPage() {
               </div>
 
               <div className="mt-5 border-t border-ink/10 pt-5">
-                <p className="text-sm font-medium">Live slideshow</p>
+                <p className="text-sm font-medium">Add-ons</p>
+                <p className="text-xs text-ink/55">
+                  Tick what you want and pay once.{' '}
+                  {lifecycle.uploadWindowEndsAt
+                    ? lifecycle.uploadOpen
+                      ? `Guests can upload until ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}.`
+                      : `The upload window closed on ${lifecycle.uploadWindowEndsAt.toLocaleDateString()}.`
+                    : ''}
+                </p>
+
+                {/* Already paid for — shown so the list reads as complete. */}
+                {event.guestDownloadEnabled ? (
+                  <p className="mt-3 text-sm text-green-700">
+                    ✓ Guest downloads — guests can download photos and videos.
+                  </p>
+                ) : null}
                 {event.liveSlideshowEnabled ? (
-                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-green-700">
-                      ✓ Enabled — open the slideshow on the screen at your venue.
+                      ✓ Live slideshow — ready for the screen at your venue.
                     </p>
                     <Link
                       href={`/event/${event.id}/live`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 rounded-full border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/5"
+                      className="shrink-0 rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent/5"
                     >
                       Open slideshow ↗
                     </Link>
                   </div>
-                ) : (
-                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-ink/60">
-                      Show photos on a screen at your venue as guests upload them. Opens in
-                      any browser — no app or install needed.
-                    </p>
+                ) : null}
+
+                {availableAddOns.length > 0 ? (
+                  <>
+                    <div className="mt-3 space-y-2">
+                      {availableAddOns.map((addon) => (
+                        <label
+                          key={addon.key}
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                            selectedAddOns.has(addon.key)
+                              ? 'border-accent bg-accent/5'
+                              : 'border-ink/15'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedAddOns.has(addon.key)}
+                            onChange={() => toggleAddOn(addon.key)}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-baseline justify-between gap-3">
+                              <span className="text-sm font-medium">{addon.label}</span>
+                              <span className="shrink-0 text-sm font-medium">${addon.price}</span>
+                            </span>
+                            <span className="mt-0.5 block text-xs text-ink/55">
+                              {addon.description}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+
+                    <div className="mt-4">
+                      <label htmlFor="addon-discount" className="text-sm font-medium">
+                        Discount code <span className="text-ink/50">(optional)</span>
+                      </label>
+                      <input
+                        id="addon-discount"
+                        type="text"
+                        value={discountCode}
+                        onChange={(e) => setDiscountCode(e.target.value)}
+                        placeholder="Enter code"
+                        autoComplete="off"
+                        className="mt-1 w-full max-w-xs rounded-xl border border-ink/20 px-4 py-2.5 uppercase focus:border-accent focus:outline-none"
+                      />
+                      <p className="mt-1 text-xs text-ink/55">
+                        A code has to cover everything ticked — otherwise buy those items
+                        separately.
+                      </p>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => void handleEnableLiveSlideshow()}
-                      disabled={slideshowWorking}
-                      className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                      onClick={() => void handleAddOnCheckout()}
+                      disabled={checkoutWorking || selectedAddOns.size === 0}
+                      className="mt-3 w-full rounded-full bg-accent py-3 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50 sm:w-auto sm:px-8"
                     >
-                      {slideshowWorking
+                      {checkoutWorking
                         ? 'Opening…'
-                        : `Enable live slideshow · $${LIVE_SLIDESHOW_ADDON_PRICE}`}
+                        : selectedAddOns.size === 0
+                          ? 'Select an add-on'
+                          : `Continue to checkout · $${addOnTotal}`}
                     </button>
-                  </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-xs text-ink/60">
+                    Everything available for this event is already active.
+                    {addOnEligible ? null : (
+                      <>
+                        {' '}Guest downloads need a Premium event or the{' '}
+                        <Link href="/corporate" className="text-accent underline">
+                          Corporate plan
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </p>
                 )}
               </div>
 

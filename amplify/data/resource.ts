@@ -345,6 +345,9 @@ const schema = a.schema({
       kind: a.string(),
       // Optional admin discount code applied server-side as a Stripe coupon.
       discountCode: a.string(),
+      // For kind 'addons': which per-event add-ons to buy together, as a
+      // comma-separated list of extend | guest_download | live_slideshow.
+      addons: a.string(),
     })
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
