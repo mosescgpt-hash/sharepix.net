@@ -105,6 +105,14 @@ export const CORPORATE_PLAN = {
   ],
 };
 
+/**
+ * One-time cost to turn on the live slideshow for a single event. Sold on every
+ * plan, not just Corporate — it's the marquee wedding feature and the main
+ * reason a couple upgrades, so gating it by tier would cost more sales than it
+ * protects.
+ */
+export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
+
 export function getTier(id: string): PricingTier | undefined {
   return PRICING_TIERS.find((t) => t.id === id);
 }

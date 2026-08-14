@@ -12,6 +12,7 @@ export interface QREvent {
   uploadsClosed?: boolean | null;
   paid?: boolean | null;
   guestDownloadEnabled?: boolean | null;
+  liveSlideshowEnabled?: boolean | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;

@@ -134,6 +134,9 @@ const TIER_PRICING: Record<string, { name: string; amount: number }> = {
   premium: { name: 'SharePix Premium event', amount: 5000 },
 };
 
+// Mirrors LIVE_SLIDESHOW_ADDON_PRICE in lib/pricing.ts (dollars → cents).
+const LIVE_SLIDESHOW_ADDON_CENTS = 2900;
+
 export const handler: Handler = async (event) => {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
@@ -266,6 +269,41 @@ export const handler: Handler = async (event) => {
     } catch (error) {
       throw new Error(
         `Stripe add-on checkout failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  // Live-slideshow add-on: a one-time charge that turns on the venue screen for
+  // a single event. Sold on every plan (unlike guest downloads), so there's no
+  // tier gate here. The webhook flips the event's liveSlideshowEnabled flag.
+  if ((event.arguments.kind ?? '') === 'live_slideshow') {
+    const showEventId = event.arguments.eventId ?? '';
+    if (!showEventId) throw new Error('Missing event for the live slideshow.');
+    try {
+      const stripe = new Stripe(secretKey);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, 'live_slideshow');
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: 'usd',
+              unit_amount: LIVE_SLIDESHOW_ADDON_CENTS,
+              product_data: { name: 'SharePix live slideshow (one event)' },
+            },
+          },
+        ],
+        success_url: `${appBaseUrl}/event/${showEventId}/admin?addon=liveslideshow`,
+        cancel_url: `${appBaseUrl}/event/${showEventId}/admin?addon=cancelled`,
+        metadata: { kind: 'live_slideshow', eventId: showEventId, ...disc.metadata },
+        discounts: disc.discounts,
+      });
+      if (!session.url) throw new Error('Stripe did not return a checkout URL.');
+      return { url: session.url };
+    } catch (error) {
+      throw new Error(
+        `Stripe slideshow checkout failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

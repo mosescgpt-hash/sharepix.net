@@ -373,6 +373,29 @@ export async function startGuestDownloadAddOn(
   return data.url;
 }
 
+/**
+ * Starts the one-time live-slideshow add-on checkout for one event and returns
+ * the hosted Stripe URL. The webhook turns the slideshow on when payment
+ * completes. Available on every plan.
+ */
+export async function startLiveSlideshowAddOn(
+  eventId: string,
+  discountCode?: string,
+): Promise<string> {
+  const { data, errors } = await client.mutations.createCheckoutSession(
+    {
+      tier: 'addon',
+      kind: 'live_slideshow',
+      eventId,
+      discountCode: discountCode?.trim().toUpperCase() || undefined,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.url) throw new Error('Checkout did not return a URL.');
+  return data.url;
+}
+
 /** One line of a print order: which photo, which product, how many copies. */
 export interface PrintOrderItemInput {
   sku: string;

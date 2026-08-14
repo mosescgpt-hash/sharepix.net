@@ -16,9 +16,15 @@ import {
   setEventUploadsClosed,
   startExtendUploadWindow,
   startGuestDownloadAddOn,
+  startLiveSlideshowAddOn,
   updateEventDetails,
 } from '@/lib/api';
-import { CORPORATE_PLAN, extensionPrice, getTier } from '@/lib/pricing';
+import {
+  CORPORATE_PLAN,
+  LIVE_SLIDESHOW_ADDON_PRICE,
+  extensionPrice,
+  getTier,
+} from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -42,6 +48,7 @@ function AdminDashboardPage() {
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [corporateActive, setCorporateActive] = useState(false);
   const [addOnWorking, setAddOnWorking] = useState(false);
+  const [slideshowWorking, setSlideshowWorking] = useState(false);
   const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension / guest-download add-on.
@@ -193,6 +200,22 @@ function AdminDashboardPage() {
     }
   }
 
+  async function handleEnableLiveSlideshow() {
+    if (!event) return;
+    setSlideshowWorking(true);
+    setSettingsMsg(null);
+    try {
+      const url = await startLiveSlideshowAddOn(event.id, discountCode);
+      window.location.assign(url);
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'Checkout could not be started.',
+        ok: false,
+      });
+      setSlideshowWorking(false);
+    }
+  }
+
   async function handleExtendWindow() {
     if (!event) return;
     setExtendWorking(true);
@@ -274,14 +297,16 @@ function AdminDashboardPage() {
                 </Link>
                 {/* Opens in its own tab so the venue screen can run the
                     slideshow while the host keeps managing the event here. */}
-                <Link
-                  href={`/event/${event.id}/live`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-full border border-accent px-4 py-2 font-medium text-accent hover:bg-accent/5"
-                >
-                  Live slideshow ↗
-                </Link>
+                {event.liveSlideshowEnabled ? (
+                  <Link
+                    href={`/event/${event.id}/live`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full border border-accent px-4 py-2 font-medium text-accent hover:bg-accent/5"
+                  >
+                    Live slideshow ↗
+                  </Link>
+                ) : null}
                 <button
                   type="button"
                   onClick={load}
@@ -468,6 +493,42 @@ function AdminDashboardPage() {
                     </Link>
                     . Hosts can always download their own events.
                   </p>
+                )}
+              </div>
+
+              <div className="mt-5 border-t border-ink/10 pt-5">
+                <p className="text-sm font-medium">Live slideshow</p>
+                {event.liveSlideshowEnabled ? (
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-green-700">
+                      ✓ Enabled — open the slideshow on the screen at your venue.
+                    </p>
+                    <Link
+                      href={`/event/${event.id}/live`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 rounded-full border border-accent px-5 py-2.5 text-sm font-medium text-accent hover:bg-accent/5"
+                    >
+                      Open slideshow ↗
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs text-ink/60">
+                      Show photos on a screen at your venue as guests upload them. Opens in
+                      any browser — no app or install needed.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void handleEnableLiveSlideshow()}
+                      disabled={slideshowWorking}
+                      className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                    >
+                      {slideshowWorking
+                        ? 'Opening…'
+                        : `Enable live slideshow · $${LIVE_SLIDESHOW_ADDON_PRICE}`}
+                    </button>
+                  </div>
                 )}
               </div>
 
