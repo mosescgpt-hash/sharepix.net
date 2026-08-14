@@ -244,6 +244,10 @@ const schema = a.schema({
       recurringDuration: a.string(),
       expiresAt: a.datetime().required(),
       maxUses: a.integer().required(),
+      // When true the code never runs out and maxUses is ignored — usedCount
+      // still counts up, so redemptions can be measured rather than capped.
+      // Missing means false, so existing codes keep their limit.
+      unlimitedUses: a.boolean(),
       usedCount: a.integer().required(),
       lastUsedAt: a.datetime(),
       createdBy: a.string(),

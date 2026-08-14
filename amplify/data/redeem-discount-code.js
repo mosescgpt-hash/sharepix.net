@@ -22,20 +22,25 @@ export function request(ctx) {
     condition: {
       // An 'all' code applies to any plan; a tier-scoped code must match the
       // plan being redeemed.
+      // An unlimited code skips the usage ceiling. A code without the attribute
+      // simply fails that comparison and falls through to the count check, so
+      // existing codes keep their limit.
       expression:
-        '#active = :active AND (#tier = :requestedTier OR #tier = :all) AND #expiresAt > :now AND #usedCount < #maxUses',
+        '#active = :active AND (#tier = :requestedTier OR #tier = :all) AND #expiresAt > :now AND (#unlimited = :true OR #usedCount < #maxUses)',
       expressionNames: {
         '#active': 'active',
         '#tier': 'appliesToTier',
         '#expiresAt': 'expiresAt',
         '#usedCount': 'usedCount',
         '#maxUses': 'maxUses',
+        '#unlimited': 'unlimitedUses',
       },
       expressionValues: util.dynamodb.toMapValues({
         ':active': true,
         ':requestedTier': tier,
         ':all': 'all',
         ':now': now,
+        ':true': true,
       }),
     },
   };
@@ -55,6 +60,9 @@ export function response(ctx) {
     code: ctx.result.code,
     appliesToTier: ctx.result.appliesToTier,
     percentOff: ctx.result.percentOff == null ? 100 : ctx.result.percentOff,
-    remainingUses: ctx.result.maxUses - ctx.result.usedCount,
+    remainingUses:
+      ctx.result.unlimitedUses === true
+        ? null
+        : ctx.result.maxUses - ctx.result.usedCount,
   };
 }

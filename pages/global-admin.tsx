@@ -131,6 +131,7 @@ function GlobalAdminPage() {
   const scopeMenuRef = useRef<HTMLDivElement | null>(null);
   const [expiresAt, setExpiresAt] = useState(defaultExpiryValue);
   const [maxUses, setMaxUses] = useState(1);
+  const [unlimitedUses, setUnlimitedUses] = useState(false);
 
   const allScopesChecked = checkedScopes.size === ALL_SCOPE_KEYS.length;
 
@@ -224,7 +225,10 @@ function GlobalAdminPage() {
 
   const totalPhotos = Object.values(photoCounts).reduce((sum, count) => sum + count, 0);
   const activeCodes = codes.filter(
-    (item) => item.active && new Date(item.expiresAt).getTime() > Date.now() && item.usedCount < item.maxUses,
+    (item) =>
+      item.active &&
+      new Date(item.expiresAt).getTime() > Date.now() &&
+      (item.unlimitedUses === true || item.usedCount < item.maxUses),
   ).length;
 
   function generateCode() {
@@ -234,7 +238,7 @@ function GlobalAdminPage() {
 
   async function handleCreateCode(e: FormEvent) {
     e.preventDefault();
-    if (!code.trim() || !expiresAt || maxUses < 1) {
+    if (!code.trim() || !expiresAt || (!unlimitedUses && maxUses < 1)) {
       setError('Enter a code, expiration date, and at least one use.');
       return;
     }
@@ -259,12 +263,16 @@ function GlobalAdminPage() {
         recurringDuration,
         scopes,
         expiresAt: new Date(expiresAt).toISOString(),
-        maxUses,
+        // maxUses is ignored when unlimited, but the field is required, so keep
+        // a sane value rather than writing 0.
+        maxUses: unlimitedUses ? 1 : maxUses,
+        unlimitedUses,
         createdBy: user?.displayName,
       });
       setCode('');
       setAssignedTo('');
       setMaxUses(1);
+      setUnlimitedUses(false);
       setPercentChoice('100');
       setRecurringDuration('once');
       setCheckedScopes(new Set());
@@ -828,12 +836,29 @@ function GlobalAdminPage() {
                         type="number"
                         min={1}
                         max={100}
-                        value={maxUses}
+                        value={unlimitedUses ? '' : maxUses}
+                        disabled={unlimitedUses}
+                        placeholder="∞"
                         onChange={(e) => setMaxUses(Number(e.target.value))}
-                        className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                        className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-ink/5 disabled:text-ink/40"
                       />
                     </div>
                   </div>
+                  <label className="flex items-start gap-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={unlimitedUses}
+                      onChange={(e) => setUnlimitedUses(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                    />
+                    <span>
+                      <span className="font-medium">Unlimited uses</span>
+                      <span className="block text-xs text-ink/55">
+                        The code never runs out. Redemptions are still counted, so you can see
+                        how many people used it.
+                      </span>
+                    </span>
+                  </label>
                   <button
                     type="submit"
                     disabled={working === 'create-code'}
@@ -848,7 +873,8 @@ function GlobalAdminPage() {
                 <div className="mt-4 space-y-3">
                   {codes.map((item) => {
                     const expired = new Date(item.expiresAt).getTime() <= Date.now();
-                    const exhausted = item.usedCount >= item.maxUses;
+                    const exhausted =
+                      item.unlimitedUses !== true && item.usedCount >= item.maxUses;
                     const status = !item.active ? 'Inactive' : expired ? 'Expired' : exhausted ? 'Used' : 'Active';
                     return (
                       <article key={item.code} className="rounded-2xl border border-ink/10 bg-white p-4">
@@ -871,7 +897,10 @@ function GlobalAdminPage() {
                           </span>
                         </div>
                         <p className="mt-3 text-xs text-ink/60">
-                          {item.usedCount}/{item.maxUses} uses · expires {new Date(item.expiresAt).toLocaleString()}
+                          {item.unlimitedUses
+                            ? `${item.usedCount} ${item.usedCount === 1 ? 'use' : 'uses'} · unlimited`
+                            : `${item.usedCount}/${item.maxUses} uses`}{' '}
+                          · expires {new Date(item.expiresAt).toLocaleString()}
                         </p>
                         <div className="mt-3 flex gap-2 text-xs">
                           <button
