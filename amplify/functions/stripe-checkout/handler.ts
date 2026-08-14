@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 // @ts-ignore -- @aws-sdk/* is provided by the Lambda runtime, not installed as a dep.
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
-import { effectiveAmountOffCents } from './discount-math';
+import { effectiveAmountOffCents, distributeDiscount } from './discount-math';
 
 type Handler = Schema['createCheckoutSession']['functionHandler'];
 
@@ -35,6 +35,8 @@ async function resolveDiscount(
   percentOff: number;
   amountOffCents: number;
   duration: 'once' | 'forever';
+  /** Which of the requested scopes this code actually applies to. */
+  coveredScopes: string[];
 } | null> {
   const code = (rawCode ?? '').trim().toUpperCase();
   if (!code) return null;
@@ -83,18 +85,12 @@ async function resolveDiscount(
     return legacyTier === '' || legacyTier === 'all' ? true : scope === `event:${legacyTier}`;
   };
 
-  // Buying several add-ons together is one Stripe session, and a Stripe coupon
-  // applies to the whole session — there is no way to discount one line only.
-  // So a code must cover every item being bought, or it would silently discount
-  // things the admin never scoped it to. Rejecting with a clear message is the
-  // only option that keeps the scope guarantee intact.
-  const uncovered = scopes.filter((scope) => !covers(scope));
-  if (uncovered.length > 0) {
-    throw new Error(
-      scopes.length === 1
-        ? 'That discount code does not apply to this purchase.'
-        : 'That discount code does not cover everything selected. Uncheck the items it does not apply to, or buy them separately.',
-    );
+  // Report which of the requested items this code covers rather than rejecting
+  // a partial match. A single-item purchase treats "covers nothing" as an error;
+  // a mixed cart discounts only the covered lines.
+  const coveredScopes = scopes.filter((scope) => covers(scope));
+  if (coveredScopes.length === 0) {
+    throw new Error('That discount code does not apply to this purchase.');
   }
 
   // A code is either a percentage or a fixed dollar amount. Missing type means
@@ -113,7 +109,7 @@ async function resolveDiscount(
   // discounts every month, 'once' (the default) only the first. Anything else is
   // treated as 'once'.
   const duration = item.recurringDuration?.S === 'forever' ? 'forever' : 'once';
-  return { code, discountType, percentOff, amountOffCents, duration };
+  return { code, discountType, percentOff, amountOffCents, duration, coveredScopes };
 }
 
 // Reuse one Stripe coupon per (kind, value, duration), creating it on first use.
@@ -398,7 +394,6 @@ export const handler: Handler = async (event) => {
       };
     }[] = [];
     const scopes: string[] = [];
-    let subtotal = 0;
 
     for (const key of requested) {
       if (key === 'extend') {
@@ -414,7 +409,6 @@ export const handler: Handler = async (event) => {
           },
         });
         scopes.push('extend');
-        subtotal += amount;
       } else if (key === 'guest_download') {
         // Already on? Don't charge for it again.
         if (ev.guestDownloadEnabled?.BOOL === true) continue;
@@ -430,7 +424,6 @@ export const handler: Handler = async (event) => {
           },
         });
         scopes.push('guest_download');
-        subtotal += 1500;
       } else if (key === 'live_slideshow') {
         if (ev.liveSlideshowEnabled?.BOOL === true) continue;
         lineItems.push({
@@ -442,7 +435,6 @@ export const handler: Handler = async (event) => {
           },
         });
         scopes.push('live_slideshow');
-        subtotal += LIVE_SLIDESHOW_ADDON_CENTS;
       } else {
         throw new Error('That add-on is not recognized.');
       }
@@ -454,10 +446,33 @@ export const handler: Handler = async (event) => {
 
     try {
       const stripe = new Stripe(secretKey);
-      // The code must cover every selected item — a Stripe coupon applies to the
-      // whole session, so a partially-scoped code would discount things it was
-      // never meant to.
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, scopes, subtotal);
+
+      // A code can cover only part of the cart. A Stripe coupon applies to the
+      // whole session, so instead of sending one, the covered lines are
+      // re-priced directly and the rest are charged in full.
+      const resolved = await resolveDiscount(event.arguments.discountCode, scopes);
+      const discountMetadata: Record<string, string> = {};
+      if (resolved) {
+        const covered = new Set(resolved.coveredScopes);
+        const adjusted = distributeDiscount(
+          lineItems.map((item, i) => ({
+            amountCents: item.price_data.unit_amount,
+            covered: covered.has(scopes[i]),
+          })),
+          resolved,
+        );
+        lineItems.forEach((item, i) => {
+          if (adjusted[i] !== item.price_data.unit_amount) {
+            item.price_data.unit_amount = adjusted[i];
+            // Stripe shows no discount line when the price itself is lowered,
+            // so say so on the item the host is looking at.
+            item.price_data.product_data.name += ' — discount applied';
+          }
+        });
+        discountMetadata.discountCode = resolved.code;
+        discountMetadata.discountAppliedTo = resolved.coveredScopes.join(',');
+      }
+
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         line_items: lineItems,
@@ -468,9 +483,8 @@ export const handler: Handler = async (event) => {
           kind: 'addons',
           eventId: addonEventId,
           addons: scopes.join(','),
-          ...disc.metadata,
+          ...discountMetadata,
         },
-        discounts: disc.discounts,
       });
       if (!session.url) throw new Error('Stripe did not return a checkout URL.');
       return { url: session.url };

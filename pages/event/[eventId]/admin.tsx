@@ -681,8 +681,8 @@ function AdminDashboardPage() {
                         className="mt-1 w-full max-w-xs rounded-xl border border-ink/20 px-4 py-2.5 uppercase focus:border-accent focus:outline-none"
                       />
                       <p className="mt-1 text-xs text-ink/55">
-                        A code has to cover everything ticked — otherwise buy those items
-                        separately.
+                        Applied to whichever ticked items the code covers. Anything it
+                        doesn&apos;t cover stays full price.
                       </p>
                     </div>
 
