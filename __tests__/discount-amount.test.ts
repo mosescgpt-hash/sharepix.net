@@ -1,4 +1,5 @@
 import {
+  distributeDiscount,
   effectiveAmountOffCents,
   STRIPE_MIN_CHARGE_CENTS,
 } from '../amplify/functions/stripe-checkout/discount-math';
@@ -72,5 +73,84 @@ describe('applyDiscount (client: the price the host is shown)', () => {
         (price * 100 - effectiveAmountOffCents(off, Math.round(price * 100))) / 100;
       expect(shown).toBeCloseTo(charged, 2);
     }
+  });
+});
+
+describe('distributeDiscount (mixed cart: code covers only some lines)', () => {
+  const percent = (percentOff: number) =>
+    ({ discountType: 'percent' as const, percentOff, amountOffCents: 0 });
+  const amount = (amountOffCents: number) =>
+    ({ discountType: 'amount' as const, percentOff: 0, amountOffCents });
+
+  it('discounts only the covered line and leaves the rest at full price', () => {
+    // $13 extension (not covered) + $29 slideshow (covered), 50% off.
+    const out = distributeDiscount(
+      [
+        { amountCents: 1300, covered: false },
+        { amountCents: 2900, covered: true },
+      ],
+      percent(50),
+    );
+    expect(out).toEqual([1300, 1450]);
+  });
+
+  it('spreads a fixed amount across covered lines only, once — not per line', () => {
+    const out = distributeDiscount(
+      [
+        { amountCents: 1000, covered: true },
+        { amountCents: 3000, covered: true },
+        { amountCents: 1500, covered: false },
+      ],
+      amount(1000),
+    );
+    // $10 off the $40 covered subtotal, split 1:3; the uncovered line is untouched.
+    expect(out[2]).toBe(1500);
+    expect(out[0] + out[1]).toBe(4000 - 1000);
+  });
+
+  it('keeps the totals exact when a split would not divide evenly', () => {
+    const lines = [
+      { amountCents: 333, covered: true },
+      { amountCents: 333, covered: true },
+      { amountCents: 334, covered: true },
+    ];
+    const out = distributeDiscount(lines, amount(100));
+    expect(out.reduce((a, b) => a + b, 0)).toBe(1000 - 100);
+  });
+
+  it('caps a fixed amount at the covered subtotal — never a negative line', () => {
+    const out = distributeDiscount(
+      [
+        { amountCents: 2900, covered: true },
+        { amountCents: 1300, covered: false },
+      ],
+      amount(999999),
+    );
+    expect(out).toEqual([0, 1300]);
+  });
+
+  it('makes an all-covered cart free when the remainder would be unchargeable', () => {
+    const out = distributeDiscount([{ amountCents: 1000, covered: true }], amount(980));
+    expect(out).toEqual([0]);
+  });
+
+  it('leaves an uncovered line intact even when the covered part goes to zero', () => {
+    // The uncovered line keeps the total chargeable, so no rounding-up applies.
+    const out = distributeDiscount(
+      [
+        { amountCents: 1000, covered: true },
+        { amountCents: 1300, covered: false },
+      ],
+      percent(100),
+    );
+    expect(out).toEqual([0, 1300]);
+  });
+
+  it('returns the cart untouched when the code covers nothing in it', () => {
+    const lines = [
+      { amountCents: 1300, covered: false },
+      { amountCents: 2900, covered: false },
+    ];
+    expect(distributeDiscount(lines, percent(50))).toEqual([1300, 2900]);
   });
 });

@@ -341,65 +341,29 @@ export function isCorporateActive(sub: CorporateSubscription | null): boolean {
   return sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due';
 }
 
-/**
- * Starts the one-time checkout to extend an event's upload window by 30 days
- * (half the plan price). The webhook pushes uploadWindowEndsAt out on success.
- */
-export async function startExtendUploadWindow(
-  eventId: string,
-  tier: string,
-  discountCode?: string,
-): Promise<string> {
-  const { data, errors } = await client.mutations.createCheckoutSession(
-    {
-      tier,
-      kind: 'extend_window',
-      eventId,
-      discountCode: discountCode?.trim().toUpperCase() || undefined,
-    },
-    { authMode: 'userPool' },
-  );
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
-  if (!data?.url) throw new Error('Checkout did not return a URL.');
-  return data.url;
-}
+/** The per-event add-ons a host can buy together in one checkout. */
+export type EventAddOnKey = 'extend' | 'guest_download' | 'live_slideshow';
 
 /**
- * Starts the one-time $15 guest-download add-on checkout for one event and
- * returns the hosted Stripe URL. The webhook enables guest downloads on success.
+ * Buy one or more per-event add-ons in a single checkout. The function re-derives
+ * and re-prices every selection from the event's own record, so the client only
+ * says which keys it wants — never what they cost.
+ *
+ * A discount code must cover every selected item: one Stripe session takes one
+ * coupon, so a partially-scoped code would discount things it wasn't meant to.
  */
-export async function startGuestDownloadAddOn(
+export async function startAddOnCheckout(
   eventId: string,
+  addons: EventAddOnKey[],
   discountCode?: string,
 ): Promise<string> {
+  if (addons.length === 0) throw new Error('Choose at least one add-on.');
   const { data, errors } = await client.mutations.createCheckoutSession(
     {
       tier: 'addon',
-      kind: 'guest_download',
+      kind: 'addons',
       eventId,
-      discountCode: discountCode?.trim().toUpperCase() || undefined,
-    },
-    { authMode: 'userPool' },
-  );
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
-  if (!data?.url) throw new Error('Checkout did not return a URL.');
-  return data.url;
-}
-
-/**
- * Starts the one-time live-slideshow add-on checkout for one event and returns
- * the hosted Stripe URL. The webhook turns the slideshow on when payment
- * completes. Available on every plan.
- */
-export async function startLiveSlideshowAddOn(
-  eventId: string,
-  discountCode?: string,
-): Promise<string> {
-  const { data, errors } = await client.mutations.createCheckoutSession(
-    {
-      tier: 'addon',
-      kind: 'live_slideshow',
-      eventId,
+      addons: addons.join(','),
       discountCode: discountCode?.trim().toUpperCase() || undefined,
     },
     { authMode: 'userPool' },

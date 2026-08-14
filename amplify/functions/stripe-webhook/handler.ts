@@ -53,6 +53,43 @@ async function upsertCorporateSubscription(subscription: Stripe.Subscription) {
   await dynamo.send(new PutItemCommand({ TableName: CORPORATE_TABLE, Item: item }));
 }
 
+const DAY_MS_WINDOW = 24 * 60 * 60 * 1000;
+
+/** Push an event's upload window out by 30 days, stacking on any existing end. */
+async function extendUploadWindow(eventId: string, now: string) {
+  const found = await dynamo.send(
+    new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
+  );
+  if (!found.Item) return;
+  const current = found.Item.uploadWindowEndsAt?.S;
+  const base = current ? new Date(current).getTime() : Date.now();
+  // Extend from the later of now / current end, so extensions stack.
+  const from = Math.max(base, Date.now());
+  const next = new Date(from + 30 * DAY_MS_WINDOW).toISOString();
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: EVENT_TABLE,
+      Key: { id: { S: eventId } },
+      UpdateExpression: 'SET uploadWindowEndsAt = :next, updatedAt = :now',
+      ExpressionAttributeValues: { ':next': { S: next }, ':now': { S: now } },
+    }),
+  );
+}
+
+/** Turn on one boolean flag on an event (an add-on becoming active). */
+async function setEventFlag(eventId: string, field: string, now: string) {
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: EVENT_TABLE,
+      Key: { id: { S: eventId } },
+      UpdateExpression: 'SET #field = :true, #updatedAt = :now',
+      ConditionExpression: 'attribute_exists(id)',
+      ExpressionAttributeNames: { '#field': field, '#updatedAt': 'updatedAt' },
+      ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: now } },
+    }),
+  );
+}
+
 // constructEvent only needs the signing secret to verify the payload — the API
 // key isn't used, but the Stripe client requires one to instantiate.
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? 'sk_placeholder');
@@ -156,7 +193,23 @@ export const handler = async (event: {
     if (eventId && session.metadata?.kind !== 'prints') {
       const kind = session.metadata?.kind ?? '';
       try {
-        if (kind === 'extend_window') {
+        if (kind === 'addons') {
+          // One checkout, several add-ons. The keys were re-derived server-side
+          // when the session was created, so this just applies each one.
+          const keys = (session.metadata?.addons ?? '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+          for (const key of keys) {
+            if (key === 'extend') {
+              await extendUploadWindow(eventId, now);
+            } else if (key === 'guest_download') {
+              await setEventFlag(eventId, 'guestDownloadEnabled', now);
+            } else if (key === 'live_slideshow') {
+              await setEventFlag(eventId, 'liveSlideshowEnabled', now);
+            }
+          }
+        } else if (kind === 'extend_window') {
           const DAY_MS = 24 * 60 * 60 * 1000;
           const found = await dynamo.send(
             new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),

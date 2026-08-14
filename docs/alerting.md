@@ -12,12 +12,19 @@ Defined in `amplify/backend.ts`. Each alarm publishes to one SNS topic
 | Alarm | Fires when |
 | --- | --- |
 | `sharepix-webhook-errors` | The Stripe webhook Lambda throws or times out |
-| `sharepix-webhook-handled-failures` | The webhook logs a `Failed to …` error (a payment/event side effect wasn't recorded — these return HTTP 500 rather than throwing, so they don't show on the Lambda error metric) |
+| `sharepix-webhook-handled-failures` | The webhook logs **two or more** `Failed to …` errors in five minutes (a payment/event side effect wasn't recorded — these return HTTP 500 rather than throwing, so they don't show on the Lambda error metric) |
 | `sharepix-checkout-errors` | The Stripe checkout Lambda throws (a host couldn't start payment) |
 | `sharepix-print-fulfill-errors` | Print fulfilment to Prodigi throws |
 | `sharepix-sanitize-errors` | The upload sanitizer crashes or times out |
 
 All alarms evaluate a 5-minute window and treat "no data" as healthy.
+
+Every alarm fires on a single occurrence except `webhook-handled-failures`,
+which needs **two in one window**. A lone handled failure is usually a guest
+interrupting their own checkout — a back button pressed mid-payment produced
+exactly that — and paging on those teaches you to ignore the alerts. Thrown
+errors and timeouts are never self-inflicted, so those still page on the first
+one.
 
 ## Turning on the emails
 
