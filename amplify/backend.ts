@@ -289,14 +289,20 @@ new MetricFilter(backend.stack, 'WebhookFailureFilter', {
 const webhookFailureAlarm = new Alarm(backend.stack, 'webhook-handled-failures', {
   alarmName: 'sharepix-webhook-handled-failures',
   alarmDescription:
-    'The Stripe webhook logged a failure — a payment or event side effect was not recorded.',
+    'The Stripe webhook logged repeated failures — payments or event side effects are not being recorded.',
   metric: new Metric({
     namespace: 'SharePix/Webhook',
     metricName: 'HandledFailures',
     period: Duration.minutes(5),
     statistic: 'Sum',
   }),
-  threshold: 1,
+  // Two in five minutes, not one. A single handled failure is usually someone
+  // interrupting their own checkout (a back button mid-payment produced exactly
+  // that), and paging on those trains the operator to ignore the alerts. Two in
+  // one window means something systematic. Note this only relaxes the
+  // log-derived alarm: the Lambda error alarms above still fire on a single
+  // thrown error or timeout, which is never self-inflicted.
+  threshold: 2,
   evaluationPeriods: 1,
   comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
   treatMissingData: TreatMissingData.NOT_BREACHING,
