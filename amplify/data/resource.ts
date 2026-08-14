@@ -76,6 +76,14 @@ const schema = a.schema({
       // SHA-256 of the file's bytes, used to skip duplicate uploads within an
       // event. Same photo (identical bytes) → same hash.
       contentHash: a.string(),
+      // Automated content screening. 'ok' = screened and clean, 'flagged' =
+      // held back from guests and the live slideshow pending host review,
+      // 'released' = host reviewed a flagged photo and allowed it, 'skipped' =
+      // not screened (a video, or screening was unavailable). Missing on photos
+      // uploaded before screening existed, and treated as visible.
+      moderationStatus: a.string(),
+      // What the screener detected, for the host's review screen.
+      moderationReasons: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create` (photos come only from createEventPhoto) and no

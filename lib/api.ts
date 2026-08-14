@@ -845,6 +845,19 @@ export async function fetchEventPhotos(
   );
 }
 
+/**
+ * Release a photo the content screener held back, making it visible to guests
+ * and the live slideshow. Host/admin only (enforced by the Photo model's owner
+ * auth). Denying is just deleting the photo, which already has its own flow.
+ */
+export async function releaseFlaggedPhoto(photoId: string): Promise<void> {
+  const { errors } = await client.models.Photo.update(
+    { id: photoId, moderationStatus: 'released' },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The photo could not be released.');
+}
+
 export async function setPhotoApproval(photoId: string, approved: boolean): Promise<void> {
   const { errors } = await client.models.Photo.update({ id: photoId, approved });
   if (errors?.length) throw new Error('Could not update the photo.');

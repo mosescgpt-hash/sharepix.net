@@ -29,6 +29,10 @@ export interface QRPhoto {
   approved?: boolean | null;
   eventOwner?: string | null;
   contentHash?: string | null;
+  /** 'ok' | 'flagged' | 'released' | 'skipped'; missing on pre-screening photos. */
+  moderationStatus?: string | null;
+  /** What the screener detected, when flagged. */
+  moderationReasons?: string | null;
   createdAt?: string | null;
 }
 
