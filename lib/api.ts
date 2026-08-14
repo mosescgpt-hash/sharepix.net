@@ -504,6 +504,23 @@ export async function updateEventDetails(
   return data as QREvent;
 }
 
+/**
+ * Choose how uploads to this event are screened: 'review' holds potentially
+ * explicit photos back for the host, 'allow_all' shows everything immediately.
+ * Applies to photos uploaded from here on; anything already held stays held
+ * until the host releases it.
+ */
+export async function setEventModerationMode(
+  eventId: string,
+  mode: 'review' | 'allow_all',
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, moderationMode: mode },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The screening setting could not be updated.');
+}
+
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
 export async function setEventUploadsClosed(
   eventId: string,
@@ -843,6 +860,68 @@ export async function fetchEventPhotos(
   return withUrls.sort((a, b) =>
     (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
   );
+}
+
+/** A flagged photo awaiting a decision, resolved from a review link's token. */
+export interface ModerationReviewView {
+  token: string;
+  status: string;
+  eventId: string;
+  eventName?: string | null;
+  reasons?: string | null;
+  expiresAt: string;
+  /** Signed URL for the held photo, so the reviewer can see what they're deciding. */
+  url: string;
+}
+
+/**
+ * Load a review by its token. Works signed out — the token is the credential —
+ * and returns null for an unknown token so the page can't be used to probe.
+ */
+export async function fetchModerationReview(
+  token: string,
+): Promise<ModerationReviewView | null> {
+  const { data, errors } = await client.models.ModerationReview.get(
+    { token },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length || !data) return null;
+
+  let url = '';
+  try {
+    const resolved = await getUrl({ path: data.photoS3Key });
+    url = resolved.url.toString();
+  } catch {
+    return null; // the photo is gone; nothing meaningful to review
+  }
+
+  return {
+    token: data.token,
+    status: data.status,
+    eventId: data.eventId,
+    eventName: data.eventName,
+    reasons: data.reasons,
+    expiresAt: data.expiresAt,
+    url,
+  };
+}
+
+/**
+ * Decide a flagged photo from a review link. 'release' shows it to guests;
+ * 'dismiss' leaves it hidden. Neither deletes anything — permanent deletion
+ * stays behind the signed-in dashboard.
+ */
+export async function reviewFlaggedPhoto(
+  token: string,
+  action: 'release' | 'dismiss',
+): Promise<string> {
+  const { data, errors } = await client.mutations.reviewFlaggedPhoto(
+    { token, action },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'That review could not be completed.');
+  return data.message ?? 'Done.';
 }
 
 /**

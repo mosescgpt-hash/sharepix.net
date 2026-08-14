@@ -26,6 +26,7 @@ import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
+import { moderatePhoto } from './functions/moderate-photo/resource';
 
 const backend = defineBackend({
   auth,
@@ -41,6 +42,7 @@ const backend = defineBackend({
   stripeWebhook,
   corporatePortal,
   sanitizeUpload,
+  moderatePhoto,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -49,6 +51,7 @@ const paymentTable = backend.data.resources.tables.Payment;
 const corporateTable = backend.data.resources.tables.CorporateSubscription;
 const printOrderTable = backend.data.resources.tables.PrintOrder;
 const discountTable = backend.data.resources.tables.DiscountCode;
+const reviewTable = backend.data.resources.tables.ModerationReview;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -124,6 +127,18 @@ createFn.addToRolePolicy(
     resources: ['*'],
   }),
 );
+// Opens a review link when a photo is held back, so the host can decide from an
+// alert without signing in.
+reviewTable.grantWriteData(createFn);
+createFn.addEnvironment('REVIEW_TABLE_NAME', reviewTable.tableName);
+
+// Moderate-photo function: decides a flagged photo from a review link. It reads
+// and closes the review, and flips the photo's status — nothing else.
+const moderateFn = backend.moderatePhoto.resources.lambda as LambdaFunction;
+reviewTable.grantReadWriteData(moderateFn);
+photoTable.grantReadWriteData(moderateFn);
+moderateFn.addEnvironment('REVIEW_TABLE_NAME', reviewTable.tableName);
+moderateFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 
 // Print-checkout function: guest-facing print order → Stripe checkout. Reads the
 // event to enforce the guest-download gate and writes a pending PrintOrder row

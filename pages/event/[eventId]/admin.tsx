@@ -13,6 +13,7 @@ import {
   getCurrentUserInfo,
   getMyCorporateSubscription,
   isCorporateActive,
+  setEventModerationMode,
   setEventUploadsClosed,
   startExtendUploadWindow,
   startGuestDownloadAddOn,
@@ -49,6 +50,7 @@ function AdminDashboardPage() {
   const [corporateActive, setCorporateActive] = useState(false);
   const [addOnWorking, setAddOnWorking] = useState(false);
   const [slideshowWorking, setSlideshowWorking] = useState(false);
+  const [moderationWorking, setModerationWorking] = useState(false);
   const [extendWorking, setExtendWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension / guest-download add-on.
@@ -197,6 +199,30 @@ function AdminDashboardPage() {
         ok: false,
       });
       setAddOnWorking(false);
+    }
+  }
+
+  async function handleModerationMode(mode: 'review' | 'allow_all') {
+    if (!event || (event.moderationMode ?? 'review') === mode) return;
+    setModerationWorking(true);
+    setSettingsMsg(null);
+    try {
+      await setEventModerationMode(event.id, mode);
+      setEvent({ ...event, moderationMode: mode });
+      setSettingsMsg({
+        text:
+          mode === 'allow_all'
+            ? 'Screening off — new photos appear right away. Photos already held stay hidden until you release them.'
+            : 'Screening on — potentially explicit photos will be held for your review.',
+        ok: true,
+      });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The setting could not be updated.',
+        ok: false,
+      });
+    } finally {
+      setModerationWorking(false);
     }
   }
 
@@ -494,6 +520,42 @@ function AdminDashboardPage() {
                     . Hosts can always download their own events.
                   </p>
                 )}
+              </div>
+
+              <div className="mt-5 border-t border-ink/10 pt-5">
+                <p className="text-sm font-medium">Photo screening</p>
+                <p className="text-xs text-ink/55">
+                  Uploads are checked for explicit content. Alcohol, smoking, and kissing are
+                  never flagged.
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {([
+                    ['review', 'Hold flagged photos for review'],
+                    ['allow_all', 'Show all photos immediately'],
+                  ] as const).map(([value, label]) => {
+                    const active = (event.moderationMode ?? 'review') === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        disabled={moderationWorking}
+                        onClick={() => void handleModerationMode(value)}
+                        className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-50 ${
+                          active
+                            ? 'border-accent bg-accent/10 text-accent'
+                            : 'border-ink/20 hover:border-accent hover:text-accent'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-xs text-ink/55">
+                  {(event.moderationMode ?? 'review') === 'allow_all'
+                    ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
+                    : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
+                </p>
               </div>
 
               <div className="mt-5 border-t border-ink/10 pt-5">
