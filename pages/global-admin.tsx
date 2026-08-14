@@ -77,6 +77,7 @@ const PAID_ITEM_SCOPES = [
   { key: 'corporate', label: 'Corporate subscription' },
   { key: 'extend', label: 'Upload extensions' },
   { key: 'guest_download', label: 'Guest downloads' },
+  { key: 'live_slideshow', label: 'Live slideshow' },
 ] as const;
 
 const ALL_SCOPE_KEYS = PAID_ITEM_SCOPES.map((scope) => scope.key);

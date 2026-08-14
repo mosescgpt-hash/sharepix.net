@@ -5,6 +5,7 @@ import {
   extensionPrice,
   getTier,
   CORPORATE_PLAN,
+  LIVE_SLIDESHOW_ADDON_PRICE,
   PRICING_TIERS,
   UPLOAD_WINDOW_DAYS,
 } from '../lib/pricing';
@@ -90,5 +91,11 @@ describe('pricing tiers stay in sync with the checkout function', () => {
     expect(getTier('standard')?.price).toBe(25);
     expect(getTier('premium')?.price).toBe(50);
     expect(CORPORATE_PLAN.price).toBe(149);
+  });
+
+  it('keeps add-on prices in step with the cent amounts the function charges', () => {
+    // stripe-checkout hard-codes these in cents; if one side moves, this fails.
+    expect(CORPORATE_PLAN.guestDownloadAddOnPrice * 100).toBe(1500);
+    expect(LIVE_SLIDESHOW_ADDON_PRICE * 100).toBe(2900);
   });
 });

@@ -177,7 +177,13 @@ export const handler = async (event: {
             );
           }
         } else {
-          const field = kind === 'guest_download' ? 'guestDownloadEnabled' : 'paid';
+          // Each add-on flips its own flag; a plain event payment marks it paid.
+          const field =
+            kind === 'guest_download'
+              ? 'guestDownloadEnabled'
+              : kind === 'live_slideshow'
+                ? 'liveSlideshowEnabled'
+                : 'paid';
           await dynamo.send(
             new UpdateItemCommand({
               TableName: EVENT_TABLE,

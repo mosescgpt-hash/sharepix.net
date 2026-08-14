@@ -131,6 +131,15 @@ export default function LiveSlideshowPage() {
           return;
         }
         setEvent(ev);
+        // The slideshow is a paid per-event add-on. The venue screen is usually
+        // not signed in, so the gate is the event's own flag rather than the
+        // viewer's identity.
+        if (ev.liveSlideshowEnabled !== true) {
+          setError(
+            'The live slideshow is not enabled for this event. The host can turn it on from their event dashboard.',
+          );
+          return;
+        }
         await refresh();
         if (!cancelled) await advance();
       } catch {
