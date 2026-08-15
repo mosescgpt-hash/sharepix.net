@@ -10,7 +10,7 @@
  */
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024; // mirror lib/validation MAX_FILE_SIZE_BYTES
-export const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // mirror lib/validation MAX_VIDEO_SIZE_BYTES
+export const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // mirror lib/validation MAX_VIDEO_SIZE_BYTES
 
 export type MediaKind = 'image' | 'video';
 

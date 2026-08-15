@@ -31,7 +31,20 @@ export const ALLOWED_VIDEO_TYPES = [
 export const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.m4v', '.3gp'];
 
 export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
-export const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
+
+/**
+ * Video ceiling. Phones record 4K/60 at roughly 400 MB per minute, so the old
+ * 100 MB cap rejected clips as short as **20 seconds** — the length of a toast
+ * or a first dance. 500 MB covers a couple of minutes at any normal phone
+ * setting while still bounding the worst case; only ProRes exceeds it.
+ *
+ * The limit itself costs nothing: S3 bills for bytes actually stored and
+ * watched, not for the ceiling. See docs/media-limits.md.
+ */
+export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
+
+/** The video ceiling as it is written in guest-facing copy. */
+export const MAX_VIDEO_SIZE_LABEL = `${Math.round(MAX_VIDEO_SIZE_BYTES / (1024 * 1024))} MB`;
 
 export function isAllowedImageType(mimeType: string): boolean {
   return ALLOWED_IMAGE_TYPES.includes(mimeType.toLowerCase());
@@ -84,7 +97,7 @@ export function validateMediaFile(
       return `"${file.name}" is a video, and this event accepts photos only.`;
     }
     if (file.size <= 0 || file.size > MAX_VIDEO_SIZE_BYTES) {
-      return `"${file.name}" is larger than 100 MB. Choose a shorter video and try again.`;
+      return `"${file.name}" is larger than ${MAX_VIDEO_SIZE_LABEL}. Choose a shorter video and try again.`;
     }
     return null;
   }

@@ -5,7 +5,7 @@ import {
   prepareEventUpload,
   uploadEventPhotoWithContext,
 } from '@/lib/api';
-import { validateMediaFile } from '@/lib/validation';
+import { MAX_VIDEO_SIZE_LABEL, validateMediaFile } from '@/lib/validation';
 
 interface UploadFormProps {
   eventId: string;
@@ -97,9 +97,11 @@ export default function UploadForm({
       if (item.status !== 'pending') continue;
 
       // Fingerprint the file and skip it if an identical one is already here.
+      // A null hash (file too big to hash, or hashing failed) is not an error —
+      // it just means this one uploads without the duplicate check.
       let hash: string | undefined;
       try {
-        hash = await computeContentHash(item.file);
+        hash = (await computeContentHash(item.file)) ?? undefined;
       } catch {
         hash = undefined; // hashing failed — fall through and upload normally
       }
@@ -180,7 +182,7 @@ export default function UploadForm({
         <span className="text-3xl" aria-hidden>📷</span>
         <p className="mt-2 font-medium">Add photos or videos</p>
         <p className="mt-1 text-sm text-ink/60">
-          Photos up to 25 MB · MP4, MOV, or WEBM videos up to 100 MB
+          Photos up to 25 MB · MP4, MOV, or WEBM videos up to {MAX_VIDEO_SIZE_LABEL}
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label

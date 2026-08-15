@@ -704,8 +704,24 @@ export interface UploadedPhoto extends QRPhoto {
   duplicate: boolean;
 }
 
-/** SHA-256 of a file's bytes as a lowercase hex string, for duplicate detection. */
-export async function computeContentHash(file: File): Promise<string> {
+/**
+ * Above this size a file is uploaded without a content hash.
+ *
+ * Hashing reads the whole file into memory at once, which a phone browser will
+ * not survive for a half-gigabyte video — and an out-of-memory kill takes the
+ * tab down rather than throwing something we could catch. Dedup is a
+ * convenience, not a gate: skipping it costs a guest nothing but the chance to
+ * upload the same large clip twice, which is rare and cheap next to losing
+ * the upload entirely.
+ */
+export const MAX_HASHABLE_BYTES = 100 * 1024 * 1024;
+
+/**
+ * SHA-256 of a file's bytes as a lowercase hex string, for duplicate detection.
+ * Returns null for a file too large to hash safely — see MAX_HASHABLE_BYTES.
+ */
+export async function computeContentHash(file: File): Promise<string | null> {
+  if (file.size > MAX_HASHABLE_BYTES) return null;
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(digest))
