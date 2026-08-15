@@ -31,6 +31,19 @@ const schema = a.schema({
       // Running count of photos, maintained by the create/delete functions so
       // the limit can be enforced atomically without scanning the table.
       photoCount: a.integer(),
+      // Videos are capped separately from photos: a still is resized before it
+      // is ever served, while a video streams from S3 at full size on every
+      // play, so it is the one upload whose cost the plan limit doesn't bound.
+      // Stamped from the tier at creation. Missing means unlimited, which is
+      // deliberate — events created before this existed are not retroactively
+      // blocked.
+      videoLimit: a.integer(),
+      // Extra videos bought on top of the plan. Effective limit is
+      // videoLimit + extraVideoCredits.
+      extraVideoCredits: a.integer(),
+      // Running count of videos, maintained alongside photoCount so the limit
+      // can be reserved atomically rather than by scanning.
+      videoCount: a.integer(),
       accessExpiresAt: a.datetime(),
       // When the 30-day upload window closes (creation + 30 days, plus any paid
       // extensions). Drives the whole lifecycle: uploads, guest view resolution,

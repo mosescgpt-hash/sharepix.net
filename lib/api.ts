@@ -15,7 +15,12 @@ import {
   DisplayPhoto,
 } from '@/lib/types';
 import { buildPhotoKey, buildPreviewKey, buildThumbKey, generateEventCode } from '@/lib/validation';
-import { computeAccessExpiresAt, computeUploadWindowEndsAt, getTier } from '@/lib/pricing';
+import {
+  computeAccessExpiresAt,
+  computeUploadWindowEndsAt,
+  getTier,
+  videoLimitForTier,
+} from '@/lib/pricing';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
@@ -91,6 +96,7 @@ export async function createNewEvent(input: {
     tier: input.tier,
     eventCode: generateEventCode(),
     photoLimit: tier?.photoLimit ?? null,
+    videoLimit: videoLimitForTier(input.tier),
     accessExpiresAt: computeAccessExpiresAt(input.tier),
     uploadWindowEndsAt: computeUploadWindowEndsAt(),
     paid: input.paid ?? true,

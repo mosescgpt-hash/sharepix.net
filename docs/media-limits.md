@@ -51,9 +51,47 @@ For contrast, stills are cheap because they are resized *before* they reach S3:
 the gallery serves 480px thumbnails and the live slideshow serves 1280px
 previews, so a whole six-hour reception on one screen is well under $0.20.
 
-**Plan limits count items, not bytes.** A 1,000-upload plan permits 500 GB of
-video at this ceiling. Nothing enforces a byte budget per event today; that is
-the control to add before raising the video limit again.
+## Videos included per plan
+
+| Plan | Photos | Videos |
+| --- | --- | --- |
+| Starter ($10) | 100 | 2 |
+| Standard ($25) | 1,000 | 10 |
+| Premium ($50) | unlimited | 30 |
+| Corporate ($149/mo) | unlimited per event | 30 per event |
+
+Photos can be unlimited because they are resized before they are ever served.
+Videos cannot: they stream from S3 at full size on every play, so an unlimited
+video allowance is an open-ended bill. Counting videos rather than bytes is the
+unit a host can understand, and the 500 MB per-file ceiling bounds the bytes
+behind each one.
+
+The limit is **stamped onto the event at creation** (`videoLimit`), so changing
+the table above never retroactively blocks uploads to an event someone already
+paid for. `extraVideoCredits` adds to it for a purchased add-on.
+
+**An event with no `videoLimit` is unlimited by design** — events created before
+this existed are not retroactively capped.
+
+### Where it is enforced
+
+`create-event-photo` reserves photo and video slots in a **single conditional
+`UpdateItem`**, so a video can never consume a photo slot without also
+consuming a video slot. When the condition fails, the handler checks which
+ceiling is actually full before choosing the message — naming the wrong one
+sends a host to buy the wrong thing.
+
+A limit of **zero** is rejected before the update rather than by a condition:
+`attribute_not_exists(videoCount)` is true on an event that has never had a
+video, which would let the first one through.
+
+`delete-event-photo` decrements `videoCount` for a video, so deleting a clip
+frees a slot — otherwise a host clearing space would find the allowance still
+spent.
+
+The upload form mirrors the remaining count so a guest is told before they wait
+through an upload that would be refused at the end. That is a courtesy; the
+atomic reservation is the enforcement.
 
 ## Known consequence: bulk ZIP downloads
 

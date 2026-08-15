@@ -3,6 +3,15 @@ export interface PricingTier {
   name: string;
   price: number;
   photoLimit: number | null; // null = unlimited
+  /**
+   * How many videos the plan includes. Videos are capped separately from photos
+   * because they are the only upload whose cost is not bounded by resizing: a
+   * still is shrunk to a 1280px preview before it is ever served, while a video
+   * streams from S3 at full size every time someone plays it. Counting videos
+   * (rather than bytes) is the unit a host can understand, and the 500 MB
+   * per-file ceiling is what bounds the bytes behind it.
+   */
+  videoLimit: number | null; // null = unlimited
   accessDays: number;
   accessLabel: string;
   // Lifecycle (all measured from when the 30-day upload window closes):
@@ -28,12 +37,13 @@ export const PRICING_TIERS: PricingTier[] = [
     name: 'Starter',
     price: 10,
     photoLimit: 100,
+    videoLimit: 2,
     accessDays: 14,
     accessLabel: '30-day upload window',
     retentionDays: 21,
     guestLowResDays: 21,
     features: [
-      'Up to 100 photos',
+      'Up to 100 photos and 2 videos',
       '30-day upload window (extend +30 days anytime)',
       'Guests view 3 weeks after uploads close; host access 3 weeks',
       'Standard QR code',
@@ -45,13 +55,14 @@ export const PRICING_TIERS: PricingTier[] = [
     name: 'Standard',
     price: 25,
     photoLimit: 1000,
+    videoLimit: 10,
     accessDays: 90,
     accessLabel: '30-day upload window',
     retentionDays: 90,
     guestLowResDays: 30,
     highlight: true,
     features: [
-      'Up to 1,000 photos',
+      'Up to 1,000 photos and 10 videos',
       '30-day upload window (extend +30 days anytime)',
       'Guests view 30 days after uploads close; host access 3 months',
       'Customizable QR code',
@@ -64,12 +75,13 @@ export const PRICING_TIERS: PricingTier[] = [
     name: 'Premium',
     price: 50,
     photoLimit: null,
+    videoLimit: 30,
     accessDays: 365,
     accessLabel: '30-day upload window',
     retentionDays: 365,
     guestLowResDays: 30,
     features: [
-      'Unlimited photos',
+      'Unlimited photos and 30 videos',
       '30-day upload window (extend +30 days anytime)',
       'Guests view 30 days after uploads close; host access 1 year',
       'Customizable QR code',
@@ -90,12 +102,15 @@ export const CORPORATE_PLAN = {
   // unlimited photos, 1-year host retention, 30-day guest low-res).
   retentionDays: 365,
   guestLowResDays: 30,
+  // Photos are unlimited on corporate events, videos are not — see PricingTier.
+  videoLimit: 30,
   // One-time cost to enable guest downloads on a single corporate event
   // (guest downloads are off by default on corporate events).
   guestDownloadAddOnPrice: 15,
   accessLabel: 'Multiple events under one account',
   features: [
     'Multiple active events',
+    'Unlimited photos and 30 videos per event',
     'Central event and storage dashboard',
     'Guest downloads available per event ($15 each)',
     'Custom company branding',
@@ -115,6 +130,36 @@ export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
 
 export function getTier(id: string): PricingTier | undefined {
   return PRICING_TIERS.find((t) => t.id === id);
+}
+
+/**
+ * How many videos a new event on this tier includes, stamped onto the event at
+ * creation so a later pricing change never retroactively blocks uploads to an
+ * event someone already paid for.
+ *
+ * Corporate has no PricingTier row, so it is handled explicitly rather than
+ * falling through to null — null means *unlimited*, which is exactly what a
+ * video limit must never become by accident.
+ */
+/**
+ * Videos an event can still accept, or null when it has no limit. Used to tell
+ * a guest before they pick a file; the real enforcement is the atomic
+ * reservation in create-event-photo, which this only mirrors.
+ */
+export function videosRemaining(event: {
+  videoLimit?: number | null;
+  extraVideoCredits?: number | null;
+  videoCount?: number | null;
+}): number | null {
+  if (event.videoLimit == null) return null; // pre-limit event, or unlimited
+  const limit = event.videoLimit + (event.extraVideoCredits ?? 0);
+  return Math.max(0, limit - (event.videoCount ?? 0));
+}
+
+export function videoLimitForTier(id: string): number | null {
+  const tier = getTier(id);
+  if (tier) return tier.videoLimit;
+  return id === 'corporate' ? CORPORATE_PLAN.videoLimit : null;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

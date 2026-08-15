@@ -16,6 +16,10 @@ const TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const BUCKET = process.env.BUCKET_NAME as string;
 
+// Mirrors create-event-photo's VIDEO_KEY: what counts against the video
+// allowance on the way in has to be what frees it on the way out.
+const VIDEO_KEY = /\.(mp4|mov|webm|m4v|3gp)$/i;
+
 type Handler = Schema['deleteEventPhoto']['functionHandler'];
 
 /** The Amplify `owner`/`eventOwner` string is `"<sub>::<loginId>"`. */
@@ -65,16 +69,21 @@ export const handler: Handler = async (event) => {
     new DeleteItemCommand({ TableName: TABLE, Key: { id: { S: photoId } } }),
   );
 
-  // Free the slot so the event's photo limit reflects the deletion. Best-effort
-  // and floored at zero so the counter never goes negative.
+  // Free the slot so the event's limits reflect the deletion. A video frees a
+  // video slot as well, or a host who deletes a clip to make room would find
+  // the allowance still spent. Best-effort and floored at zero so neither
+  // counter can go negative.
   const eventId = item.eventId?.S;
   if (eventId) {
+    const wasVideo = VIDEO_KEY.test(item.s3Key?.S ?? '');
     await dynamo
       .send(
         new UpdateItemCommand({
           TableName: EVENT_TABLE,
           Key: { id: { S: eventId } },
-          UpdateExpression: 'ADD photoCount :neg',
+          UpdateExpression: wasVideo
+            ? 'ADD photoCount :neg, videoCount :neg'
+            : 'ADD photoCount :neg',
           ConditionExpression: 'attribute_exists(photoCount) AND photoCount > :zero',
           ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
         }),
