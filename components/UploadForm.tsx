@@ -182,21 +182,13 @@ export default function UploadForm({
         <p className="mt-1 text-sm text-ink/60">
           Photos up to 25 MB · MP4, MOV, or WEBM videos up to 100 MB
         </p>
-        <div className={`mt-4 grid gap-3 ${allowVideo ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label
             htmlFor="photo-camera-input"
             className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
           >
-            Take a photo
+            Camera
           </label>
-          {allowVideo ? (
-            <label
-              htmlFor="video-camera-input"
-              className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
-            >
-              Record a video
-            </label>
-          ) : null}
           <label
             htmlFor="photo-library-input"
             className="cursor-pointer rounded-full border border-ink/20 bg-white px-4 py-3 font-medium text-ink hover:border-accent"
@@ -211,7 +203,13 @@ export default function UploadForm({
           and opens the file picker instead, which is why this opened the gallery
           on a Pixel while iOS still honoured it. Extensions are pointless here
           anyway: the camera returns whatever the OS produces, not a file the
-          user picked. */}
+          user picked.
+
+          One accept value means one mode, and this is deliberately the photo
+          one: a guest snapping a picture at a reception is the common case, and
+          this way it works the same on every phone. Recording still reaches us
+          through the picker below — guests film in their own camera app, which
+          is what they do anyway, then choose the clip. */}
       <input
         id="photo-camera-input"
         type="file"
@@ -220,17 +218,6 @@ export default function UploadForm({
         className="sr-only"
         onChange={handleFileSelect}
       />
-      {/* Recording is a separate input for the same reason — one type each. */}
-      {allowVideo ? (
-        <input
-          id="video-camera-input"
-          type="file"
-          accept="video/*"
-          capture="environment"
-          className="sr-only"
-          onChange={handleFileSelect}
-        />
-      ) : null}
       <input
         id="photo-library-input"
         type="file"
