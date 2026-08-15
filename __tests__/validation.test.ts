@@ -7,6 +7,8 @@ import {
   isGalleryActive,
   isUploadOpen,
   isVideoFilename,
+  MAX_VIDEO_SIZE_BYTES,
+  MAX_VIDEO_SIZE_LABEL,
   sanitizeFilename,
   validateImageFile,
   validateMediaFile,
@@ -83,9 +85,25 @@ describe('video validation', () => {
     expect(isVideoFilename('events/abc/photos/image.jpg')).toBe(false);
   });
 
-  it('accepts a short video and rejects one over 100 MB', () => {
+  it('accepts a short video and rejects one over the ceiling', () => {
     expect(validateMediaFile({ type: 'video/mp4', size: 20 * 1024 * 1024, name: 'clip.mp4' })).toBeNull();
-    expect(validateMediaFile({ type: 'video/mp4', size: 101 * 1024 * 1024, name: 'long.mp4' })).toContain('100 MB');
+    expect(
+      validateMediaFile({ type: 'video/mp4', size: MAX_VIDEO_SIZE_BYTES + 1, name: 'long.mp4' }),
+    ).toContain(MAX_VIDEO_SIZE_LABEL);
+  });
+
+  // The 100 MB ceiling rejected a 20-second clip, because phones record 4K/60 at
+  // ~400 MB per minute. These are the real per-minute rates; the ceiling has to
+  // clear a reasonable clip at every setting a guest might have their phone on.
+  it.each([
+    ['1080p/30', 60],
+    ['1080p/60', 90],
+    ['4K/24', 135],
+    ['4K/30', 170],
+    ['4K/60', 400],
+  ])('accepts 30 seconds recorded at %s', (_setting, mbPerMinute) => {
+    const size = Math.round((mbPerMinute / 2) * 1024 * 1024);
+    expect(validateMediaFile({ type: 'video/quicktime', size, name: 'IMG_0001.MOV' })).toBeNull();
   });
 
   it('accepts an iPhone MOV when the browser omits its MIME type', () => {

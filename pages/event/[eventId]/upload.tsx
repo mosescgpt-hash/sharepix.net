@@ -5,6 +5,7 @@ import Layout from '@/components/Layout';
 import UploadForm from '@/components/UploadForm';
 import { fetchEvent } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { videosRemaining } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
 
 export default function GuestUploadPage() {
@@ -51,7 +52,11 @@ export default function GuestUploadPage() {
         ) : event ? (
           <>
             <p className="text-center text-sm uppercase tracking-wide text-ink/50">
-              You&apos;re adding {event.videoUploadsEnabled === false ? 'photos' : 'photos and videos'} to
+              You&apos;re adding{' '}
+              {event.videoUploadsEnabled === false || videosRemaining(event) === 0
+                ? 'photos'
+                : 'photos and videos'}{' '}
+              to
             </p>
             <h1 className="mt-1 text-center font-display text-3xl font-extrabold">
               {event.name}
@@ -72,6 +77,7 @@ export default function GuestUploadPage() {
                 <UploadForm
                   eventId={event.id}
                   allowVideo={event.videoUploadsEnabled !== false}
+                  videosRemaining={videosRemaining(event)}
                 />
               ) : event.uploadsClosed ? (
                 <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">

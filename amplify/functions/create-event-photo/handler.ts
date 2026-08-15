@@ -327,13 +327,30 @@ export const handler: Handler = async (event) => {
   }
 
   const eventOwner = ev.owner?.S ?? '';
+  const isVideo = VIDEO_KEY.test(s3Key);
   const photoLimit = toInt(ev.photoLimit?.N);
   const extraCredits = toInt(ev.extraPhotoCredits?.N) ?? 0;
+  const videoLimit = toInt(ev.videoLimit?.N);
+  const extraVideoCredits = toInt(ev.extraVideoCredits?.N) ?? 0;
 
   // Reserve a slot atomically. `photoLimit === null` means unlimited (Premium),
   // so the count still increments but never blocks. A missing photoCount is
   // treated as 0, so older events simply start counting from this upload.
   const effectiveLimit = photoLimit === null ? null : photoLimit + extraCredits;
+  // Videos are capped separately — see the model comment on `videoLimit`. A
+  // missing limit means unlimited, so events created before video limits
+  // existed keep working exactly as they did.
+  const effectiveVideoLimit =
+    !isVideo || videoLimit === null ? null : videoLimit + extraVideoCredits;
+
+  // A limit of zero can't be expressed as a condition: `attribute_not_exists`
+  // is true on an event that has never had a video, which would let the first
+  // one through. Reject it up front instead.
+  if (effectiveVideoLimit === 0) {
+    throw new Error('This event’s plan does not include videos.');
+  }
+
+  const conditions: string[] = [];
   const update: {
     TableName: string;
     Key: Record<string, AttributeValue>;
@@ -343,19 +360,37 @@ export const handler: Handler = async (event) => {
   } = {
     TableName: EVENT_TABLE,
     Key: { id: { S: eventId } },
-    UpdateExpression: 'ADD photoCount :one',
+    // Both counters move in ONE update, so a video can never consume a photo
+    // slot without also consuming a video slot (or vice versa) when the other
+    // condition fails.
+    UpdateExpression: isVideo ? 'ADD photoCount :one, videoCount :one' : 'ADD photoCount :one',
     ExpressionAttributeValues: { ':one': { N: '1' } },
   };
   if (effectiveLimit !== null) {
-    update.ConditionExpression = 'attribute_not_exists(photoCount) OR photoCount < :limit';
+    conditions.push('(attribute_not_exists(photoCount) OR photoCount < :limit)');
     update.ExpressionAttributeValues[':limit'] = { N: String(effectiveLimit) };
+  }
+  if (effectiveVideoLimit !== null) {
+    conditions.push('(attribute_not_exists(videoCount) OR videoCount < :videoLimit)');
+    update.ExpressionAttributeValues[':videoLimit'] = { N: String(effectiveVideoLimit) };
+  }
+  if (conditions.length > 0) {
+    update.ConditionExpression = conditions.join(' AND ');
   }
 
   try {
     await dynamo.send(new UpdateItemCommand(update));
   } catch (error) {
     if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
-      throw new Error('This event has reached its photo limit.');
+      // Either ceiling can be the one that failed. Naming the wrong one sends
+      // the host to buy the wrong thing, so check which is actually full.
+      const photoCount = toInt(ev.photoCount?.N) ?? 0;
+      const photosFull = effectiveLimit !== null && photoCount >= effectiveLimit;
+      throw new Error(
+        photosFull || !isVideo
+          ? 'This event has reached its photo limit.'
+          : 'This event has reached its video limit.',
+      );
     }
     throw error;
   }
@@ -366,7 +401,9 @@ export const handler: Handler = async (event) => {
         new UpdateItemCommand({
           TableName: EVENT_TABLE,
           Key: { id: { S: eventId } },
-          UpdateExpression: 'ADD photoCount :neg',
+          UpdateExpression: isVideo
+            ? 'ADD photoCount :neg, videoCount :neg'
+            : 'ADD photoCount :neg',
           ConditionExpression: 'attribute_exists(photoCount) AND photoCount > :zero',
           ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
         }),

@@ -26,6 +26,7 @@ import {
   LIVE_SLIDESHOW_ADDON_PRICE,
   extensionPrice,
   getTier,
+  videosRemaining,
 } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { DisplayPhoto, QREvent } from '@/lib/types';
@@ -556,6 +557,15 @@ function AdminDashboardPage() {
                         ? 'Off — guests can add photos only.'
                         : 'On. Screening checks photos but not videos, so turn this off if you want screened media only.'}
                     </p>
+                    {event.videoUploadsEnabled !== false && event.videoLimit != null ? (
+                      <p className="mt-1 text-sm text-ink/60">
+                        {event.videoCount ?? 0} of{' '}
+                        {event.videoLimit + (event.extraVideoCredits ?? 0)} videos used.
+                        {videosRemaining(event) === 0
+                          ? ' Guests can still add photos; deleting a video frees a slot.'
+                          : ''}
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"

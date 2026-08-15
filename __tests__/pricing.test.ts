@@ -8,6 +8,8 @@ import {
   LIVE_SLIDESHOW_ADDON_PRICE,
   PRICING_TIERS,
   UPLOAD_WINDOW_DAYS,
+  videoLimitForTier,
+  videosRemaining,
 } from '../lib/pricing';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -97,5 +99,52 @@ describe('pricing tiers stay in sync with the checkout function', () => {
     // stripe-checkout hard-codes these in cents; if one side moves, this fails.
     expect(CORPORATE_PLAN.guestDownloadAddOnPrice * 100).toBe(1500);
     expect(LIVE_SLIDESHOW_ADDON_PRICE * 100).toBe(2900);
+  });
+});
+
+describe('video allowances', () => {
+  it('gives every tier a real number, never unlimited', () => {
+    // A video is the one upload whose cost is not bounded by resizing, so
+    // `null` (unlimited) on a paid tier would be an open-ended bill.
+    for (const tier of PRICING_TIERS) {
+      expect(typeof tier.videoLimit).toBe('number');
+      expect(tier.videoLimit).toBeGreaterThan(0);
+    }
+    expect(typeof CORPORATE_PLAN.videoLimit).toBe('number');
+  });
+
+  it('never gives a cheaper plan more videos than a dearer one', () => {
+    const byPrice = [...PRICING_TIERS].sort((a, b) => a.price - b.price);
+    for (let i = 1; i < byPrice.length; i += 1) {
+      expect(byPrice[i].videoLimit!).toBeGreaterThanOrEqual(byPrice[i - 1].videoLimit!);
+    }
+  });
+
+  it('stamps corporate events explicitly instead of leaving them unlimited', () => {
+    // Corporate has no PricingTier row, so a plain lookup returns undefined —
+    // and `undefined ?? null` would silently mean "unlimited videos".
+    expect(getTier('corporate')).toBeUndefined();
+    expect(videoLimitForTier('corporate')).toBe(CORPORATE_PLAN.videoLimit);
+    expect(videoLimitForTier('standard')).toBe(getTier('standard')!.videoLimit);
+  });
+
+  it('counts remaining videos, including purchased credits', () => {
+    expect(videosRemaining({ videoLimit: 10, videoCount: 3 })).toBe(7);
+    expect(videosRemaining({ videoLimit: 10, videoCount: 3, extraVideoCredits: 5 })).toBe(12);
+    expect(videosRemaining({ videoLimit: 2, videoCount: 2 })).toBe(0);
+  });
+
+  it('never reports a negative remainder', () => {
+    // A limit lowered after uploads (or a comped event) must read as 0, not -3.
+    expect(videosRemaining({ videoLimit: 2, videoCount: 5 })).toBe(0);
+  });
+
+  it('treats an event with no limit as unlimited, so older events keep working', () => {
+    expect(videosRemaining({ videoCount: 40 })).toBeNull();
+    expect(videosRemaining({ videoLimit: null, videoCount: 40 })).toBeNull();
+  });
+
+  it('treats a missing count as zero used', () => {
+    expect(videosRemaining({ videoLimit: 10 })).toBe(10);
   });
 });

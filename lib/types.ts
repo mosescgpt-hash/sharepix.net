@@ -7,6 +7,10 @@ export interface QREvent {
   photoLimit?: number | null;
   extraPhotoCredits?: number | null;
   photoCount?: number | null;
+  /** Videos included by the plan. Missing means unlimited (pre-limit events). */
+  videoLimit?: number | null;
+  extraVideoCredits?: number | null;
+  videoCount?: number | null;
   accessExpiresAt?: string | null;
   uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;

@@ -5,13 +5,19 @@ import {
   prepareEventUpload,
   uploadEventPhotoWithContext,
 } from '@/lib/api';
-import { validateMediaFile } from '@/lib/validation';
+import { MAX_VIDEO_SIZE_LABEL, isVideoFilename, validateMediaFile } from '@/lib/validation';
 
 interface UploadFormProps {
   eventId: string;
   onUploaded?: () => void;
   /** False when the host has turned video off for this event. */
   allowVideo?: boolean;
+  /**
+   * Videos the plan still has room for, or null when unlimited. The server is
+   * the authority — this only lets a guest find out before they wait through an
+   * upload that would be refused at the end.
+   */
+  videosRemaining?: number | null;
 }
 
 type FileStatus = 'pending' | 'uploading' | 'done' | 'error' | 'duplicate';
@@ -27,6 +33,7 @@ export default function UploadForm({
   eventId,
   onUploaded,
   allowVideo = true,
+  videosRemaining = null,
 }: UploadFormProps) {
   const [queue, setQueue] = useState<QueuedFile[]>([]);
   const [busy, setBusy] = useState(false);
@@ -54,11 +61,31 @@ export default function UploadForm({
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
+    // Videos already spoken for by this queue, so picking three clips when one
+    // slot is left flags the last two here instead of after the upload.
+    let videosTaken = queue.filter(
+      (item) => item.status !== 'error' && isVideoFilename(item.file.name),
+    ).length;
+
     const next: QueuedFile[] = files.map((file) => {
       const problem = validateMediaFile(file, { allowVideo });
-      return problem
-        ? { file, status: 'error', percent: 0, error: problem }
-        : { file, status: 'pending', percent: 0 };
+      if (problem) return { file, status: 'error' as const, percent: 0, error: problem };
+
+      if (isVideoFilename(file.name) && videosRemaining !== null) {
+        if (videosTaken >= videosRemaining) {
+          return {
+            file,
+            status: 'error' as const,
+            percent: 0,
+            error:
+              videosRemaining === 0
+                ? 'This event has no video slots left. Photos are still welcome.'
+                : `Only ${videosRemaining} more video${videosRemaining === 1 ? '' : 's'} can be added to this event. Photos are still welcome.`,
+          };
+        }
+        videosTaken += 1;
+      }
+      return { file, status: 'pending' as const, percent: 0 };
     });
     setQueue((previous) => [...previous, ...next]);
     setSuccessCount(0);
@@ -97,9 +124,11 @@ export default function UploadForm({
       if (item.status !== 'pending') continue;
 
       // Fingerprint the file and skip it if an identical one is already here.
+      // A null hash (file too big to hash, or hashing failed) is not an error —
+      // it just means this one uploads without the duplicate check.
       let hash: string | undefined;
       try {
-        hash = await computeContentHash(item.file);
+        hash = (await computeContentHash(item.file)) ?? undefined;
       } catch {
         hash = undefined; // hashing failed — fall through and upload normally
       }
@@ -180,8 +209,17 @@ export default function UploadForm({
         <span className="text-3xl" aria-hidden>📷</span>
         <p className="mt-2 font-medium">Add photos or videos</p>
         <p className="mt-1 text-sm text-ink/60">
-          Photos up to 25 MB · MP4, MOV, or WEBM videos up to 100 MB
+          {allowVideo && videosRemaining !== 0
+            ? `Photos up to 25 MB · MP4, MOV, or WEBM videos up to ${MAX_VIDEO_SIZE_LABEL}`
+            : 'Photos up to 25 MB'}
         </p>
+        {allowVideo && videosRemaining !== null ? (
+          <p className="mt-1 text-sm text-ink/60">
+            {videosRemaining === 0
+              ? 'This event’s videos are all used — photos only from here.'
+              : `Room for ${videosRemaining} more video${videosRemaining === 1 ? '' : 's'}.`}
+          </p>
+        ) : null}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label
             htmlFor="photo-camera-input"

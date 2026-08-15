@@ -5,6 +5,7 @@ import {
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
 } from '../amplify/functions/sanitize-upload/safety';
+import { MAX_FILE_SIZE_BYTES, MAX_VIDEO_SIZE_BYTES } from '../lib/validation';
 
 const bytes = (...vals: number[]) => new Uint8Array(vals);
 const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
@@ -51,5 +52,14 @@ describe('maxBytesForKind', () => {
   it('caps images and videos separately', () => {
     expect(maxBytesForKind('image')).toBe(MAX_IMAGE_BYTES);
     expect(maxBytesForKind('video')).toBe(MAX_VIDEO_BYTES);
+  });
+
+  // These constants are duplicated by hand (the Lambda bundle deliberately has
+  // no imports from lib/). Drift is worse than it looks: a server ceiling below
+  // the client's means the upload succeeds, the guest is told it worked, and
+  // this trigger silently deletes the file afterwards.
+  it('matches the ceilings the client validates against', () => {
+    expect(MAX_IMAGE_BYTES).toBe(MAX_FILE_SIZE_BYTES);
+    expect(MAX_VIDEO_BYTES).toBe(MAX_VIDEO_SIZE_BYTES);
   });
 });
