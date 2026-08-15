@@ -8,7 +8,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { sniffMediaKind, maxBytesForKind } from './safety';
-import { isJpeg, stripJpegMetadata } from './exif';
+import { isJpeg, isHeic, stripJpegMetadata, stripHeicGps } from './exif';
 
 const s3 = new S3Client({});
 
@@ -87,8 +87,11 @@ async function processRecord(record) {
 }
 
 /**
- * Remove location and other metadata from a JPEG original, keeping only its
- * orientation so the photo still displays the right way up.
+ * Take the location data out of an uploaded original.
+ *
+ * A JPEG is rebuilt with everything but its orientation removed. A HEIC only
+ * has its GPS values zeroed where they sit, because its container records
+ * absolute file offsets and resizing the metadata would invalidate them.
  *
  * Best-effort throughout: the photo is already validated and visible, so a
  * failure here leaves it exactly as uploaded rather than breaking the gallery.
@@ -102,12 +105,14 @@ async function stripMetadata(
   // Our own rewrite fires another ObjectCreated event. The marker below is how
   // that second pass knows to stop, so this never loops.
   if (metadata?.sanitized === 'true') return;
-  if (!isJpeg(header)) return; // only JPEG is handled — see docs/moderation.md
+  // JPEG loses all metadata; HEIC only its GPS, in place — see docs/moderation.md.
+  const jpeg = isJpeg(header);
+  if (!jpeg && !isHeic(header)) return;
 
   try {
     const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
     const bytes = await readBytes(object.Body);
-    const stripped = stripJpegMetadata(bytes);
+    const stripped = jpeg ? stripJpegMetadata(bytes) : stripHeicGps(bytes);
     if (!stripped) return; // nothing to remove, or the file looked malformed
 
     await s3.send(
@@ -115,7 +120,7 @@ async function stripMetadata(
         Bucket: bucket,
         Key: key,
         Body: Buffer.from(stripped),
-        ContentType: object.ContentType ?? 'image/jpeg',
+        ContentType: object.ContentType ?? (jpeg ? 'image/jpeg' : 'image/heic'),
         Metadata: { ...(object.Metadata ?? {}), sanitized: 'true' },
         MetadataDirective: 'REPLACE',
       }),

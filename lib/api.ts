@@ -426,6 +426,20 @@ export async function manageUser(
 }
 
 /**
+ * Global-admin health check of the print provider. Unlike the other admin
+ * actions this does NOT throw when it fails — a failing check's message is the
+ * whole point of running it, so both outcomes come back to the caller.
+ */
+export async function checkPrintProvider(): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await client.mutations.checkPrintProvider({}, { authMode: 'userPool' });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return {
+    ok: Boolean(data?.success),
+    message: data?.message ?? 'The check returned no result.',
+  };
+}
+
+/**
  * Global-admin grant of extra photo capacity to one event (the pilot version of
  * the "buy more storage" add-on). `additionalCredits` is added to whatever the
  * event already has; the effective limit becomes photoLimit + extraPhotoCredits.

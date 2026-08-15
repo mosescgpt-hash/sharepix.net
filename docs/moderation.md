@@ -126,15 +126,30 @@ through untouched, so there is **no re-encode and no quality loss**.
 A photo already upright (orientation 1) gets no EXIF block at all. A file that
 looks malformed is left exactly as uploaded.
 
-### Known gap: JPEG only
+### Two formats, two methods
 
-Only JPEG originals are stripped. **HEIC is not** — that's the iPhone default
-unless the phone is set to "Most Compatible", and HEIC stores metadata in ISO
-BMFF boxes that need a separate parser. PNG and WebP can also carry metadata and
-are likewise untouched.
+**JPEG** is rebuilt with only the orientation kept, as above — GPS, timestamps,
+camera, thumbnails, XMP and IPTC all gone by construction.
 
-So coverage today is Android, cameras, and iPhones set to JPEG. Extending it to
-HEIC is a worthwhile follow-up, not a small one.
+**HEIC** (the iPhone default) is handled differently. Its container records
+**absolute file offsets** for every piece of data, so resizing the metadata would
+shift every offset after it and one wrong number leaves an unopenable photo.
+Instead the GPS values are **overwritten with zeroes exactly where they sit**:
+nothing changes length, every offset stays valid, and there is nothing to
+recompute.
+
+Because GPS coordinates are RATIONALs stored outside their tag entry, the
+out-of-line values are zeroed too — clearing only the entry would hide the
+coordinates from readers while leaving them in the file.
+
+The trade-off is that HEIC keeps benign metadata (camera, timestamps) that the
+JPEG path removes, since dropping those needs the resize this deliberately
+avoids. Location — the part that matters — is gone from both.
+
+### What is still not covered
+
+- **PNG and WebP** metadata is untouched. Both are rare from phone cameras.
+- **XMP location data**, if a photo carries it alongside Exif, survives on HEIC.
 
 ## Cost
 

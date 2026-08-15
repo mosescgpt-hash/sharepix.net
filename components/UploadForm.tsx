@@ -187,7 +187,7 @@ export default function UploadForm({
             htmlFor="photo-camera-input"
             className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
           >
-            Use camera
+            Camera
           </label>
           <label
             htmlFor="photo-library-input"
@@ -197,10 +197,23 @@ export default function UploadForm({
           </label>
         </div>
       </div>
+      {/* Camera capture needs a SINGLE simple accept value. Android Chrome only
+          launches the camera when `capture` is paired with one plain type like
+          "image/*" — give it a list (image/*,video/*,.heic,...) and it gives up
+          and opens the file picker instead, which is why this opened the gallery
+          on a Pixel while iOS still honoured it. Extensions are pointless here
+          anyway: the camera returns whatever the OS produces, not a file the
+          user picked.
+
+          One accept value means one mode, and this is deliberately the photo
+          one: a guest snapping a picture at a reception is the common case, and
+          this way it works the same on every phone. Recording still reaches us
+          through the picker below — guests film in their own camera app, which
+          is what they do anyway, then choose the clip. */}
       <input
         id="photo-camera-input"
         type="file"
-        accept={allowVideo ? 'image/*,video/*,.heic,.heif,.mov,.m4v' : 'image/*,.heic,.heif'}
+        accept="image/*"
         capture="environment"
         className="sr-only"
         onChange={handleFileSelect}

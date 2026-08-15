@@ -185,3 +185,152 @@ export function stripJpegMetadata(bytes: Uint8Array): Uint8Array | null {
   }
   return concat(kept);
 }
+
+// ---------------------------------------------------------------------------
+// HEIC
+//
+// HEIC is an ISO container: metadata lives in nested boxes and the item table
+// records ABSOLUTE file offsets for each piece of data. Rebuilding the metadata
+// the way the JPEG path does would shift every offset after it, and one wrong
+// number leaves an unopenable photo.
+//
+// So HEIC is handled differently: the GPS values are overwritten with zeroes
+// exactly where they sit. Nothing changes length, so every offset in the file
+// stays valid and there is nothing to recompute.
+//
+// That means HEIC loses its GPS but keeps benign metadata (camera, timestamps)
+// that the JPEG path drops — removing those would require the resize this is
+// deliberately avoiding.
+// ---------------------------------------------------------------------------
+
+/** EXIF tag whose value points at the GPS sub-IFD. */
+const TAG_GPS_IFD = 0x8825;
+
+/** Bytes per TIFF value, indexed by the type code in an IFD entry. */
+const TIFF_TYPE_SIZES: Record<number, number> = {
+  1: 1, // BYTE
+  2: 1, // ASCII
+  3: 2, // SHORT
+  4: 4, // LONG
+  5: 8, // RATIONAL
+  6: 1, // SBYTE
+  7: 1, // UNDEFINED
+  8: 2, // SSHORT
+  9: 4, // SLONG
+  10: 8, // SRATIONAL
+  11: 4, // FLOAT
+  12: 8, // DOUBLE
+};
+
+const HEIC_BRANDS = new Set([
+  'heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'heif', 'mif1', 'msf1',
+]);
+
+function asciiAt(bytes: Uint8Array, offset: number, length: number): string {
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    const byte = bytes[offset + i];
+    if (byte === undefined) return out;
+    out += String.fromCharCode(byte);
+  }
+  return out;
+}
+
+/** Whether these bytes are a HEIC/HEIF still image. */
+export function isHeic(bytes: Uint8Array): boolean {
+  if (bytes.length < 16) return false;
+  if (asciiAt(bytes, 4, 4) !== 'ftyp') return false;
+  return HEIC_BRANDS.has(asciiAt(bytes, 8, 4).toLowerCase());
+}
+
+/**
+ * Zero the GPS data reachable from one TIFF block, in place. Returns true when
+ * anything was actually cleared.
+ *
+ * GPS coordinates are RATIONALs — 8 bytes each — so they don't fit in an IFD
+ * entry's 4-byte value slot and live elsewhere in the block. Clearing the entry
+ * alone would hide them from readers while leaving the coordinates in the file,
+ * so each out-of-line value is zeroed too.
+ */
+function zeroGpsInTiff(buf: Uint8Array, tiffStart: number, tiffEnd: number): boolean {
+  if (tiffStart + 8 > tiffEnd) return false;
+
+  const order = readUint16(buf, tiffStart, false);
+  let little: boolean;
+  if (order === 0x4949) little = true; // "II"
+  else if (order === 0x4d4d) little = false; // "MM"
+  else return false;
+  if (readUint16(buf, tiffStart + 2, little) !== 42) return false;
+
+  const ifd0 = tiffStart + readUint32(buf, tiffStart + 4, little);
+  if (ifd0 + 2 > tiffEnd || ifd0 < tiffStart) return false;
+
+  const entryCount = readUint16(buf, ifd0, little);
+  if (entryCount > 512) return false; // not a plausible IFD
+
+  for (let i = 0; i < entryCount; i += 1) {
+    const entry = ifd0 + 2 + i * 12;
+    if (entry + 12 > tiffEnd) return false;
+    if (readUint16(buf, entry, little) !== TAG_GPS_IFD) continue;
+
+    const gpsIfd = tiffStart + readUint32(buf, entry + 8, little);
+    if (gpsIfd + 2 > tiffEnd || gpsIfd < tiffStart) return false;
+
+    const gpsCount = readUint16(buf, gpsIfd, little);
+    if (gpsCount > 256) return false;
+
+    // Zero each GPS value that is stored outside its entry.
+    for (let g = 0; g < gpsCount; g += 1) {
+      const gpsEntry = gpsIfd + 2 + g * 12;
+      if (gpsEntry + 12 > tiffEnd) return false;
+      const type = readUint16(buf, gpsEntry + 2, little);
+      const count = readUint32(buf, gpsEntry + 4, little);
+      const size = (TIFF_TYPE_SIZES[type] ?? 0) * count;
+      if (size > 4) {
+        const valueAt = tiffStart + readUint32(buf, gpsEntry + 8, little);
+        if (valueAt >= tiffStart && valueAt + size <= tiffEnd) {
+          buf.fill(0, valueAt, valueAt + size);
+        }
+      }
+    }
+
+    // Then the GPS entries themselves, and the count that reaches them.
+    const entriesEnd = Math.min(gpsIfd + 2 + gpsCount * 12, tiffEnd);
+    buf.fill(0, gpsIfd, entriesEnd);
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Remove GPS coordinates from a HEIC photo, in place.
+ *
+ * Returns the cleaned bytes, or null when the file isn't HEIC, carries no GPS,
+ * or doesn't parse exactly as expected — in which case the caller leaves the
+ * object untouched. Nothing is ever resized, so the container stays valid.
+ */
+export function stripHeicGps(bytes: Uint8Array): Uint8Array | null {
+  if (!isHeic(bytes)) return null;
+
+  const buf = new Uint8Array(bytes); // copy; only returned if something changed
+  let cleared = false;
+
+  // The Exif payload sits in the media data, introduced by "Exif\0\0" and then a
+  // TIFF header. Each candidate is validated as real TIFF before anything is
+  // written, so image data that happens to contain these bytes is not touched.
+  for (let i = 0; i + 14 < buf.length; i += 1) {
+    if (
+      buf[i] !== 0x45 || // E
+      buf[i + 1] !== 0x78 || // x
+      buf[i + 2] !== 0x69 || // i
+      buf[i + 3] !== 0x66 || // f
+      buf[i + 4] !== 0x00 ||
+      buf[i + 5] !== 0x00
+    ) {
+      continue;
+    }
+    if (zeroGpsInTiff(buf, i + 6, buf.length)) cleared = true;
+  }
+
+  return cleared ? buf : null;
+}

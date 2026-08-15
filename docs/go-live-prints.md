@@ -42,7 +42,33 @@ Do all four parts in one sitting.
 After changing secrets, **redeploy** (a fresh build re-bakes them). The
 `PRODIGI_ENV` code change already triggers a build when merged.
 
-## Verify after go-live
+## Verify after go-live — for free, first
+
+**Global admin → Print provider check → "Check print provider"** asks Prodigi to
+price one copy of each of the five sizes through the `/v4.0/quotes` endpoint.
+A quote creates nothing: no order exists afterwards, nothing is printed, nothing
+is charged, and there is nothing to cancel. Run it as often as you like.
+
+It proves the three things that actually differ between sandbox and live:
+
+- the **live API key authenticates** (a sandbox key answers `401` here),
+- **Lambda can reach `api.prodigi.com`** (a blocked network path times out here
+  exactly as it would mid-order), and
+- every **SKU and its required attributes** are valid in the live catalogue.
+
+A green result reports the per-print and shipping cost Prodigi quoted, which is
+also a free check that `lib/prints.ts`'s base costs are still right.
+
+It does **not** exercise order creation or Prodigi's fetch of the signed asset
+URL — those happen only on a real order. That code is identical to what sandbox
+already proved across all five sizes; only the base URL and key change, and
+those are precisely what the check covers.
+
+The check's SKU/attribute table is duplicated from `print-fulfill` by hand, and
+`__tests__/print-provider-check.test.ts` fails the build if the two drift — a
+check quoting a different product than fulfilment orders would prove nothing.
+
+## Verify with a real order
 
 1. Place **one real order** of a cheap size (e.g. a 4×6) with a real card.
 2. Stripe shows the payment; the webhook delivery returns `200` quickly.
