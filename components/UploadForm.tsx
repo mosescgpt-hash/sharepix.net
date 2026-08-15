@@ -182,13 +182,21 @@ export default function UploadForm({
         <p className="mt-1 text-sm text-ink/60">
           Photos up to 25 MB · MP4, MOV, or WEBM videos up to 100 MB
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className={`mt-4 grid gap-3 ${allowVideo ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
           <label
             htmlFor="photo-camera-input"
             className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
           >
-            Use camera
+            Take a photo
           </label>
+          {allowVideo ? (
+            <label
+              htmlFor="video-camera-input"
+              className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
+            >
+              Record a video
+            </label>
+          ) : null}
           <label
             htmlFor="photo-library-input"
             className="cursor-pointer rounded-full border border-ink/20 bg-white px-4 py-3 font-medium text-ink hover:border-accent"
@@ -197,14 +205,32 @@ export default function UploadForm({
           </label>
         </div>
       </div>
+      {/* Camera capture needs a SINGLE simple accept value. Android Chrome only
+          launches the camera when `capture` is paired with one plain type like
+          "image/*" — give it a list (image/*,video/*,.heic,...) and it gives up
+          and opens the file picker instead, which is why this opened the gallery
+          on a Pixel while iOS still honoured it. Extensions are pointless here
+          anyway: the camera returns whatever the OS produces, not a file the
+          user picked. */}
       <input
         id="photo-camera-input"
         type="file"
-        accept={allowVideo ? 'image/*,video/*,.heic,.heif,.mov,.m4v' : 'image/*,.heic,.heif'}
+        accept="image/*"
         capture="environment"
         className="sr-only"
         onChange={handleFileSelect}
       />
+      {/* Recording is a separate input for the same reason — one type each. */}
+      {allowVideo ? (
+        <input
+          id="video-camera-input"
+          type="file"
+          accept="video/*"
+          capture="environment"
+          className="sr-only"
+          onChange={handleFileSelect}
+        />
+      ) : null}
       <input
         id="photo-library-input"
         type="file"
