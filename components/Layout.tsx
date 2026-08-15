@@ -2,6 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { ReactNode } from 'react';
 import Navbar from '@/components/Navbar';
+import { SUPPORT_EMAIL } from '@/lib/help';
 
 interface LayoutProps {
   title?: string;
@@ -32,6 +33,13 @@ export default function Layout({ title, children }: LayoutProps) {
           <Link href="/help" className="text-white/70 underline hover:text-white">
             Help
           </Link>
+          <span className="mx-2 text-white/30">·</span>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="text-white/70 underline hover:text-white"
+          >
+            {SUPPORT_EMAIL}
+          </a>
           <span className="mx-2 text-white/30">·</span>
           <Link href="/privacy" className="text-white/70 underline hover:text-white">
             Privacy Policy

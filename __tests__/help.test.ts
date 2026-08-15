@@ -4,6 +4,7 @@ import {
   articlesInCategory,
   findArticle,
   searchHelp,
+  SUPPORT_EMAIL,
 } from '../lib/help';
 
 describe('help article structure', () => {
@@ -102,5 +103,31 @@ describe('help content stays true to the product', () => {
     expect(article.summary).toContain('Two');
     expect(article.summary).toContain('ten');
     expect(article.summary).toContain('thirty');
+  });
+});
+
+describe('getting in touch', () => {
+  it('routes every "email us" through the one address', () => {
+    // A support address typed into prose is one that gets missed when it
+    // changes. Contact blocks carry no address of their own.
+    for (const article of HELP_ARTICLES) {
+      for (const block of article.blocks) {
+        const text = 'text' in block ? block.text : block.steps.join(' ');
+        expect(text).not.toContain('@');
+      }
+    }
+  });
+
+  it('gives the articles that cannot self-serve a way to reach a human', () => {
+    // Refunds, duplicate charges, a stuck event and a lost sign-in all end in
+    // something only we can do.
+    for (const slug of ['print-problem', 'event-not-active', 'billing-help', 'reset-password']) {
+      const article = findArticle(slug)!;
+      expect(article.blocks.some((block) => block.kind === 'contact')).toBe(true);
+    }
+  });
+
+  it('uses a real address', () => {
+    expect(SUPPORT_EMAIL).toMatch(/^[^@\s]+@[^@\s]+\.[a-z]+$/);
   });
 });

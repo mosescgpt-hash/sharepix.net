@@ -5,6 +5,7 @@ import {
   HELP_ARTICLES,
   HELP_CATEGORIES,
   HelpArticle,
+  SUPPORT_EMAIL,
   articlesInCategory,
   searchHelp,
 } from '@/lib/help';
@@ -128,8 +129,14 @@ export default function HelpIndexPage() {
         <div className="mt-12 rounded-2xl border border-ink/10 bg-white p-6 text-center">
           <h2 className="font-display text-lg font-bold">Still stuck?</h2>
           <p className="mt-2 text-sm text-ink/70">
-            Tell us the event name and what you saw on screen, and we will sort it out.
+            Email us the event name and what you saw on screen, and we will sort it out.
           </p>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="mt-4 inline-block rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night"
+          >
+            {SUPPORT_EMAIL}
+          </a>
         </div>
       </section>
     </Layout>

@@ -1,7 +1,7 @@
 import { GetStaticPaths, GetStaticProps } from 'next';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
-import { HELP_ARTICLES, HelpArticle, findArticle } from '@/lib/help';
+import { HELP_ARTICLES, HelpArticle, SUPPORT_EMAIL, findArticle } from '@/lib/help';
 
 interface Props {
   article: HelpArticle;
@@ -33,6 +33,19 @@ export default function HelpArticlePage({ article, related }: Props) {
                     </li>
                   ))}
                 </ol>
+              );
+            }
+            if (block.kind === 'contact') {
+              return (
+                <p key={index} className="rounded-xl border border-ink/15 bg-white px-4 py-3">
+                  {block.text}{' '}
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(article.title)}`}
+                    className="font-medium text-accent hover:underline"
+                  >
+                    {SUPPORT_EMAIL}
+                  </a>
+                </p>
               );
             }
             if (block.kind === 'note') {

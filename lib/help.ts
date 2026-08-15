@@ -14,10 +14,19 @@
 
 export type HelpAudience = 'guest' | 'host';
 
+/** Where readers are told to write when an article cannot finish the job. */
+export const SUPPORT_EMAIL = 'info@sharepix.net';
+
 export type HelpBlock =
   | { kind: 'text'; text: string }
   | { kind: 'steps'; steps: string[] }
-  | { kind: 'note'; text: string };
+  | { kind: 'note'; text: string }
+  /**
+   * Renders as a mailto link. A block rather than an address typed into prose,
+   * so the address lives in one constant and every "get in touch" is tappable
+   * on a phone instead of something to copy out by hand.
+   */
+  | { kind: 'contact'; text: string };
 
 export interface HelpArticle {
   slug: string;
@@ -322,8 +331,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
         text: 'Prints are produced and posted by our print partner, usually within a few days of ordering, and delivery time depends on your address.',
       },
       {
-        kind: 'text',
-        text: 'If an order arrives damaged, is wrong, or does not arrive, contact us with the email address you used at checkout and the approximate order date. A photo of the problem helps a replacement go through quickly.',
+        kind: 'contact',
+        text: 'If an order arrives damaged, is wrong, or does not arrive, email us with the address you used at checkout and the approximate order date. A photo of the problem helps a replacement go through quickly.',
       },
       {
         kind: 'note',
@@ -507,7 +516,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'text',
-        text: 'If it is still inactive after a few minutes, check your card statement. If you were charged and the event has not activated, contact us with the event name and we will activate it.',
+        text: 'If it is still inactive after a few minutes, check your card statement.',
+      },
+      {
+        kind: 'contact',
+        text: 'If you were charged and the event has not activated, email us with the event name and we will activate it.',
       },
       {
         kind: 'note',
@@ -818,8 +831,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
         text: 'Payments are handled by Stripe, and the card receipt comes from them. Corporate subscribers can see every invoice in the billing portal.',
       },
       {
-        kind: 'text',
-        text: 'If you think you were charged twice — for instance after a browser back button during checkout — contact us with the event name and the approximate time, and we will check and refund any duplicate.',
+        kind: 'contact',
+        text: 'If you think you were charged twice — for instance after a browser back button during checkout — email us with the event name and the approximate time, and we will check and refund any duplicate.',
       },
       {
         kind: 'note',
@@ -848,7 +861,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'text',
-        text: 'If the email does not arrive, check spam, and confirm you are using the address you originally signed up with. If you are still stuck, contact us and we can send a reset.',
+        text: 'If the email does not arrive, check spam, and confirm you are using the address you originally signed up with.',
+      },
+      {
+        kind: 'contact',
+        text: 'Still stuck? Email us from the address on the account and we can send a reset.',
       },
       {
         kind: 'note',
