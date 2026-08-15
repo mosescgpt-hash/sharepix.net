@@ -21,7 +21,7 @@ import {
   startCheckout,
 } from '@/lib/api';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
-import { eventLifecycle } from '@/lib/lifecycle';
+import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { DiscountCode, QREvent } from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,18 +47,40 @@ function simulateWindowEnd(event: QREvent, phase: string): string | null {
   }
 }
 
-/** Short human label for where an event sits in its lifecycle. */
-function lifecyclePhase(event: QREvent): { label: string; recover: boolean } {
+/** Which bucket the lifecycle filter puts an event in. */
+type PhaseGroup = 'live' | 'archived' | 'expired';
+
+/**
+ * Short human label for where an event sits in its lifecycle.
+ *
+ * `group` drives the filter; `recover` is whether Restore access applies, which
+ * is true for anything the host can no longer reach — including an event past
+ * its archive window, since restoring it is exactly how you undo that.
+ */
+function lifecyclePhase(event: QREvent): {
+  label: string;
+  recover: boolean;
+  group: PhaseGroup;
+  archivable: boolean;
+} {
   const lc = eventLifecycle(event);
-  if (!lc.uploadWindowEndsAt) return { label: 'Active', recover: false };
-  if (lc.uploadOpen) return { label: 'Open · uploads', recover: false };
+  if (!lc.uploadWindowEndsAt) {
+    return { label: 'Active', recover: false, group: 'live', archivable: true };
+  }
+  if (lc.uploadOpen) {
+    return { label: 'Open · uploads', recover: false, group: 'live', archivable: true };
+  }
   if (lc.hostAccess) {
     return {
       label: lc.guestResolution === 'small' ? 'Post-window · guests low-res' : 'Host retention',
       recover: false,
+      group: 'live',
+      archivable: true,
     };
   }
-  return { label: lc.archived ? 'Archived · recoverable' : 'Past archive', recover: true };
+  return lc.archived
+    ? { label: 'Archived · recoverable', recover: true, group: 'archived', archivable: false }
+    : { label: 'Past archive', recover: true, group: 'expired', archivable: false };
 }
 
 function defaultExpiryValue(): string {
@@ -113,6 +135,9 @@ function GlobalAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  // Archived events are otherwise needles in the full list — this is how an
+  // admin finds the one a host has asked to have back.
+  const [phaseFilter, setPhaseFilter] = useState<PhaseGroup | 'all'>('all');
   const [userEmail, setUserEmail] = useState('');
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
@@ -221,13 +246,19 @@ function GlobalAdminPage() {
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return events;
-    return events.filter((event) =>
-      [event.name, event.eventCode, event.createdBy, event.tier]
+    return events.filter((event) => {
+      if (phaseFilter !== 'all' && lifecyclePhase(event).group !== phaseFilter) return false;
+      if (!query) return true;
+      return [event.name, event.eventCode, event.createdBy, event.tier]
         .filter(Boolean)
-        .some((value) => value?.toLowerCase().includes(query)),
-    );
-  }, [events, search]);
+        .some((value) => value?.toLowerCase().includes(query));
+    });
+  }, [events, search, phaseFilter]);
+
+  const archivedCount = useMemo(
+    () => events.filter((event) => lifecyclePhase(event).group !== 'live').length,
+    [events],
+  );
 
   const totalPhotos = Object.values(photoCounts).reduce((sum, count) => sum + count, 0);
   const activeCodes = codes.filter(
@@ -434,6 +465,33 @@ function GlobalAdminPage() {
     }
   }
 
+  /**
+   * Archive on request: guests lose the gallery, the host loses access, and the
+   * event becomes admin-only but recoverable for the length of the archive
+   * window. Nothing is deleted — Restore access puts it back.
+   */
+  async function handleArchiveEvent(event: QREvent) {
+    const until = eventLifecycle(event).archiveEndsAt;
+    if (
+      !window.confirm(
+        `Archive “${event.name}”?\n\nGuests lose the gallery and the host loses access immediately. Nothing is deleted — you can restore it from here${
+          until ? ', and it stays recoverable for the full archive window' : ''
+        }.`,
+      )
+    ) return;
+
+    setWorking(`archive-${event.id}`);
+    setError(null);
+    try {
+      await setEventUploadWindowEnd(event.id, archiveWindowEnd(event));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The event could not be archived.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleRestoreEvent(event: QREvent) {
     if (
       !window.confirm(
@@ -613,7 +671,10 @@ function GlobalAdminPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="font-display text-2xl font-bold">Events</h2>
-                    <p className="text-sm text-ink/60">Open a host dashboard or remove a problem event.</p>
+                    <p className="text-sm text-ink/60">
+                      Open a host dashboard, archive an event, or restore one that was
+                      archived.
+                    </p>
                   </div>
                   <input
                     type="search"
@@ -622,6 +683,36 @@ function GlobalAdminPage() {
                     placeholder="Search events"
                     className="rounded-xl border border-ink/20 bg-white px-4 py-2.5 text-sm focus:border-accent focus:outline-none"
                   />
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  {(
+                    [
+                      ['all', `All (${events.length})`],
+                      ['live', 'Active'],
+                      ['archived', 'Archived · recoverable'],
+                      ['expired', 'Past archive'],
+                    ] as [PhaseGroup | 'all', string][]
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPhaseFilter(value)}
+                      className={`rounded-full border px-3 py-1.5 font-medium transition ${
+                        phaseFilter === value
+                          ? 'border-accent bg-accent text-white'
+                          : 'border-ink/20 bg-white text-ink/70 hover:border-accent'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {archivedCount > 0 && phaseFilter === 'all' ? (
+                    <span className="self-center text-ink/50">
+                      {archivedCount} event{archivedCount === 1 ? '' : 's'} no longer reachable
+                      by their host
+                    </span>
+                  ) : null}
                 </div>
                 <div className="mt-4 space-y-3">
                   {filteredEvents.length === 0 ? (
@@ -645,7 +736,14 @@ function GlobalAdminPage() {
                           </p>
                           {(() => {
                             const phase = lifecyclePhase(event);
+                            const archiveEnd = eventLifecycle(event).archiveEndsAt;
                             return (
+                              <>
+                              {phase.group === 'archived' && archiveEnd ? (
+                                <p className="mt-1 text-xs text-amber-700">
+                                  Recoverable until {archiveEnd.toLocaleDateString()}
+                                </p>
+                              ) : null}
                               <span
                                 className={`mt-2 inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                   phase.recover
@@ -655,6 +753,7 @@ function GlobalAdminPage() {
                               >
                                 {phase.label}
                               </span>
+                              </>
                             );
                           })()}
                         </div>
@@ -675,6 +774,16 @@ function GlobalAdminPage() {
                               Add photos
                             </button>
                           ) : null}
+                          {lifecyclePhase(event).archivable ? (
+                            <button
+                              type="button"
+                              disabled={working === `archive-${event.id}`}
+                              onClick={() => void handleArchiveEvent(event)}
+                              className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent disabled:opacity-50"
+                            >
+                              {working === `archive-${event.id}` ? 'Archiving…' : 'Archive'}
+                            </button>
+                          ) : null}
                           {lifecyclePhase(event).recover ? (
                             <button
                               type="button"
@@ -682,7 +791,7 @@ function GlobalAdminPage() {
                               onClick={() => void handleRestoreEvent(event)}
                               className="rounded-full border border-accent px-3 py-1.5 text-accent hover:bg-accent hover:text-white disabled:opacity-50"
                             >
-                              Restore access
+                              {working === `restore-${event.id}` ? 'Restoring…' : 'Restore access'}
                             </button>
                           ) : null}
                           <select
@@ -700,7 +809,9 @@ function GlobalAdminPage() {
                             <option value="open">Open (uploads)</option>
                             <option value="lowres">Guests low-res</option>
                             <option value="gone">Guests gone</option>
-                            <option value="archived">Archived</option>
+                            {/* No "archived" here on purpose — Archive above is
+                                the real action, and two ways to do the same
+                                thing is how one of them gets missed. */}
                           </select>
                           <button
                             type="button"

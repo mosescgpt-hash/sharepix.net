@@ -17,6 +17,12 @@ export interface EventLifecycle {
   archived: boolean;
   uploadWindowEndsAt: Date | null;
   retentionEndsAt: Date | null;
+  /**
+   * When the admin-only archive window closes and the event stops being
+   * recoverable. Null for an event with no window (created before the
+   * lifecycle model), which never archives.
+   */
+  archiveEndsAt: Date | null;
 }
 
 /**
@@ -43,6 +49,7 @@ export function eventLifecycle(
       archived: false,
       uploadWindowEndsAt: null,
       retentionEndsAt: null,
+      archiveEndsAt: null,
     };
   }
 
@@ -56,6 +63,7 @@ export function eventLifecycle(
       archived: false,
       uploadWindowEndsAt: null,
       retentionEndsAt: null,
+      archiveEndsAt: null,
     };
   }
 
@@ -86,5 +94,29 @@ export function eventLifecycle(
     archived: now >= retentionEnd && now < archiveEnd,
     uploadWindowEndsAt: windowEnd,
     retentionEndsAt: retentionEnd,
+    archiveEndsAt: archiveEnd,
   };
+}
+
+/**
+ * The `uploadWindowEndsAt` that puts an event at the very start of its archive
+ * window: guests see nothing, the host loses access, and the event is
+ * admin-only but still recoverable.
+ *
+ * Computed rather than hard-coded because retention differs per plan, and it
+ * lands the event just past the retention boundary rather than deep into the
+ * archive — so archiving by hand does not quietly burn part of the recovery
+ * period the host would get back.
+ */
+export function archiveWindowEnd(
+  event: Pick<QREvent, 'tier'>,
+  now: Date = new Date(),
+): string {
+  const isCorporate = event.tier === 'corporate';
+  const retentionDays = isCorporate
+    ? CORPORATE_PLAN.retentionDays
+    : getTier(event.tier)?.retentionDays ?? 90;
+  // One minute past the boundary, so `archived` is true immediately rather
+  // than depending on clock skew between here and the next render.
+  return new Date(now.getTime() - retentionDays * DAY_MS - 60_000).toISOString();
 }
