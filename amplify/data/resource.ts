@@ -7,6 +7,7 @@ import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-ph
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
+import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
 
 /**
  * SharePix data models.
@@ -328,6 +329,17 @@ const schema = a.schema({
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(adminUserActionsFn)),
+
+  // Global-admin only: price a one-print order through Prodigi's quotes
+  // endpoint to confirm the live key, network path and SKUs work. Creates
+  // nothing and charges nothing. Takes no arguments — there is no input to
+  // trust, and the ADMINS group is the whole authorization story.
+  checkPrintProvider: a
+    .mutation()
+    .arguments({})
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(printProviderCheckFn)),
 
   CheckoutSession: a.customType({
     url: a.string().required(),

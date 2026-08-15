@@ -5,6 +5,7 @@ import Layout from '@/components/Layout';
 import { isGlobalAdmin } from '@/lib/admin';
 import {
   addEventPhotoCredits,
+  checkPrintProvider,
   createDiscountCode,
   deleteDiscountCode,
   deleteEventAsGlobalAdmin,
@@ -114,6 +115,7 @@ function GlobalAdminPage() {
   const [search, setSearch] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -346,6 +348,22 @@ function GlobalAdminPage() {
     }
   }
 
+  async function handleCheckPrintProvider() {
+    setWorking('print-check');
+    setPrintCheck(null);
+    try {
+      const result = await checkPrintProvider();
+      setPrintCheck({ text: result.message, ok: result.ok });
+    } catch (err) {
+      setPrintCheck({
+        text: err instanceof Error ? err.message : 'The check could not be run.',
+        ok: false,
+      });
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleTestCheckout(tier: string) {
     setWorking(`checkout-${tier}`);
     setError(null);
@@ -560,6 +578,33 @@ function GlobalAdminPage() {
                 >
                   {userMessage.text}
                 </p>
+              ) : null}
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+              <h2 className="font-display text-xl font-bold">Print provider check</h2>
+              <p className="text-sm text-ink/70">
+                Asks Prodigi to price one of each print we sell. This only requests a{' '}
+                <strong>quote</strong> — nothing is printed, nothing is ordered and nothing is
+                charged — so it can be run any time. It confirms the API key works, that the
+                servers can reach Prodigi, and that every size and its options are still valid.
+              </p>
+              <button
+                type="button"
+                disabled={working === 'print-check'}
+                onClick={() => void handleCheckPrintProvider()}
+                className="mt-4 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+              >
+                {working === 'print-check' ? 'Checking…' : 'Check print provider'}
+              </button>
+              {printCheck ? (
+                <pre
+                  className={`mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
+                    printCheck.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {printCheck.text}
+                </pre>
               ) : null}
             </div>
 

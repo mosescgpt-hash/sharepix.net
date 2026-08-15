@@ -21,6 +21,7 @@ import { createEventPhoto } from './functions/create-event-photo/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { printCheckout } from './functions/print-checkout/resource';
 import { printFulfill } from './functions/print-fulfill/resource';
+import { printProviderCheck } from './functions/print-provider-check/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
@@ -37,6 +38,7 @@ const backend = defineBackend({
   stripeCheckout,
   printCheckout,
   printFulfill,
+  printProviderCheck,
   listEventPhotos,
   adminUserActions,
   stripeWebhook,
