@@ -95,7 +95,7 @@ describe('help content stays true to the product', () => {
   it('quotes the current video ceiling', () => {
     const article = findArticle('video-wont-upload')!;
     const text = article.blocks.map((b) => ('text' in b ? b.text : b.steps.join(' '))).join(' ');
-    expect(text).toContain('500 MB');
+    expect(text).toContain('250 MB');
   });
 
   it('quotes the current per-plan video allowances', () => {

@@ -75,6 +75,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
         text: 'Nothing to install and no sign-up. If you leave the page mid-upload, files that had already finished are safely stored; anything still in progress needs picking again.',
       },
       {
+        kind: 'text',
+        text: 'Photos appear in the shared gallery for everyone. Videos go to the host instead — you will not see your own clip in the gallery, and that is not a failed upload.',
+      },
+      {
         kind: 'note',
         text: 'No QR code handy? Ask the host for the event code and enter it on the sharepix.net home page.',
       },
@@ -106,11 +110,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     audience: 'guest',
     category: 'Adding photos and videos',
     summary: 'Almost always the file size or the event’s video allowance. Both say so on screen.',
-    keywords: ['video', 'too large', 'size limit', 'mov', 'mp4', '4k', 'rejected'],
+    keywords: ['video', 'too large', 'size limit', 'mov', 'mp4', '4k', 'rejected', 'missing', 'not in gallery'],
     blocks: [
       {
         kind: 'text',
-        text: 'Videos can be up to 500 MB each, in MP4, MOV, WEBM, M4V or 3GP. For scale, 500 MB is about two minutes of 4K video, or considerably more at 1080p.',
+        text: 'Videos can be up to 250 MB each, in MP4, MOV, WEBM, M4V or 3GP. For scale, 250 MB is about a minute of 4K video, or four minutes at 1080p.',
       },
       {
         kind: 'text',
@@ -262,6 +266,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
       {
         kind: 'text',
         text: 'Guest downloading is an optional extra the host buys per event. When it is on, you get download buttons on individual photos and can select several and take them as one ZIP file.',
+      },
+      {
+        kind: 'text',
+        text: 'Videos are the exception: they go to the host only. Guests can film and upload them, but they are not shown or downloadable in the guest gallery — ask the host if you want a copy.',
       },
       {
         kind: 'text',
@@ -625,7 +633,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Anything you upload is visible to other guests at that event and to the host. Galleries are not indexed or searchable, but anyone with the code or QR image can open one — treat it as sharing with everyone at the party.',
+        text: 'Photos you upload are visible to other guests at that event and to the host. Galleries are not indexed or searchable, but anyone with the code or QR image can open one — treat a photo as sharing with everyone at the party.',
+      },
+      {
+        kind: 'text',
+        text: 'Videos are different: only the host sees them. A clip you upload goes to the couple and is not shown to other guests at all.',
       },
       {
         kind: 'text',
@@ -669,11 +681,15 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Videos are counted separately from photos, and each can be up to 500 MB. Your dashboard shows how many have been used.',
+        text: 'Videos are counted separately from photos, and each can be up to 250 MB. Your dashboard shows how many have been used.',
       },
       {
         kind: 'text',
         text: 'Photos can be unlimited on the higher plans, but video cannot: a photo is shrunk before it is ever shown, while a video is sent in full every time somebody plays it. The allowance is what keeps that predictable.',
+      },
+      {
+        kind: 'text',
+        text: 'For the same reason, videos are yours alone. Guests can film and upload them, but only you can watch and download them — a hundred guests replaying each other’s clips is the one cost in the product with no ceiling on it.',
       },
       {
         kind: 'text',

@@ -15,6 +15,7 @@ import {
   DisplayPhoto,
 } from '@/lib/types';
 import { buildPhotoKey, buildPreviewKey, buildThumbKey, generateEventCode } from '@/lib/validation';
+import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import {
   computeAccessExpiresAt,
   computeUploadWindowEndsAt,
@@ -49,6 +50,24 @@ export async function getCurrentUserInfo(): Promise<CurrentUser | null> {
 /** Guests use the identity pool; signed-in users use the user pool. */
 async function authModeFor(): Promise<DataAuthMode> {
   return (await getCurrentUserInfo()) ? 'userPool' : 'identityPool';
+}
+
+/**
+ * Amplify's `getUrl` signs for 15 minutes. Reusing for 10 leaves five minutes of
+ * validity on the most stale URL we ever hand out, which is ample for a page
+ * that is already rendered — and it means revisiting a gallery serves images
+ * and video from the browser cache instead of pulling them from S3 again.
+ */
+const SIGNED_URL_REUSE_MS = 10 * 60 * 1000;
+
+const signedUrls = createSignedUrlCache(
+  async (path: string) => (await getUrl({ path })).url.toString(),
+  SIGNED_URL_REUSE_MS,
+);
+
+/** A signed display URL for a storage path, reused while it is still fresh. */
+async function signedUrlFor(path: string): Promise<string> {
+  return signedUrls.get(path);
 }
 
 function errorMessage(error: unknown): string {
@@ -898,8 +917,7 @@ export async function fetchEventPhotos(
         : opts.useThumbs
           ? p.thumbS3Key || p.previewS3Key || p.s3Key
           : p.previewS3Key || p.s3Key;
-      const { url } = await getUrl({ path: displayPath });
-      return { ...p, url: url.toString() };
+      return { ...p, url: await signedUrlFor(displayPath) };
     })
   );
 
@@ -1103,8 +1121,7 @@ export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]
  * periodically rather than holding one for the whole reception.
  */
 export async function getPhotoDisplayUrl(photo: QRPhoto): Promise<string> {
-  const { url } = await getUrl({ path: photo.previewS3Key || photo.s3Key });
-  return url.toString();
+  return signedUrlFor(photo.previewS3Key || photo.s3Key);
 }
 
 /** Triggers a browser download of a photo. */

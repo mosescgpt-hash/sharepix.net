@@ -213,6 +213,11 @@ export default function UploadForm({
             ? `Photos up to 25 MB · MP4, MOV, or WEBM videos up to ${MAX_VIDEO_SIZE_LABEL}`
             : 'Photos up to 25 MB'}
         </p>
+        {allowVideo && videosRemaining !== 0 ? (
+          <p className="mt-1 text-sm text-ink/60">
+            Videos go straight to the host — they won’t appear in the guest gallery.
+          </p>
+        ) : null}
         {allowVideo && videosRemaining !== null ? (
           <p className="mt-1 text-sm text-ink/60">
             {videosRemaining === 0

@@ -8,7 +8,7 @@ export interface PricingTier {
    * because they are the only upload whose cost is not bounded by resizing: a
    * still is shrunk to a 1280px preview before it is ever served, while a video
    * streams from S3 at full size every time someone plays it. Counting videos
-   * (rather than bytes) is the unit a host can understand, and the 500 MB
+   * (rather than bytes) is the unit a host can understand, and the 250 MB
    * per-file ceiling is what bounds the bytes behind it.
    */
   videoLimit: number | null; // null = unlimited
@@ -133,15 +133,6 @@ export function getTier(id: string): PricingTier | undefined {
 }
 
 /**
- * How many videos a new event on this tier includes, stamped onto the event at
- * creation so a later pricing change never retroactively blocks uploads to an
- * event someone already paid for.
- *
- * Corporate has no PricingTier row, so it is handled explicitly rather than
- * falling through to null — null means *unlimited*, which is exactly what a
- * video limit must never become by accident.
- */
-/**
  * Videos an event can still accept, or null when it has no limit. Used to tell
  * a guest before they pick a file; the real enforcement is the atomic
  * reservation in create-event-photo, which this only mirrors.
@@ -156,6 +147,15 @@ export function videosRemaining(event: {
   return Math.max(0, limit - (event.videoCount ?? 0));
 }
 
+/**
+ * How many videos a new event on this tier includes, stamped onto the event at
+ * creation so a later pricing change never retroactively blocks uploads to an
+ * event someone already paid for.
+ *
+ * Corporate has no PricingTier row, so it is handled explicitly rather than
+ * falling through to null — null means *unlimited*, which is exactly what a
+ * video limit must never become by accident.
+ */
 export function videoLimitForTier(id: string): number | null {
   const tier = getTier(id);
   if (tier) return tier.videoLimit;

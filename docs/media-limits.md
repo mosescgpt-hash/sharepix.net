@@ -3,7 +3,7 @@
 | | Limit | Where enforced |
 | --- | --- | --- |
 | Photos | 25 MB | `lib/validation.ts` (client) + `amplify/functions/sanitize-upload/safety.ts` (server) |
-| Videos | 500 MB | same two files |
+| Videos | 250 MB | same two files |
 
 The client check is a courtesy that gives the guest a readable message. The
 **server** check is the real one: `sanitize-upload` re-reads the object's actual
@@ -16,7 +16,7 @@ Drift is worse than it looks in the direction where the server is lower: the
 upload succeeds, the guest is told it worked, and the trigger silently deletes
 the file afterwards.
 
-## Why videos are 500 MB
+## Why videos are 250 MB
 
 The limit was 100 MB, which rejected a **20-second clip** — a toast, a first
 dance. Phones record at these rates (Apple's published figures; Android is
@@ -31,9 +31,15 @@ comparable):
 | **4K / 60** | ~400 MB | **~133 MB** |
 | ProRes 4K / 30 | ~1.7 GB | ~570 MB |
 
-4K/60 is a common default on recent phones, so the old ceiling failed a
-perfectly ordinary clip. 500 MB clears a couple of minutes at every setting
-except ProRes.
+4K/60 is a common default on recent phones, so the old 100 MB ceiling failed a
+perfectly ordinary clip. 250 MB clears roughly 35 seconds at 4K/60, over a
+minute at 4K/30, and four minutes at 1080p.
+
+It was briefly 500 MB. The reason for halving it is not storage — that is
+pennies either way — but **playback**: a video is sent in full on every play,
+so the per-file ceiling multiplies by every view. 250 MB covers "a guest filmed
+a moment" without reaching for "a guest filmed the ceremony", and halves what
+the biggest clip an event can hold costs each time somebody watches it.
 
 ## What a limit does and does not cost
 
@@ -45,11 +51,49 @@ larger files.
 What is expensive is **playback**, because videos are served straight from S3 —
 no transcode, no CloudFront. A gallery tile uses `preload="metadata"`, so idle
 browsing is cheap, but every play streams the whole original. Roughly $0.09 per
-GB delivered, so one 500 MB clip watched 30 times is about $1.35.
+GB delivered, so one 250 MB clip watched 30 times is about $0.68.
+
+The count of videos is not the cost — the count of *views* is. Five 250 MB
+clips sitting in an event cost about $0.03 a month to store. The same five
+watched right through by 100 guests is 125 GB out, about $11. The lever that
+matters most is therefore **who can play them**, not how many there are.
 
 For contrast, stills are cheap because they are resized *before* they reach S3:
 the gallery serves 480px thumbnails and the live slideshow serves 1280px
 previews, so a whole six-hour reception on one screen is well under $0.20.
+
+## Videos are host-only
+
+Guests can upload video; only the **host** (and a global admin) can watch or
+download it. Enforced in `list-event-photos/visibility.ts` — the query simply
+does not return video records to anyone else.
+
+**Why in the Lambda and not the gallery.** Guests hold S3 read credentials for
+`events/*`, and the query hands out object keys. Hiding a video in the UI while
+still returning its key would not be a gate at all.
+
+**Why at all.** Egress is bytes times viewers. Five 250 MB clips watched right
+through by 100 guests is 125 GB, about $11 — on a $25 event. The same five
+watched by the host a few times is under $0.40. This is the single largest
+lever on the bill, and it costs nothing anyone was buying: guests upload clips
+*for the couple*, not to watch each other's.
+
+The trade-off, stated plainly: a guest who uploads a video will not see it in
+the gallery. The upload form says so up front, because otherwise it reads as a
+failed upload.
+
+The live slideshow was already stills-only, so nothing changed there.
+
+## Signed URL reuse
+
+`getUrl` signs a fresh URL on every call, and a fresh signature is a different
+query string — which the browser treats as a different file. Re-signing on every
+render therefore threw away the cache and re-downloaded everything.
+
+`lib/signedUrlCache.ts` reuses a signature for 10 minutes (Amplify signs for 15,
+so the most stale URL handed out still has five minutes left) and de-duplicates
+concurrent requests for the same path. Revisiting a gallery now serves from the
+browser cache instead of pulling from S3 again.
 
 ## Videos included per plan
 
@@ -63,7 +107,7 @@ previews, so a whole six-hour reception on one screen is well under $0.20.
 Photos can be unlimited because they are resized before they are ever served.
 Videos cannot: they stream from S3 at full size on every play, so an unlimited
 video allowance is an open-ended bill. Counting videos rather than bytes is the
-unit a host can understand, and the 500 MB per-file ceiling bounds the bytes
+unit a host can understand, and the 250 MB per-file ceiling bounds the bytes
 behind each one.
 
 The limit is **stamped onto the event at creation** (`videoLimit`), so changing
@@ -96,9 +140,9 @@ atomic reservation is the enforcement.
 ## Known consequence: bulk ZIP downloads
 
 `downloadPhotosAsZip` and `downloadEventsAsZip` build the archive in the
-browser, holding every file in memory at once. With 500 MB videos a host who
-selects a whole event can exhaust the tab's memory. This predates the limit
-change but is five times easier to hit now.
+browser, holding every file in memory at once. With 250 MB videos a host who
+selects a whole event can exhaust the tab's memory. This predates the video
+limit changes but is easier to hit than it was at 100 MB.
 
 The fix is a streaming or server-side archive, or a per-archive byte budget that
 skips oversized files and names them. Until then, hosts with long videos should
@@ -107,8 +151,8 @@ download in smaller selections.
 ## Content hashing
 
 Uploads are fingerprinted with SHA-256 so the same file is not stored twice.
-Hashing reads the entire file into memory, which a phone will not survive at
-half a gigabyte — and an out-of-memory kill takes the tab down rather than
-throwing something catchable. Files over `MAX_HASHABLE_BYTES` (100 MB) are
+Hashing reads the entire file into memory, which a phone will not reliably
+survive at a couple of hundred megabytes — and an out-of-memory kill takes the
+tab down rather than throwing something catchable. Files over `MAX_HASHABLE_BYTES` (100 MB) are
 therefore uploaded **without** a hash. Dedup is a convenience, not a gate: the
 cost is that the same large clip can be uploaded twice.
