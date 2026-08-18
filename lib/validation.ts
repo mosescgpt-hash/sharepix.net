@@ -35,13 +35,15 @@ export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 /**
  * Video ceiling. Phones record 4K/60 at roughly 400 MB per minute, so the old
  * 100 MB cap rejected clips as short as **20 seconds** — the length of a toast
- * or a first dance. 500 MB covers a couple of minutes at any normal phone
- * setting while still bounding the worst case; only ProRes exceeds it.
+ * or a first dance. 250 MB clears roughly 35 seconds at 4K/60, over a minute at
+ * 4K/30, and four minutes at 1080p — the whole range of "a guest filmed a
+ * moment" without reaching for "a guest filmed the ceremony".
  *
- * The limit itself costs nothing: S3 bills for bytes actually stored and
- * watched, not for the ceiling. See docs/media-limits.md.
+ * Storing a bigger ceiling costs nothing; *watching* is what is billed, and it
+ * scales with the file size on every play. Halving the ceiling halves the cost
+ * of every view of the biggest clips an event can hold. See docs/media-limits.md.
  */
-export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024;
+export const MAX_VIDEO_SIZE_BYTES = 250 * 1024 * 1024;
 
 /** The video ceiling as it is written in guest-facing copy. */
 export const MAX_VIDEO_SIZE_LABEL = `${Math.round(MAX_VIDEO_SIZE_BYTES / (1024 * 1024))} MB`;

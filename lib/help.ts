@@ -110,7 +110,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Videos can be up to 500 MB each, in MP4, MOV, WEBM, M4V or 3GP. For scale, 500 MB is about two minutes of 4K video, or considerably more at 1080p.',
+        text: 'Videos can be up to 250 MB each, in MP4, MOV, WEBM, M4V or 3GP. For scale, 250 MB is about a minute of 4K video, or four minutes at 1080p.',
       },
       {
         kind: 'text',
@@ -669,7 +669,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Videos are counted separately from photos, and each can be up to 500 MB. Your dashboard shows how many have been used.',
+        text: 'Videos are counted separately from photos, and each can be up to 250 MB. Your dashboard shows how many have been used.',
       },
       {
         kind: 'text',
