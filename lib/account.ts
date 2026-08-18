@@ -2,8 +2,8 @@
  * Validation for the account-settings page.
  *
  * Pure functions, no Amplify imports, so the rules can be unit tested without a
- * user pool. The page does the actual `updateUserAttributes` /
- * `confirmUserAttribute` calls; these just decide whether it should.
+ * user pool or database. The page/API do the actual writes (HostProfile for the
+ * name, Cognito for the email); these just decide whether they should.
  */
 
 // Control characters (CR/LF among them) have no place in a name, and are what
@@ -11,7 +11,7 @@
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
 
-/** Trim to what Cognito's `name` attribute should hold. */
+/** Trim to what the stored display name should hold. */
 export function sanitizeDisplayName(value: string): string {
   return value
     .replace(CONTROL_CHARS, ' ')

@@ -16,6 +16,7 @@ import {
 } from '@/lib/types';
 import { buildPhotoKey, buildPreviewKey, buildThumbKey, generateEventCode } from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
+import { sanitizeDisplayName } from '@/lib/account';
 import {
   computeAccessExpiresAt,
   computeUploadWindowEndsAt,
@@ -39,23 +40,52 @@ export async function getCurrentUserInfo(): Promise<CurrentUser | null> {
   try {
     const user = await getCurrentUser();
     const loginId = user.signInDetails?.loginId ?? null;
-    // Prefer the display name the host set (Cognito `name`), read from the
-    // cached ID token so this stays a no-network call. A just-changed name only
-    // appears here after the next token refresh, which is fine — events snapshot
-    // the name at creation. Fall back to "seth" from "seth@example.com".
-    let chosenName: string | null = null;
-    try {
-      const session = await fetchAuthSession();
-      const claim = session.tokens?.idToken?.payload?.name;
-      if (typeof claim === 'string' && claim.trim()) chosenName = claim.trim();
-    } catch {
-      // No session/token — fall through to the email-derived name.
-    }
-    const displayName = chosenName || (loginId ? loginId.split('@')[0] : 'Host');
+    // Fast path only — no profile read here, since this gates a lot of UI.
+    // "seth" from "seth@example.com". The host's chosen display name lives in
+    // HostProfile and is read where it's actually shown (see createNewEvent).
+    const displayName = loginId ? loginId.split('@')[0] : 'Host';
     return { userId: user.userId, displayName, loginId };
   } catch {
     return null;
   }
+}
+
+/**
+ * The host's chosen display name, or '' if they haven't set one. Owner auth
+ * means this only ever returns the caller's own profile.
+ */
+export async function getMyDisplayName(): Promise<string> {
+  const user = await getCurrentUserInfo();
+  if (!user) return '';
+  try {
+    const { data } = await client.models.HostProfile.get(
+      { id: user.userId },
+      { authMode: 'userPool' },
+    );
+    return data?.displayName ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Save the host's display name (upsert on their own profile row, keyed by sub).
+ * An empty value clears it, returning to the email-derived name everywhere.
+ */
+export async function setMyDisplayName(name: string): Promise<string> {
+  const user = await getCurrentUserInfo();
+  if (!user) throw new Error('Sign in to update your account.');
+  const clean = sanitizeDisplayName(name);
+  const existing = await client.models.HostProfile.get(
+    { id: user.userId },
+    { authMode: 'userPool' },
+  );
+  const input = { id: user.userId, displayName: clean };
+  const { errors } = existing.data
+    ? await client.models.HostProfile.update(input, { authMode: 'userPool' })
+    : await client.models.HostProfile.create(input, { authMode: 'userPool' });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return clean;
 }
 
 /** Guests use the identity pool; signed-in users use the user pool. */
@@ -119,6 +149,10 @@ export async function createNewEvent(input: {
 }): Promise<QREvent> {
   const tier = getTier(input.tier);
   const user = await getCurrentUserInfo();
+  // Snapshot the host's chosen display name onto the event, falling back to the
+  // email-derived one. Snapshotted at creation, so changing the name later
+  // leaves existing events as they were.
+  const chosenName = await getMyDisplayName().catch(() => '');
 
   const { data: event, errors } = await client.models.Event.create({
     name: input.name,
@@ -130,7 +164,7 @@ export async function createNewEvent(input: {
     accessExpiresAt: computeAccessExpiresAt(input.tier),
     uploadWindowEndsAt: computeUploadWindowEndsAt(),
     paid: input.paid ?? true,
-    createdBy: user?.displayName ?? 'Unknown',
+    createdBy: chosenName || user?.displayName || 'Unknown',
   });
 
   if (errors?.length || !event) {

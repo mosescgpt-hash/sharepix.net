@@ -7,6 +7,7 @@ import {
   updateUserAttributes,
 } from 'aws-amplify/auth';
 import Layout from '@/components/Layout';
+import { getMyDisplayName, setMyDisplayName } from '@/lib/api';
 import {
   isCompleteCode,
   sanitizeDisplayName,
@@ -36,10 +37,14 @@ function AccountPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const attrs = await fetchUserAttributes();
+      // Email from Cognito (the login identity); display name from HostProfile.
+      const [attrs, displayName] = await Promise.all([
+        fetchUserAttributes(),
+        getMyDisplayName(),
+      ]);
       setCurrentEmail(attrs.email ?? '');
-      setCurrentName(attrs.name ?? '');
-      setName(attrs.name ?? '');
+      setCurrentName(displayName);
+      setName(displayName);
     } catch {
       setNameNote({ text: 'We could not load your account details. Try again.', ok: false });
     } finally {
@@ -58,17 +63,16 @@ function AccountPage() {
       setNameNote({ text: problem, ok: false });
       return;
     }
-    const clean = sanitizeDisplayName(name);
     setSavingName(true);
     setNameNote(null);
     try {
-      // An empty name clears the attribute, returning to the email-derived name.
-      await updateUserAttributes({ userAttributes: { name: clean } });
+      // An empty name clears it, returning to the email-derived name.
+      const clean = await setMyDisplayName(name);
       setCurrentName(clean);
       setName(clean);
       setNameNote({
         text: clean
-          ? 'Saved. New events will show this name; it updates elsewhere next time you sign in.'
+          ? 'Saved. New events you create will show this name.'
           : 'Cleared. Your account will show the name from your email address again.',
         ok: true,
       });
