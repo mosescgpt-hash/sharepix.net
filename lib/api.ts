@@ -465,6 +465,20 @@ export async function checkPrintProvider(): Promise<{ ok: boolean; message: stri
 }
 
 /**
+ * Global-admin delivery check for the held-photo alert email. Sends the real
+ * message to the signed-in admin. Like the print check, a failure's message is
+ * the point of running it, so this reports rather than throws.
+ */
+export async function sendTestAlertEmail(): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await client.mutations.sendTestAlertEmail({}, { authMode: 'userPool' });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return {
+    ok: Boolean(data?.success),
+    message: data?.message ?? 'The test returned no result.',
+  };
+}
+
+/**
  * Global-admin grant of extra photo capacity to one event (the pilot version of
  * the "buy more storage" add-on). `additionalCredits` is added to whatever the
  * event already has; the effective limit becomes photoLimit + extraPhotoCredits.

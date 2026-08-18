@@ -8,6 +8,7 @@ import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
+import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/resource';
 
 /**
  * SharePix data models.
@@ -353,6 +354,18 @@ const schema = a.schema({
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(printProviderCheckFn)),
+
+  // Global-admin only: send the real "photo held for review" alert to the
+  // signed-in admin, so delivery and rendering can be checked without waiting
+  // for a photo to actually be flagged. Takes no arguments — the recipient is
+  // read from the caller's token, never from the request, so this can never
+  // become a way to send mail from our domain to an arbitrary address.
+  sendTestAlertEmail: a
+    .mutation()
+    .arguments({})
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(sendTestAlertFn)),
 
   CheckoutSession: a.customType({
     url: a.string().required(),

@@ -94,6 +94,27 @@ Leaving `ALERT_FROM_ADDRESS` unset simply disables the emails — held photos ar
 still reviewable in the dashboard. Send failures are logged and never block an
 upload.
 
+**SES identities are per-region.** The Lambda sends from the region the Amplify
+app runs in, so a domain verified in a different region fails with "email
+address not verified" while the console shows it green.
+
+### Checking it works
+
+The only way to see a real alert is to get a photo flagged, which cannot be done
+on demand with ordinary pictures — so **Global admin → Alert email check** sends
+the same message, built by the same code, with a real preview pulled from the
+bucket the same way.
+
+It goes to the address on the calling admin's own token, never to an address
+from the request: a recipient argument would turn an admin action into a way to
+send mail from our verified domain to anyone. `__tests__/test-alert.test.ts`
+asserts the mutation takes no arguments and that the handler reads the recipient
+from `identity.claims`.
+
+The Approve/Deny buttons in a test message point at a token that resolves to
+nothing, so they report an invalid link. That is expected — the buttons are
+there to be looked at, not clicked.
+
 ### Why not SMS?
 
 US A2P messaging requires 10DLC brand/campaign registration before any send, and

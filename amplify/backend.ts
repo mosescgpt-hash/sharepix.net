@@ -22,6 +22,7 @@ import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { printCheckout } from './functions/print-checkout/resource';
 import { printFulfill } from './functions/print-fulfill/resource';
 import { printProviderCheck } from './functions/print-provider-check/resource';
+import { sendTestAlert } from './functions/send-test-alert/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
@@ -39,6 +40,7 @@ const backend = defineBackend({
   printCheckout,
   printFulfill,
   printProviderCheck,
+  sendTestAlert,
   listEventPhotos,
   adminUserActions,
   stripeWebhook,
@@ -139,6 +141,25 @@ createFn.addEnvironment('REVIEW_TABLE_NAME', reviewTable.tableName);
 createFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 createFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
 createFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['ses:SendEmail'],
+    resources: ['*'],
+  }),
+);
+
+// Test-alert function: sends the same held-photo alert to the admin who asked
+// for it, so delivery can be checked without waiting for a photo to be flagged.
+// Configured from the SAME values as createFn above — a test that ran with a
+// different sender, region or app URL would prove nothing about the real path.
+// It reads a photo row and its preview only to embed a realistic image.
+const testAlertFn = backend.sendTestAlert.resources.lambda as LambdaFunction;
+photoTable.grantReadData(testAlertFn);
+bucket.grantRead(testAlertFn);
+testAlertFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+testAlertFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+testAlertFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+testAlertFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+testAlertFn.addToRolePolicy(
   new PolicyStatement({
     actions: ['ses:SendEmail'],
     resources: ['*'],
