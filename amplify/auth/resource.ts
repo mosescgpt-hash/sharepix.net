@@ -9,16 +9,11 @@ export const auth = defineAuth({
   loginWith: {
     email: true,
   },
-  // A host can set a display name on their account (Cognito's standard `name`
-  // attribute). Declaring it here is what makes it writable by the account
-  // page — an undeclared standard attribute is read-only to the app client.
-  // Optional: with none set, the app falls back to the email prefix as before.
-  userAttributes: {
-    fullname: {
-      mutable: true,
-      required: false,
-    },
-  },
+  // NB: do NOT add `userAttributes` here. Cognito refuses to change a user
+  // pool's schema after the pool exists ("User pool attributes cannot be
+  // changed after a user pool has been created"), so declaring a new standard
+  // attribute fails the deploy and rolls back. The host display name is stored
+  // in the HostProfile data model instead — see amplify/data/resource.ts.
   multifactor: {
     mode: 'OPTIONAL',
     totp: true,

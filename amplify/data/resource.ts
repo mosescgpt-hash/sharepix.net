@@ -142,6 +142,18 @@ const schema = a.schema({
       allow.guest().to(['get']),
     ]),
 
+  // A host's own account profile. Just the display name today — the name shown
+  // as the host on events they create. Kept in the data layer, NOT as a Cognito
+  // user-pool attribute: Cognito refuses to add attributes to an existing pool,
+  // so a pool-schema approach can't be deployed. The row id is the host's sub,
+  // and owner auth means each host can only read/write their own — no one can
+  // enumerate or edit anyone else's.
+  HostProfile: a
+    .model({
+      displayName: a.string(),
+    })
+    .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
+
   // Recorded by the Stripe webhook when a checkout completes. Admins read these
   // to confirm payments landed; the webhook writes them directly (via the table
   // grant in backend.ts), so no model-level create/update is granted here.
