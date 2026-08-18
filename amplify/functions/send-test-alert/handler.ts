@@ -3,6 +3,10 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import {
+  CognitoIdentityProviderClient,
+  AdminGetUserCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 // Imported, not copied. A test that built its own version of the message would
 // prove the test works, not that the alert does.
 import { buildAlertEmail, sanitizeHeaderValue } from '../create-event-photo/alert-email';
@@ -10,14 +14,44 @@ import { buildAlertEmail, sanitizeHeaderValue } from '../create-event-photo/aler
 const ses = new SESv2Client({});
 const s3 = new S3Client({});
 const dynamo = new DynamoDBClient({});
+const cognito = new CognitoIdentityProviderClient({});
 
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET_NAME = process.env.BUCKET_NAME as string;
+const USER_POOL_ID = process.env.USER_POOL_ID as string;
 
 /** Shaped like a real one (the builder only accepts hex), but resolves to nothing. */
 const TEST_TOKEN = '0'.repeat(32);
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * The caller's own email, read from Cognito by their username.
+ *
+ * NOT taken from the request, and NOT taken from the token's claims: Amplify's
+ * data client authorizes with the Cognito *access* token, which carries the
+ * username but not `email` (only the ID token does). So the address has to be
+ * looked up server-side — the same reason admin-user-actions goes to Cognito.
+ * Reading it here (rather than accepting an argument) is also what stops this
+ * from becoming a way to send mail from our verified domain to any address.
+ */
+async function callerEmail(identity: {
+  username?: string;
+  claims?: Record<string, unknown>;
+} | undefined): Promise<string | null> {
+  const username = identity?.username ?? (identity?.claims?.username as string | undefined);
+  if (!username || !USER_POOL_ID) return null;
+  try {
+    const res = await cognito.send(
+      new AdminGetUserCommand({ UserPoolId: USER_POOL_ID, Username: username }),
+    );
+    const attr = (res.UserAttributes ?? []).find((a) => a.Name === 'email');
+    const email = attr?.Value?.trim() ?? '';
+    return EMAIL.test(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * A preview from a real photo, so the test exercises the same S3 fetch and
@@ -54,19 +88,20 @@ export const handler = async (event) => {
     };
   }
 
-  // The recipient is the signed-in admin, taken from their token — never from
-  // the request. An address argument would turn an admin action into a way to
-  // send mail from our verified domain to anyone.
-  const identity = event?.identity as { claims?: Record<string, unknown> } | undefined;
-  const claimed = String(identity?.claims?.email ?? '').trim();
-  if (!EMAIL.test(claimed)) {
+  // The recipient is the signed-in admin, looked up in Cognito from their
+  // username — never taken from the request. See callerEmail above.
+  const identity = event?.identity as
+    | { username?: string; claims?: Record<string, unknown> }
+    | undefined;
+  const email = await callerEmail(identity);
+  if (!email) {
     return {
       success: false,
       message:
-        'Your account has no email address on it, so there is nowhere to send the test. Sign in with an email account and try again.',
+        'Could not read the email address on your admin account from Cognito, so there is nowhere to send the test. Make sure your account has a verified email.',
     };
   }
-  const to = sanitizeHeaderValue(claimed);
+  const to = sanitizeHeaderValue(email);
 
   const appUrl = process.env.APP_URL ?? 'https://www.sharepix.net';
   const image = await samplePreview();

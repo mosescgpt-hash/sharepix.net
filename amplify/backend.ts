@@ -159,10 +159,19 @@ testAlertFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 testAlertFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 testAlertFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 testAlertFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+// The recipient is the caller's own email, which the data client's access token
+// does not carry — so it is read from Cognito, scoped to this pool.
+testAlertFn.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);
 testAlertFn.addToRolePolicy(
   new PolicyStatement({
     actions: ['ses:SendEmail'],
     resources: ['*'],
+  }),
+);
+testAlertFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['cognito-idp:AdminGetUser'],
+    resources: [backend.auth.resources.userPool.userPoolArn],
   }),
 );
 

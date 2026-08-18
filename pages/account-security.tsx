@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import {
   fetchMFAPreference,
@@ -207,6 +208,12 @@ function AccountSecurityPage() {
         <p className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
           Keep access to your authenticator app. If you lose it, an administrator must reset MFA before you can sign in again.
         </p>
+
+        <div className="mt-6">
+          <Link href="/account" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
+            ← Name &amp; email
+          </Link>
+        </div>
       </section>
     </Layout>
   );
