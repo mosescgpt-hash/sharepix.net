@@ -105,11 +105,15 @@ on demand with ordinary pictures — so **Global admin → Alert email check** s
 the same message, built by the same code, with a real preview pulled from the
 bucket the same way.
 
-It goes to the address on the calling admin's own token, never to an address
-from the request: a recipient argument would turn an admin action into a way to
-send mail from our verified domain to anyone. `__tests__/test-alert.test.ts`
-asserts the mutation takes no arguments and that the handler reads the recipient
-from `identity.claims`.
+It goes to the calling admin's own email, never to an address from the request:
+a recipient argument would turn an admin action into a way to send mail from our
+verified domain to anyone. That address is looked up in Cognito
+(`AdminGetUser`), keyed on the caller's username — **not** read from the token
+claims, because the data client authorizes with the Cognito *access* token,
+which carries the username but not `email`. (An earlier version read
+`identity.claims.email` and always found it empty.) `__tests__/test-alert.test.ts`
+asserts the mutation takes no arguments and that the handler resolves the
+recipient from the caller identity via Cognito.
 
 The Approve/Deny buttons in a test message point at a token that resolves to
 nothing, so they report an invalid link. That is expected — the buttons are

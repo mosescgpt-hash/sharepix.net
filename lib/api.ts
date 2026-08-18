@@ -39,8 +39,19 @@ export async function getCurrentUserInfo(): Promise<CurrentUser | null> {
   try {
     const user = await getCurrentUser();
     const loginId = user.signInDetails?.loginId ?? null;
-    // Show "seth", not "seth@example.com", in public galleries.
-    const displayName = loginId ? loginId.split('@')[0] : 'Host';
+    // Prefer the display name the host set (Cognito `name`), read from the
+    // cached ID token so this stays a no-network call. A just-changed name only
+    // appears here after the next token refresh, which is fine — events snapshot
+    // the name at creation. Fall back to "seth" from "seth@example.com".
+    let chosenName: string | null = null;
+    try {
+      const session = await fetchAuthSession();
+      const claim = session.tokens?.idToken?.payload?.name;
+      if (typeof claim === 'string' && claim.trim()) chosenName = claim.trim();
+    } catch {
+      // No session/token — fall through to the email-derived name.
+    }
+    const displayName = chosenName || (loginId ? loginId.split('@')[0] : 'Host');
     return { userId: user.userId, displayName, loginId };
   } catch {
     return null;

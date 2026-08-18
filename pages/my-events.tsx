@@ -135,8 +135,11 @@ function MyEventsPage() {
                 Global admin
               </Link>
             ) : null}
+            <Link href="/account" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
+              Account
+            </Link>
             <Link href="/account-security" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
-              Account security
+              Security
             </Link>
             <button type="button" onClick={handleSignOut} className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-red-500 hover:text-red-700">
               Sign out

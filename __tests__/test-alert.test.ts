@@ -69,11 +69,19 @@ describe('the test alert cannot become an open relay', () => {
 
   it('never reads a recipient out of the request', () => {
     expect(testAlertSource).not.toMatch(/arguments\??\.\s*\w*(email|to|recipient)/i);
-    expect(testAlertSource).toContain('identity?.claims?.email');
   });
 
-  it('validates the address off the token before putting it in a header', () => {
-    expect(testAlertSource).toContain('EMAIL.test(claimed)');
-    expect(testAlertSource).toContain('sanitizeHeaderValue(claimed)');
+  it('reads the recipient from Cognito by the caller identity, not the token claims', () => {
+    // The data client authorizes with the access token, which carries the
+    // username but not `email` — so the address is looked up in the pool, keyed
+    // on the caller's own identity, never on anything from the request.
+    expect(testAlertSource).toContain('AdminGetUserCommand');
+    expect(testAlertSource).toContain('identity?.username');
+    expect(testAlertSource).toContain('callerEmail(identity)');
+  });
+
+  it('validates the looked-up address before putting it in a header', () => {
+    expect(testAlertSource).toContain('EMAIL.test(email)');
+    expect(testAlertSource).toContain('sanitizeHeaderValue(email)');
   });
 });
