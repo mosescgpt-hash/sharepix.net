@@ -16,6 +16,7 @@ import {
   listPaymentsCount,
   manageUser,
   restoreEventAccess,
+  sendTestAlertEmail,
   setDiscountCodeActive,
   setEventUploadWindowEnd,
   startCheckout,
@@ -141,6 +142,7 @@ function GlobalAdminPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
+  const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -388,6 +390,22 @@ function GlobalAdminPage() {
     } catch (err) {
       setPrintCheck({
         text: err instanceof Error ? err.message : 'The check could not be run.',
+        ok: false,
+      });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleSendTestAlert() {
+    setWorking('alert-test');
+    setAlertTest(null);
+    try {
+      const result = await sendTestAlertEmail();
+      setAlertTest({ text: result.message, ok: result.ok });
+    } catch (err) {
+      setAlertTest({
+        text: err instanceof Error ? err.message : 'The test could not be sent.',
         ok: false,
       });
     } finally {
@@ -663,6 +681,33 @@ function GlobalAdminPage() {
                 >
                   {printCheck.text}
                 </pre>
+              ) : null}
+            </div>
+
+            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+              <h2 className="font-display text-xl font-bold">Alert email check</h2>
+              <p className="text-sm text-ink/70">
+                Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
+                embedded preview, same buttons a host would see. Nothing is flagged and no
+                host is emailed. It goes to the address on your own admin account, so this
+                can never send mail to anyone else.
+              </p>
+              <button
+                type="button"
+                disabled={working === 'alert-test'}
+                onClick={() => void handleSendTestAlert()}
+                className="mt-4 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+              >
+                {working === 'alert-test' ? 'Sending…' : 'Send test alert email'}
+              </button>
+              {alertTest ? (
+                <p
+                  className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                    alertTest.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {alertTest.text}
+                </p>
               ) : null}
             </div>
 
