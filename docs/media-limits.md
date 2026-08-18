@@ -62,6 +62,39 @@ For contrast, stills are cheap because they are resized *before* they reach S3:
 the gallery serves 480px thumbnails and the live slideshow serves 1280px
 previews, so a whole six-hour reception on one screen is well under $0.20.
 
+## Videos are host-only
+
+Guests can upload video; only the **host** (and a global admin) can watch or
+download it. Enforced in `list-event-photos/visibility.ts` — the query simply
+does not return video records to anyone else.
+
+**Why in the Lambda and not the gallery.** Guests hold S3 read credentials for
+`events/*`, and the query hands out object keys. Hiding a video in the UI while
+still returning its key would not be a gate at all.
+
+**Why at all.** Egress is bytes times viewers. Five 250 MB clips watched right
+through by 100 guests is 125 GB, about $11 — on a $25 event. The same five
+watched by the host a few times is under $0.40. This is the single largest
+lever on the bill, and it costs nothing anyone was buying: guests upload clips
+*for the couple*, not to watch each other's.
+
+The trade-off, stated plainly: a guest who uploads a video will not see it in
+the gallery. The upload form says so up front, because otherwise it reads as a
+failed upload.
+
+The live slideshow was already stills-only, so nothing changed there.
+
+## Signed URL reuse
+
+`getUrl` signs a fresh URL on every call, and a fresh signature is a different
+query string — which the browser treats as a different file. Re-signing on every
+render therefore threw away the cache and re-downloaded everything.
+
+`lib/signedUrlCache.ts` reuses a signature for 10 minutes (Amplify signs for 15,
+so the most stale URL handed out still has five minutes left) and de-duplicates
+concurrent requests for the same path. Revisiting a gallery now serves from the
+browser cache instead of pulling from S3 again.
+
 ## Videos included per plan
 
 | Plan | Photos | Videos |

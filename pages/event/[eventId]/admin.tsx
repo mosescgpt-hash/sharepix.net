@@ -167,7 +167,7 @@ function AdminDashboardPage() {
         key: 'guest_download',
         label: 'Guest downloads',
         price: CORPORATE_PLAN.guestDownloadAddOnPrice,
-        description: 'Let guests download photos and videos, and share a download QR code.',
+        description: 'Let guests download photos, and share a download QR code.',
       });
     }
     if (!event.liveSlideshowEnabled) {
@@ -555,7 +555,7 @@ function AdminDashboardPage() {
                     <p className="text-xs text-ink/55">
                       {event.videoUploadsEnabled === false
                         ? 'Off — guests can add photos only.'
-                        : 'On. Screening checks photos but not videos, so turn this off if you want screened media only.'}
+                        : 'On. Videos are yours alone: guests can upload them but only you can watch them, which is also what keeps them from costing a fortune to serve. Screening checks photos but not videos, so turn this off if you want screened media only.'}
                     </p>
                     {event.videoUploadsEnabled !== false && event.videoLimit != null ? (
                       <p className="mt-1 text-sm text-ink/60">
