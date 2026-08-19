@@ -142,7 +142,11 @@ createFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.
 createFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
 createFn.addToRolePolicy(
   new PolicyStatement({
-    actions: ['ses:SendEmail'],
+    // The alert is raw MIME (preview inlined as multipart/related), and IAM
+    // authorizes raw sends under `ses:SendRawEmail`, NOT `ses:SendEmail` —
+    // different action names for what looks like the same API. Both are granted
+    // so a future switch to simple content still works.
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
     resources: ['*'],
   }),
 );
@@ -164,7 +168,8 @@ testAlertFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS 
 testAlertFn.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);
 testAlertFn.addToRolePolicy(
   new PolicyStatement({
-    actions: ['ses:SendEmail'],
+    // Raw MIME send — see the createFn grant above for why SendRawEmail.
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
     resources: ['*'],
   }),
 );

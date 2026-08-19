@@ -98,6 +98,19 @@ upload.
 app runs in, so a domain verified in a different region fails with "email
 address not verified" while the console shows it green.
 
+**The IAM action for a raw send is `ses:SendRawEmail`, not `ses:SendEmail`.**
+The alert is raw MIME (the preview is inlined as `multipart/related`), and IAM
+authorizes raw sends under a different action name than the simple send — a
+grant of only `ses:SendEmail` fails with *"not authorized to perform
+ses:SendRawEmail"* even though the SDK call looks the same. `backend.ts` grants
+both on the alert and test-alert functions.
+
+**Still in the SES sandbox?** A sandbox account can only send to *verified*
+addresses. Verifying the domain covers the sender; the recipient (e.g. a host's
+Gmail, or your own admin email for the test) must also be verified until
+production access is granted. To test before then, verify that one address as an
+SES identity; for real hosts, request production access.
+
 ### Checking it works
 
 The only way to see a real alert is to get a photo flagged, which cannot be done
