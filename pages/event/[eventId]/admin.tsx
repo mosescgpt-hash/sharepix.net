@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import EventQRCode from '@/components/EventQRCode';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
+import HostGuide from '@/components/HostGuide';
 import {
   deleteEventWithPhotos,
   fetchEvent,
@@ -429,6 +430,17 @@ function AdminDashboardPage() {
                 <p className="text-xs text-ink/60">Hidden from gallery</p>
               </div>
             </div>
+
+            <HostGuide
+              event={event}
+              onShowQR={() => {
+                setShowQR(true);
+                window.setTimeout(
+                  () => document.getElementById('event-qr-code')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                  50,
+                );
+              }}
+            />
 
             <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
