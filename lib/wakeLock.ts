@@ -39,9 +39,13 @@ export interface ScreenWakeLock {
  * Acquire a screen wake lock. Always resolves to a controller — a no-op one when
  * the API is missing or the request is denied (e.g. low battery), so the caller
  * just holds it and releases it in a `finally`.
+ *
+ * `api` is injectable so tests pass a fake instead of mutating a global
+ * `navigator` — which doesn't exist in the Node test environment at all.
  */
-export async function keepScreenAwake(): Promise<ScreenWakeLock> {
-  const api = wakeLockApi();
+export async function keepScreenAwake(
+  api: WakeLockLike | null = wakeLockApi(),
+): Promise<ScreenWakeLock> {
   if (!api) return { release: async () => {} };
 
   let sentinel: WakeLockSentinelLike | null = null;
