@@ -6,6 +6,7 @@ import UploadForm from '@/components/UploadForm';
 import { fetchEvent } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { videosRemaining } from '@/lib/pricing';
+import { themeKeyForEvent } from '@/lib/eventTheme';
 import { QREvent } from '@/lib/types';
 
 export default function GuestUploadPage() {
@@ -81,6 +82,7 @@ export default function GuestUploadPage() {
                   eventId={event.id}
                   allowVideo={event.videoUploadsEnabled !== false}
                   videosRemaining={videosRemaining(event)}
+                  themeKey={themeKeyForEvent(event)}
                 />
               ) : event.uploadsClosed ? (
                 <p className="rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">

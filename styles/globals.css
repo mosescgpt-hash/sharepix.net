@@ -12,3 +12,133 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* =========================================================================
+   Twin Cities Con 2026 — comic-convention upload theme.
+   Scoped entirely under .tcc-theme so it can't touch any other event or page.
+   Built from CSS only: palette, halftone dots, action lines, comic bursts.
+   ========================================================================= */
+.tcc-theme {
+  --tcc-navy: #0b1220;
+  --tcc-panel: #121b2e;
+  --tcc-ink: #05070d;
+  --tcc-cyan: #38e1ff;
+  --tcc-magenta: #ff4fa3;
+  --tcc-yellow: #ffd23f;
+  --tcc-text: #f6f9ff; /* AA on the navy panels */
+  --tcc-muted: #b7c4dd;
+  color: var(--tcc-text);
+  background-color: var(--tcc-navy);
+  /* Halftone dots + a soft top glow, all from gradients (no image request). */
+  background-image:
+    radial-gradient(circle at top, rgba(56, 225, 255, 0.12), transparent 60%),
+    radial-gradient(rgba(255, 255, 255, 0.06) 1.1px, transparent 1.2px);
+  background-size: 100% 100%, 14px 14px;
+  background-position: center top, 0 0;
+}
+
+/* A bold outlined comic panel. */
+.tcc-panel {
+  background-color: var(--tcc-panel);
+  border: 2px solid var(--tcc-text);
+  border-radius: 16px;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Diagonal action lines, used behind headings. Decorative only (aria-hidden). */
+.tcc-actionlines {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(56, 225, 255, 0.16) 0,
+    rgba(56, 225, 255, 0.16) 2px,
+    transparent 2px,
+    transparent 9px
+  );
+}
+
+/* Halftone chip behind the eyebrow. */
+.tcc-eyebrow {
+  display: inline-block;
+  background-color: var(--tcc-yellow);
+  color: var(--tcc-ink);
+  border: 2px solid var(--tcc-ink);
+  border-radius: 999px;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.55);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+/* Primary comic button: filled, bold outline, hard shadow, tactile press. */
+.tcc-btn-primary {
+  background-color: var(--tcc-cyan);
+  color: var(--tcc-ink);
+  border: 2px solid var(--tcc-ink);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55);
+  font-weight: 800;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.tcc-btn-primary:hover {
+  background-color: #63e9ff;
+}
+.tcc-btn-primary:active {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* Secondary/outlined button on the dark panel. */
+.tcc-btn-ghost {
+  background-color: transparent;
+  color: var(--tcc-text);
+  border: 2px solid var(--tcc-text);
+  font-weight: 700;
+  transition: background-color 0.1s ease;
+}
+.tcc-btn-ghost:hover {
+  background-color: rgba(246, 249, 255, 0.1);
+}
+
+/* Keep focus obvious against the dark theme for keyboard users. */
+.tcc-theme :focus-visible {
+  outline: 3px solid var(--tcc-yellow);
+  outline-offset: 2px;
+}
+
+/* Progress bar fill. */
+.tcc-progress-fill {
+  background: linear-gradient(90deg, var(--tcc-cyan), var(--tcc-magenta));
+  transition: width 0.25s ease;
+}
+
+/* Celebration burst — a few CSS shapes, gentle, and only animated when the
+   viewer allows motion. Purely decorative and aria-hidden. */
+.tcc-burst {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tcc-burst {
+    animation: tcc-pop 1400ms ease-out forwards;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Show a small static scatter instead of motion. */
+  .tcc-burst {
+    opacity: 0.9;
+  }
+}
+@keyframes tcc-pop {
+  0% {
+    transform: translate(0, 0) scale(0.4);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--tcc-dx, 0), var(--tcc-dy, -40px)) scale(1) rotate(var(--tcc-rot, 90deg));
+    opacity: 0;
+  }
+}
