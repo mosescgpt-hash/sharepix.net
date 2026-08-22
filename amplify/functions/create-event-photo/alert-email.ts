@@ -15,6 +15,12 @@ export interface AlertEmailInput {
   eventName: string;
   reasons: string;
   reviewUrl: string;
+  /**
+   * Where a host's reply should go. Useful when `from` is a send-only address
+   * (e.g. pix@…) that no one reads — a Reply-To points replies at a real inbox.
+   * Omit to let replies go to `from`.
+   */
+  replyTo?: string;
   /** Preview image bytes, embedded inline. Omit to send a text-only alert. */
   image?: { bytes: Uint8Array; contentType: string };
 }
@@ -103,9 +109,12 @@ export function buildAlertEmail(input: AlertEmailInput): string {
   // Everything reaching a header is stripped of control characters first: a CR
   // or LF in an event name would otherwise inject extra headers.
   const subjectName = sanitizeHeaderValue(input.eventName ?? '', 80);
+  const replyTo = sanitizeHeaderValue(input.replyTo ?? '', 200);
   const headers = [
     `From: ${sanitizeHeaderValue(input.from, 200)}`,
     `To: ${sanitizeHeaderValue(input.to, 200)}`,
+    // Only when set, and only if it survived sanitizing to something non-empty.
+    ...(replyTo ? [`Reply-To: ${replyTo}`] : []),
     `Subject: A photo needs your review${subjectName ? ` — ${subjectName}` : ''}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/related; boundary="${boundary}"`,

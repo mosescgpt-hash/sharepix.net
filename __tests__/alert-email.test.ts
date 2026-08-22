@@ -61,6 +61,25 @@ describe('sanitizeHeaderValue', () => {
 });
 
 describe('buildAlertEmail', () => {
+  it('omits Reply-To when none is given', () => {
+    const headerBlock = buildAlertEmail(base).split('\r\n\r\n')[0];
+    expect(headerBlock).not.toMatch(/^Reply-To:/m);
+  });
+
+  it('adds a Reply-To when one is given, so replies reach a real inbox', () => {
+    const headerBlock = buildAlertEmail({ ...base, replyTo: 'info@sharepix.net' }).split('\r\n\r\n')[0];
+    expect(headerBlock).toMatch(/^Reply-To: info@sharepix\.net$/m);
+  });
+
+  it('sanitizes the Reply-To so it cannot inject headers', () => {
+    const headerBlock = buildAlertEmail({
+      ...base,
+      replyTo: 'info@sharepix.net\r\nBcc: attacker@example.com',
+    }).split('\r\n\r\n')[0];
+    expect(headerBlock).not.toMatch(/^Bcc:/m);
+    expect(headerBlock.split('\r\n').filter((l) => l.startsWith('Reply-To:'))).toHaveLength(1);
+  });
+
   it('does not let an event name break out of the Subject header', () => {
     const mime = buildAlertEmail({
       ...base,

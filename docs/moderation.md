@@ -88,7 +88,10 @@ scanner approve it before a human ever looked.
 1. Verify a domain (or address) in **Amazon SES** and request **production
    access** — a new account is sandboxed and can only send to verified addresses.
 2. Set **`ALERT_FROM_ADDRESS`** on the Amplify app to a verified sender, e.g.
-   `alerts@sharepix.net`, and redeploy.
+   `pix@sharepix.net`, and redeploy.
+3. Optionally set **`ALERT_REPLY_TO`** (e.g. `info@sharepix.net`) so a host who
+   replies to an alert reaches a real inbox even when the From address is
+   send-only. Unset means replies go to the From address.
 
 Leaving `ALERT_FROM_ADDRESS` unset simply disables the emails — held photos are
 still reviewable in the dashboard. Send failures are logged and never block an

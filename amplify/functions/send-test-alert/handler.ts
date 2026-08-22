@@ -10,6 +10,7 @@ import {
 // Imported, not copied. A test that built its own version of the message would
 // prove the test works, not that the alert does.
 import { buildAlertEmail, sanitizeHeaderValue } from '../create-event-photo/alert-email';
+import { sesSendHint } from './hints';
 
 const ses = new SESv2Client({});
 const s3 = new S3Client({});
@@ -118,6 +119,7 @@ export const handler = async (event) => {
                 eventName: 'Test event (no photo was held)',
                 reasons: 'This is a test — nothing was flagged',
                 reviewUrl: `${appUrl}/review/${TEST_TOKEN}`,
+                replyTo: process.env.ALERT_REPLY_TO,
                 image,
               }),
             ),
@@ -127,13 +129,8 @@ export const handler = async (event) => {
     );
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    // The two failures worth naming, because the fix differs.
-    const hint = /not verified/i.test(detail)
-      ? ` — ${from} is not a verified sender in this Lambda's region. SES identities are per-region: verify the domain in the region the app runs in.`
-      : /sandbox|not authorized to send/i.test(detail)
-        ? ` — the account is still in the SES sandbox, which only delivers to verified addresses. Request production access.`
-        : '';
-    return { success: false, message: `Send failed: ${detail}${hint}` };
+    const hint = sesSendHint(detail);
+    return { success: false, message: `Send failed: ${detail}${hint ? ` — ${hint}` : ''}` };
   }
 
   console.log('Test alert sent', { at: new Date().toISOString(), hasImage: Boolean(image) });
