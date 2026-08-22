@@ -6,6 +6,7 @@ import {
   uploadEventPhotoWithContext,
 } from '@/lib/api';
 import { MAX_VIDEO_SIZE_LABEL, isVideoFilename, validateMediaFile } from '@/lib/validation';
+import { keepScreenAwake } from '@/lib/wakeLock';
 
 interface UploadFormProps {
   eventId: string;
@@ -102,24 +103,28 @@ export default function UploadForm({
     let uploaded = 0;
     let duplicates = 0;
     const uploadedBy = uploaderLabel();
-    let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
+    // Hold the screen awake for the whole run so a phone's auto-lock doesn't
+    // interrupt an upload in progress. No-op where unsupported; released in the
+    // finally below no matter how this exits.
+    const wakeLock = await keepScreenAwake();
 
     try {
-      uploadContext = await prepareEventUpload(eventId, uploadedBy);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'The upload session could not be started.';
-      setQueue((previous) => previous.map((item) =>
-        item.status === 'pending' ? { ...item, status: 'error', error: message } : item,
-      ));
-      setBusy(false);
-      return;
-    }
+      let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
+      try {
+        uploadContext = await prepareEventUpload(eventId, uploadedBy);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'The upload session could not be started.';
+        setQueue((previous) => previous.map((item) =>
+          item.status === 'pending' ? { ...item, status: 'error', error: message } : item,
+        ));
+        return;
+      }
 
-    // Hashes already in this event, plus hashes we upload during this run, so we
-    // skip both photos already stored and the same file picked twice in a batch.
-    const seenHashes = await fetchEventPhotoHashes(eventId);
+      // Hashes already in this event, plus hashes we upload during this run, so
+      // we skip both photos already stored and the same file picked twice.
+      const seenHashes = await fetchEventPhotoHashes(eventId);
 
-    for (let i = 0; i < queue.length; i += 1) {
+      for (let i = 0; i < queue.length; i += 1) {
       const item = queue[i];
       if (item.status !== 'pending') continue;
 
@@ -168,10 +173,13 @@ export default function UploadForm({
       }
     }
 
-    setBusy(false);
-    setSuccessCount(uploaded);
-    setDuplicateCount(duplicates);
-    if (uploaded > 0) onUploaded?.();
+      setSuccessCount(uploaded);
+      setDuplicateCount(duplicates);
+      if (uploaded > 0) onUploaded?.();
+    } finally {
+      await wakeLock.release();
+      setBusy(false);
+    }
   }
 
   function handleRetryFailed() {
@@ -323,6 +331,13 @@ export default function UploadForm({
         >
           {busy ? 'Uploading…' : `Upload ${pendingCount} file${pendingCount === 1 ? '' : 's'}`}
         </button>
+      ) : null}
+
+      {busy ? (
+        <p className="mt-3 text-center text-xs text-ink/50">
+          Keep this screen open until it finishes — the phone can&apos;t upload while it&apos;s
+          locked or on another app.
+        </p>
       ) : null}
 
       {successCount > 0 && !busy ? (

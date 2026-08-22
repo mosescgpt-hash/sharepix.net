@@ -1,0 +1,22 @@
+/**
+ * Which quick-start sections the host guide shows for an event.
+ *
+ * Pure so the ordering and the "only when the slideshow is bought" rule can be
+ * tested without rendering. The component (components/HostGuide.tsx) turns each
+ * id into copy plus the event's real links.
+ */
+
+export type HostGuideSection = 'upload' | 'brochure' | 'live' | 'downloads';
+
+export function hostGuideSections(event: {
+  liveSlideshowEnabled?: boolean | null;
+  guestDownloadEnabled?: boolean | null;
+}): HostGuideSection[] {
+  const sections: HostGuideSection[] = ['upload', 'brochure'];
+  // The live slideshow is a paid add-on — only guide the host through running it
+  // once they actually have it, or the steps point at a page they can't use.
+  if (event.liveSlideshowEnabled) sections.push('live');
+  // Same for guest downloads: only relevant once enabled.
+  if (event.guestDownloadEnabled) sections.push('downloads');
+  return sections;
+}
