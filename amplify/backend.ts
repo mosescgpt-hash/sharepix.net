@@ -140,6 +140,8 @@ createFn.addEnvironment('REVIEW_TABLE_NAME', reviewTable.tableName);
 // identity; leaving it unset simply disables the emails (see docs/alerting.md).
 createFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 createFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+// Optional: where host replies to an alert go, when the From is send-only.
+createFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
 createFn.addToRolePolicy(
   new PolicyStatement({
     // The alert is raw MIME (preview inlined as multipart/related), and IAM
@@ -163,6 +165,7 @@ testAlertFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 testAlertFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 testAlertFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 testAlertFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+testAlertFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
 // The recipient is the caller's own email, which the data client's access token
 // does not carry — so it is read from Cognito, scoped to this pool.
 testAlertFn.addEnvironment('USER_POOL_ID', backend.auth.resources.userPool.userPoolId);

@@ -227,6 +227,7 @@ async function sendAlertEmail(input: {
                 eventName: input.eventName,
                 reasons: input.reasons.join(', '),
                 reviewUrl,
+                replyTo: process.env.ALERT_REPLY_TO,
                 image,
               }),
             ),
