@@ -143,8 +143,61 @@ export function buildPhotoKey(
   return `events/${eventId}/photos/${stamp}-${sanitizeFilename(filename)}`;
 }
 
-/** Put a reduced-quality JPEG beside the original without exposing it as a download filename. */
-export function buildPreviewKey(originalKey: string): string {
+/**
+ * One segment of a download filename: readable, but safe on every OS. Keeps
+ * letters/digits, turns everything else into a single dash, and bounds the
+ * length so a long event name can't produce an unusable filename.
+ */
+function filenameSegment(value: string, maxLength = 40): string {
+  return value
+    .normalize('NFKD')
+    // Windows forbids \ / : * ? " < > | ; dashes are safe everywhere.
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, maxLength)
+    .replace(/-+$/, '');
+}
+
+/**
+ * The filename a guest or host actually receives: `001-Event-Name-Uploader.jpg`
+ *
+ * Deliberately NOT the S3 key. The key carries the content hash that drives
+ * duplicate detection, and preview/thumb keys are derived from it by string
+ * replacement — so it stays machine-shaped and this stays human-shaped.
+ *
+ * `index` is 1-based and zero-padded to three digits (wider only if an event
+ * ever exceeds 999, so files keep sorting correctly). Missing pieces are simply
+ * left out rather than rendered as "undefined".
+ */
+export function buildDownloadFilename(input: {
+  /** 1-based position in the download; omitted from the name when absent. */
+  index?: number;
+  eventName?: string | null;
+  uploadedBy?: string | null;
+  /** Source key or filename, used only for the extension. */
+  s3Key?: string | null;
+}): string {
+  const parts: string[] = [];
+
+  if (typeof input.index === 'number' && Number.isFinite(input.index) && input.index > 0) {
+    parts.push(String(Math.floor(input.index)).padStart(3, '0'));
+  }
+  const event = filenameSegment(input.eventName ?? '');
+  if (event) parts.push(event);
+  const uploader = filenameSegment(input.uploadedBy ?? '', 30);
+  if (uploader) parts.push(uploader);
+
+  // Extension from the stored key; default to .jpg for a still with none.
+  const base = (input.s3Key ?? '').split('/').pop() ?? '';
+  const match = base.match(/\.([a-zA-Z0-9]{1,5})$/);
+  const extension = match ? `.${match[1].toLowerCase()}` : '.jpg';
+
+  const stem = parts.join('-') || 'sharepix-photo';
+  return `${stem}${extension}`;
+}
+
+/** Put a reduced-quality JPEG beside the original without exposing it as a download filename. */export function buildPreviewKey(originalKey: string): string {
   const withoutExtension = originalKey.replace(/\.[^/.]+$/, '');
   return `${withoutExtension.replace('/photos/', '/previews/')}-preview.jpg`;
 }

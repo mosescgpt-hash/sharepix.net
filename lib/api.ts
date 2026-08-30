@@ -14,7 +14,13 @@ import {
   QRPhoto,
   DisplayPhoto,
 } from '@/lib/types';
-import { buildPhotoKey, buildPreviewKey, buildThumbKey, generateEventCode } from '@/lib/validation';
+import {
+  buildDownloadFilename,
+  buildPhotoKey,
+  buildPreviewKey,
+  buildThumbKey,
+  generateEventCode,
+} from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import { sanitizeDisplayName } from '@/lib/account';
 import {
@@ -1183,15 +1189,27 @@ export async function getPhotoDisplayUrl(photo: QRPhoto): Promise<string> {
   return signedUrlFor(photo.previewS3Key || photo.s3Key);
 }
 
-/** Triggers a browser download of a photo. */
-export async function downloadPhoto(photo: QRPhoto): Promise<void> {
+/**
+ * Triggers a browser download of a photo, named for humans rather than for S3:
+ * `001-Event-Name-Uploader.jpg`. Context is optional so callers that don't know
+ * the event name or position still get a sensible name.
+ */
+export async function downloadPhoto(
+  photo: QRPhoto,
+  context: { eventName?: string; index?: number } = {},
+): Promise<void> {
   const { body } = await downloadData({ path: photo.s3Key }).result;
   const blob = await body.blob();
 
   const blobUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = blobUrl;
-  link.download = photo.s3Key.split('/').pop() ?? 'photo.jpg';
+  link.download = buildDownloadFilename({
+    index: context.index,
+    eventName: context.eventName,
+    uploadedBy: photo.uploadedBy,
+    s3Key: photo.s3Key,
+  });
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -1218,9 +1236,15 @@ export async function downloadPhotosAsZip(
     try {
       const { body } = await downloadData({ path: photo.s3Key }).result;
       const blob = await body.blob();
-      const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
-      const numberedName = `${String(index + 1).padStart(3, '0')}-${originalName}`;
-      zip.file(numberedName, blob);
+      zip.file(
+        buildDownloadFilename({
+          index: index + 1,
+          eventName: archiveName,
+          uploadedBy: photo.uploadedBy,
+          s3Key: photo.s3Key,
+        }),
+        blob,
+      );
       added += 1;
     } catch {
       failedIds.push(photo.id); // missing/unavailable file — skip and keep going
@@ -1285,8 +1309,15 @@ export async function downloadEventsAsZip(
       try {
         const { body } = await downloadData({ path: photo.s3Key }).result;
         const blob = await body.blob();
-        const originalName = photo.s3Key.split('/').pop() || `media-${index + 1}`;
-        folder.file(`${String(index + 1).padStart(3, '0')}-${originalName}`, blob);
+        folder.file(
+          buildDownloadFilename({
+            index: index + 1,
+            eventName: group.name,
+            uploadedBy: photo.uploadedBy,
+            s3Key: photo.s3Key,
+          }),
+          blob,
+        );
         added += 1;
       } catch {
         skipped += 1; // missing/unavailable file — skip and keep going
