@@ -86,6 +86,18 @@ export default function HostGuide({
               <li>Use your browser’s Print (or “Save as PDF”) — on a phone it’s in the share menu.</li>
               <li>Place one on each table, or by the entrance, so guests can join at any point.</li>
             </ol>
+            <p className="mt-2">
+              Prefer something that stands up on its own? The{' '}
+              <Link
+                href={`/event/${event.id}/table-tent`}
+                target="_blank"
+                className="font-medium text-accent hover:underline"
+              >
+                table tent
+              </Link>{' '}
+              prints on one sheet and folds in half — both sides read the right way up, so a
+              whole table can see it.
+            </p>
           </section>
 
           {/* 3 — Live slideshow (only when purchased) */}
