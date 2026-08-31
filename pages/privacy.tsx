@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'July 28, 2026';
+const LAST_UPDATED = 'August 31, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
@@ -71,9 +71,29 @@ export default function PrivacyPage() {
               </li>
             </ul>
             <p>
-              Guests are not asked for an email address, phone number, or account. Please note
-              that photos and videos can themselves contain personal information (faces,
-              locations, or details visible in the image, and any metadata the file carries).
+              To upload photos or view a gallery, guests are not asked for an email address,
+              phone number, or account. That changes only if a guest chooses to order prints,
+              which is optional and separate &mdash; see <strong>If you order prints</strong>{' '}
+              below. Please note that photos and videos can themselves contain personal
+              information (faces, locations, or details visible in the image, and any metadata
+              the file carries).
+            </p>
+
+            <h3>If you order prints</h3>
+            <p>
+              Ordering a physical print is optional. Uploading photos and browsing a gallery
+              never require it, and nothing about ordering is a condition of taking part in an
+              event. If you do order, we need what any purchase and delivery requires: your
+              name, shipping address, and an email address for the receipt and delivery
+              updates. You enter these at Stripe&rsquo;s checkout, not on SharePix.
+            </p>
+            <p>
+              We keep a record of the order &mdash; the items, the shipping name and address,
+              the email address, and the order status &mdash; so we can answer questions about
+              it, resolve delivery problems, and meet accounting obligations. As with everything
+              else in this Policy, <strong>we do not sell this information</strong>. It is used
+              to fulfil your order and support it, and shared only with the providers named
+              below who carry that out.
             </p>
 
             <h3>Payment information</h3>
@@ -127,8 +147,12 @@ export default function PrivacyPage() {
               <li>
                 <strong>With service providers</strong> that run the Service on our behalf,
                 namely <strong>Amazon Web Services</strong> (hosting, storage, databases, and
-                account management) and <strong>Stripe</strong> (payment processing). These
-                providers handle data under their own privacy and security commitments.
+                account management), <strong>Stripe</strong> (payment processing), and{' '}
+                <strong>Prodigi</strong> (print manufacturing and shipping). Prodigi is
+                involved only when you order a print: it receives the shipping name and
+                address for that order and retrieves the photo you chose, in order to make and
+                send it. These providers handle data under their own privacy and security
+                commitments, and are given only what they need to perform their part.
               </li>
               <li>
                 <strong>Within an event</strong> — content and any nickname you add are shared
