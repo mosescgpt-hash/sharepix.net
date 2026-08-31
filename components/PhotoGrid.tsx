@@ -268,7 +268,7 @@ export default function PhotoGrid({
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-        {sortedPhotos.map((photo) => (
+        {sortedPhotos.map((photo, i) => (
           <PhotoCard
             key={photo.id}
             photo={photo}
@@ -276,6 +276,8 @@ export default function PhotoGrid({
             selectable={canDownload}
             selected={selected.has(photo.id)}
             failed={failedIds.has(photo.id)}
+            eventName={eventName}
+            index={i + 1}
             onToggleSelected={() => toggleSelected(photo.id)}
             onEnlarge={
               canViewOriginal && !isVideoFilename(photo.s3Key)
@@ -396,7 +398,7 @@ export default function PhotoGrid({
             ) : null}
             <button
               type="button"
-              onClick={() => downloadPhoto(enlarged)}
+              onClick={() => downloadPhoto(enlarged, { eventName })}
               className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-ink hover:bg-white/90"
             >
               Download original

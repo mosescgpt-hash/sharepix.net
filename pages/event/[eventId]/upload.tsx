@@ -66,6 +66,9 @@ export default function GuestUploadPage() {
                 {new Date(`${event.date}T00:00:00`).toLocaleDateString()}
               </p>
             ) : null}
+            {event.location ? (
+              <p className="mt-1 text-center text-ink/60">{event.location}</p>
+            ) : null}
 
             <div className="mt-8">
               {event.paid === false ? (

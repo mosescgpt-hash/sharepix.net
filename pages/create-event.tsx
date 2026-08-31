@@ -20,6 +20,8 @@ function CreateEventPage() {
 
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
+  const [city, setCity] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
   const [tierId, setTierId] = useState(getTier(initialTier) ? initialTier : 'standard');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +137,7 @@ function CreateEventPage() {
         if (!corporateActive) {
           throw new Error('An active Corporate subscription is required for corporate events.');
         }
-        const event = await createNewEvent({ name: name.trim(), date, tier: 'corporate', paid: true });
+        const event = await createNewEvent({ name: name.trim(), date, city, state: stateRegion, tier: 'corporate', paid: true });
         setCreatedEvent(event);
         return;
       }
@@ -148,7 +150,7 @@ function CreateEventPage() {
           setPilotCodeMessage(redemption.message ?? 'That pilot code can no longer be used.');
           throw new Error(redemption.message ?? 'That pilot code can no longer be used.');
         }
-        const event = await createNewEvent({ name: name.trim(), date, tier: tierId, paid: true });
+        const event = await createNewEvent({ name: name.trim(), date, city, state: stateRegion, tier: tierId, paid: true });
         setCreatedEvent(event);
         return;
       }
@@ -157,7 +159,7 @@ function CreateEventPage() {
       // The webhook flips `paid` to true when the payment completes, activating
       // it. Uploads are blocked until then, so nothing is usable without payment.
       // A partial discount code rides along and is applied server-side at Stripe.
-      const event = await createNewEvent({ name: name.trim(), date, tier: tierId, paid: false });
+      const event = await createNewEvent({ name: name.trim(), date, city, state: stateRegion, tier: tierId, paid: false });
       const url = await startCheckout(tierId, event.id, isDiscounted ? pilotCode : undefined);
       window.location.assign(url);
     } catch (err) {
@@ -242,6 +244,39 @@ function CreateEventPage() {
               onChange={(e) => setDate(e.target.value)}
               className="mt-1 w-full rounded-xl border border-ink/20 bg-white px-4 py-3 focus:border-accent focus:outline-none"
             />
+          </div>
+
+          <div>
+            <span className="block text-sm font-medium">
+              Where is it? <span className="text-ink/50">(optional)</span>
+            </span>
+            <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <input
+                id="event-city"
+                type="text"
+                value={city}
+                maxLength={60}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="City"
+                aria-label="City"
+                className="w-full rounded-xl border border-ink/20 bg-white px-4 py-3 focus:border-accent focus:outline-none"
+              />
+              <input
+                id="event-state"
+                type="text"
+                value={stateRegion}
+                maxLength={40}
+                onChange={(e) => setStateRegion(e.target.value)}
+                placeholder="State"
+                aria-label="State"
+                className="w-full rounded-xl border border-ink/20 bg-white px-4 py-3 focus:border-accent focus:outline-none"
+              />
+            </div>
+            <p className="mt-1 text-xs text-ink/55">
+              Shown with the event, so photos stay tied to the place years later. City and
+              state only — we never store a street address, and photo location data is
+              always removed on upload.
+            </p>
           </div>
 
           <fieldset>

@@ -13,6 +13,10 @@ interface PhotoCardProps {
   onToggleSelected?: () => void;
   /** When set (hosts only), clicking the photo opens the full-quality view. */
   onEnlarge?: () => void;
+  /** Context for the download filename: 001-Event-Name-Uploader.jpg */
+  eventName?: string;
+  /** 1-based position in the gallery, for the download filename. */
+  index?: number;
 }
 
 export default function PhotoCard({
@@ -23,13 +27,15 @@ export default function PhotoCard({
   failed = false,
   onToggleSelected,
   onEnlarge,
+  eventName,
+  index,
 }: PhotoCardProps) {
   const [downloading, setDownloading] = useState(false);
 
   async function handleDownload() {
     setDownloading(true);
     try {
-      await downloadPhoto(photo);
+      await downloadPhoto(photo, { eventName, index });
     } finally {
       setDownloading(false);
     }

@@ -30,6 +30,7 @@ import {
   videosRemaining,
 } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { parseEventLocation } from '@/lib/eventLocation';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
 
@@ -47,6 +48,8 @@ function AdminDashboardPage() {
   // Event-settings panel state (edit name/date, close/reopen uploads).
   const [editName, setEditName] = useState('');
   const [editDate, setEditDate] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editState, setEditState] = useState('');
   const [savingDetails, setSavingDetails] = useState(false);
   const [closing, setClosing] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -137,6 +140,9 @@ function AdminDashboardPage() {
     if (!event) return;
     setEditName(event.name ?? '');
     setEditDate(event.date ?? '');
+    const place = parseEventLocation(event.location);
+    setEditCity(place.city);
+    setEditState(place.state);
     setAlertEmail(event.alertEmail ?? '');
   }, [event]);
 
@@ -193,7 +199,13 @@ function AdminDashboardPage() {
     setSavingDetails(true);
     setSettingsMsg(null);
     try {
-      const updated = await updateEventDetails(event.id, { name: editName, date: editDate });
+      // Once photos exist the name and date are locked server-side, so only
+      // send them while they're still editable — the location always goes.
+      const updated = await updateEventDetails(event.id, {
+        ...(detailsLocked ? {} : { name: editName, date: editDate }),
+        city: editCity,
+        state: editState,
+      });
       setEvent(updated);
       setSettingsMsg({ text: 'Event details updated.', ok: true });
     } catch (err) {
@@ -477,23 +489,55 @@ function AdminDashboardPage() {
                 </label>
               </div>
 
+              <div className="mt-4">
+                <span className="text-sm font-medium">
+                  Where it happened <span className="text-ink/50">(optional)</span>
+                </span>
+                <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                  <input
+                    type="text"
+                    value={editCity}
+                    maxLength={60}
+                    disabled={savingDetails}
+                    onChange={(e) => setEditCity(e.target.value)}
+                    placeholder="City"
+                    aria-label="City"
+                    className="w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke"
+                  />
+                  <input
+                    type="text"
+                    value={editState}
+                    maxLength={40}
+                    disabled={savingDetails}
+                    onChange={(e) => setEditState(e.target.value)}
+                    placeholder="State"
+                    aria-label="State"
+                    className="w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-ink/55">
+                  City and state only — never a street address. Photos&apos; own location data
+                  is always removed when they&apos;re uploaded.
+                </p>
+              </div>
+
               {detailsLocked ? (
                 <p className="mt-2 text-xs text-ink/55">
                   The name and date lock once the first photo is uploaded, so guests&apos;
-                  memories keep the details they saw.
+                  memories keep the details they saw. You can still change the location.
                 </p>
-              ) : (
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={handleSaveDetails}
-                    disabled={savingDetails}
-                    className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
-                  >
-                    {savingDetails ? 'Saving…' : 'Save details'}
-                  </button>
-                </div>
-              )}
+              ) : null}
+
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={handleSaveDetails}
+                  disabled={savingDetails}
+                  className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                >
+                  {savingDetails ? 'Saving…' : 'Save details'}
+                </button>
+              </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
                 <div>
