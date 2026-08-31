@@ -22,6 +22,7 @@ import {
   generateEventCode,
 } from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
+import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
 import {
   computeAccessExpiresAt,
@@ -150,6 +151,9 @@ export async function createNewEvent(input: {
   name: string;
   date?: string;
   tier: string;
+  /** Optional "City, State" for the event; stored as a single label. */
+  city?: string;
+  state?: string;
   /** true = paid/comped and active now; false = pending until the webhook activates it. */
   paid?: boolean;
 }): Promise<QREvent> {
@@ -165,6 +169,7 @@ export async function createNewEvent(input: {
     date: input.date || null,
     tier: input.tier,
     eventCode: generateEventCode(),
+    location: formatEventLocation(input.city, input.state) || null,
     photoLimit: tier?.photoLimit ?? null,
     videoLimit: videoLimitForTier(input.tier),
     accessExpiresAt: computeAccessExpiresAt(input.tier),
@@ -561,24 +566,34 @@ export async function addEventPhotoCredits(
  */
 export async function updateEventDetails(
   eventId: string,
-  changes: { name?: string; date?: string | null },
+  changes: { name?: string; date?: string | null; city?: string; state?: string },
 ): Promise<QREvent> {
   const { data: existing, errors: readErrors } = await client.models.Event.get(
     { id: eventId },
     { authMode: 'userPool' },
   );
   if (readErrors?.length || !existing) throw new Error('The event could not be loaded.');
-  if ((existing.photoCount ?? 0) > 0) {
+
+  // Name and date lock once guests have uploaded, so an event can't rename
+  // itself underneath them. Location is only a label, so it stays editable —
+  // a host who forgot to set it shouldn't have to live without it.
+  const changingIdentity = changes.name !== undefined || changes.date !== undefined;
+  if (changingIdentity && (existing.photoCount ?? 0) > 0) {
     throw new Error('This event already has photos, so its name and date are locked.');
   }
 
-  const patch: { id: string; name?: string; date?: string | null } = { id: eventId };
+  const patch: { id: string; name?: string; date?: string | null; location?: string | null } = {
+    id: eventId,
+  };
   if (changes.name !== undefined) {
     const trimmed = changes.name.trim();
     if (!trimmed) throw new Error('Enter an event name.');
     patch.name = trimmed;
   }
   if (changes.date !== undefined) patch.date = changes.date || null;
+  if (changes.city !== undefined || changes.state !== undefined) {
+    patch.location = formatEventLocation(changes.city, changes.state) || null;
+  }
 
   const { data, errors } = await client.models.Event.update(patch, { authMode: 'userPool' });
   if (errors?.length || !data) throw new Error('The event could not be updated.');

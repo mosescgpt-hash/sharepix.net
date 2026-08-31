@@ -4,6 +4,8 @@ export interface QREvent {
   eventCode: string;
   date?: string | null;
   tier: string;
+  /** "City, State" the host set for this event, if any. */
+  location?: string | null;
   photoLimit?: number | null;
   extraPhotoCredits?: number | null;
   photoCount?: number | null;

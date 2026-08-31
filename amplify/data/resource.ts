@@ -45,6 +45,11 @@ const schema = a.schema({
       // Running count of videos, maintained alongside photoCount so the limit
       // can be reserved atomically rather than by scanning.
       videoCount: a.integer(),
+      // "City, State" the host sets for the event — a memory label shown on
+      // photos and used in downloads. NOT derived from photo GPS, which is
+      // still stripped from every upload, and deliberately no finer than a
+      // city (no street address).
+      location: a.string(),
       accessExpiresAt: a.datetime(),
       // When the 30-day upload window closes (creation + 30 days, plus any paid
       // extensions). Drives the whole lifecycle: uploads, guest view resolution,
