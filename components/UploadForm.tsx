@@ -1,12 +1,8 @@
-import { ChangeEvent, useEffect, useState } from 'react';
-import {
-  computeContentHash,
-  fetchEventPhotoHashes,
-  prepareEventUpload,
-  uploadEventPhotoWithContext,
-} from '@/lib/api';
-import { MAX_VIDEO_SIZE_LABEL, isVideoFilename, validateMediaFile } from '@/lib/validation';
-import { keepScreenAwake } from '@/lib/wakeLock';
+import { ChangeEvent } from 'react';
+import { MAX_VIDEO_SIZE_LABEL } from '@/lib/validation';
+import { EventThemeKey } from '@/lib/eventTheme';
+import { useMediaUpload } from '@/hooks/useMediaUpload';
+import TccUploadExperience from '@/components/tcc/TccUploadExperience';
 
 interface UploadFormProps {
   eventId: string;
@@ -19,15 +15,8 @@ interface UploadFormProps {
    * upload that would be refused at the end.
    */
   videosRemaining?: number | null;
-}
-
-type FileStatus = 'pending' | 'uploading' | 'done' | 'error' | 'duplicate';
-
-interface QueuedFile {
-  file: File;
-  status: FileStatus;
-  percent: number;
-  error?: string;
+  /** Event presentation theme; the default experience when null. */
+  themeKey?: EventThemeKey | null;
 }
 
 export default function UploadForm({
@@ -35,166 +24,68 @@ export default function UploadForm({
   onUploaded,
   allowVideo = true,
   videosRemaining = null,
+  themeKey = null,
 }: UploadFormProps) {
-  const [queue, setQueue] = useState<QueuedFile[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [successCount, setSuccessCount] = useState(0);
-  const [duplicateCount, setDuplicateCount] = useState(0);
-  const [uploaderName, setUploaderName] = useState('');
-
-  useEffect(() => {
-    setUploaderName(window.localStorage.getItem('sharepix-uploader-name') ?? '');
-  }, []);
-
-  function uploaderLabel(): string {
-    const entered = uploaderName.trim().slice(0, 60);
-    if (entered) {
-      window.localStorage.setItem('sharepix-uploader-name', entered);
-      return entered;
-    }
-
-    const savedLabel = window.localStorage.getItem('sharepix-guest-label');
-    if (savedLabel) return savedLabel;
-    const label = `Guest ${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    window.localStorage.setItem('sharepix-guest-label', label);
-    return label;
-  }
+  const upload = useMediaUpload({ eventId, allowVideo, videosRemaining, onUploaded });
+  const {
+    queue,
+    busy,
+    successCount,
+    duplicateCount,
+    uploaderName,
+    setUploaderName,
+    addFiles,
+    upload: startUpload,
+    retryFailed,
+    counts,
+  } = upload;
 
   function handleFileSelect(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    // Videos already spoken for by this queue, so picking three clips when one
-    // slot is left flags the last two here instead of after the upload.
-    let videosTaken = queue.filter(
-      (item) => item.status !== 'error' && isVideoFilename(item.file.name),
-    ).length;
-
-    const next: QueuedFile[] = files.map((file) => {
-      const problem = validateMediaFile(file, { allowVideo });
-      if (problem) return { file, status: 'error' as const, percent: 0, error: problem };
-
-      if (isVideoFilename(file.name) && videosRemaining !== null) {
-        if (videosTaken >= videosRemaining) {
-          return {
-            file,
-            status: 'error' as const,
-            percent: 0,
-            error:
-              videosRemaining === 0
-                ? 'This event has no video slots left. Photos are still welcome.'
-                : `Only ${videosRemaining} more video${videosRemaining === 1 ? '' : 's'} can be added to this event. Photos are still welcome.`,
-          };
-        }
-        videosTaken += 1;
-      }
-      return { file, status: 'pending' as const, percent: 0 };
-    });
-    setQueue((previous) => [...previous, ...next]);
-    setSuccessCount(0);
-    setDuplicateCount(0);
+    addFiles(Array.from(e.target.files ?? []));
     e.target.value = '';
   }
 
-  function updateItem(index: number, patch: Partial<QueuedFile>) {
-    setQueue((prev) => prev.map((item, i) => (i === index ? { ...item, ...patch } : item)));
-  }
+  // Camera capture needs a SINGLE simple accept value. Android Chrome only
+  // launches the camera when `capture` is paired with one plain type like
+  // "image/*" — a list makes it fall back to the file picker. The library
+  // input keeps the full list. These are rendered in every branch so the TCC
+  // experience's "choose different"/"add more" buttons can trigger them too;
+  // this is the file-picker behaviour, deliberately unchanged.
+  const fileInputs = (
+    <>
+      <input
+        id="photo-camera-input"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={handleFileSelect}
+      />
+      <input
+        id="photo-library-input"
+        type="file"
+        accept={allowVideo ? 'image/*,video/*,.heic,.heif,.mov,.m4v' : 'image/*,.heic,.heif'}
+        multiple
+        className="sr-only"
+        onChange={handleFileSelect}
+      />
+    </>
+  );
 
-  async function handleUpload() {
-    setBusy(true);
-    let uploaded = 0;
-    let duplicates = 0;
-    const uploadedBy = uploaderLabel();
-    // Hold the screen awake for the whole run so a phone's auto-lock doesn't
-    // interrupt an upload in progress. No-op where unsupported; released in the
-    // finally below no matter how this exits.
-    const wakeLock = await keepScreenAwake();
-
-    try {
-      let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
-      try {
-        uploadContext = await prepareEventUpload(eventId, uploadedBy);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'The upload session could not be started.';
-        setQueue((previous) => previous.map((item) =>
-          item.status === 'pending' ? { ...item, status: 'error', error: message } : item,
-        ));
-        return;
-      }
-
-      // Hashes already in this event, plus hashes we upload during this run, so
-      // we skip both photos already stored and the same file picked twice.
-      const seenHashes = await fetchEventPhotoHashes(eventId);
-
-      for (let i = 0; i < queue.length; i += 1) {
-      const item = queue[i];
-      if (item.status !== 'pending') continue;
-
-      // Fingerprint the file and skip it if an identical one is already here.
-      // A null hash (file too big to hash, or hashing failed) is not an error —
-      // it just means this one uploads without the duplicate check.
-      let hash: string | undefined;
-      try {
-        hash = (await computeContentHash(item.file)) ?? undefined;
-      } catch {
-        hash = undefined; // hashing failed — fall through and upload normally
-      }
-      if (hash && seenHashes.has(hash)) {
-        updateItem(i, { status: 'duplicate', percent: 0 });
-        duplicates += 1;
-        continue;
-      }
-
-      updateItem(i, { status: 'uploading', percent: 0 });
-      try {
-        const photo = await uploadEventPhotoWithContext(
-          uploadContext,
-          item.file,
-          ({ loaded, total }) => {
-            updateItem(i, { percent: total ? Math.round((loaded / total) * 100) : 0 });
-          },
-          hash,
-        );
-        if (hash) seenHashes.add(hash);
-        // Another guest can upload the same photo between our check and this
-        // call; the server dedups it and tells us the record already existed.
-        if (photo.duplicate) {
-          updateItem(i, { status: 'duplicate', percent: 0 });
-          duplicates += 1;
-        } else {
-          updateItem(i, { status: 'done', percent: 100 });
-          uploaded += 1;
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 150));
-      } catch (err) {
-        const rawMessage = err instanceof Error ? err.message : '';
-        const message = /rate exceeded|throttl|no current user/i.test(rawMessage)
-          ? 'The service was busy. Use Retry failed files, then tap Upload again.'
-          : rawMessage || 'Upload failed. Check your connection and try again.';
-        updateItem(i, { status: 'error', error: message });
-      }
-    }
-
-      setSuccessCount(uploaded);
-      setDuplicateCount(duplicates);
-      if (uploaded > 0) onUploaded?.();
-    } finally {
-      await wakeLock.release();
-      setBusy(false);
-    }
-  }
-
-  function handleRetryFailed() {
-    setQueue((previous) =>
-      previous.map((item) =>
-        item.status === 'error'
-          ? { ...item, status: 'pending', percent: 0, error: undefined }
-          : item,
-      ),
+  // Themed post-selection experience: only for a themed event, and only once
+  // files have been selected. Before selection, and for every other event, the
+  // default experience below is untouched.
+  if (themeKey === 'tcc-2026' && queue.length > 0) {
+    return (
+      <>
+        {fileInputs}
+        <TccUploadExperience upload={upload} galleryHref={`/event/${eventId}`} />
+      </>
     );
-    setSuccessCount(0);
   }
 
-  const pendingCount = queue.filter((q) => q.status === 'pending').length;
-  const failedCount = queue.filter((q) => q.status === 'error').length;
+  const pendingCount = counts.pending;
+  const failedCount = counts.failed;
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-white p-5">
@@ -248,40 +139,12 @@ export default function UploadForm({
           </label>
         </div>
       </div>
-      {/* Camera capture needs a SINGLE simple accept value. Android Chrome only
-          launches the camera when `capture` is paired with one plain type like
-          "image/*" — give it a list (image/*,video/*,.heic,...) and it gives up
-          and opens the file picker instead, which is why this opened the gallery
-          on a Pixel while iOS still honoured it. Extensions are pointless here
-          anyway: the camera returns whatever the OS produces, not a file the
-          user picked.
-
-          One accept value means one mode, and this is deliberately the photo
-          one: a guest snapping a picture at a reception is the common case, and
-          this way it works the same on every phone. Recording still reaches us
-          through the picker below — guests film in their own camera app, which
-          is what they do anyway, then choose the clip. */}
-      <input
-        id="photo-camera-input"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        onChange={handleFileSelect}
-      />
-      <input
-        id="photo-library-input"
-        type="file"
-        accept={allowVideo ? 'image/*,video/*,.heic,.heif,.mov,.m4v' : 'image/*,.heic,.heif'}
-        multiple
-        className="sr-only"
-        onChange={handleFileSelect}
-      />
+      {fileInputs}
 
       {queue.length > 0 ? (
         <ul className="mt-4 space-y-2">
-          {queue.map((item, i) => (
-            <li key={`${item.file.name}-${i}`} className="rounded-lg bg-smoke px-3 py-2 text-sm">
+          {queue.map((item) => (
+            <li key={item.id} className="rounded-lg bg-smoke px-3 py-2 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate">{item.file.name}</span>
                 <span className="shrink-0 text-xs text-ink/60">
@@ -315,7 +178,7 @@ export default function UploadForm({
       {failedCount > 0 && !busy ? (
         <button
           type="button"
-          onClick={handleRetryFailed}
+          onClick={retryFailed}
           className="mt-3 w-full rounded-full border border-ink/20 bg-white py-2.5 font-medium text-ink hover:border-accent"
         >
           Retry {failedCount} failed file{failedCount === 1 ? '' : 's'}
@@ -325,7 +188,7 @@ export default function UploadForm({
       {pendingCount > 0 ? (
         <button
           type="button"
-          onClick={handleUpload}
+          onClick={startUpload}
           disabled={busy}
           className="mt-4 w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
         >
