@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { pricingSourceFor } from './pricing';
 // @ts-ignore -- @aws-sdk/* is provided by the Lambda runtime, not installed as a dep.
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
@@ -19,6 +20,21 @@ async function eventTier(eventId: string): Promise<string> {
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
   return (found.Item?.tier?.S ?? '').toLowerCase();
+}
+
+/**
+ * The fields of an event's row that decide what it costs and who may pay.
+ * The decision itself is in ./pricing, where it is tested.
+ */
+async function eventRowFor(eventId: string): Promise<{ tier: string; owner: string } | null> {
+  const found = await dynamo.send(
+    new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
+  );
+  if (!found.Item) return null;
+  return {
+    tier: (found.Item.tier?.S ?? '').toLowerCase(),
+    owner: found.Item.owner?.S ?? '',
+  };
 }
 
 // Validate a caller-supplied discount code against the DiscountCode table and
@@ -444,14 +460,24 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  const tier = (event.arguments.tier ?? '').toLowerCase();
-  const pricing = TIER_PRICING[tier];
-  if (!pricing) {
-    throw new Error('Unknown plan.');
-  }
-
   // Optional: the pending event this payment activates once it completes.
   const eventId = event.arguments.eventId ?? '';
+
+  // When this payment activates a real event, both the plan and the amount come
+  // from that event's stored row — never from the request. The caller-supplied
+  // `tier` is used only for the admin test checkout, which activates nothing.
+  const storedEvent = eventId ? await eventRowFor(eventId) : null;
+  const source = pricingSourceFor({
+    eventId,
+    argumentTier: event.arguments.tier ?? '',
+    stored: storedEvent,
+    sellableTier: (candidate) => Boolean(TIER_PRICING[candidate]),
+    caller: event.identity as { sub?: string; groups?: string[] | null } | undefined,
+  });
+  if (source.kind === 'refused') throw new Error(source.reason);
+
+  const tier = source.tier;
+  const pricing = TIER_PRICING[tier];
 
   const appUrl = process.env.APP_URL ?? 'https://www.sharepix.net';
   // When paying for a real event, land back on a page that activates it; the
