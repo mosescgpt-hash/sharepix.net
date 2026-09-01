@@ -65,6 +65,12 @@ const schema = a.schema({
       // Guest downloads are off by default on every plan. Corporate hosts can
       // buy a per-event add-on that flips this to true (via the Stripe webhook).
       guestDownloadEnabled: a.boolean(),
+      // The host's choice to withhold downloads from guests. Absent or false
+      // means downloads are on, which is the default and what every plan
+      // includes — a legacy event with no value set must never read as blocked.
+      // When true the gallery serves guests the low-resolution thumbnail and
+      // hides the download controls.
+      guestDownloadsBlocked: a.boolean(),
       // The live slideshow (a venue screen showing uploads as they arrive) is a
       // per-event paid add-on, available on any plan. Flipped by the webhook.
       liveSlideshowEnabled: a.boolean(),

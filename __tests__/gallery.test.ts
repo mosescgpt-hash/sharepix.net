@@ -1,4 +1,9 @@
-import { canDownloadEventMedia, isEventHost, sortGalleryPhotos } from '../lib/gallery';
+import {
+  canDownloadEventMedia,
+  galleryVariantFor,
+  isEventHost,
+  sortGalleryPhotos,
+} from '../lib/gallery';
 import { DisplayPhoto, QREvent } from '../lib/types';
 
 const event: QREvent = {
@@ -21,6 +26,30 @@ describe('gallery permissions', () => {
 
   test('guests can download too — downloads ship with every plan', () => {
     expect(canDownloadEventMedia({ ...event }, false)).toBe(true);
+  });
+
+  test('a host can withhold downloads from guests', () => {
+    expect(canDownloadEventMedia({ ...event, guestDownloadsBlocked: true }, false)).toBe(false);
+  });
+
+  test('withholding never restricts the host — they keep their own photos', () => {
+    expect(canDownloadEventMedia({ ...event, guestDownloadsBlocked: true }, true)).toBe(true);
+  });
+
+  test('an event with no setting is not blocked', () => {
+    // Every event created before the toggle existed has no value here, and
+    // must keep working exactly as it did.
+    expect(canDownloadEventMedia({ ...event }, false)).toBe(true);
+    expect(canDownloadEventMedia({ ...event, guestDownloadsBlocked: false }, false)).toBe(true);
+    expect(canDownloadEventMedia({ ...event, guestDownloadsBlocked: null }, false)).toBe(true);
+  });
+
+  test('a blocked event serves guests the thumbnail, not the preview', () => {
+    // Hiding the button alone would be theatre — the large image would still be
+    // in the page. Withholding downloads means not sending the big file.
+    expect(galleryVariantFor({ ...event, guestDownloadsBlocked: true }, false)).toBe('thumb');
+    expect(galleryVariantFor({ ...event, guestDownloadsBlocked: true }, true)).toBe('preview');
+    expect(galleryVariantFor({ ...event }, false)).toBe('preview');
   });
 
   test('the retired guest-download flag no longer withholds downloads', () => {

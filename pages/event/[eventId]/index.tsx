@@ -6,7 +6,7 @@ import PhotoGrid from '@/components/PhotoGrid';
 import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { eventLifecycle } from '@/lib/lifecycle';
-import { canDownloadEventMedia, isEventHost } from '@/lib/gallery';
+import { canDownloadEventMedia, galleryVariantFor, isEventHost } from '@/lib/gallery';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 
 export default function EventGalleryPage() {
@@ -45,7 +45,11 @@ export default function EventGalleryPage() {
       const privilegedViewer = isHost || isAdmin;
       if (privilegedViewer || lc.guestResolution !== 'none') {
         const items = await fetchEventPhotos(eventId, {
-          useThumbs: !privilegedViewer && lc.guestResolution === 'small',
+          // Small variant either because the window has closed, or because the
+          // host has withheld downloads for this event.
+          useThumbs:
+            !privilegedViewer &&
+            (lc.guestResolution === 'small' || galleryVariantFor(ev, privilegedViewer) === 'thumb'),
         });
         setPhotos(items);
       }
@@ -118,6 +122,11 @@ export default function EventGalleryPage() {
               <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
                 Uploads for this event have closed. These previews stay available for a
                 little longer before the gallery closes.
+              </p>
+            ) : !privileged && event.guestDownloadsBlocked === true ? (
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
+                The host has kept downloads for this event to themselves, so these are
+                viewing copies. Ask them if you would like a full-size photo.
               </p>
             ) : null}
 

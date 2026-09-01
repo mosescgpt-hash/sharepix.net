@@ -13,16 +13,37 @@ export function isEventHost(event: QREvent, user: CurrentUser | null): boolean {
 }
 
 /**
- * Who may download an event's media. Everyone who can see the gallery can —
- * guest downloads are included on every plan rather than sold as an add-on,
- * which is what every comparable service does and what guests expect.
+ * Who may download an event's media.
  *
- * The `event` and `host` arguments are kept because callers pass them and
- * because any future per-event restriction belongs here rather than scattered
- * across the pages that render download buttons.
+ * Downloads are included on every plan, so the default is yes for everyone who
+ * can see the gallery. A host can withhold them from guests for a particular
+ * event — a private memorial, a corporate event under an image policy — and
+ * that is what `guestDownloadsBlocked` records.
+ *
+ * The host is never restricted: it is their event and their photos to keep.
+ * A missing flag means downloads are on, so events created before the toggle
+ * existed keep working.
  */
-export function canDownloadEventMedia(_event: QREvent, _host: boolean): boolean {
-  return true;
+export function canDownloadEventMedia(event: QREvent, host: boolean): boolean {
+  if (host) return true;
+  return event.guestDownloadsBlocked !== true;
+}
+
+/**
+ * Which stored variant a viewer is shown in the gallery.
+ *
+ * A guest of an event with downloads withheld gets the 480px thumbnail rather
+ * than the 1280px preview. Hiding the download button alone would be theatre —
+ * the image is right there in the page and can be saved from any browser — so
+ * the honest version of "no downloads" is to not send the large file at all.
+ *
+ * This is not DRM and should never be described as such to a host: a
+ * screenshot still works, and the thumbnail is still a real picture. It lowers
+ * what a guest can walk away with, which is what a host asking for this
+ * actually wants.
+ */
+export function galleryVariantFor(event: QREvent, host: boolean): 'preview' | 'thumb' {
+  return canDownloadEventMedia(event, host) ? 'preview' : 'thumb';
 }
 
 function createdAt(photo: DisplayPhoto): string {

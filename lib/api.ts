@@ -650,6 +650,24 @@ export async function setEventVideoUploads(
   if (errors?.length) throw new Error('The video setting could not be updated.');
 }
 
+/**
+ * Withhold guest downloads for one event, or restore them.
+ *
+ * `true` hides the download controls from guests AND serves them the small
+ * variant, so a withheld event does not quietly keep sending the large file.
+ * The host is never affected — it is their event.
+ */
+export async function setEventGuestDownloadsBlocked(
+  eventId: string,
+  blocked: boolean,
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, guestDownloadsBlocked: blocked },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The download setting could not be updated.');
+}
+
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
 export async function setEventUploadsClosed(
   eventId: string,

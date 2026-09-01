@@ -37,6 +37,7 @@ export default function UploadForm({
     addFiles,
     upload: startUpload,
     retryFailed,
+    retryable,
     counts,
   } = upload;
 
@@ -175,13 +176,15 @@ export default function UploadForm({
         </p>
       ) : null}
 
-      {failedCount > 0 && !busy ? (
+      {/* Only offered when a retry could actually change the outcome. A file
+          rejected for its size or type keeps its message and is left alone. */}
+      {retryable > 0 && !busy ? (
         <button
           type="button"
           onClick={retryFailed}
           className="mt-3 w-full rounded-full border border-ink/20 bg-white py-2.5 font-medium text-ink hover:border-accent"
         >
-          Retry {failedCount} failed file{failedCount === 1 ? '' : 's'}
+          Retry {retryable} failed file{retryable === 1 ? '' : 's'}
         </button>
       ) : null}
 

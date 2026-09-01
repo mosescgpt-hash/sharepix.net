@@ -17,6 +17,7 @@ import {
   setEventAlertEmail,
   setEventModerationMode,
   setEventUploadsClosed,
+  setEventGuestDownloadsBlocked,
   setEventVideoUploads,
   startAddOnCheckout,
   type EventAddOnKey,
@@ -61,6 +62,7 @@ function AdminDashboardPage() {
   const [alertEmail, setAlertEmail] = useState('');
   const [alertWorking, setAlertWorking] = useState(false);
   const [videoWorking, setVideoWorking] = useState(false);
+  const [downloadsWorking, setDownloadsWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension or slideshow add-on.
   const [discountCode, setDiscountCode] = useState('');
@@ -227,6 +229,29 @@ function AdminDashboardPage() {
       });
     } finally {
       setClosing(false);
+    }
+  }
+
+  async function handleGuestDownloads(blocked: boolean) {
+    if (!event) return;
+    setDownloadsWorking(true);
+    setSettingsMsg(null);
+    try {
+      await setEventGuestDownloadsBlocked(event.id, blocked);
+      setEvent({ ...event, guestDownloadsBlocked: blocked });
+      setSettingsMsg({
+        text: blocked
+          ? 'Guests can view the gallery but not download. They now see viewing copies rather than full-size photos.'
+          : 'Guests can download the photos again, at full resolution.',
+        ok: true,
+      });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The setting could not be updated.',
+        ok: false,
+      });
+    } finally {
+      setDownloadsWorking(false);
     }
   }
 
@@ -601,6 +626,34 @@ function AdminDashboardPage() {
                     ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
                     : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
                 </p>
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">Guest downloads</p>
+                    <p className="text-xs text-ink/55">
+                      {event.guestDownloadsBlocked === true
+                        ? 'Off — guests can view the gallery but not download, and they see smaller viewing copies rather than full-size photos. You still have everything at full resolution.'
+                        : 'On. Guests can save the photos at full resolution, no account needed. Turn this off for an event where you would rather the pictures stayed with you.'}
+                    </p>
+                    {event.guestDownloadsBlocked === true ? (
+                      <p className="mt-1 text-xs text-ink/45">
+                        This lowers what a guest can take away — it cannot stop a screenshot.
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={downloadsWorking}
+                    onClick={() => void handleGuestDownloads(event.guestDownloadsBlocked !== true)}
+                    className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                  >
+                    {downloadsWorking
+                      ? 'Saving…'
+                      : event.guestDownloadsBlocked === true
+                        ? 'Allow downloads'
+                        : 'Turn off downloads'}
+                  </button>
+                </div>
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                   <div className="min-w-0">
