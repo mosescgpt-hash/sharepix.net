@@ -277,7 +277,7 @@ export async function createDiscountCode(input: {
   /** Corporate subscriptions only: 'once' (first month) or 'forever' (every month). */
   recurringDuration?: 'once' | 'forever';
   /**
-   * The paid items the code applies to, e.g. ['event:premium', 'guest_download'].
+   * The paid items the code applies to, e.g. ['event:premium', 'live_slideshow'].
    * Stored verbatim — a code covers exactly what was chosen.
    */
   scopes: string[];
@@ -423,7 +423,7 @@ export function isCorporateActive(sub: CorporateSubscription | null): boolean {
 }
 
 /** The per-event add-ons a host can buy together in one checkout. */
-export type EventAddOnKey = 'extend' | 'guest_download' | 'live_slideshow';
+export type EventAddOnKey = 'extend' | 'live_slideshow';
 
 /**
  * Buy one or more per-event add-ons in a single checkout. The function re-derives
@@ -1099,15 +1099,6 @@ export async function createDownloadShare(
   event: QREvent,
   requestedPhotoIds: string[],
 ): Promise<DownloadShare> {
-  // Gated on the guest-download add-on (what the host actually buys), not on the
-  // plan tier — so it works on any event with guest downloads enabled (Premium
-  // or Corporate), matching the admin UI that unlocks the builder on the add-on.
-  if (event.guestDownloadEnabled !== true) {
-    throw new Error(
-      'Enable guest downloads for this event to create a download-sharing QR code.',
-    );
-  }
-
   const user = await getCurrentUserInfo();
   if (!user || !event.owner?.includes(user.userId)) {
     throw new Error('Only the signed-in event host can create a download-sharing QR code.');

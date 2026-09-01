@@ -260,20 +260,20 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Can I download the photos?',
     audience: 'guest',
     category: 'Finding and viewing photos',
-    summary: 'Only if the host has turned guest downloads on for the event.',
+    summary: 'Yes — every event includes guest downloads, at full resolution.',
     keywords: ['download', 'save', 'keep', 'copy', 'zip'],
     blocks: [
       {
         kind: 'text',
-        text: 'Guest downloading is an optional extra the host buys per event. When it is on, you get download buttons on individual photos and can select several and take them as one ZIP file.',
+        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the full-resolution original, the same file the photographer\u2019s phone produced — good enough to print.',
       },
       {
         kind: 'text',
-        text: 'Videos are the exception: they go to the host only. Guests can film and upload them, but they are not shown or downloadable in the guest gallery — ask the host if you want a copy.',
+        text: 'You do not need an account, and there is nothing to buy. Downloads are included on every event.',
       },
       {
         kind: 'text',
-        text: 'When it is off, you can still view everything — and you can ask the host, who can enable it at any time from their dashboard.',
+        text: 'Videos are the exception: they go to the host only. Guests can film and upload them, but they are not shown or downloadable in the guest gallery \u2014 ask the host if you want a copy.',
       },
     ],
     related: ['host-guest-downloads', 'gallery-lifecycle'],
@@ -321,7 +321,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'note',
-        text: 'Prints are only offered on events where the host has enabled guest downloads. Videos cannot be printed.',
+        text: 'Prints can be ordered from any event gallery. Videos cannot be printed.',
       },
     ],
     related: ['print-problem', 'guest-download'],
@@ -708,7 +708,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Add-ons sit in one list on your dashboard: extend the upload window, guest downloads, and the live slideshow. Tick everything you want, apply a discount code if you have one, and pay with a single checkout.',
+        text: 'Add-ons sit in one list on your dashboard: extend the upload window, and the live slideshow. Tick everything you want, apply a discount code if you have one, and pay with a single checkout.',
       },
       {
         kind: 'text',
@@ -725,20 +725,24 @@ export const HELP_ARTICLES: HelpArticle[] = [
     slug: 'host-guest-downloads',
     title: 'Letting guests download photos',
     audience: 'host',
-    category: 'Plans, billing and add-ons',
-    summary: 'A per-event add-on that also unlocks print ordering and download QR codes.',
-    keywords: ['guest download', 'let guests save', 'download qr', 'share link', 'unlock'],
+    category: 'Running your event',
+    summary: 'Included on every plan — nothing to turn on or buy.',
+    keywords: ['guest download', 'let guests save', 'download qr', 'share link'],
     blocks: [
       {
         kind: 'text',
-        text: 'Buy Guest downloads from the Add-ons list and guests get download buttons plus bulk ZIP downloads. It also enables print ordering for guests.',
+        text: 'Guests can download photos from your gallery on every plan. They get download buttons on individual photos plus bulk ZIP downloads, at full resolution, with no account needed. There is nothing to enable.',
       },
       {
         kind: 'text',
-        text: 'You can additionally build a download QR code for a chosen selection of photos — handy for sending a specific set to family without giving them the whole gallery.',
+        text: 'You can also build a download QR code for a chosen selection of photos \u2014 handy for sending a specific set to family without pointing them at the whole gallery.',
+      },
+      {
+        kind: 'note',
+        text: 'Videos stay host-only. Guests can upload them, but only you can watch and download them.',
       },
     ],
-    related: ['add-ons', 'order-prints', 'guest-download'],
+    related: ['order-prints', 'guest-download'],
   },
   {
     slug: 'live-slideshow',

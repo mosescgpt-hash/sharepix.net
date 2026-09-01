@@ -100,7 +100,6 @@ const PAID_ITEM_SCOPES = [
   { key: 'event:premium', label: 'Premium event' },
   { key: 'corporate', label: 'Corporate subscription' },
   { key: 'extend', label: 'Upload extensions' },
-  { key: 'guest_download', label: 'Guest downloads' },
   { key: 'live_slideshow', label: 'Live slideshow' },
 ] as const;
 
@@ -964,7 +963,7 @@ function GlobalAdminPage() {
                       ) : null}
                     </div>
                     <p className="mt-2 text-xs text-ink/55">
-                      Upload extensions and guest downloads are redeemed on an event&apos;s{' '}
+                      Upload extensions and the live slideshow are redeemed on an event&apos;s{' '}
                       <span className="font-medium">Manage</span> page.
                     </p>
                   </div>

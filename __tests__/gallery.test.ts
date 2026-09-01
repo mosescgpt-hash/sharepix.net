@@ -15,14 +15,18 @@ const photos: DisplayPhoto[] = [
 ];
 
 describe('gallery permissions', () => {
-  test('hosts can download regardless of the guest-download add-on', () => {
+  test('hosts can download their own event', () => {
     expect(canDownloadEventMedia({ ...event }, true)).toBe(true);
-    expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: false }, true)).toBe(true);
   });
 
-  test('guests can download only when the add-on is enabled', () => {
-    expect(canDownloadEventMedia({ ...event }, false)).toBe(false);
-    expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: false }, false)).toBe(false);
+  test('guests can download too — downloads ship with every plan', () => {
+    expect(canDownloadEventMedia({ ...event }, false)).toBe(true);
+  });
+
+  test('the retired guest-download flag no longer withholds downloads', () => {
+    // Events sold before downloads were included still carry the old flag, set
+    // either way. Neither value may now block a guest.
+    expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: false }, false)).toBe(true);
     expect(canDownloadEventMedia({ ...event, guestDownloadEnabled: true }, false)).toBe(true);
   });
 

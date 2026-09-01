@@ -258,9 +258,9 @@ export default function PhotoGrid({
               </button>
             ) : null}
           </div>
-        ) : (
+        ) : downloadMessage ? (
           <p className="text-sm text-ink/60">{downloadMessage}</p>
-        )}
+        ) : null}
       </div>
 
       {error ? (

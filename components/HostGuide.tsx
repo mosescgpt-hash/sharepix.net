@@ -5,9 +5,9 @@ import { hostGuideSections } from '@/lib/hostGuide';
 
 /**
  * A collapsible quick-start on the host dashboard: how guests upload, how to
- * print the brochure, and — once bought — how to run the live slideshow and let
- * guests download. Contextual to this event, so the links actually work and the
- * paid sections only appear when the host owns them.
+ * print the brochure, how guests download (included on every plan), and — once
+ * bought — how to run the live slideshow. Contextual to this event, so the links
+ * actually work and the paid section only appears when the host owns it.
  */
 export default function HostGuide({
   event,
@@ -127,15 +127,16 @@ export default function HostGuide({
             </section>
           ) : null}
 
-          {/* Guest downloads (only when purchased) */}
+          {/* Guest downloads — included on every plan */}
           {sections.includes('downloads') ? (
             <section>
               <h3 className="font-display text-base font-bold text-ink">
                 {sections.includes('live') ? '4' : '3'}. Let guests download
               </h3>
               <p className="mt-2">
-                Guest downloads are on. Guests now get download buttons in the gallery, and you can
-                build a download QR code for a chosen set of photos from the settings below.
+                Guests get download buttons in the gallery on every plan, at full resolution and
+                with no account needed. You can also build a download QR code for a chosen set of
+                photos from the settings below, to send a specific selection to family.
               </p>
             </section>
           ) : null}

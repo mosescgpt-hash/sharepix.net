@@ -187,7 +187,8 @@ export const handler = async (event: {
 
     // Apply the event side effect of this payment, if any:
     //  - extend_window → push the upload window out by 30 days
-    //  - guest_download add-on → enable guest downloads on the event
+    //  - guest_download add-on → legacy; no longer sold, but still honored so
+    //    a checkout already in flight at deploy time is not left unapplied
     //  - prints → no event change (fulfilment is handed off below)
     //  - otherwise (event payment) → activate the pending event
     if (eventId && session.metadata?.kind !== 'prints') {
@@ -204,6 +205,7 @@ export const handler = async (event: {
             if (key === 'extend') {
               await extendUploadWindow(eventId, now);
             } else if (key === 'guest_download') {
+              // Legacy add-on, no longer purchasable — see the note above.
               await setEventFlag(eventId, 'guestDownloadEnabled', now);
             } else if (key === 'live_slideshow') {
               await setEventFlag(eventId, 'liveSlideshowEnabled', now);

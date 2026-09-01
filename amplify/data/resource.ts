@@ -263,7 +263,7 @@ const schema = a.schema({
       appliesToTier: a.string().required(),
       // The paid items the code can be redeemed against, comma-separated:
       // event:starter, event:standard, event:premium, corporate, extend,
-      // guest_download. A code covers exactly what was selected. ('all' and a
+      // live_slideshow. A code covers exactly what was selected. ('all' and a
       // bare 'event' are still honored for codes created earlier.) Missing on
       // legacy codes → fall back to appliesToTier.
       appliesToScopes: a.string(),
@@ -401,7 +401,9 @@ const schema = a.schema({
       // Optional admin discount code applied server-side as a Stripe coupon.
       discountCode: a.string(),
       // For kind 'addons': which per-event add-ons to buy together, as a
-      // comma-separated list of extend | guest_download | live_slideshow.
+      // comma-separated list of extend | live_slideshow. (guest_download is a
+      // retired scope that may still appear on codes created before it was
+      // folded into every plan.)
       addons: a.string(),
     })
     .returns(a.ref('CheckoutSession'))

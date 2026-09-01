@@ -33,7 +33,8 @@ export default function DownloadSharePage() {
         ]);
         if (!cancelled) {
           setShare(loadedShare);
-          setDownloadsEnabled(event?.guestDownloadEnabled === true);
+          // Guest downloads are included on every plan.
+          setDownloadsEnabled(true);
           setPhotos(eventPhotos.filter((photo) => allowedIds.has(photo.id)));
         }
       } catch {
