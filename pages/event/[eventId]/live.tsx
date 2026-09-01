@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { QRCodeSVG } from 'qrcode.react';
-import { fetchEvent, fetchEventPhotoRecords, getPhotoDisplayUrl } from '@/lib/api';
+import { fetchEvent, fetchEventPhotoRecords, getPhotoDisplaySource } from '@/lib/api';
+import { FallbackImage } from '@/components/FallbackMedia';
+import { initialSource, type MediaSource } from '@/lib/mediaSource';
 import {
   LIVE_BUFFER_SECONDS,
   POLL_INTERVAL_MS,
@@ -14,10 +16,10 @@ import {
 } from '@/lib/slideshow';
 import { QREvent, QRPhoto } from '@/lib/types';
 
-/** A photo plus the signed URL we resolved for it, and when. */
+/** A photo plus where we resolved it from (R2 first, S3 behind), and when. */
 interface Frame {
   photo: QRPhoto;
-  url: string;
+  source: MediaSource;
   signedAt: number;
 }
 
@@ -50,23 +52,23 @@ export default function LiveSlideshowPage() {
   const queueRef = useRef<QRPhoto[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
   const indexRef = useRef(0);
-  const urlCacheRef = useRef<Map<string, { url: string; signedAt: number }>>(new Map());
+  const urlCacheRef = useRef<Map<string, { source: MediaSource; signedAt: number }>>(new Map());
 
   const uploadUrl =
     typeof window !== 'undefined' && eventId
       ? `${window.location.origin}/event/${eventId}/upload`
       : '';
 
-  /** Signed URL for a photo, reusing a cached one until it is near expiry. */
-  const resolveUrl = useCallback(async (photo: QRPhoto): Promise<string | null> => {
+  /** Where to load a photo from, reusing a cached pair until it is near expiry. */
+  const resolveSource = useCallback(async (photo: QRPhoto): Promise<MediaSource | null> => {
     const cached = urlCacheRef.current.get(photo.id);
-    if (cached && Date.now() - cached.signedAt < URL_REFRESH_MS) return cached.url;
+    if (cached && Date.now() - cached.signedAt < URL_REFRESH_MS) return cached.source;
     try {
-      const url = await getPhotoDisplayUrl(photo);
-      urlCacheRef.current.set(photo.id, { url, signedAt: Date.now() });
-      return url;
+      const source = await getPhotoDisplaySource(photo);
+      urlCacheRef.current.set(photo.id, { source, signedAt: Date.now() });
+      return source;
     } catch {
-      return cached?.url ?? null; // keep showing a stale URL rather than nothing
+      return cached?.source ?? null; // keep showing a stale URL rather than nothing
     }
   }, []);
 
@@ -104,18 +106,18 @@ export default function LiveSlideshowPage() {
     }
     if (!candidate) return;
 
-    const url = await resolveUrl(candidate);
-    if (!url) return; // couldn't sign it; try again on the next tick
+    const source = await resolveSource(candidate);
+    if (!source) return; // couldn't sign it; try again on the next tick
 
     seenRef.current.add(candidate.id);
     setFading(true);
     // Let the outgoing frame fade before swapping in the next one.
     window.setTimeout(() => {
-      setFrame({ photo: candidate as QRPhoto, url, signedAt: Date.now() });
+      setFrame({ photo: candidate as QRPhoto, source, signedAt: Date.now() });
       setIsNew(flagAsNew);
       setFading(false);
     }, 400);
-  }, [resolveUrl]);
+  }, [resolveSource]);
 
   // Initial load: event details, then the first fill of the reel.
   useEffect(() => {
@@ -256,12 +258,13 @@ export default function LiveSlideshowPage() {
             <div
               aria-hidden="true"
               className="absolute inset-0 scale-110 bg-cover bg-center opacity-30 blur-2xl"
-              style={{ backgroundImage: `url(${frame.url})` }}
+              // The blur is decorative, so it takes the first URL and doesn't
+              // follow a fallback — a missing backdrop is invisible either way.
+              style={{ backgroundImage: `url(${initialSource(frame.source)})` }}
             />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <FallbackImage
               key={frame.photo.id}
-              src={frame.url}
+              source={frame.source}
               alt=""
               className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ${
                 fading ? 'opacity-0' : 'opacity-100'

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import PhotoCard from '@/components/PhotoCard';
 import PrintOrderModal from '@/components/PrintOrderModal';
-import { downloadPhoto, downloadPhotosAsZip, getOriginalMediaUrl } from '@/lib/api';
+import { downloadPhoto, downloadPhotosAsZip, getOriginalMediaSource } from '@/lib/api';
+import { FallbackImage } from '@/components/FallbackMedia';
+import type { MediaSource } from '@/lib/mediaSource';
 import { GallerySort, sortGalleryPhotos } from '@/lib/gallery';
 import { isVideoFilename } from '@/lib/validation';
 
@@ -50,7 +52,7 @@ export default function PhotoGrid({
   const [error, setError] = useState<string | null>(null);
   const [enlargedIndex, setEnlargedIndex] = useState<number | null>(null);
   const [printPhotos, setPrintPhotos] = useState<DisplayPhoto[] | null>(null);
-  const [originalUrl, setOriginalUrl] = useState<string | null>(null);
+  const [originalSource, setOriginalSource] = useState<MediaSource | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const sortedPhotos = useMemo(() => sortGalleryPhotos(photos, sort), [photos, sort]);
   // Only images open in the enlarged viewer (videos play inline), so the
@@ -80,12 +82,13 @@ export default function PhotoGrid({
   }
 
   async function loadOriginal(photo: DisplayPhoto) {
-    setOriginalUrl(null);
+    setOriginalSource(null);
     setOriginalLoading(true);
     try {
-      setOriginalUrl(await getOriginalMediaUrl(photo));
+      setOriginalSource(await getOriginalMediaSource(photo));
     } catch {
-      setOriginalUrl(photo.url); // fall back to the preview if the original can't load
+      // Show the preview we already have rather than nothing.
+      setOriginalSource({ primary: photo.url, fallback: photo.fallbackUrl });
     } finally {
       setOriginalLoading(false);
     }
@@ -105,7 +108,7 @@ export default function PhotoGrid({
 
   function closeEnlarge() {
     setEnlargedIndex(null);
-    setOriginalUrl(null);
+    setOriginalSource(null);
   }
 
   function showPrevEnlarged() {
@@ -370,10 +373,9 @@ export default function PhotoGrid({
           >
             {originalLoading ? (
               <p className="text-sm text-white/70">Loading full-quality photo…</p>
-            ) : originalUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={originalUrl}
+            ) : originalSource ? (
+              <FallbackImage
+                source={originalSource}
                 alt={`Full-quality photo uploaded by ${enlarged.uploadedBy ?? 'Anonymous'}`}
                 className="max-h-full max-w-full object-contain"
               />

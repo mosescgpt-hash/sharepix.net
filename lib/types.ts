@@ -50,9 +50,17 @@ export interface QRPhoto {
   createdAt?: string | null;
 }
 
-/** A photo joined with its resolved (signed) S3 URL for display. */
+/**
+ * A photo joined with the signed URL to display it from.
+ *
+ * `url` is Cloudflare R2 when R2 can serve this object and S3 otherwise;
+ * `fallbackUrl` is the S3 one, used by the browser if the first fails to load.
+ * Both are signed locally, so having two costs nothing but the field.
+ */
 export interface DisplayPhoto extends QRPhoto {
   url: string;
+  /** S3, for when `url` points at R2 and R2 turns out not to have the object. */
+  fallbackUrl?: string;
 }
 
 export interface DiscountCode {

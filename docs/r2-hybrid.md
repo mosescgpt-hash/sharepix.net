@@ -91,25 +91,44 @@ Every part of the mirror is best-effort and degrades to S3:
    they are present, the mirror ran on the wrong pass — stop and fix it before
    going further.
 
+## Serving reads out of R2
+
+The `mediaUrls` query (`amplify/functions/media-url/`) mints **presigned R2
+URLs** for a batch of keys after checking, per key, that the caller may have it.
+Presigned rather than a public `cdn.sharepix.net` domain: read access was
+enforced by `defineStorage.access` through the identity pool, and a public
+bucket would drop that entirely, making every photo readable by anyone holding a
+URL. The rules that replace it live in `access.ts` and are tested there.
+
+It is batched because a gallery needs one URL per photo. A per-photo query would
+mean hundreds of round trips and hundreds of Lambda invocations to open a single
+page; one query covers the whole gallery, capped at `MAX_KEYS_PER_REQUEST`.
+
+**There is no existence check.** Signing is local HMAC, so the expensive part of
+a HEAD-per-object would be the one thing that doesn't scale to a gallery — and
+it isn't needed. A signed URL for an object R2 doesn't have returns 404, and
+every caller already treats a failed fetch as "use S3": an image swaps its `src`
+(`lib/mediaSource.ts`), a download falls through to `downloadData`. A miss costs
+one request and no bytes.
+
+So every read carries two URLs, both signed locally at no per-photo cost:
+
+| Path | Primary | Fallback |
+| --- | --- | --- |
+| Gallery grid, admin grid | R2 preview/thumb | S3 |
+| Enlarged original (host) | R2 original | S3 |
+| Live slideshow | R2 preview | S3 |
+| Download, ZIP, print order | R2 original | S3 `downloadData` |
+
+The browser settles which one works. When R2 is unconfigured, every primary is
+the S3 URL and the fallback is absent — exactly the behaviour that predates all
+of this.
+
 ## What is not done yet
 
-**Reads still come from S3.** This change gets bytes *into* R2; it does not yet
-serve anything *out* of it, so it produces no saving on its own. That is
-deliberate — the read path cannot be verified without a real bucket, and
-shipping unexercised network code into every gallery view is not worth it.
-
-Stage 2, once a bucket exists:
-
-- A Lambda that mints **presigned R2 URLs** after checking event ownership and
-  lifecycle. Presigned, not a public `cdn.sharepix.net` domain: read access is
-  currently enforced by `defineStorage.access` through the identity pool, and a
-  public bucket would drop that entirely, making every photo readable by anyone
-  holding a URL.
-- Swap the signer behind `createSignedUrlCache` in `lib/api.ts` (one call site)
-  so a failure to presign falls back to S3.
-- Batch the presigning into the existing `listEventPhotos` query rather than one
-  round trip per photo — a 1,000-photo gallery must not make 1,000 calls.
-- Backfill existing objects with `rclone` or Cloudflare's Super Slurper.
-- Confirm Prodigi can fetch a presigned R2 URL, with one real print order.
-
-Only after reads move does the bandwidth saving actually arrive.
+- **Nothing was backfilled.** Anything uploaded before the mirror went live
+  exists only in S3 and is served from there. `rclone` or Cloudflare's Super
+  Slurper would move the rest; the fallback means there is no rush.
+- **Prodigi still fetches from S3.** The webhook regenerates URLs from the
+  stored keys at submission time. Worth confirming Prodigi can fetch a
+  presigned R2 URL with one real print order before moving it.

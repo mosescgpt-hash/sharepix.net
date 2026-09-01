@@ -11,6 +11,33 @@
  * stated rather than assumed.
  */
 
+/**
+ * How many objects one request may ask to sign.
+ *
+ * A gallery loads in a single batch, and the widest read anywhere is the
+ * 500-photo page limit in listEventPhotos, so this is that with room to spare.
+ * The cap exists because `keys` is a client-supplied array: without it, one
+ * request could ask for an unbounded amount of signing work.
+ */
+export const MAX_KEYS_PER_REQUEST = 600;
+
+/**
+ * The keys to actually work on: blanks dropped, duplicates collapsed, and no
+ * more than `limit` of them. Deduping matters because a gallery legitimately
+ * repeats a key — a photo with no preview falls back to its original, and two
+ * photos in the same request can land on the same fallback.
+ */
+export function dedupeKeys(keys: (string | null | undefined)[], limit: number): string[] {
+  const seen = new Set<string>();
+  for (const raw of keys ?? []) {
+    const key = (raw ?? '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    if (seen.size >= limit) break;
+  }
+  return [...seen];
+}
+
 const VIDEO_KEY = /\.(mp4|mov|webm|m4v|3gp)$/i;
 
 /** `events/<eventId>/photos/...` — the uploaded original. */
