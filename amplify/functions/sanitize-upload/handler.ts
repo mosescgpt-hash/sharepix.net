@@ -9,8 +9,73 @@ import {
 } from '@aws-sdk/client-s3';
 import { sniffMediaKind, maxBytesForKind } from './safety';
 import { isJpeg, isHeic, stripJpegMetadata, stripHeicGps } from './exif';
+import { mirrorConfigured, mirrorDecision, r2KeyFor } from './mirror';
 
 const s3 = new S3Client({});
+
+/**
+ * Cloudflare R2, where reads are served from. R2 speaks the S3 API, so the same
+ * client works against a different endpoint. Built lazily and only when fully
+ * configured — with anything missing SharePix serves from S3 alone and this
+ * whole path is inert.
+ */
+let r2Client: S3Client | null = null;
+function r2(): S3Client | null {
+  if (!mirrorConfigured(process.env)) return null;
+  if (!r2Client) {
+    r2Client = new S3Client({
+      region: 'auto',
+      endpoint: process.env.R2_ACCOUNT_ENDPOINT,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+      },
+    });
+  }
+  return r2Client;
+}
+
+/**
+ * Copy one object into R2. Best-effort by design: the file is already safe and
+ * serveable from S3, so a mirror failure must degrade to "read it from S3"
+ * rather than fail the upload or lose the photo.
+ */
+async function mirrorToR2(bucket: string, key: string) {
+  const client = r2();
+  if (!client) return;
+  try {
+    const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const bytes = await readBytes(object.Body);
+    await client.send(
+      new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: r2KeyFor(key),
+        Body: Buffer.from(bytes),
+        ContentType: object.ContentType,
+      }),
+    );
+    console.log('Mirrored to R2', { at: new Date().toISOString(), key, bytes: bytes.length });
+  } catch (error) {
+    console.error('Could not mirror to R2 (serving from S3)', {
+      at: new Date().toISOString(),
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/** Remove a rejected object's mirror, so a deleted upload cannot be served. */
+async function removeFromR2(key: string) {
+  const client = r2();
+  if (!client) return;
+  try {
+    await client.send(
+      new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET, Key: r2KeyFor(key) }),
+    );
+  } catch {
+    // Nothing to remove, or R2 is unreachable — the S3 delete is what counts.
+  }
+}
 
 // Only vet uploaded originals. Previews and thumbnails are re-encoded from the
 // original by the browser's canvas and written under sibling prefixes, so they
@@ -37,9 +102,11 @@ async function deleteObjectAndDerivatives(bucket: string, key: string) {
   );
 }
 
-function reject(bucket: string, key: string, reason: string, detail: Record<string, unknown> = {}) {
+async function reject(bucket: string, key: string, reason: string, detail: Record<string, unknown> = {}) {
   console.error('Rejected upload', { at: new Date().toISOString(), bucket, key, reason, ...detail });
-  return deleteObjectAndDerivatives(bucket, key);
+  await deleteObjectAndDerivatives(bucket, key);
+  // A rejected upload must not survive in the store reads are served from.
+  await removeFromR2(key);
 }
 
 async function processRecord(record) {
@@ -49,7 +116,14 @@ async function processRecord(record) {
   // S3 URL-encodes keys in event notifications (spaces as '+', etc.).
   const key = decodeURIComponent(String(rawKey).replace(/\+/g, ' '));
 
-  if (!ORIGINAL_KEY.test(key)) return;
+  // Previews and thumbs are re-encoded by the browser from the original, so
+  // they carry no metadata and need no vetting — but they are what the gallery
+  // serves, so they are exactly what we want in R2.
+  if (!ORIGINAL_KEY.test(key)) {
+    const derived = mirrorDecision({ key });
+    if (derived.mirror) await mirrorToR2(bucket, key);
+    return;
+  }
 
   // Sniff the real type from the first bytes. A tiny ranged read is enough and
   // keeps large videos from being downloaded just to be identified.
@@ -84,6 +158,18 @@ async function processRecord(record) {
   }
 
   await stripMetadata(bucket, key, header, headerObj.Metadata);
+
+  // Mirror only once the bytes are final. A JPEG or HEIC is rewritten by
+  // stripMetadata, and that rewrite fires its own event carrying
+  // `sanitized: 'true'` — this pass deliberately skips it so the copy that
+  // reaches R2 is the stripped one, never the guest's original.
+  const strippable = isJpeg(header) || isHeic(header);
+  const decision = mirrorDecision({
+    key,
+    strippable,
+    sanitized: headerObj.Metadata?.sanitized === 'true',
+  });
+  if (decision.mirror) await mirrorToR2(bucket, key);
 }
 
 /**
