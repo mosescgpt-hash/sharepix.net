@@ -31,6 +31,11 @@
   ],
   "exclude": [
     "node_modules",
-    "amplify/functions/**/handler.ts"
+    "amplify/functions/**/handler.ts",
+    // A local operator script that imports the generated amplify_outputs.json.
+    // That file is gitignored and only exists after a deploy or sandbox run, so
+    // including it here made `next build` fail on any fresh clone — including
+    // CI — for a file the site never bundles.
+    "scripts/**/*.ts"
   ]
 }
