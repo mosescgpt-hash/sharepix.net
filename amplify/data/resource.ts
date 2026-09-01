@@ -9,6 +9,7 @@ import { corporatePortal as corporatePortalFn } from '../functions/corporate-por
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
 import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/resource';
+import { mediaUrl as mediaUrlFn } from '../functions/media-url/resource';
 
 /**
  * SharePix data models.
@@ -486,6 +487,25 @@ const schema = a.schema({
         entry: './validate-discount-code.js',
       }),
     ),
+
+  // A signed URL for one stored object, served from Cloudflare R2 where egress
+  // is free. Returns null whenever R2 cannot serve it — unconfigured, the
+  // object was never mirrored, or the caller may not have it — and the client
+  // falls back to S3, which is what every caller did before this existed.
+  MediaUrl: a.customType({
+    url: a.string(),
+    /** Why there is no url, for logs and tests. Never shown to a guest. */
+    reason: a.string(),
+  }),
+
+  mediaUrl: a
+    .query()
+    .arguments({ eventId: a.id().required(), key: a.string().required() })
+    .returns(a.ref('MediaUrl'))
+    // Guests have no account, so this has to be reachable by them; the handler
+    // decides what any given caller may actually have.
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(mediaUrlFn)),
 
   redeemDiscountCode: a
     .mutation()
