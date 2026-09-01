@@ -4,8 +4,11 @@ import {
   countsOf,
   overallPercent,
   QueuedMedia,
+  resetForRetry,
+  retryableCount,
   uploadPhase,
 } from '../lib/uploadQueue';
+import { MAX_VIDEO_SIZE_BYTES } from '../lib/validation';
 
 // A minimal File stand-in — buildQueuedFiles only reads name/type/size, and
 // validateMediaFile (already tested on its own) does the real checks.
@@ -129,5 +132,73 @@ describe('canStartUpload prevents duplicate submissions', () => {
 
   it('blocks a start when nothing is pending', () => {
     expect(canStartUpload([item({ status: 'done' })], false)).toBe(false);
+  });
+});
+
+describe('resetForRetry — the oversize-video retry bug', () => {
+  const limits = { allowVideo: true, videosRemaining: null };
+  const huge = () => file('party.mp4', 'video/mp4', MAX_VIDEO_SIZE_BYTES + 1);
+
+  it('refuses to retry a video rejected for its size', () => {
+    // Reported from real use: a video too large to upload was rejected, and
+    // tapping "Retry failed files" uploaded it anyway. The whole file went up,
+    // the server deleted it on arrival, and the event still spent a video slot.
+    const queued = buildQueuedFiles([huge()], [], limits, makeId);
+    expect(queued[0].status).toBe('error');
+    expect(queued[0].permanent).toBe(true);
+
+    const afterRetry = resetForRetry(queued, limits);
+    expect(afterRetry[0].status).toBe('error');
+    expect(afterRetry[0].error).toContain('larger than');
+  });
+
+  it('still retries a genuine transient failure', () => {
+    const failed = [item({ status: 'error', error: 'The service was busy.' })];
+    const afterRetry = resetForRetry(failed, limits);
+    expect(afterRetry[0].status).toBe('pending');
+    expect(afterRetry[0].error).toBeUndefined();
+    expect(afterRetry[0].percent).toBe(0);
+  });
+
+  it('leaves anything not in error untouched', () => {
+    const queue = [
+      item({ status: 'done', percent: 100 }),
+      item({ status: 'duplicate' }),
+      item({ status: 'pending' }),
+    ];
+    expect(resetForRetry(queue, limits)).toEqual(queue);
+  });
+
+  it('re-checks a transient failure rather than trusting the original pick', () => {
+    // An item can become invalid between the pick and the retry — here the
+    // event has since run out of video slots.
+    const failed = [
+      item({ file: file('clip.mp4', 'video/mp4', 1_000), status: 'error', error: 'Network error' }),
+    ];
+    const afterRetry = resetForRetry(failed, { allowVideo: true, videosRemaining: 0 });
+    expect(afterRetry[0].status).toBe('error');
+    expect(afterRetry[0].permanent).toBe(true);
+    expect(afterRetry[0].error).toContain('no video slots left');
+  });
+
+  it('turns a now-disallowed video into a permanent failure', () => {
+    const failed = [
+      item({ file: file('clip.mp4', 'video/mp4', 1_000), status: 'error', error: 'Network error' }),
+    ];
+    const afterRetry = resetForRetry(failed, { allowVideo: false, videosRemaining: null });
+    expect(afterRetry[0].status).toBe('error');
+    expect(afterRetry[0].permanent).toBe(true);
+  });
+
+  it('counts only the failures a retry could fix', () => {
+    const queue = [
+      item({ status: 'error', permanent: true, error: 'too big' }),
+      item({ status: 'error', error: 'network' }),
+      item({ status: 'done' }),
+    ];
+    // The button hides entirely when this is zero, so a guest is never offered
+    // a retry that cannot work.
+    expect(retryableCount(queue)).toBe(1);
+    expect(retryableCount([item({ status: 'error', permanent: true })])).toBe(0);
   });
 });

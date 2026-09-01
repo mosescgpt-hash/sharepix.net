@@ -14,6 +14,8 @@ import {
   QueuedMedia,
   uploadPhase,
   UploadPhase,
+  resetForRetry,
+  retryableCount,
 } from '@/lib/uploadQueue';
 
 interface UseMediaUploadArgs {
@@ -167,13 +169,11 @@ export function useMediaUpload({ eventId, allowVideo, videosRemaining, onUploade
   }
 
   function retryFailed() {
-    setQueue((previous) =>
-      previous.map((item) =>
-        item.status === 'error'
-          ? { ...item, status: 'pending', percent: 0, error: undefined }
-          : item,
-      ),
-    );
+    // Only reset what a retry could actually fix. A file rejected for its size,
+    // its type, or a full video allowance stays failed with its message —
+    // clearing it indiscriminately meant an oversize video uploaded in full and
+    // was then deleted server-side on arrival.
+    setQueue((previous) => resetForRetry(previous, { allowVideo, videosRemaining }));
     setSuccessCount(0);
   }
 
@@ -193,6 +193,8 @@ export function useMediaUpload({ eventId, allowVideo, videosRemaining, onUploade
     upload,
     retryFailed,
     counts,
+    /** Failed items a retry could actually fix — the rest are permanent. */
+    retryable: retryableCount(queue),
     phase,
     overall: overallPercent(queue),
     canUpload: canStartUpload(queue, busy),

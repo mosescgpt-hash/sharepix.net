@@ -18,6 +18,17 @@ export interface QueuedMedia {
   status: MediaStatus;
   percent: number;
   error?: string;
+  /**
+   * True when this file failed a rule it can never pass — too large, wrong
+   * type, or no video slots left. Retrying cannot help, so "Retry failed files"
+   * must leave it alone.
+   *
+   * Without this the retry button cleared every error indiscriminately, and an
+   * oversize video would upload in full: the guest burned the data, the server
+   * correctly deleted the object on arrival, and the event was left having
+   * spent a video slot on a file that no longer existed.
+   */
+  permanent?: boolean;
 }
 
 export interface QueueLimits {
@@ -43,7 +54,9 @@ export function buildQueuedFiles(
 
   return files.map((file) => {
     const problem = validateMediaFile(file, { allowVideo: limits.allowVideo });
-    if (problem) return { id: makeId(), file, status: 'error', percent: 0, error: problem };
+    if (problem) {
+      return { id: makeId(), file, status: 'error', percent: 0, error: problem, permanent: true };
+    }
 
     if (isVideoFilename(file.name) && limits.videosRemaining !== null) {
       if (videosTaken >= limits.videosRemaining) {
@@ -52,6 +65,7 @@ export function buildQueuedFiles(
           file,
           status: 'error',
           percent: 0,
+          permanent: true,
           error:
             limits.videosRemaining === 0
               ? 'This event has no video slots left. Photos are still welcome.'
@@ -62,6 +76,59 @@ export function buildQueuedFiles(
     }
     return { id: makeId(), file, status: 'pending', percent: 0 };
   });
+}
+
+/**
+ * What "Retry failed files" should produce.
+ *
+ * Only failures that could plausibly succeed on a second attempt are reset — a
+ * dropped connection, a busy service. A file rejected by a rule is left exactly
+ * as it was, with its message intact, because retrying it wastes the guest's
+ * bandwidth and then fails server-side anyway.
+ *
+ * Transient failures are re-validated on the way back to `pending` rather than
+ * trusted from the original pick: video slots may have been used up by someone
+ * else since, and an item that has become invalid should stop here rather than
+ * upload and be deleted on arrival.
+ */
+export function resetForRetry(queue: QueuedMedia[], limits: QueueLimits): QueuedMedia[] {
+  // Videos still queued or already uploaded hold their slots.
+  let videosTaken = queue.filter(
+    (item) => item.status !== 'error' && isVideoFilename(item.file.name),
+  ).length;
+
+  return queue.map((item) => {
+    if (item.status !== 'error') return item;
+    if (item.permanent) return item;
+
+    const problem = validateMediaFile(item.file, { allowVideo: limits.allowVideo });
+    if (problem) {
+      return { ...item, status: 'error', percent: 0, error: problem, permanent: true };
+    }
+
+    if (isVideoFilename(item.file.name) && limits.videosRemaining !== null) {
+      if (videosTaken >= limits.videosRemaining) {
+        return {
+          ...item,
+          status: 'error',
+          percent: 0,
+          permanent: true,
+          error:
+            limits.videosRemaining === 0
+              ? 'This event has no video slots left. Photos are still welcome.'
+              : `Only ${limits.videosRemaining} more video${limits.videosRemaining === 1 ? '' : 's'} can be added to this event. Photos are still welcome.`,
+        };
+      }
+      videosTaken += 1;
+    }
+
+    return { ...item, status: 'pending', percent: 0, error: undefined };
+  });
+}
+
+/** How many failed items the retry button can actually do anything about. */
+export function retryableCount(queue: QueuedMedia[]): number {
+  return queue.filter((item) => item.status === 'error' && !item.permanent).length;
 }
 
 export function isVideoItem(item: QueuedMedia): boolean {

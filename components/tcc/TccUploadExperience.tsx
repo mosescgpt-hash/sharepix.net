@@ -20,7 +20,7 @@ export default function TccUploadExperience({
   upload: MediaUpload;
   galleryHref: string;
 }) {
-  const { queue, busy, phase, overall, counts, retryFailed, removeFile, upload: startUpload } = upload;
+  const { queue, busy, phase, overall, counts, retryFailed, retryable, removeFile, upload: startUpload } = upload;
 
   // Object URLs for image previews, created lazily and revoked on removal and
   // unmount so a big selection doesn't leak memory. Videos are shown as a light
@@ -72,6 +72,7 @@ export default function TccUploadExperience({
           galleryHref={galleryHref}
           previewUrl={(item) => urlsRef.current.get(item.id)}
           onRetry={retryFailed}
+          retryable={retryable}
         />
       ) : (
         <ReviewOrUploading
@@ -386,12 +387,15 @@ function PartialPanel({
   galleryHref,
   previewUrl,
   onRetry,
+  retryable,
 }: {
   queue: QueuedMedia[];
   counts: { done: number; failed: number };
   galleryHref: string;
   previewUrl: (item: QueuedMedia) => string | undefined;
   onRetry: () => void;
+  /** Failed items a retry could fix; the rest are permanent and stay put. */
+  retryable: number;
 }) {
   const failed = queue.filter((item) => item.status === 'error');
   return (
@@ -414,13 +418,15 @@ function PartialPanel({
       </ul>
 
       <div className="mt-5 space-y-3">
-        <button
-          type="button"
-          onClick={onRetry}
-          className="tcc-btn-primary w-full rounded-full px-5 py-4 text-base"
-        >
-          Retry {counts.failed} file{counts.failed === 1 ? '' : 's'}
-        </button>
+        {retryable > 0 ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="tcc-btn-primary w-full rounded-full px-5 py-4 text-base"
+          >
+            Retry {retryable} file{retryable === 1 ? '' : 's'}
+          </button>
+        ) : null}
         {counts.done > 0 ? (
           <Link href={galleryHref} className="tcc-btn-ghost block w-full rounded-full px-5 py-3 text-center text-sm">
             View the Live Gallery
