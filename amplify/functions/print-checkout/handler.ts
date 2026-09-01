@@ -84,15 +84,10 @@ export const handler: Handler = async (event) => {
   if (eventItem.paid?.BOOL === false) {
     throw new Error('This event isn’t active yet.');
   }
-  // Is the caller the event's host? Match their Cognito sub against the event
-  // owner, the same way the gallery's isEventHost does. Guests (identityPool)
-  // have no sub, so they never match — they need the add-on.
-  const identity = event.identity as { sub?: string } | undefined;
-  const callerSub = identity?.sub ?? '';
-  const isHost = callerSub !== '' && (eventItem.owner?.S ?? '').includes(callerSub);
-  if (!isHost && eventItem.guestDownloadEnabled?.BOOL !== true) {
-    throw new Error('Prints aren’t enabled for this event.');
-  }
+  // Anyone who can reach the event's gallery may order prints of it. This used
+  // to require the guest-download add-on, but downloads now ship with every
+  // plan — and leaving the check in place would have silently ended guest print
+  // orders, since the flag it read can no longer be set by anyone.
   const eventName = eventItem.name?.S ?? 'SharePix event';
 
   // Parse and validate the requested items.

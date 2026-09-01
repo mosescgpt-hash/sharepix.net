@@ -223,9 +223,9 @@ describe('upload open state', () => {
 
 describe('pricing', () => {
   it('exposes the three tiers with correct prices', () => {
-    expect(getTier('starter')?.price).toBe(10);
-    expect(getTier('standard')?.price).toBe(25);
-    expect(getTier('premium')?.price).toBe(50);
+    expect(getTier('starter')?.price).toBe(19);
+    expect(getTier('standard')?.price).toBe(39);
+    expect(getTier('premium')?.price).toBe(79);
   });
 
   it('computes expiry based on tier access days', () => {

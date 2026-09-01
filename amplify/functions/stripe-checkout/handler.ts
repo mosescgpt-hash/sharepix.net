@@ -63,7 +63,7 @@ async function resolveDiscount(
 
   // Scope check. New codes carry appliesToScopes: a comma-separated list of the
   // paid items ticked when the code was made — event:starter, event:standard,
-  // event:premium, corporate, extend, guest_download. ('all' is still honored
+  // event:premium, corporate, extend. ('all' is still honored
   // for codes created before plans were listed individually.) Legacy codes have
   // only appliesToTier, where 'all'/blank was universal and a specific tier only
   // ever applied to creating an event on that plan.
@@ -180,10 +180,13 @@ async function buildDiscount(
 
 // Prices mirror lib/pricing.ts (dollars → cents). Kept in sync by hand so the
 // function has no cross-bundle imports.
+// Mirrors PRICING_TIERS in lib/pricing.ts (dollars -> cents). These two lists
+// MUST move together: this one is what Stripe actually charges, the other is
+// what the site advertises, and a mismatch bills a price nobody was shown.
 const TIER_PRICING: Record<string, { name: string; amount: number }> = {
-  starter: { name: 'SharePix Starter event', amount: 1000 },
-  standard: { name: 'SharePix Standard event', amount: 2500 },
-  premium: { name: 'SharePix Premium event', amount: 5000 },
+  starter: { name: 'SharePix Starter event', amount: 1900 },
+  standard: { name: 'SharePix Standard event', amount: 3900 },
+  premium: { name: 'SharePix Premium event', amount: 7900 },
 };
 
 // Mirrors LIVE_SLIDESHOW_ADDON_PRICE in lib/pricing.ts (dollars → cents).
@@ -286,45 +289,6 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  // Guest-download add-on: a one-time $15 charge that enables guest downloads on
-  // a single event. The webhook flips the event's guestDownloadEnabled flag.
-  if ((event.arguments.kind ?? '') === 'guest_download') {
-    const addOnEventId = event.arguments.eventId ?? '';
-    if (!addOnEventId) throw new Error('Missing event for the download add-on.');
-    // Only Premium and Corporate events may buy guest downloads.
-    const tier = await eventTier(addOnEventId);
-    if (tier !== 'premium' && tier !== 'corporate') {
-      throw new Error('Guest downloads are available on Premium and Corporate events.');
-    }
-    try {
-      const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['guest_download'], 1500);
-      const session = await stripe.checkout.sessions.create({
-        mode: 'payment',
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency: 'usd',
-              unit_amount: 1500,
-              product_data: { name: 'SharePix guest-download add-on (one event)' },
-            },
-          },
-        ],
-        success_url: `${appBaseUrl}/event/${addOnEventId}/admin?addon=guestdownload`,
-        cancel_url: `${appBaseUrl}/event/${addOnEventId}/admin?addon=cancelled`,
-        metadata: { kind: 'guest_download', eventId: addOnEventId, ...disc.metadata },
-        discounts: disc.discounts,
-      });
-      if (!session.url) throw new Error('Stripe did not return a checkout URL.');
-      return { url: session.url };
-    } catch (error) {
-      throw new Error(
-        `Stripe add-on checkout failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-
   // Live-slideshow add-on: a one-time charge that turns on the venue screen for
   // a single event. Sold on every plan (unlike guest downloads), so there's no
   // tier gate here. The webhook flips the event's liveSlideshowEnabled flag.
@@ -409,21 +373,6 @@ export const handler: Handler = async (event) => {
           },
         });
         scopes.push('extend');
-      } else if (key === 'guest_download') {
-        // Already on? Don't charge for it again.
-        if (ev.guestDownloadEnabled?.BOOL === true) continue;
-        if (evTier !== 'premium' && evTier !== 'corporate') {
-          throw new Error('Guest downloads are available on Premium and Corporate events.');
-        }
-        lineItems.push({
-          quantity: 1,
-          price_data: {
-            currency: 'usd',
-            unit_amount: 1500,
-            product_data: { name: 'SharePix guest-download add-on (one event)' },
-          },
-        });
-        scopes.push('guest_download');
       } else if (key === 'live_slideshow') {
         if (ev.liveSlideshowEnabled?.BOOL === true) continue;
         lineItems.push({

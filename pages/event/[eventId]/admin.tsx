@@ -62,7 +62,7 @@ function AdminDashboardPage() {
   const [alertWorking, setAlertWorking] = useState(false);
   const [videoWorking, setVideoWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  // Optional discount code applied to the extension / guest-download add-on.
+  // Optional discount code applied to the extension or slideshow add-on.
   const [discountCode, setDiscountCode] = useState('');
 
   // Download-QR share selection, built by toggling photos in the gallery below.
@@ -71,13 +71,12 @@ function AdminDashboardPage() {
     () => photos.filter((photo) => photo.approved !== false).map((photo) => photo.id),
     [photos],
   );
-  const guestDownloadsOn = event?.guestDownloadEnabled === true;
   // Default the selection to the whole (approved) event whenever the photo set
-  // changes, matching the old builder's behavior.
+  // changes, matching the old builder's behavior. Guest downloads ship with
+  // every plan, so the share builder is always available.
   useEffect(() => {
-    if (!guestDownloadsOn) return;
     setShareSelected(new Set(approvedPhotoIds));
-  }, [guestDownloadsOn, approvedPhotoIds]);
+  }, [approvedPhotoIds]);
   const toggleShare = useCallback((id: string) => {
     setShareSelected((prev) => {
       const next = new Set(prev);
@@ -152,9 +151,6 @@ function AdminDashboardPage() {
   // server-maintained counter, falling back to what we loaded.
   const photoCount = event?.photoCount ?? photos.length;
   const detailsLocked = photoCount > 0;
-  // The guest-download add-on is offered on Premium events and to Corporate
-  // subscribers only.
-  const addOnEligible = tier?.id === 'premium' || corporateActive;
   // What this event can still buy. Extensions only apply to the fixed-length
   // plans (a corporate event has no plan price to halve), and each add-on drops
   // off the list once it's active.
@@ -169,14 +165,6 @@ function AdminDashboardPage() {
         description: 'Give guests another 30 days to add photos.',
       });
     }
-    if (!event.guestDownloadEnabled && addOnEligible) {
-      items.push({
-        key: 'guest_download',
-        label: 'Guest downloads',
-        price: CORPORATE_PLAN.guestDownloadAddOnPrice,
-        description: 'Let guests download photos, and share a download QR code.',
-      });
-    }
     if (!event.liveSlideshowEnabled) {
       items.push({
         key: 'live_slideshow',
@@ -186,7 +174,7 @@ function AdminDashboardPage() {
       });
     }
     return items;
-  }, [event, addOnEligible]);
+  }, [event]);
 
   const addOnTotal = availableAddOns
     .filter((addon) => selectedAddOns.has(addon.key))
@@ -689,12 +677,10 @@ function AdminDashboardPage() {
                     : ''}
                 </p>
 
-                {/* Already paid for — shown so the list reads as complete. */}
-                {event.guestDownloadEnabled ? (
-                  <p className="mt-3 text-sm text-green-700">
-                    ✓ Guest downloads — guests can download photos and videos.
-                  </p>
-                ) : null}
+                {/* Included on every plan — shown so the list reads as complete. */}
+                <p className="mt-3 text-sm text-green-700">
+                  ✓ Guest downloads — included, guests can download photos and videos.
+                </p>
                 {event.liveSlideshowEnabled ? (
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-green-700">
@@ -777,15 +763,6 @@ function AdminDashboardPage() {
                 ) : (
                   <p className="mt-3 text-xs text-ink/60">
                     Everything available for this event is already active.
-                    {addOnEligible ? null : (
-                      <>
-                        {' '}Guest downloads need a Premium event or the{' '}
-                        <Link href="/corporate" className="text-accent underline">
-                          Corporate plan
-                        </Link>
-                        .
-                      </>
-                    )}
                   </p>
                 )}
               </div>
@@ -817,28 +794,20 @@ function AdminDashboardPage() {
             </div>
 
             <div className="mt-8">
-              {guestDownloadsOn ? (
-                <DownloadShareBuilder
-                  event={event}
-                  selectedIds={selectedApprovedIds}
-                  approvedCount={approvedPhotoIds.length}
-                  onSelectAll={() => setShareSelected(new Set(approvedPhotoIds))}
-                  onClear={() => setShareSelected(new Set())}
-                />
-              ) : (
-                <div className="rounded-xl border border-dashed border-ink/20 bg-white px-4 py-5 text-sm text-ink/60">
-                  Download-sharing QR codes let guests download a set of photos you
-                  choose. They require guest downloads, which you can enable per event
-                  as an add-on above (Premium and Corporate).
-                </div>
-              )}
+              <DownloadShareBuilder
+                event={event}
+                selectedIds={selectedApprovedIds}
+                approvedCount={approvedPhotoIds.length}
+                onSelectAll={() => setShareSelected(new Set(approvedPhotoIds))}
+                onClear={() => setShareSelected(new Set())}
+              />
             </div>
 
             <div className="mt-8">
               <AdminPhotoGrid
                 photos={photos}
                 onChanged={load}
-                selectable={guestDownloadsOn}
+                selectable
                 selectedIds={shareSelected}
                 onToggleSelected={toggleShare}
               />

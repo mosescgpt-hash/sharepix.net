@@ -61,7 +61,7 @@ export interface DiscountCode {
   /**
    * Which paid flows the code can be redeemed against: 'all', or a
    * comma-separated list of scope keys (event, corporate, extend,
-   * guest_download). Missing on legacy codes — fall back to appliesToTier.
+   * live_slideshow). Missing on legacy codes — fall back to appliesToTier.
    */
   appliesToScopes?: string | null;
   /** 'percent' (default) or 'amount' for a fixed dollar discount. */

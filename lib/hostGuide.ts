@@ -17,6 +17,7 @@ export function hostGuideSections(event: {
   // once they actually have it, or the steps point at a page they can't use.
   if (event.liveSlideshowEnabled) sections.push('live');
   // Same for guest downloads: only relevant once enabled.
-  if (event.guestDownloadEnabled) sections.push('downloads');
+  // Guest downloads ship with every plan now, so the how-to always applies.
+  sections.push('downloads');
   return sections;
 }

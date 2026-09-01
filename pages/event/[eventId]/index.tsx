@@ -129,7 +129,6 @@ export default function EventGalleryPage() {
                   canViewOriginal={host || admin}
                   eventName={event.name}
                   eventId={event.id}
-                  downloadMessage="The host has the photos. Guest downloads aren't enabled for this event."
                 />
               ) : (
                 <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">

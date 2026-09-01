@@ -47,9 +47,9 @@ describe('applyPercentOff (discount math)', () => {
 
 describe('extensionPrice', () => {
   it('is half the plan price with a $1 floor', () => {
-    expect(extensionPrice('starter')).toBe(5); // 10 / 2
-    expect(extensionPrice('standard')).toBe(13); // 25 / 2, rounded
-    expect(extensionPrice('premium')).toBe(25); // 50 / 2
+    expect(extensionPrice('starter')).toBe(10); // 19 / 2, rounded
+    expect(extensionPrice('standard')).toBe(20); // 39 / 2, rounded
+    expect(extensionPrice('premium')).toBe(40); // 79 / 2, rounded
   });
 
   it('falls back to a sane default for an unknown tier', () => {
@@ -89,16 +89,25 @@ describe('pricing tiers stay in sync with the checkout function', () => {
   // it can't import this module. If a plan price changes here, update it there
   // too — this guard makes a drift visible in tests.
   it('has the expected published prices', () => {
-    expect(getTier('starter')?.price).toBe(10);
-    expect(getTier('standard')?.price).toBe(25);
-    expect(getTier('premium')?.price).toBe(50);
+    expect(getTier('starter')?.price).toBe(19);
+    expect(getTier('standard')?.price).toBe(39);
+    expect(getTier('premium')?.price).toBe(79);
     expect(CORPORATE_PLAN.price).toBe(149);
   });
 
   it('keeps add-on prices in step with the cent amounts the function charges', () => {
     // stripe-checkout hard-codes these in cents; if one side moves, this fails.
-    expect(CORPORATE_PLAN.guestDownloadAddOnPrice * 100).toBe(1500);
     expect(LIVE_SLIDESHOW_ADDON_PRICE * 100).toBe(2900);
+  });
+
+  it('prices every tier above the egress a full-resolution event can generate', () => {
+    // Guest downloads are included now, so each plan has to carry its own
+    // bandwidth. A ceiling-case event is roughly 6 GB of originals; at ~$0.09/GB
+    // even 20 full-event downloads is about $11, which the cheapest plan must
+    // still clear with room for Stripe's fee.
+    for (const tier of PRICING_TIERS) {
+      expect(tier.price).toBeGreaterThanOrEqual(15);
+    }
   });
 });
 

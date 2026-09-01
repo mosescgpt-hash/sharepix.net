@@ -35,7 +35,7 @@ export const PRICING_TIERS: PricingTier[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: 10,
+    price: 19,
     photoLimit: 100,
     videoLimit: 2,
     accessDays: 14,
@@ -48,12 +48,13 @@ export const PRICING_TIERS: PricingTier[] = [
       'Guests view 3 weeks after uploads close; host access 3 weeks',
       'Standard QR code',
       'Host individual and bulk ZIP downloads (sign-in required)',
+      'Guests can download the photos too — full resolution, no account',
     ],
   },
   {
     id: 'standard',
     name: 'Standard',
-    price: 25,
+    price: 39,
     photoLimit: 1000,
     videoLimit: 10,
     accessDays: 90,
@@ -67,13 +68,14 @@ export const PRICING_TIERS: PricingTier[] = [
       'Guests view 30 days after uploads close; host access 3 months',
       'Customizable QR code',
       'Host individual and bulk ZIP downloads',
+      'Guests can download the photos too — full resolution, no account',
       'Uploader names on photos',
     ],
   },
   {
     id: 'premium',
     name: 'Premium',
-    price: 50,
+    price: 79,
     photoLimit: null,
     videoLimit: 30,
     accessDays: 365,
@@ -88,7 +90,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Event branding',
       'Moderation tools (approve before showing)',
       'Host photo, video, and bulk ZIP downloads',
-      'Guest download add-on available ($15/event)',
+      'Guests can download the photos too — full resolution, no account',
     ],
   },
 ];
@@ -104,17 +106,14 @@ export const CORPORATE_PLAN = {
   guestLowResDays: 30,
   // Photos are unlimited on corporate events, videos are not — see PricingTier.
   videoLimit: 30,
-  // One-time cost to enable guest downloads on a single corporate event
-  // (guest downloads are off by default on corporate events).
-  guestDownloadAddOnPrice: 15,
   accessLabel: 'Multiple events under one account',
   features: [
     'Multiple active events',
     'Unlimited photos and 30 videos per event',
     'Central event and storage dashboard',
-    'Guest downloads available per event ($15 each)',
     'Custom company branding',
     'Host and bulk ZIP downloads',
+    'Guests can download the photos too — full resolution, no account',
     '30 days to download after your last paid month',
     'Priority support',
   ],
