@@ -16,15 +16,28 @@ Defined in `amplify/backend.ts`. Each alarm publishes to one SNS topic
 | `sharepix-checkout-errors` | The Stripe checkout Lambda throws (a host couldn't start payment) |
 | `sharepix-print-fulfill-errors` | Print fulfilment to Prodigi throws |
 | `sharepix-sanitize-errors` | The upload sanitizer crashes or times out |
+| `sharepix-create-event-errors` | Event creation throws (a host got no event, or a comped code was spent on nothing) |
+| `sharepix-r2-mirror-failures` | The sanitizer logs **three or more** `Could not mirror to R2` errors in five minutes — new uploads aren't reaching Cloudflare R2 |
 
 All alarms evaluate a 5-minute window and treat "no data" as healthy.
 
-Every alarm fires on a single occurrence except `webhook-handled-failures`,
-which needs **two in one window**. A lone handled failure is usually a guest
+Every alarm fires on a single occurrence except two. `webhook-handled-failures`
+needs **two in one window**: a lone handled failure is usually a guest
 interrupting their own checkout — a back button pressed mid-payment produced
-exactly that — and paging on those teaches you to ignore the alerts. Thrown
-errors and timeouts are never self-inflicted, so those still page on the first
-one.
+exactly that — and paging on those teaches you to ignore the alerts.
+`r2-mirror-failures` needs **three**, because one is a transient blip on a
+single object and that object still reads fine from S3. Thrown errors and
+timeouts are never self-inflicted, so those still page on the first one.
+
+### Why the R2 mirror needs a log-derived alarm
+
+The mirror is best-effort on purpose: an upload that can't be copied to R2 is
+still safe and serveable from S3, so the sanitizer catches the error rather than
+throwing it. That is right for the guest mid-upload and wrong for you — a
+revoked or mistyped R2 token would stop every new object reaching R2, and the
+only symptom would be the S3 egress bill quietly coming back. Nothing on the
+Lambda error metric would fire, because nothing failed. Hence the metric filter
+on the log line. Same reasoning as `webhook-handled-failures`.
 
 ## Turning on the emails
 

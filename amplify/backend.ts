@@ -18,6 +18,8 @@ import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
+import { createEvent } from './functions/create-event/resource';
+import { updateEvent } from './functions/update-event/resource';
 import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { printCheckout } from './functions/print-checkout/resource';
 import { printFulfill } from './functions/print-fulfill/resource';
@@ -37,6 +39,8 @@ const backend = defineBackend({
   storage,
   deleteEventPhoto,
   createEventPhoto,
+  createEvent,
+  updateEvent,
   stripeCheckout,
   printCheckout,
   printFulfill,
@@ -58,6 +62,7 @@ const corporateTable = backend.data.resources.tables.CorporateSubscription;
 const printOrderTable = backend.data.resources.tables.PrintOrder;
 const discountTable = backend.data.resources.tables.DiscountCode;
 const reviewTable = backend.data.resources.tables.ModerationReview;
+const hostProfileTable = backend.data.resources.tables.HostProfile;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -173,6 +178,33 @@ createFn.addToRolePolicy(
     resources: ['*'],
   }),
 );
+
+// Create-event function: the only thing that writes an Event row. It reads the
+// caller's Corporate subscription and the discount code they named to decide
+// whether the event starts active — the two ways to open one without paying —
+// and reads their HostProfile only for the display name shown as the host.
+//
+// Write-only on the event table: it creates rows and never needs to read one,
+// which keeps this function from becoming a way to enumerate other hosts'
+// events. The discount table is read-write because a comped event spends a use
+// of the code in the same request.
+const createEventFn = backend.createEvent.resources.lambda as LambdaFunction;
+eventTable.grantWriteData(createEventFn);
+corporateTable.grantReadData(createEventFn);
+discountTable.grantReadWriteData(createEventFn);
+hostProfileTable.grantReadData(createEventFn);
+createEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+createEventFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
+createEventFn.addEnvironment('DISCOUNT_TABLE_NAME', discountTable.tableName);
+createEventFn.addEnvironment('HOST_PROFILE_TABLE_NAME', hostProfileTable.tableName);
+
+// Update-event function: the only way a host changes their own event, now that
+// the model grants owners no `update`. It reads the row to check ownership and
+// the photo count (which locks the name and date), then writes back only the
+// fields on its allow-list.
+const updateEventFn = backend.updateEvent.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(updateEventFn);
+updateEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // Test-alert function: sends the same held-photo alert to the admin who asked
 // for it, so delivery can be checked without waiting for a photo to be flagged.
@@ -328,6 +360,58 @@ errorRateAlarm('webhook-errors', webhookFn, 'Stripe webhook');
 errorRateAlarm('checkout-errors', stripeCheckoutFn, 'Stripe checkout');
 errorRateAlarm('print-fulfill-errors', printFulfillFn, 'Print fulfilment');
 errorRateAlarm('sanitize-errors', sanitizeFn, 'Upload sanitizer');
+// A failure here means a host paid (or tried to) and got no event, or a comped
+// code was spent on nothing. It throws on every refusal path, so this covers it.
+errorRateAlarm('create-event-errors', createEventFn, 'Event creation');
+// Settings changes are the host's only write path to their own event, so a
+// failure here locks them out of their own dashboard. It returns a message
+// rather than throwing for anything the host did wrong, so this only fires on
+// real faults.
+errorRateAlarm('update-event-errors', updateEventFn, 'Event settings');
+
+// The R2 mirror is best-effort by design: an upload that can't be copied is
+// still safe and serveable from S3, so the sanitizer catches the error rather
+// than throwing it. That is the right behaviour for a guest mid-upload and the
+// wrong behaviour for us — a revoked or mistyped R2 token would stop every new
+// object reaching R2 and the only symptom would be the S3 bill quietly coming
+// back. Nothing above would fire, because nothing failed.
+//
+// So turn the mirror's own error log into a metric and alarm on it. The log
+// group is imported by name so we don't alter the function's logging config —
+// same approach as the webhook filter below.
+const sanitizeLogGroup = LogGroup.fromLogGroupName(
+  backend.stack,
+  'SanitizeLogGroupRef',
+  `/aws/lambda/${sanitizeFn.functionName}`,
+);
+new MetricFilter(backend.stack, 'MirrorFailureFilter', {
+  logGroup: sanitizeLogGroup,
+  metricNamespace: 'SharePix/Mirror',
+  metricName: 'MirrorFailures',
+  filterPattern: FilterPattern.literal('"Could not mirror to R2"'),
+  metricValue: '1',
+  defaultValue: 0,
+});
+const mirrorFailureAlarm = new Alarm(backend.stack, 'r2-mirror-failures', {
+  alarmName: 'sharepix-r2-mirror-failures',
+  alarmDescription:
+    'Uploads are not reaching Cloudflare R2 — check the R2 credentials and bucket. Reads still fall back to S3, so this costs money rather than breaking anything.',
+  metric: new Metric({
+    namespace: 'SharePix/Mirror',
+    metricName: 'MirrorFailures',
+    period: Duration.minutes(5),
+    statistic: 'Sum',
+  }),
+  // Three in five minutes. One is a transient network blip on a single object,
+  // and the object is still readable from S3, so paging on it would train the
+  // operator to ignore this alarm. Three means the credentials or the bucket
+  // are wrong and nothing is being mirrored at all.
+  threshold: 3,
+  evaluationPeriods: 1,
+  comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+  treatMissingData: TreatMissingData.NOT_BREACHING,
+});
+mirrorFailureAlarm.addAlarmAction(new SnsAction(alertsTopic));
 
 // The webhook handles its own errors and returns HTTP 500 (so Stripe retries)
 // rather than throwing, so those money-critical failures never show up on the

@@ -4,6 +4,7 @@ import {
   isHostOrAdmin,
   isVideoKey,
   variantOf,
+  type EventState,
 } from '../amplify/functions/media-url/access';
 
 const EVENT = 'evt-1';
@@ -17,9 +18,9 @@ const preview = `events/${EVENT}/previews/abc-preview.jpg`;
 const thumb = `events/${EVENT}/thumbs/abc-thumb.jpg`;
 const video = `events/${EVENT}/photos/clip.mp4`;
 
-const openEvent = { owner, guestResolution: 'full' as const };
+const openEvent: EventState = { owner, guestResolution: 'full' };
 
-function sign(key: string, caller: unknown, event = openEvent, eventId = EVENT) {
+function sign(key: string, caller: unknown, event: EventState = openEvent, eventId = EVENT) {
   return canSign({ eventId, key, event, caller: caller as never });
 }
 

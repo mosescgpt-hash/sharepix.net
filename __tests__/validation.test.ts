@@ -1,7 +1,6 @@
 import {
   buildPhotoKey,
   buildPreviewKey,
-  generateEventCode,
   isAllowedImageType,
   isAllowedVideoType,
   isGalleryActive,
@@ -175,14 +174,6 @@ describe('S3 keys', () => {
     expect(buildPreviewKey('events/evt/photos/1234-camera.heic')).toBe(
       'events/evt/previews/1234-camera-preview.jpg',
     );
-  });
-});
-
-describe('event codes', () => {
-  it('generates codes of the requested length from the safe alphabet', () => {
-    const code = generateEventCode(6);
-    expect(code).toHaveLength(6);
-    expect(code).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]+$/);
   });
 });
 

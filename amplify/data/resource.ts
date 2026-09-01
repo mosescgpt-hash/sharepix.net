@@ -1,6 +1,8 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
+import { createEvent as createEventFn } from '../functions/create-event/resource';
+import { updateEvent as updateEventFn } from '../functions/update-event/resource';
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
 import { printCheckout as printCheckoutFn } from '../functions/print-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
@@ -94,8 +96,21 @@ const schema = a.schema({
     // to open a gallery), but not `list` — that would let anyone enumerate
     // every host's events and event codes. Owners still list their own events
     // (allow.owner) and admins list all (allow.group).
+    //
+    // Hosts get no `create` and no `update` on their own events, only read and
+    // delete. Both of those mutations let the client write the WHOLE row, and
+    // most of the row is money: the plan, the photo and video limits, the
+    // counters createEventPhoto maintains, the dates the retention lifecycle is
+    // measured from, and `paid` — which used to default to true on create and
+    // could be flipped by an update a second later. Events are created by the
+    // createEvent function and changed by updateEventSettings, each of which
+    // writes only what it derives or allow-lists.
+    //
+    // Admins keep full model access. They can already comp any event, so
+    // restricting them buys nothing, and the global-admin dashboard writes
+    // extraPhotoCredits and uploadWindowEndsAt directly.
     .authorization((allow) => [
-      allow.owner(),
+      allow.owner().to(['get', 'list', 'delete']),
       allow.group('ADMINS'),
       allow.authenticated().to(['get']),
       allow.guest().to(['get']),
@@ -437,6 +452,78 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(corporatePortalFn)),
 
+  CreatedEvent: a.customType({
+    id: a.string().required(),
+    name: a.string().required(),
+    eventCode: a.string().required(),
+    tier: a.string().required(),
+    date: a.string(),
+    location: a.string(),
+    photoLimit: a.integer(),
+    videoLimit: a.integer(),
+    accessExpiresAt: a.string(),
+    uploadWindowEndsAt: a.string(),
+    /** false = created but inactive until the Stripe webhook confirms payment. */
+    paid: a.boolean().required(),
+    createdBy: a.string(),
+    owner: a.string(),
+    createdAt: a.string(),
+  }),
+
+  // Creates an event. The only way to make one — the Event model grants no
+  // `create` to anyone.
+  //
+  // The request says what the event IS (a name, a date, a place, a plan) and
+  // never what it COSTS or what it's WORTH: the photo and video limits, both
+  // expiry dates, the event code, the owner, and whether it starts active are
+  // all derived server-side. Previously every one of those came from the
+  // browser, and `paid` defaulted to true.
+  //
+  // An event starts active only via a live Corporate subscription or a discount
+  // code that covers the whole price, both read from their own tables. Anything
+  // else is created pending, and createEventPhoto refuses uploads to it until
+  // the Stripe webhook flips `paid`.
+  createEvent: a
+    .mutation()
+    .arguments({
+      name: a.string().required(),
+      tier: a.string().required(),
+      date: a.string(),
+      city: a.string(),
+      state: a.string(),
+      discountCode: a.string(),
+    })
+    .returns(a.ref('CreatedEvent'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(createEventFn)),
+
+  // Changes an event's host-editable settings. The Event model grants owners no
+  // `update`, so this is the only way a host changes their own event, and the
+  // allow-list in the function is the entire surface: a field it doesn't name
+  // cannot be written by a host at all.
+  //
+  // Omitting an argument leaves that field alone; sending it empty clears the
+  // ones that can be cleared (date, location, alertEmail). Ownership is checked
+  // against the stored row, and "not yours" and "no such event" give the same
+  // answer so this can't be used to discover event ids.
+  updateEventSettings: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      name: a.string(),
+      date: a.string(),
+      city: a.string(),
+      state: a.string(),
+      moderationMode: a.string(),
+      alertEmail: a.string(),
+      videoUploadsEnabled: a.boolean(),
+      guestDownloadsBlocked: a.boolean(),
+      uploadsClosed: a.boolean(),
+    })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(updateEventFn)),
+
   // Creates a photo record after stamping eventOwner from the event and
   // enforcing the event's photo limit (plan limit + purchased extra credits).
   createEventPhoto: a
@@ -507,20 +594,14 @@ const schema = a.schema({
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(mediaUrlFn)),
 
-  redeemDiscountCode: a
-    .mutation()
-    .arguments({
-      code: a.string().required(),
-      tier: a.string().required(),
-    })
-    .returns(a.ref('DiscountRedemption'))
-    .authorization((allow) => [allow.authenticated()])
-    .handler(
-      a.handler.custom({
-        dataSource: a.ref('DiscountCode'),
-        entry: './redeem-discount-code.js',
-      }),
-    ),
+  // `redeemDiscountCode` used to live here: a mutation that spent one use of a
+  // code and gave nothing back but a confirmation. Any signed-in caller could
+  // run it against any code they could name, burning an admin's limited-use
+  // codes without buying a thing — and the create-event page called it as a
+  // separate step *before* creating the event, so an interrupted signup spent a
+  // use anyway. Redemption now happens inside createEvent, conditionally and in
+  // the same request that produces the free event, so a code is only ever spent
+  // on something that exists. validateDiscountCode above stays: it only reads.
 });
 
 export type Schema = ClientSchema<typeof schema>;

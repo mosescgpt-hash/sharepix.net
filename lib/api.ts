@@ -19,17 +19,10 @@ import {
   buildPhotoKey,
   buildPreviewKey,
   buildThumbKey,
-  generateEventCode,
 } from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
-import {
-  computeAccessExpiresAt,
-  computeUploadWindowEndsAt,
-  getTier,
-  videoLimitForTier,
-} from '@/lib/pricing';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
@@ -147,6 +140,20 @@ async function retryTransient<T>(operation: () => Promise<T>, attempts = 4): Pro
   throw lastError;
 }
 
+/**
+ * Create an event.
+ *
+ * This used to be a direct `Event.create` model write, where the browser chose
+ * the plan's photo and video limits, both expiry dates, the event code, and
+ * `paid` — which defaulted to true. All of that is decided by the createEvent
+ * function now; the Event model grants no `create` to anyone, so there is no
+ * longer a client-side path to an active event.
+ *
+ * The returned event carries `paid`: true means it is live right now (a
+ * Corporate subscription covered it, or a code comped the whole price), false
+ * means the caller should send the host to Stripe. The server decides which —
+ * a discount code goes in the same request rather than being redeemed first.
+ */
 export async function createNewEvent(input: {
   name: string;
   date?: string;
@@ -154,29 +161,20 @@ export async function createNewEvent(input: {
   /** Optional "City, State" for the event; stored as a single label. */
   city?: string;
   state?: string;
-  /** true = paid/comped and active now; false = pending until the webhook activates it. */
-  paid?: boolean;
+  /** An optional code. The server validates it and decides what it's worth. */
+  discountCode?: string;
 }): Promise<QREvent> {
-  const tier = getTier(input.tier);
-  const user = await getCurrentUserInfo();
-  // Snapshot the host's chosen display name onto the event, falling back to the
-  // email-derived one. Snapshotted at creation, so changing the name later
-  // leaves existing events as they were.
-  const chosenName = await getMyDisplayName().catch(() => '');
-
-  const { data: event, errors } = await client.models.Event.create({
-    name: input.name,
-    date: input.date || null,
-    tier: input.tier,
-    eventCode: generateEventCode(),
-    location: formatEventLocation(input.city, input.state) || null,
-    photoLimit: tier?.photoLimit ?? null,
-    videoLimit: videoLimitForTier(input.tier),
-    accessExpiresAt: computeAccessExpiresAt(input.tier),
-    uploadWindowEndsAt: computeUploadWindowEndsAt(),
-    paid: input.paid ?? true,
-    createdBy: chosenName || user?.displayName || 'Unknown',
-  });
+  const { data: event, errors } = await client.mutations.createEvent(
+    {
+      name: input.name,
+      tier: input.tier.trim().toLowerCase(),
+      date: input.date || undefined,
+      city: input.city || undefined,
+      state: input.state || undefined,
+      discountCode: input.discountCode?.trim().toUpperCase() || undefined,
+    },
+    { authMode: 'userPool' },
+  );
 
   if (errors?.length || !event) {
     const detail = errors?.map((e) => e.message).join(' · ');
@@ -204,20 +202,6 @@ export async function validateDiscountCode(
   });
   if (errors?.length || !data) {
     throw new Error('The access code could not be checked. Please try again.');
-  }
-  return data as DiscountRedemption;
-}
-
-export async function redeemDiscountCode(
-  code: string,
-  tier: string,
-): Promise<DiscountRedemption> {
-  const { data, errors } = await client.mutations.redeemDiscountCode({
-    code: code.trim().toUpperCase(),
-    tier: tier.trim().toLowerCase(),
-  });
-  if (errors?.length || !data) {
-    throw new Error('The access code could not be redeemed. Please try again.');
   }
   return data as DiscountRedemption;
 }
@@ -538,6 +522,11 @@ export async function sendTestAlertEmail(): Promise<{ ok: boolean; message: stri
  * Global-admin grant of extra photo capacity to one event (the pilot version of
  * the "buy more storage" add-on). `additionalCredits` is added to whatever the
  * event already has; the effective limit becomes photoLimit + extraPhotoCredits.
+ *
+ * One of the two places that still writes the Event model directly, and it works
+ * only for admins: the owner rule no longer grants `update`, so an ordinary host
+ * calling this gets an authorization error rather than free capacity. That is
+ * the point — this is giving away storage.
  */
 export async function addEventPhotoCredits(
   eventId: string,
@@ -559,45 +548,71 @@ export async function addEventPhotoCredits(
 }
 
 /**
- * Update an event's name and/or date. Allowed only until the first photo is
- * uploaded — once guests have contributed, the event's identity is locked so
- * the name/date on their memories can't change under them. The photo-count
- * guard is re-checked here against the live record, not just the UI.
+ * Change one or more of an event's host-editable settings.
+ *
+ * Every host-side write to an event goes through here. The Event model grants
+ * owners no `update` — that mutation covered the whole row, `paid` and the plan
+ * limits included — so the updateEventSettings function is the only path, and
+ * its allow-list is what a host can actually change.
+ *
+ * Omit a field to leave it alone; pass an empty string to clear the ones that
+ * can be cleared. The rules (the name/date lock once photos exist, the
+ * moderation modes, the email format) are enforced there, not here.
+ */
+async function updateEventSettings(
+  eventId: string,
+  changes: {
+    name?: string;
+    date?: string | null;
+    city?: string;
+    state?: string;
+    moderationMode?: 'review' | 'allow_all';
+    alertEmail?: string | null;
+    videoUploadsEnabled?: boolean;
+    guestDownloadsBlocked?: boolean;
+    uploadsClosed?: boolean;
+  },
+  failureMessage: string,
+): Promise<void> {
+  const { data, errors } = await client.mutations.updateEventSettings(
+    {
+      eventId,
+      // `undefined` is dropped on the way out, which is what tells the function
+      // to leave a field alone. `null` would mean "clear it", so a caller that
+      // means "no change" must not send one.
+      name: changes.name,
+      date: changes.date === null ? '' : changes.date,
+      city: changes.city,
+      state: changes.state,
+      moderationMode: changes.moderationMode,
+      alertEmail: changes.alertEmail === null ? '' : changes.alertEmail,
+      videoUploadsEnabled: changes.videoUploadsEnabled,
+      guestDownloadsBlocked: changes.guestDownloadsBlocked,
+      uploadsClosed: changes.uploadsClosed,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message || failureMessage);
+}
+
+/**
+ * Update an event's name, date and/or location. Name and date are allowed only
+ * until the first photo is uploaded — once guests have contributed, the event's
+ * identity is locked so it can't change under them. That guard lives in the
+ * function, checked against the stored photo count.
+ *
+ * Returns the event as it now stands, re-read rather than assembled locally, so
+ * the caller shows what was actually written.
  */
 export async function updateEventDetails(
   eventId: string,
   changes: { name?: string; date?: string | null; city?: string; state?: string },
 ): Promise<QREvent> {
-  const { data: existing, errors: readErrors } = await client.models.Event.get(
-    { id: eventId },
-    { authMode: 'userPool' },
-  );
-  if (readErrors?.length || !existing) throw new Error('The event could not be loaded.');
-
-  // Name and date lock once guests have uploaded, so an event can't rename
-  // itself underneath them. Location is only a label, so it stays editable —
-  // a host who forgot to set it shouldn't have to live without it.
-  const changingIdentity = changes.name !== undefined || changes.date !== undefined;
-  if (changingIdentity && (existing.photoCount ?? 0) > 0) {
-    throw new Error('This event already has photos, so its name and date are locked.');
-  }
-
-  const patch: { id: string; name?: string; date?: string | null; location?: string | null } = {
-    id: eventId,
-  };
-  if (changes.name !== undefined) {
-    const trimmed = changes.name.trim();
-    if (!trimmed) throw new Error('Enter an event name.');
-    patch.name = trimmed;
-  }
-  if (changes.date !== undefined) patch.date = changes.date || null;
-  if (changes.city !== undefined || changes.state !== undefined) {
-    patch.location = formatEventLocation(changes.city, changes.state) || null;
-  }
-
-  const { data, errors } = await client.models.Event.update(patch, { authMode: 'userPool' });
-  if (errors?.length || !data) throw new Error('The event could not be updated.');
-  return data as QREvent;
+  await updateEventSettings(eventId, changes, 'The event could not be updated.');
+  const updated = await fetchEvent(eventId);
+  if (!updated) throw new Error('The event could not be loaded.');
+  return updated;
 }
 
 /**
@@ -610,11 +625,11 @@ export async function setEventModerationMode(
   eventId: string,
   mode: 'review' | 'allow_all',
 ): Promise<void> {
-  const { errors } = await client.models.Event.update(
-    { id: eventId, moderationMode: mode },
-    { authMode: 'userPool' },
+  await updateEventSettings(
+    eventId,
+    { moderationMode: mode },
+    'The screening setting could not be updated.',
   );
-  if (errors?.length) throw new Error('The screening setting could not be updated.');
 }
 
 /**
@@ -623,15 +638,11 @@ export async function setEventModerationMode(
  * way.
  */
 export async function setEventAlertEmail(eventId: string, email: string): Promise<void> {
-  const trimmed = email.trim();
-  if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-    throw new Error('Enter a valid email address.');
-  }
-  const { errors } = await client.models.Event.update(
-    { id: eventId, alertEmail: trimmed || null },
-    { authMode: 'userPool' },
+  await updateEventSettings(
+    eventId,
+    { alertEmail: email.trim() },
+    'The alert email could not be saved.',
   );
-  if (errors?.length) throw new Error('The alert email could not be saved.');
 }
 
 /**
@@ -639,15 +650,12 @@ export async function setEventAlertEmail(eventId: string, email: string): Promis
  * stills but not video, so a host who wants only screened media can turn video
  * off. Enforced server-side in createEventPhoto as well.
  */
-export async function setEventVideoUploads(
-  eventId: string,
-  enabled: boolean,
-): Promise<void> {
-  const { errors } = await client.models.Event.update(
-    { id: eventId, videoUploadsEnabled: enabled },
-    { authMode: 'userPool' },
+export async function setEventVideoUploads(eventId: string, enabled: boolean): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    { videoUploadsEnabled: enabled },
+    'The video setting could not be updated.',
   );
-  if (errors?.length) throw new Error('The video setting could not be updated.');
 }
 
 /**
@@ -661,24 +669,18 @@ export async function setEventGuestDownloadsBlocked(
   eventId: string,
   blocked: boolean,
 ): Promise<void> {
-  const { errors } = await client.models.Event.update(
-    { id: eventId, guestDownloadsBlocked: blocked },
-    { authMode: 'userPool' },
+  await updateEventSettings(
+    eventId,
+    { guestDownloadsBlocked: blocked },
+    'The download setting could not be updated.',
   );
-  if (errors?.length) throw new Error('The download setting could not be updated.');
 }
 
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
-export async function setEventUploadsClosed(
-  eventId: string,
-  closed: boolean,
-): Promise<void> {
-  const { errors } = await client.models.Event.update(
-    { id: eventId, uploadsClosed: closed },
-    { authMode: 'userPool' },
-  );
-  if (errors?.length) throw new Error('The event could not be updated.');
+export async function setEventUploadsClosed(eventId: string, closed: boolean): Promise<void> {
+  await updateEventSettings(eventId, { uploadsClosed: closed }, 'The event could not be updated.');
 }
+
 
 /**
  * Fully remove an event: delete each photo's S3 objects + record (through the
@@ -723,8 +725,15 @@ export async function restoreEventAccess(eventId: string): Promise<void> {
   return setEventUploadWindowEnd(eventId, new Date().toISOString());
 }
 
-/** Global-admin: set an event's upload-window end date directly (also used to
- * simulate lifecycle phases for testing). */
+/**
+ * Global-admin: set an event's upload-window end date directly (also used to
+ * simulate lifecycle phases for testing).
+ *
+ * The other direct Event-model write, and admin-only for the same reason: this
+ * date is what the whole retention lifecycle is measured from, so a host who
+ * could set it would extend their own event indefinitely without paying for the
+ * extension. `updateEventSettings` deliberately does not carry it.
+ */
 export async function setEventUploadWindowEnd(eventId: string, iso: string): Promise<void> {
   const { errors } = await client.models.Event.update(
     { id: eventId, uploadWindowEndsAt: iso },
