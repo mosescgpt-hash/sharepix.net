@@ -98,6 +98,14 @@ s3Bucket.addLifecycleRule({
 const sanitizeFn = backend.sanitizeUpload.resources.lambda as LambdaFunction;
 bucket.grantReadWrite(sanitizeFn);
 bucket.grantDelete(sanitizeFn);
+// Cloudflare R2 mirror. Uploads are still vetted in S3; once the bytes are
+// final this copies them to R2, which is where reads get served from because
+// its egress is free. Every value is optional: with any of them unset the
+// mirror is inert and SharePix serves from S3 exactly as before.
+sanitizeFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+sanitizeFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+sanitizeFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+sanitizeFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.
