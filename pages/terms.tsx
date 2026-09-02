@@ -159,7 +159,22 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>9. Disclaimers</h2>
+            <h2>9. Copyright and DMCA</h2>
+            <p>
+              SharePix hosts photos and videos uploaded by hosts and their guests. We respond to
+              notices of claimed copyright infringement under the Digital Millennium Copyright
+              Act. Our <a href="/dmca">Copyright and DMCA Policy</a> sets out our designated
+              agent&rsquo;s contact details and the process for sending a notice or a
+              counter-notification.
+            </p>
+            <p>
+              We have adopted and reasonably implement a policy of terminating, in appropriate
+              circumstances, the accounts of hosts who are repeat infringers.
+            </p>
+          </div>
+
+          <div>
+            <h2>10. Disclaimers</h2>
             <p>
               THE SERVICE IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE,&rdquo; WITHOUT
               WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED, INCLUDING IMPLIED WARRANTIES OF
@@ -170,7 +185,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>10. Limitation of liability</h2>
+            <h2>11. Limitation of liability</h2>
             <p>
               TO THE MAXIMUM EXTENT PERMITTED BY LAW, SHAREPIX AND CALVIN SOLUTIONS LLC WILL NOT BE
               LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR
@@ -182,7 +197,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>11. Indemnification</h2>
+            <h2>12. Indemnification</h2>
             <p>
               You agree to indemnify and hold harmless SharePix and Calvin Solutions LLC from claims,
               damages, and expenses (including reasonable legal fees) arising out of Your Content,
@@ -191,7 +206,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>12. Governing law</h2>
+            <h2>13. Governing law</h2>
             <p>
               These Terms are governed by the laws of {GOVERNING_STATE}, without regard to its
               conflict-of-laws rules. You agree to the exclusive jurisdiction of the state and
@@ -201,7 +216,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>13. Changes to these Terms</h2>
+            <h2>14. Changes to these Terms</h2>
             <p>
               We may update these Terms from time to time. When we do, we will revise the
               &ldquo;Last updated&rdquo; date above, and for significant changes we will provide a
@@ -211,7 +226,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>14. Contact</h2>
+            <h2>15. Contact</h2>
             <p>
               Questions about these Terms? Contact us at{' '}
               <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
