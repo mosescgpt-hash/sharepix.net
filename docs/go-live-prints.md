@@ -77,6 +77,25 @@ check quoting a different product than fulfilment orders would prove nothing.
 4. The order appears in the **live** Prodigi dashboard.
 5. If you just wanted to test, **cancel/refund** promptly (Prodigi prints fast).
 
+## When an order fails
+
+A paid order that Prodigi rejects does **not** throw — print-fulfill records
+`status: failed` on the `PrintOrder` row with the reason in `error`, and returns.
+The customer has been charged and nothing is printing.
+
+`sharepix-print-order-failures` alarms on exactly that (see `docs/alerting.md`).
+On alert: find the row, read `error`, then either fix the cause and resubmit or
+refund. The row keeps `stripeSessionId`, so the refund is one click in Stripe.
+
+The likeliest causes, in the order they've bitten:
+
+| `error` says | Cause |
+| --- | --- |
+| `Prodigi 401` | The API key is for the other environment (sandbox key against live, or vice versa) |
+| `Prodigi 400` … attribute | A SKU's required attribute is missing or invalid in the live catalogue |
+| Prodigi fetched the asset and failed | The signed URL expired (48h) or the object is gone |
+| `PRODIGI_API_KEY is missing` | The secret didn't survive a redeploy |
+
 ## Rollback
 
 Set `PRODIGI_ENV` back to `'sandbox'`, restore the sandbox `PRODIGI_API_KEY`, and

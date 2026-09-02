@@ -17,6 +17,7 @@ Defined in `amplify/backend.ts`. Each alarm publishes to one SNS topic
 | `sharepix-print-fulfill-errors` | Print fulfilment to Prodigi throws |
 | `sharepix-sanitize-errors` | The upload sanitizer crashes or times out |
 | `sharepix-create-event-errors` | Event creation throws (a host got no event, or a comped code was spent on nothing) |
+| `sharepix-print-order-failures` | A **paid** print order was not placed with Prodigi — the customer was charged and nothing is being printed |
 | `sharepix-r2-mirror-failures` | The sanitizer logs **three or more** `Could not mirror to R2` errors in five minutes — new uploads aren't reaching Cloudflare R2 |
 
 All alarms evaluate a 5-minute window and treat "no data" as healthy.
@@ -28,6 +29,20 @@ exactly that — and paging on those teaches you to ignore the alerts.
 `r2-mirror-failures` needs **three**, because one is a transient blip on a
 single object and that object still reads fine from S3. Thrown errors and
 timeouts are never self-inflicted, so those still page on the first one.
+
+### Why print fulfilment needs a log-derived alarm
+
+`print-fulfill-errors` watches the Lambda's error metric, and print-fulfill
+never reaches it: the whole handler body sits inside a `try/catch` that records
+`status: failed` on the order row and returns normally. A Prodigi rejection, a
+missing `PRODIGI_API_KEY` and a missing order row all leave the error metric at
+zero. That was the most expensive silent failure in the product — the customer
+has paid, nothing is being printed, and nobody is told — so the log lines that
+mean exactly that are the alarm instead.
+
+**When it fires:** find the order in the `PrintOrder` table with
+`status = "failed"`; the reason is in its `error` field. Either fix the cause
+and resubmit, or refund the customer. Don't wait for them to ask.
 
 ### Why the R2 mirror needs a log-derived alarm
 
