@@ -341,9 +341,11 @@ if (alertEmail) {
   alertsTopic.addSubscription(new EmailSubscription(alertEmail));
 }
 
-// Fire when a function throws/times out (unhandled failures). checkout and
-// print-fulfill throw on error, so this covers their failures directly; the
-// sanitizer and webhook are covered for crashes and timeouts.
+// Fire when a function throws/times out (unhandled failures). That covers
+// crashes and timeouts everywhere, and is the whole story only for the
+// functions that let their errors escape. Two do not — print-fulfill and the
+// R2 mirror both catch their own failures deliberately — and each has a
+// log-derived alarm below instead.
 function errorRateAlarm(id: string, fn: LambdaFunction, label: string) {
   const alarm = new Alarm(backend.stack, id, {
     alarmName: `sharepix-${id}`,
@@ -368,6 +370,50 @@ errorRateAlarm('create-event-errors', createEventFn, 'Event creation');
 // rather than throwing for anything the host did wrong, so this only fires on
 // real faults.
 errorRateAlarm('update-event-errors', updateEventFn, 'Event settings');
+
+// A print order that fails after payment is the most expensive silent failure
+// in the product: the customer has been charged, physical goods were never
+// ordered, and nobody finds out. `print-fulfill-errors` above does NOT catch
+// it — print-fulfill wraps its whole body in try/catch and returns normally on
+// every failure path, so a Prodigi rejection, a missing API key and a missing
+// order row all leave the Lambda's error metric at zero. It records `failed` on
+// the row and moves on.
+//
+// So alarm on the log lines that mean exactly that. Threshold 1, unlike the
+// mirror below: there is no benign occurrence. Every one is someone's money.
+const printFulfillLogGroup = LogGroup.fromLogGroupName(
+  backend.stack,
+  'PrintFulfillLogGroupRef',
+  `/aws/lambda/${printFulfillFn.functionName}`,
+);
+new MetricFilter(backend.stack, 'PrintOrderFailureFilter', {
+  logGroup: printFulfillLogGroup,
+  metricNamespace: 'SharePix/Prints',
+  metricName: 'PrintOrderFailures',
+  filterPattern: FilterPattern.anyTerm(
+    'Prodigi rejected print order',
+    'Failed to submit print order',
+    'Print order not found',
+  ),
+  metricValue: '1',
+  defaultValue: 0,
+});
+const printFailureAlarm = new Alarm(backend.stack, 'print-order-failures', {
+  alarmName: 'sharepix-print-order-failures',
+  alarmDescription:
+    'A paid print order was not placed with Prodigi. The customer has been charged and nothing is being printed — find the order in the PrintOrder table (status "failed", with the reason in `error`) and either resubmit it or refund.',
+  metric: new Metric({
+    namespace: 'SharePix/Prints',
+    metricName: 'PrintOrderFailures',
+    period: Duration.minutes(5),
+    statistic: 'Sum',
+  }),
+  threshold: 1,
+  evaluationPeriods: 1,
+  comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+  treatMissingData: TreatMissingData.NOT_BREACHING,
+});
+printFailureAlarm.addAlarmAction(new SnsAction(alertsTopic));
 
 // The R2 mirror is best-effort by design: an upload that can't be copied is
 // still safe and serveable from S3, so the sanitizer catches the error rather

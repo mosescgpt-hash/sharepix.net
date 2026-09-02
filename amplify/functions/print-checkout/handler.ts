@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import { randomUUID } from 'node:crypto';
 import type { Schema } from '../../data/resource';
+import { printableKey } from './printable';
 
 type Handler = Schema['createPrintCheckout']['functionHandler'];
 
@@ -49,9 +50,6 @@ function shippingCents(maxShipFirst: number, maxShipAdd: number, totalCopies: nu
   return Math.round((maxShipFirst + maxShipAdd * extras) * 100);
 }
 
-// Videos can't be printed; reject them so an order never references one.
-const VIDEO_EXT = /\.(mp4|mov|m4v|webm|avi|mkv|3gp|hevc)$/i;
-
 // Guardrails. These aren't about profit (bigger orders are more profitable —
 // extra prints ship free); they bound worst-case exposure on a single order,
 // since a fraudulent/disputed order means physical goods already printed and
@@ -73,9 +71,7 @@ export const handler: Handler = async (event) => {
   const eventId = (event.arguments.eventId ?? '').trim();
   if (!eventId) throw new Error('Missing event for the print order.');
 
-  // Gate. The host can order prints on any plan; guests can only once the
-  // event's guest-download add-on has been purchased. Also confirm the event
-  // exists and is paid (active) before we take any money.
+  // Gate: the event must exist and be paid (active) before we take any money.
   const found = await dynamo.send(
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
@@ -104,7 +100,6 @@ export const handler: Handler = async (event) => {
     throw new Error(`A single order can include up to ${MAX_PHOTOS_PER_ORDER} photos.`);
   }
 
-  const prefix = `events/${eventId}/`;
   const snapshot: Array<{
     sku: string;
     name: string;
@@ -134,14 +129,11 @@ export const handler: Handler = async (event) => {
     }
 
     const s3Key = String(item?.s3Key ?? '');
-    // The photo must live under this event's own storage prefix — the same check
-    // createEventPhoto uses to stop a request pointing at another event's files.
-    if (!s3Key.startsWith(prefix)) {
-      throw new Error('One of the photos does not belong to this event.');
-    }
-    if (VIDEO_EXT.test(s3Key)) {
-      throw new Error('Videos can’t be printed — choose photos only.');
-    }
+    // Must be an ORIGINAL under this event's own prefix — not a preview or a
+    // thumbnail, which are small re-encodes that would print badly. See
+    // ./printable, where the rule is tested.
+    const printable = printableKey(s3Key, eventId);
+    if (!printable.ok) throw new Error(printable.reason);
 
     const priceCents = unitPriceCents(product.baseCost);
     const group = bySku.get(item.sku) ?? { product, qty: 0, priceCents };
