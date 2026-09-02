@@ -50,6 +50,9 @@ describe('the allow-list is the whole surface', () => {
       'eventCode',
       'owner',
       'createdBy',
+      // Admin-only: a host must not be able to dress their event up as
+      // someone else's branded experience.
+      'themeKey',
     ];
     for (const field of forbidden) expect(EDITABLE_FIELDS).not.toContain(field);
   });
