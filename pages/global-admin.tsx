@@ -19,8 +19,10 @@ import {
   sendTestAlertEmail,
   setDiscountCodeActive,
   setEventUploadWindowEnd,
+  setEventTheme,
   startCheckout,
 } from '@/lib/api';
+import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { DiscountCode, QREvent } from '@/lib/types';
@@ -448,6 +450,24 @@ function GlobalAdminPage() {
     }
   }
 
+  /**
+   * Put an event into a branded upload experience, or back to the default.
+   * Admin-only by construction: hosts have no update on the Event model at all,
+   * so this call fails for anyone else.
+   */
+  async function handleSetTheme(event: QREvent, themeKey: string) {
+    setWorking(`theme-${event.id}`);
+    setError(null);
+    try {
+      await setEventTheme(event.id, themeKey || null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The event theme could not be updated.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleDeleteEvent(event: QREvent) {
     if (
       !window.confirm(
@@ -767,7 +787,17 @@ function GlobalAdminPage() {
                     <article key={event.id} className="rounded-2xl border border-ink/10 bg-white p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <h3 className="truncate font-display text-lg font-bold">{event.name}</h3>
+                          <h3 className="truncate font-display text-lg font-bold">
+                            {event.name}
+                            {/* Themed events are rare, so say so plainly rather
+                                than leaving it only in the menu below — a theme
+                                pointed at the wrong event should be obvious. */}
+                            {themeKeyForEvent(event) ? (
+                              <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 align-middle text-xs font-medium text-accent">
+                                {themeLabel(themeKeyForEvent(event))}
+                              </span>
+                            ) : null}
+                          </h3>
                           <p className="mt-1 text-sm text-ink/60">
                             {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
                             {event.photoLimit == null
@@ -838,6 +868,21 @@ function GlobalAdminPage() {
                               {working === `restore-${event.id}` ? 'Restoring…' : 'Restore access'}
                             </button>
                           ) : null}
+                          <select
+                            aria-label={`Upload experience for ${event.name}`}
+                            title="Which upload experience guests see for this event"
+                            disabled={working === `theme-${event.id}`}
+                            value={themeKeyForEvent(event) ?? ''}
+                            onChange={(e) => void handleSetTheme(event, e.target.value)}
+                            className="rounded-full border border-ink/30 px-2 py-1.5 disabled:opacity-50"
+                          >
+                            <option value="">Default experience</option>
+                            {EVENT_THEMES.map((theme) => (
+                              <option key={theme.key} value={theme.key}>
+                                {theme.label}
+                              </option>
+                            ))}
+                          </select>
                           <select
                             aria-label="Simulate lifecycle phase (testing)"
                             disabled={working === `sim-${event.id}`}

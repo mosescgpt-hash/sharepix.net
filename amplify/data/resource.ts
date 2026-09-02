@@ -89,6 +89,12 @@ const schema = a.schema({
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
       videoUploadsEnabled: a.boolean(),
+      // A branded guest upload experience for one event, e.g. 'tcc-2026'.
+      // Missing means the default, which is every event unless an admin says
+      // otherwise. Deliberately NOT on the updateEventSettings allow-list: only
+      // an admin can put an event into a branded experience, so a host can't
+      // dress their event up as someone else's.
+      themeKey: a.string(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })

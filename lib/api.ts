@@ -24,6 +24,7 @@ import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import type { MediaSource } from '@/lib/mediaSource';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
+import { isEventThemeKey } from '@/lib/eventTheme';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
 
 const client = generateClient<Schema>();
@@ -724,6 +725,31 @@ export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
  */
 export async function restoreEventAccess(eventId: string): Promise<void> {
   return setEventUploadWindowEnd(eventId, new Date().toISOString());
+}
+
+/**
+ * Global-admin: put an event into a branded upload experience, or back to the
+ * default. Pass null/'' to clear it.
+ *
+ * Writes the Event model directly, which is what makes this admin-only: the
+ * owner rule grants hosts no `update`, and `themeKey` is not on the
+ * updateEventSettings allow-list either. A host calling this gets an
+ * authorization error, which is the point — otherwise anyone could dress their
+ * event up as a con they have nothing to do with.
+ */
+export async function setEventTheme(
+  eventId: string,
+  themeKey: string | null,
+): Promise<void> {
+  const clean = (themeKey ?? '').trim();
+  // Reject anything that isn't a theme we ship rather than storing a value the
+  // gallery will silently ignore later.
+  if (clean && !isEventThemeKey(clean)) throw new Error('That is not an available theme.');
+  const { errors } = await client.models.Event.update(
+    { id: eventId, themeKey: clean || null },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The event theme could not be updated.');
 }
 
 /**

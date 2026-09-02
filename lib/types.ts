@@ -1,6 +1,11 @@
 export interface QREvent {
   id: string;
   name: string;
+  /**
+   * A branded guest upload experience for this event, set by a global admin.
+   * Missing/empty is the default experience. See lib/eventTheme.ts.
+   */
+  themeKey?: string | null;
   eventCode: string;
   date?: string | null;
   tier: string;
