@@ -483,7 +483,13 @@ const schema = a.schema({
   // code that covers the whole price, both read from their own tables. Anything
   // else is created pending, and createEventPhoto refuses uploads to it until
   // the Stripe webhook flips `paid`.
-  createEvent: a
+  //
+  // NOT called `createEvent`: the Event model still generates its own
+  // `createEvent` mutation for admins, and AppSync refuses two fields of the
+  // same name ("Object type extension 'Mutation' cannot redeclare field
+  // createEvent"). That is a deploy-time error the typecheck and unit tests
+  // cannot see, which is what `npm run validate:backend` now exists to catch.
+  createHostedEvent: a
     .mutation()
     .arguments({
       name: a.string().required(),

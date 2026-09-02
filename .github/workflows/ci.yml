@@ -32,5 +32,16 @@ jobs:
       - run: npm ci
       - name: Type-check backend (incl. Lambda handlers)
         run: npm run typecheck:backend
+      # Synthesises the CDK app the way the Amplify deploy does, which is the
+      # only thing that reads the GraphQL schema as a whole. It catches what the
+      # typecheck cannot: two mutations sharing a name, an auth rule the
+      # transformer rejects, a resolver pointing at nothing. A `createEvent`
+      # custom mutation colliding with the Event model's generated one passed
+      # both the typecheck and the tests, and only failed at deploy.
+      #
+      # Needs no AWS credentials — synth is local. CDK_CONTEXT_JSON stands in
+      # for the values `ampx` normally injects.
+      - name: Validate backend synthesises
+        run: npm run validate:backend
       - name: Unit tests
         run: npm test

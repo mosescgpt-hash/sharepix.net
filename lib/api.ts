@@ -146,9 +146,9 @@ async function retryTransient<T>(operation: () => Promise<T>, attempts = 4): Pro
  *
  * This used to be a direct `Event.create` model write, where the browser chose
  * the plan's photo and video limits, both expiry dates, the event code, and
- * `paid` — which defaulted to true. All of that is decided by the createEvent
- * function now; the Event model grants no `create` to anyone, so there is no
- * longer a client-side path to an active event.
+ * `paid` — which defaulted to true. All of that is decided by the create-event
+ * function now; the Event model grants hosts no `create`, so there is no longer
+ * a client-side path to an active event.
  *
  * The returned event carries `paid`: true means it is live right now (a
  * Corporate subscription covered it, or a code comped the whole price), false
@@ -165,7 +165,7 @@ export async function createNewEvent(input: {
   /** An optional code. The server validates it and decides what it's worth. */
   discountCode?: string;
 }): Promise<QREvent> {
-  const { data: event, errors } = await client.mutations.createEvent(
+  const { data: event, errors } = await client.mutations.createHostedEvent(
     {
       name: input.name,
       tier: input.tier.trim().toLowerCase(),
