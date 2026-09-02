@@ -8,7 +8,6 @@ import {
   createNewEvent,
   getMyCorporateSubscription,
   isCorporateActive,
-  redeemDiscountCode,
   startCheckout,
   validateDiscountCode,
 } from '@/lib/api';
@@ -132,34 +131,29 @@ function CreateEventPage() {
     setBusy(true);
     setError(null);
     try {
-      if (tierId === 'corporate') {
-        // Included in the active Corporate subscription — create it free.
-        if (!corporateActive) {
-          throw new Error('An active Corporate subscription is required for corporate events.');
-        }
-        const event = await createNewEvent({ name: name.trim(), date, city, state: stateRegion, tier: 'corporate', paid: true });
+      // One call, and the server decides whether the event starts active. The
+      // subscription check, the code's validity, and what it's worth are all
+      // re-derived there from its own tables — the prices and the corporate
+      // banner on this page are a preview of that decision, never the input to
+      // it. The code goes along in the same request, so a code is only ever
+      // spent on an event that actually got created.
+      const event = await createNewEvent({
+        name: name.trim(),
+        date,
+        city,
+        state: stateRegion,
+        tier: tierId,
+        discountCode: pilotCodeStatus === 'valid' ? pilotCode : undefined,
+      });
+
+      // Active already: covered by a Corporate subscription, or comped outright.
+      if (event.paid !== false) {
         setCreatedEvent(event);
         return;
       }
 
-      if (isComped) {
-        // Pilot/discount code path: redeem the code and create an active event.
-        const redemption = await redeemDiscountCode(pilotCode, tierId);
-        if (!redemption.valid) {
-          setPilotCodeStatus('invalid');
-          setPilotCodeMessage(redemption.message ?? 'That pilot code can no longer be used.');
-          throw new Error(redemption.message ?? 'That pilot code can no longer be used.');
-        }
-        const event = await createNewEvent({ name: name.trim(), date, city, state: stateRegion, tier: tierId, paid: true });
-        setCreatedEvent(event);
-        return;
-      }
-
-      // Paid path: create the event as pending, then send the host to Stripe.
-      // The webhook flips `paid` to true when the payment completes, activating
-      // it. Uploads are blocked until then, so nothing is usable without payment.
-      // A partial discount code rides along and is applied server-side at Stripe.
-      const event = await createNewEvent({ name: name.trim(), date, city, state: stateRegion, tier: tierId, paid: false });
+      // Pending: it exists but accepts no uploads until the Stripe webhook flips
+      // `paid`. A partial discount code rides along and is applied at Stripe.
       const url = await startCheckout(tierId, event.id, isDiscounted ? pilotCode : undefined);
       window.location.assign(url);
     } catch (err) {

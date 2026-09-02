@@ -208,15 +208,10 @@ export function buildThumbKey(originalKey: string): string {
   return `${withoutExtension.replace('/photos/', '/thumbs/')}-thumb.jpg`;
 }
 
-/** Generate a short human-friendly event code, e.g. "K7MPQ2". */
-export function generateEventCode(length = 6): string {
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no confusing 0/O, 1/I/L
-  let code = '';
-  for (let i = 0; i < length; i += 1) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return code;
-}
+// `generateEventCode` used to live here, drawing from Math.random in the
+// browser. Event codes are minted by the create-event function now (see
+// amplify/functions/create-event/newEvent.ts, which uses the CSPRNG), so this
+// copy is gone rather than left around to be picked up again by accident.
 
 /** Whether a gallery is still within its access window. */
 export function isGalleryActive(accessExpiresAt?: string | null, now: Date = new Date()): boolean {
