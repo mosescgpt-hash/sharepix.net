@@ -29,7 +29,7 @@ const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
 const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 const HOST_PROFILE_TABLE = process.env.HOST_PROFILE_TABLE_NAME as string;
 
-type Handler = Schema['createEvent']['functionHandler'];
+type Handler = Schema['createHostedEvent']['functionHandler'];
 
 /** The host's saved display name, or '' — best-effort, it is only cosmetic. */
 async function profileNameFor(sub: string): Promise<string> {

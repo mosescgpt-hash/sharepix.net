@@ -8,6 +8,7 @@
     "start": "next start",
     "test": "jest",
     "typecheck:backend": "tsc -p tsconfig.backend.json --noEmit",
+    "validate:backend": "CDK_CONTEXT_JSON='{\"amplify-backend-namespace\":\"ci\",\"amplify-backend-name\":\"validate\",\"amplify-backend-type\":\"branch\"}' tsx amplify/backend.ts",
     "sandbox": "ampx sandbox",
     "admin:grant": "tsx scripts/grant-global-admin.ts"
   },
