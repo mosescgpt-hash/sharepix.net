@@ -21,6 +21,7 @@ import {
   buildThumbKey,
 } from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
+import type { MediaSource } from '@/lib/mediaSource';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
@@ -1017,16 +1018,28 @@ export async function fetchEventPhotos(
     photos = photos.filter((p) => p.approved !== false);
   }
 
-  const withUrls = await Promise.all(
-    photos.map(async (p) => {
-      const displayPath = opts.useOriginals
-        ? p.s3Key
-        : opts.useThumbs
-          ? p.thumbS3Key || p.previewS3Key || p.s3Key
-          : p.previewS3Key || p.s3Key;
-      return { ...p, url: await signedUrlFor(displayPath) };
-    })
+  const displayPaths = photos.map((p) =>
+    opts.useOriginals
+      ? p.s3Key
+      : opts.useThumbs
+        ? p.thumbS3Key || p.previewS3Key || p.s3Key
+        : p.previewS3Key || p.s3Key,
   );
+
+  // Two signed URLs per photo, both produced locally: Amplify's getUrl signs
+  // with the browser's own credentials and the R2 ones come back from a single
+  // batched query. Neither costs a request per photo, which is what makes it
+  // reasonable to carry both and let the browser choose.
+  const [r2Urls, s3Urls] = await Promise.all([
+    r2UrlsFor(eventId, displayPaths),
+    Promise.all(displayPaths.map((path) => signedUrlFor(path))),
+  ]);
+
+  const withUrls: DisplayPhoto[] = photos.map((p, index) => {
+    const s3 = s3Urls[index];
+    const r2 = r2Urls.get(displayPaths[index]);
+    return { ...p, url: r2 || s3, fallbackUrl: r2 ? s3 : undefined };
+  });
 
   return withUrls.sort((a, b) =>
     (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
@@ -1190,10 +1203,20 @@ export async function fetchDownloadShare(shareId: string): Promise<DownloadShare
   }
 }
 
-/** Signed URL for the full-resolution original — used for the host's enlarged view. */
-export async function getOriginalMediaUrl(photo: QRPhoto): Promise<string> {
-  const { url } = await getUrl({ path: photo.s3Key });
-  return url.toString();
+/**
+ * Where to load the full-resolution original from — the host's enlarged view.
+ *
+ * Returns both URLs rather than one: R2 first where it can serve the object,
+ * S3 behind it. An original is the biggest thing we ever send, so this is worth
+ * the same treatment as a download.
+ */
+export async function getOriginalMediaSource(photo: QRPhoto): Promise<MediaSource> {
+  const [r2, s3] = await Promise.all([
+    r2UrlsFor(photo.eventId, [photo.s3Key]),
+    getUrl({ path: photo.s3Key }).then(({ url }) => url.toString()),
+  ]);
+  const primary = r2.get(photo.s3Key);
+  return primary ? { primary, fallback: s3 } : { primary: s3 };
 }
 
 /**
@@ -1214,41 +1237,74 @@ export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]
 }
 
 /**
- * Signed URL for a photo at display quality (the preview, falling back to the
- * original). Signed URLs are short-lived, so the slideshow re-resolves them
- * periodically rather than holding one for the whole reception.
+ * Where to load a photo at display quality (the preview, falling back to the
+ * original file). Signed URLs are short-lived, so the slideshow re-resolves
+ * them periodically rather than holding one for the whole reception.
+ *
+ * Returns R2 and S3 both, same as the gallery: a slideshow runs for hours on a
+ * venue screen, so it is worth serving from the side with free egress.
  */
-export async function getPhotoDisplayUrl(photo: QRPhoto): Promise<string> {
-  return signedUrlFor(photo.previewS3Key || photo.s3Key);
+export async function getPhotoDisplaySource(photo: QRPhoto): Promise<MediaSource> {
+  const path = photo.previewS3Key || photo.s3Key;
+  const [r2, s3] = await Promise.all([
+    r2UrlsFor(photo.eventId, [path]),
+    signedUrlFor(path),
+  ]);
+  const primary = r2.get(path);
+  return primary ? { primary, fallback: s3 } : { primary: s3 };
+}
+
+/**
+ * Signed Cloudflare R2 URLs for a batch of stored objects, keyed by storage key.
+ *
+ * R2 costs nothing in egress, which on a busy event is most of the bill. A key
+ * missing from the returned map means R2 can't serve it and the caller should
+ * use S3. There are several ordinary reasons for that: nothing was backfilled,
+ * so anything uploaded before the mirror went live is S3-only; the mirror is
+ * best-effort and may have skipped a newer file; R2 may not be configured; and
+ * the object may be one this caller isn't allowed (a guest asking for a video,
+ * say). All of them land in the same place — the S3 path that served everything
+ * before this existed.
+ *
+ * Batched deliberately. A gallery resolves every photo in one query rather than
+ * one query per photo; a download asks for a single key through the same path.
+ * Never throws: R2 being unreachable must not stop a gallery rendering.
+ */
+async function r2UrlsFor(
+  eventId: string | undefined,
+  keys: string[],
+): Promise<Map<string, string>> {
+  const urls = new Map<string, string>();
+  if (!eventId || keys.length === 0) return urls;
+  try {
+    const { data } = await client.queries.mediaUrls(
+      { eventId, keys },
+      { authMode: await authModeFor() },
+    );
+    for (const entry of data ?? []) {
+      if (entry?.key && entry.url) urls.set(entry.key, entry.url);
+    }
+  } catch {
+    // Fall through with an empty map: every caller treats a miss as "use S3".
+  }
+  return urls;
 }
 
 /**
  * Fetch one stored object, preferring Cloudflare R2.
  *
- * R2 costs nothing in egress, and downloads are where the bytes actually are —
- * an original is megabytes where a preview is kilobytes. So a download asks the
- * server for a signed R2 URL first and only falls back to S3 when there isn't
- * one.
- *
- * There are several ordinary reasons there won't be: nothing was backfilled, so
- * anything uploaded before the mirror went live is S3-only; the mirror is
- * best-effort and may have skipped a newer file; and R2 may simply not be
- * configured. All of them land in the same place — the S3 path that served
- * every download before this existed — so a miss costs one wasted round trip
- * and nothing else.
+ * Downloads are where the bytes actually are — an original is megabytes where a
+ * preview is kilobytes — so a download asks for the R2 URL first and only falls
+ * back to S3 when there isn't one, or when the one there is doesn't resolve.
  */
 async function fetchStoredBlob(eventId: string | undefined, key: string): Promise<Blob> {
-  if (eventId) {
+  const url = (await r2UrlsFor(eventId, [key])).get(key);
+  if (url) {
     try {
-      const { data } = await client.queries.mediaUrl(
-        { eventId, key },
-        { authMode: await authModeFor() },
-      );
-      const url = data?.url;
-      if (url) {
-        const response = await fetch(url);
-        if (response.ok) return await response.blob();
-      }
+      const response = await fetch(url);
+      // A 404 here is ordinary: the object was never mirrored. It cost one
+      // request and no bytes, and S3 has it.
+      if (response.ok) return await response.blob();
     } catch {
       // Any trouble reaching R2 is not the guest's problem — use S3.
     }

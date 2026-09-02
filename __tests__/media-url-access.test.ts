@@ -1,5 +1,7 @@
 import {
+  MAX_KEYS_PER_REQUEST,
   canSign,
+  dedupeKeys,
   eventIdOfKey,
   isHostOrAdmin,
   isVideoKey,
@@ -123,6 +125,34 @@ describe('canSign — guests', () => {
     // An empty owner must not match a caller with no sub.
     const ownerless = { owner: '', guestResolution: 'full' as const };
     expect(sign(video, guest, ownerless).allowed).toBe(false);
+  });
+});
+
+describe('dedupeKeys — bounding what one request can ask for', () => {
+  it('drops blanks and collapses duplicates', () => {
+    // A gallery legitimately repeats a key: a photo with no preview falls back
+    // to its original, and two photos can share the same fallback.
+    expect(dedupeKeys([original, '', original, '  ', preview], 100)).toEqual([original, preview]);
+  });
+
+  it('trims, so whitespace cannot smuggle a second copy of a key past the cap', () => {
+    expect(dedupeKeys([original, ` ${original} `], 100)).toEqual([original]);
+  });
+
+  it('stops at the limit', () => {
+    const many = Array.from({ length: 50 }, (_, i) => `events/${EVENT}/photos/${i}.jpg`);
+    expect(dedupeKeys(many, 10)).toHaveLength(10);
+  });
+
+  it('handles an empty or junk list without throwing', () => {
+    expect(dedupeKeys([], 10)).toEqual([]);
+    expect(dedupeKeys([null, undefined, ''], 10)).toEqual([]);
+  });
+
+  it('caps low enough to bound the work and high enough for a full gallery', () => {
+    // listEventPhotos pages at 500, so a gallery must fit in one request.
+    expect(MAX_KEYS_PER_REQUEST).toBeGreaterThanOrEqual(500);
+    expect(MAX_KEYS_PER_REQUEST).toBeLessThanOrEqual(1000);
   });
 });
 

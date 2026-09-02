@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { deleteEventPhoto, releaseFlaggedPhoto, setPhotoApproval } from '@/lib/api';
 import { isVideoFilename } from '@/lib/validation';
+import { FallbackImage, FallbackVideo } from '@/components/FallbackMedia';
 
 interface AdminPhotoGridProps {
   photos: DisplayPhoto[];
@@ -99,8 +100,8 @@ export default function AdminPhotoGrid({
             >
               <div className="relative">
                 {isVideo ? (
-                  <video
-                    src={photo.url}
+                  <FallbackVideo
+                    source={{ primary: photo.url, fallback: photo.fallbackUrl }}
                     controls
                     playsInline
                     preload="metadata"
@@ -108,15 +109,12 @@ export default function AdminPhotoGrid({
                     className={`aspect-square w-full bg-black object-contain ${hidden ? 'opacity-50' : ''}`}
                   />
                 ) : (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={photo.url}
-                      alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
-                      loading="lazy"
-                      className={`aspect-square w-full object-cover ${hidden ? 'opacity-50' : ''}`}
-                    />
-                  </>
+                  <FallbackImage
+                    source={{ primary: photo.url, fallback: photo.fallbackUrl }}
+                    alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
+                    loading="lazy"
+                    className={`aspect-square w-full object-cover ${hidden ? 'opacity-50' : ''}`}
+                  />
                 )}
                 {canSelect ? (
                   <button

@@ -576,21 +576,23 @@ const schema = a.schema({
     ),
 
   // A signed URL for one stored object, served from Cloudflare R2 where egress
-  // is free. Returns null whenever R2 cannot serve it — unconfigured, the
+  // is free. `url` is null whenever R2 cannot serve it — unconfigured, the
   // object was never mirrored, or the caller may not have it — and the client
   // falls back to S3, which is what every caller did before this existed.
   MediaUrl: a.customType({
+    key: a.string().required(),
     url: a.string(),
-    /** Why there is no url, for logs and tests. Never shown to a guest. */
-    reason: a.string(),
   }),
 
-  mediaUrl: a
+  // Batched, because a gallery needs one URL per photo and a per-photo query
+  // would mean hundreds of round trips to open a single page. A download asks
+  // for one key through the same path.
+  mediaUrls: a
     .query()
-    .arguments({ eventId: a.id().required(), key: a.string().required() })
-    .returns(a.ref('MediaUrl'))
+    .arguments({ eventId: a.id().required(), keys: a.string().array().required() })
+    .returns(a.ref('MediaUrl').array())
     // Guests have no account, so this has to be reachable by them; the handler
-    // decides what any given caller may actually have.
+    // decides which of the requested keys any given caller may actually have.
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(mediaUrlFn)),
 

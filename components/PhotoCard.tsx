@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { downloadPhoto } from '@/lib/api';
 import { isVideoFilename } from '@/lib/validation';
+import { FallbackImage, FallbackVideo } from '@/components/FallbackMedia';
 
 interface PhotoCardProps {
   photo: DisplayPhoto;
@@ -43,6 +44,12 @@ export default function PhotoCard({
 
   const uploadedAt = photo.createdAt ? new Date(photo.createdAt) : null;
   const isVideo = isVideoFilename(photo.s3Key);
+  // Memoized so the element isn't handed a new object every render, which would
+  // reset the src mid-fallback.
+  const source = useMemo(
+    () => ({ primary: photo.url, fallback: photo.fallbackUrl }),
+    [photo.url, photo.fallbackUrl],
+  );
 
   return (
     <figure
@@ -56,8 +63,8 @@ export default function PhotoCard({
     >
       <div className="relative">
         {isVideo ? (
-          <video
-            src={photo.url}
+          <FallbackVideo
+            source={source}
             controls
             playsInline
             preload="metadata"
@@ -72,19 +79,16 @@ export default function PhotoCard({
             aria-label="View full-quality photo"
             className="block w-full cursor-zoom-in"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photo.url}
+            <FallbackImage
+              source={source}
               alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
               loading="lazy"
               className="aspect-square w-full object-cover"
             />
           </button>
         ) : (
-          // Signed S3 URLs change constantly, so a plain img tag is simpler than next/image here.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photo.url}
+          <FallbackImage
+            source={source}
             alt={`Photo uploaded by ${photo.uploadedBy ?? 'Anonymous'}`}
             loading="lazy"
             className="aspect-square w-full object-cover"
