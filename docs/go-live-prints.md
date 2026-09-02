@@ -79,11 +79,14 @@ check quoting a different product than fulfilment orders would prove nothing.
 
 ## When an order fails
 
-A paid order that Prodigi rejects does **not** throw — print-fulfill records
-`status: failed` on the `PrintOrder` row with the reason in `error`, and returns.
-The customer has been charged and nothing is printing.
+A paid order that Prodigi rejects records `status: failed` on the `PrintOrder`
+row with the reason in `error`, and then **throws** — which is what makes
+`sharepix-print-fulfill-errors` fire (see `docs/alerting.md`). The customer has
+been charged and nothing is printing, so this is meant to be loud.
 
-`sharepix-print-order-failures` alarms on exactly that (see `docs/alerting.md`).
+It is tried **once**: async retries are set to 0, because a retry after Prodigi
+may have already created the order would print and ship it twice.
+
 On alert: find the row, read `error`, then either fix the cause and resubmit or
 refund. The row keeps `stripeSessionId`, so the refund is one click in Stripe.
 
