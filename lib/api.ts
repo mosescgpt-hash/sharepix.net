@@ -1214,6 +1214,41 @@ export async function getPhotoDisplayUrl(photo: QRPhoto): Promise<string> {
 }
 
 /**
+ * Fetch one stored object, preferring Cloudflare R2.
+ *
+ * R2 costs nothing in egress, and downloads are where the bytes actually are —
+ * an original is megabytes where a preview is kilobytes. So a download asks the
+ * server for a signed R2 URL first and only falls back to S3 when there isn't
+ * one.
+ *
+ * There are several ordinary reasons there won't be: nothing was backfilled, so
+ * anything uploaded before the mirror went live is S3-only; the mirror is
+ * best-effort and may have skipped a newer file; and R2 may simply not be
+ * configured. All of them land in the same place — the S3 path that served
+ * every download before this existed — so a miss costs one wasted round trip
+ * and nothing else.
+ */
+async function fetchStoredBlob(eventId: string | undefined, key: string): Promise<Blob> {
+  if (eventId) {
+    try {
+      const { data } = await client.queries.mediaUrl(
+        { eventId, key },
+        { authMode: await authModeFor() },
+      );
+      const url = data?.url;
+      if (url) {
+        const response = await fetch(url);
+        if (response.ok) return await response.blob();
+      }
+    } catch {
+      // Any trouble reaching R2 is not the guest's problem — use S3.
+    }
+  }
+  const { body } = await downloadData({ path: key }).result;
+  return body.blob();
+}
+
+/**
  * Triggers a browser download of a photo, named for humans rather than for S3:
  * `001-Event-Name-Uploader.jpg`. Context is optional so callers that don't know
  * the event name or position still get a sensible name.
@@ -1222,8 +1257,7 @@ export async function downloadPhoto(
   photo: QRPhoto,
   context: { eventName?: string; index?: number } = {},
 ): Promise<void> {
-  const { body } = await downloadData({ path: photo.s3Key }).result;
-  const blob = await body.blob();
+  const blob = await fetchStoredBlob(photo.eventId, photo.s3Key);
 
   const blobUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -1258,8 +1292,7 @@ export async function downloadPhotosAsZip(
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
     try {
-      const { body } = await downloadData({ path: photo.s3Key }).result;
-      const blob = await body.blob();
+      const blob = await fetchStoredBlob(photo.eventId, photo.s3Key);
       zip.file(
         buildDownloadFilename({
           index: index + 1,
@@ -1331,8 +1364,7 @@ export async function downloadEventsAsZip(
     for (let index = 0; index < group.photos.length; index += 1) {
       const photo = group.photos[index];
       try {
-        const { body } = await downloadData({ path: photo.s3Key }).result;
-        const blob = await body.blob();
+        const blob = await fetchStoredBlob(photo.eventId, photo.s3Key);
         folder.file(
           buildDownloadFilename({
             index: index + 1,

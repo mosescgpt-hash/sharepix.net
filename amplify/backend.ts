@@ -28,6 +28,7 @@ import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
+import { mediaUrl } from './functions/media-url/resource';
 import { moderatePhoto } from './functions/moderate-photo/resource';
 
 const backend = defineBackend({
@@ -46,6 +47,7 @@ const backend = defineBackend({
   stripeWebhook,
   corporatePortal,
   sanitizeUpload,
+  mediaUrl,
   moderatePhoto,
 });
 
@@ -106,6 +108,17 @@ sanitizeFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT
 sanitizeFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 sanitizeFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
 sanitizeFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+
+// Signs R2 URLs for the gallery and downloads. Reads the event row to decide
+// what a caller may have, and holds the same R2 credentials as the mirror —
+// with them unset it returns nothing and every caller falls back to S3.
+const mediaUrlFn = backend.mediaUrl.resources.lambda as LambdaFunction;
+eventTable.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+mediaUrlFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+mediaUrlFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+mediaUrlFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+mediaUrlFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.
