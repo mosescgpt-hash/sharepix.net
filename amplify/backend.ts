@@ -373,47 +373,25 @@ errorRateAlarm('update-event-errors', updateEventFn, 'Event settings');
 
 // A print order that fails after payment is the most expensive silent failure
 // in the product: the customer has been charged, physical goods were never
-// ordered, and nobody finds out. `print-fulfill-errors` above does NOT catch
-// it — print-fulfill wraps its whole body in try/catch and returns normally on
-// every failure path, so a Prodigi rejection, a missing API key and a missing
-// order row all leave the Lambda's error metric at zero. It records `failed` on
-// the row and moves on.
+// ordered, and nobody finds out.
 //
-// So alarm on the log lines that mean exactly that. Threshold 1, unlike the
-// mirror below: there is no benign occurrence. Every one is someone's money.
-const printFulfillLogGroup = LogGroup.fromLogGroupName(
-  backend.stack,
-  'PrintFulfillLogGroupRef',
-  `/aws/lambda/${printFulfillFn.functionName}`,
-);
-new MetricFilter(backend.stack, 'PrintOrderFailureFilter', {
-  logGroup: printFulfillLogGroup,
-  metricNamespace: 'SharePix/Prints',
-  metricName: 'PrintOrderFailures',
-  filterPattern: FilterPattern.anyTerm(
-    'Prodigi rejected print order',
-    'Failed to submit print order',
-    'Print order not found',
-  ),
-  metricValue: '1',
-  defaultValue: 0,
-});
-const printFailureAlarm = new Alarm(backend.stack, 'print-order-failures', {
-  alarmName: 'sharepix-print-order-failures',
-  alarmDescription:
-    'A paid print order was not placed with Prodigi. The customer has been charged and nothing is being printed — find the order in the PrintOrder table (status "failed", with the reason in `error`) and either resubmit it or refund.',
-  metric: new Metric({
-    namespace: 'SharePix/Prints',
-    metricName: 'PrintOrderFailures',
-    period: Duration.minutes(5),
-    statistic: 'Sum',
-  }),
-  threshold: 1,
-  evaluationPeriods: 1,
-  comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-  treatMissingData: TreatMissingData.NOT_BREACHING,
-});
-printFailureAlarm.addAlarmAction(new SnsAction(alertsTopic));
+// The first attempt at covering it was a metric filter on print-fulfill's log
+// group, and it could not deploy: CloudFormation refuses to attach a filter to
+// a log group that does not exist, and a Lambda has no log group until its
+// first invocation. print-fulfill has never run in this environment, so the
+// whole stack rolled back. (The mirror filter below deploys because the
+// sanitizer runs on every upload and its log group is long since created —
+// which is exactly the kind of difference that only shows up at deploy time.)
+//
+// So print-fulfill throws on its failure paths now instead of swallowing them,
+// which makes `print-fulfill-errors` above genuinely cover it and needs no log
+// group at all. The retry config below is what makes throwing safe.
+//
+// Lambda retries a failed async invocation twice by default. That is the wrong
+// behaviour for an order of physical goods: if Prodigi created the order but
+// answered with an error, a retry prints and ships it again, and nothing can
+// un-ship it. One attempt, and the alarm tells a human to go look.
+printFulfillFn.configureAsyncInvoke({ retryAttempts: 0 });
 
 // The R2 mirror is best-effort by design: an upload that can't be copied is
 // still safe and serveable from S3, so the sanitizer catches the error rather

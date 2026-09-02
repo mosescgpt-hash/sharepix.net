@@ -17,7 +17,6 @@ Defined in `amplify/backend.ts`. Each alarm publishes to one SNS topic
 | `sharepix-print-fulfill-errors` | Print fulfilment to Prodigi throws |
 | `sharepix-sanitize-errors` | The upload sanitizer crashes or times out |
 | `sharepix-create-event-errors` | Event creation throws (a host got no event, or a comped code was spent on nothing) |
-| `sharepix-print-order-failures` | A **paid** print order was not placed with Prodigi — the customer was charged and nothing is being printed |
 | `sharepix-r2-mirror-failures` | The sanitizer logs **three or more** `Could not mirror to R2` errors in five minutes — new uploads aren't reaching Cloudflare R2 |
 
 All alarms evaluate a 5-minute window and treat "no data" as healthy.
@@ -30,15 +29,29 @@ exactly that — and paging on those teaches you to ignore the alerts.
 single object and that object still reads fine from S3. Thrown errors and
 timeouts are never self-inflicted, so those still page on the first one.
 
-### Why print fulfilment needs a log-derived alarm
+### Print fulfilment, and why it throws
 
-`print-fulfill-errors` watches the Lambda's error metric, and print-fulfill
-never reaches it: the whole handler body sits inside a `try/catch` that records
-`status: failed` on the order row and returns normally. A Prodigi rejection, a
-missing `PRODIGI_API_KEY` and a missing order row all leave the error metric at
-zero. That was the most expensive silent failure in the product — the customer
-has paid, nothing is being printed, and nobody is told — so the log lines that
-mean exactly that are the alarm instead.
+A paid print order that never reaches Prodigi is the most expensive silent
+failure in the product: the customer has been charged, nothing is being printed,
+and nobody finds out.
+
+`print-fulfill` used to wrap its whole body in a `try/catch` that recorded
+`status: failed` on the order row and returned normally — so a Prodigi
+rejection, a missing `PRODIGI_API_KEY` and a missing order row all left the
+error metric at zero, and `print-fulfill-errors` could not fire for the one
+thing it exists to catch. It records the failure and then **rethrows**, so that
+alarm genuinely covers it.
+
+Its async retries are set to **0** (`configureAsyncInvoke` in `backend.ts`).
+Lambda would otherwise retry a failed async invocation twice, and if Prodigi had
+created the order but answered with an error, each retry would print and ship it
+again. One attempt, and a human decides.
+
+A log-derived filter was tried first and could not deploy: CloudFormation
+refuses to attach a metric filter to a log group that does not exist, and a
+Lambda has no log group until its first invocation. `print-fulfill` has never
+run. The mirror and webhook filters below work because those functions run
+constantly.
 
 **When it fires:** find the order in the `PrintOrder` table with
 `status = "failed"`; the reason is in its `error` field. Either fix the cause

@@ -45,8 +45,9 @@ async function fulfillPrintOrder(session) {
   );
   const order = found.Item;
   if (!order) {
-    console.error('Print order not found', printOrderId);
-    return;
+    // A paid session naming an order row that isn't there. Nothing can be
+    // printed and nothing can be recorded, so this has to be loud.
+    throw new Error(`Print order not found: ${printOrderId}`);
   }
   if (order.status?.S === 'submitted') return; // already fulfilled
 
@@ -144,7 +145,10 @@ async function fulfillPrintOrder(session) {
       }),
     );
     console.error('Prodigi rejected print order', printOrderId, response.status, detail);
-    return;
+    // Throw AFTER recording the failure, so the row explains it and the
+    // function's error metric fires. Swallowing this was the bug: a customer
+    // had paid, nothing was being printed, and no alarm could see it.
+    throw new Error(`Prodigi ${response.status}: ${detail}`.slice(0, 400));
   }
 
   const result = (await response.json().catch(() => ({}))) ?? {};
@@ -178,7 +182,7 @@ export const handler = async (event) => {
     await fulfillPrintOrder(session);
   } catch (err) {
     console.error('Failed to submit print order', err);
-    // Record the failure so it's visible instead of silently lost.
+    // Record the failure so the row explains itself to whoever investigates.
     const printOrderId = session?.metadata?.printOrderId;
     if (printOrderId) {
       await dynamo
@@ -197,5 +201,15 @@ export const handler = async (event) => {
         )
         .catch(() => undefined);
     }
+    // ...then rethrow. This used to end here, which meant the function returned
+    // successfully from every failure and its error metric never moved — so the
+    // alarm watching that metric could not fire for the one thing it exists to
+    // catch: a customer charged for prints that were never ordered.
+    //
+    // Safe to throw because backend.ts sets retryAttempts to 0 on this
+    // function. Lambda would otherwise retry a failed async invocation twice,
+    // and if Prodigi had created the order but answered with an error, each
+    // retry would print and ship it again.
+    throw err;
   }
 };
