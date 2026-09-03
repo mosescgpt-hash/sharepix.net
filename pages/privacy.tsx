@@ -9,17 +9,17 @@ const CONTACT_EMAIL = 'privacy@sharepix.net';
 export default function PrivacyPage() {
   return (
     <Layout title="Privacy Policy">
-      <section className="mx-auto max-w-3xl py-10">
-        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-ink/60">Last updated: {LAST_UPDATED}</p>
+      <section className="mx-auto max-w-3xl py-12 sm:py-16">
+        <h1 className="font-display text-3xl font-bold sm:text-4xl">Privacy Policy</h1>
+        <p className="mt-3 text-sm text-muted">Last updated: {LAST_UPDATED}</p>
 
-        <div className="mt-8 space-y-8 text-ink/80 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_h3]:font-semibold [&_h3]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
+        <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_h3]:font-semibold [&_h3]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
               SharePix, a product of Calvin Solutions LLC (&ldquo;SharePix,&rdquo;
               &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), provides an event
               photo-sharing service at{' '}
-              <a href="https://www.sharepix.net">sharepix.net</a> (the
+              <a href="https://www.sharepix.net">sharepix.net</a>{' '}(the
               &ldquo;Service&rdquo;). This Privacy Policy explains what information we
               collect, how we use and share it, and the choices you have. By using the
               Service, you agree to this Policy.
@@ -66,7 +66,7 @@ export default function PrivacyPage() {
                 <strong>Photos and videos</strong> you choose to upload to an event gallery.
               </li>
               <li>
-                <strong>An optional name or nickname</strong> you may add so the host knows who
+                <strong>An optional name or nickname</strong>{' '}you may add so the host knows who
                 contributed (for example, &ldquo;Aunt Maya&rdquo;). This is optional and stored
                 on your own device to save you retyping it; it is attached to photos you upload.
               </li>
@@ -99,7 +99,7 @@ export default function PrivacyPage() {
 
             <h3>Payment information</h3>
             <p>
-              Payments are processed by <a href="https://stripe.com">Stripe</a> through its
+              Payments are processed by <a href="https://stripe.com">Stripe</a>{' '}through its
               hosted checkout. Your full card number and security code are entered on
               Stripe&rsquo;s pages and are <strong>never sent to or stored by SharePix</strong>.
               We receive a confirmation from Stripe that includes limited details such as the

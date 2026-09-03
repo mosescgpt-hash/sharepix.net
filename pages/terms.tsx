@@ -11,18 +11,18 @@ const GOVERNING_STATE = 'the State in which Calvin Solutions LLC is organized';
 export default function TermsPage() {
   return (
     <Layout title="Terms of Service">
-      <section className="mx-auto max-w-3xl py-10">
-        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Terms of Service</h1>
-        <p className="mt-2 text-sm text-ink/60">Last updated: {LAST_UPDATED}</p>
+      <section className="mx-auto max-w-3xl py-12 sm:py-16">
+        <h1 className="font-display text-3xl font-bold sm:text-4xl">Terms of Service</h1>
+        <p className="mt-3 text-sm text-muted">Last updated: {LAST_UPDATED}</p>
 
-        <div className="mt-8 space-y-8 text-ink/80 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
+        <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
               These Terms of Service (&ldquo;Terms&rdquo;) are a legal agreement between you
-              and <strong>SharePix, a product of Calvin Solutions LLC</strong>
+              and <strong>SharePix, a product of Calvin Solutions LLC</strong>{' '}
               (&ldquo;SharePix,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;),
               governing your use of the event photo-sharing service at{' '}
-              <a href="https://www.sharepix.net">sharepix.net</a> (the &ldquo;Service&rdquo;). By
+              <a href="https://www.sharepix.net">sharepix.net</a>{' '}(the &ldquo;Service&rdquo;). By
               creating an account, creating or joining an event, or uploading content, you agree
               to these Terms. If you do not agree, do not use the Service.
             </p>
@@ -122,7 +122,7 @@ export default function TermsPage() {
                 Card details are entered on Stripe and are never stored by SharePix.
               </li>
               <li>
-                Every event includes a <strong>30-day upload window</strong> (extendable in
+                Every event includes a <strong>30-day upload window</strong>{' '}(extendable in
                 30-day blocks for half the plan price). After it closes, guests keep limited,
                 reduced-resolution viewing for a while, and the host keeps full access and
                 downloads for the plan&rsquo;s retention period (Starter ~3 weeks, Standard 3
@@ -164,7 +164,7 @@ export default function TermsPage() {
             <p>
               SharePix hosts photos and videos uploaded by hosts and their guests. We respond to
               notices of claimed copyright infringement under the Digital Millennium Copyright
-              Act. Our <a href="/dmca">Copyright and DMCA Policy</a> sets out our designated
+              Act. Our <a href="/dmca">Copyright and DMCA Policy</a>{' '}sets out our designated
               agent&rsquo;s contact details and the process for sending a notice or a
               counter-notification.
             </p>
@@ -235,7 +235,7 @@ export default function TermsPage() {
             {/* The postal address comes from lib/businessInfo, the same place
                 the DMCA page reads it, so the two can never disagree. */}
             <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               Copyright notices go to our designated agent instead — see our{' '}
               <a href="/dmca">Copyright and DMCA Policy</a>.
             </p>

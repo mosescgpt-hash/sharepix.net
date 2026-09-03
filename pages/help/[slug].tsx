@@ -12,14 +12,14 @@ export default function HelpArticlePage({ article, related }: Props) {
   return (
     <Layout title={article.title}>
       <article className="mx-auto max-w-2xl py-10">
-        <Link href="/help" className="text-sm text-ink/60 hover:text-accent">
+        <Link href="/help" className="text-sm text-muted hover:text-accent">
           ← All help articles
         </Link>
 
-        <p className="mt-6 text-sm uppercase tracking-wide text-ink/50">
+        <p className="mt-6 text-sm uppercase tracking-wide text-muted">
           {article.category} · {article.audience === 'guest' ? 'For guests' : 'For hosts'}
         </p>
-        <h1 className="mt-1 font-display text-3xl font-extrabold">{article.title}</h1>
+        <h1 className="mt-1 font-display text-3xl font-bold">{article.title}</h1>
         <p className="mt-3 text-lg text-ink/70">{article.summary}</p>
 
         <div className="mt-8 space-y-5">
@@ -37,7 +37,7 @@ export default function HelpArticlePage({ article, related }: Props) {
             }
             if (block.kind === 'contact') {
               return (
-                <p key={index} className="rounded-xl border border-ink/15 bg-white px-4 py-3">
+                <p key={index} className="rounded-xl border border-line bg-card shadow-card px-4 py-3">
                   {block.text}{' '}
                   <a
                     href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(article.title)}`}

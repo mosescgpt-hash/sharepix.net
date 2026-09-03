@@ -154,19 +154,19 @@ function AccountPage() {
     <Layout title="Account">
       <section className="mx-auto max-w-xl py-10">
         <p className="text-sm font-medium uppercase tracking-wide text-accent">Your account</p>
-        <h1 className="mt-1 font-display text-3xl font-extrabold">Account details</h1>
+        <h1 className="mt-1 font-display text-3xl font-bold">Account details</h1>
         <p className="mt-2 text-ink/70">
           Change the name shown on your events and the email address you sign in with.
         </p>
 
         {loading ? (
-          <p className="mt-8 text-center text-ink/60">Loading your details…</p>
+          <p className="mt-8 text-center text-muted">Loading your details…</p>
         ) : (
           <>
             {/* Display name */}
-            <form onSubmit={handleSaveName} className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
+            <form onSubmit={handleSaveName} className="mt-6 sp-card p-5">
               <h2 className="font-display text-xl font-bold">Display name</h2>
-              <p className="mt-1 text-sm text-ink/65">
+              <p className="mt-1 text-sm text-muted">
                 Shown as the host on events you create. Leave it blank to use the name from your
                 email address.
               </p>
@@ -195,9 +195,9 @@ function AccountPage() {
             </form>
 
             {/* Email */}
-            <div className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-6 sp-card p-5">
               <h2 className="font-display text-xl font-bold">Email address</h2>
-              <p className="mt-1 text-sm text-ink/65">
+              <p className="mt-1 text-sm text-muted">
                 You currently sign in with <strong className="text-ink">{currentEmail || 'an unknown address'}</strong>.
                 Changing it sends a code to the new address to confirm it&apos;s yours.
               </p>
@@ -269,7 +269,7 @@ function AccountPage() {
             </div>
 
             {/* Deferred fields — said plainly rather than shown as dead inputs. */}
-            <div className="mt-6 rounded-2xl border border-dashed border-ink/20 bg-white p-5 text-sm text-ink/65">
+            <div className="mt-6 rounded-2xl border border-dashed border-ink/20 bg-white p-5 text-sm text-muted">
               <h2 className="font-display text-lg font-bold text-ink">Phone and mailing address</h2>
               <p className="mt-1">
                 We don&apos;t collect these. Print orders take a delivery address at checkout each

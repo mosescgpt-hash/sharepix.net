@@ -75,7 +75,7 @@ export default function EventGalleryPage() {
     <Layout title={event ? event.name : 'Event gallery'}>
       <section className="py-8">
         {loading ? (
-          <p className="text-center text-ink/60">Loading gallery…</p>
+          <p className="text-center text-muted">Loading gallery…</p>
         ) : error ? (
           <p className="mx-auto max-w-lg rounded-xl bg-red-50 px-4 py-6 text-center text-red-700">
             {error}
@@ -83,9 +83,9 @@ export default function EventGalleryPage() {
         ) : event ? (
           <>
             <div className="flex flex-col items-center gap-2 text-center">
-              <h1 className="font-display text-3xl font-extrabold sm:text-4xl">{event.name}</h1>
-              {event.location ? <p className="text-ink/60">{event.location}</p> : null}
-              <p className="text-ink/60">
+              <h1 className="font-display text-3xl font-bold sm:text-4xl">{event.name}</h1>
+              {event.location ? <p className="text-muted">{event.location}</p> : null}
+              <p className="text-muted">
                 {photos.length} item{photos.length === 1 ? '' : 's'} shared by guests
               </p>
               <div className="mt-2 flex gap-3 text-sm">
@@ -113,18 +113,18 @@ export default function EventGalleryPage() {
                 ship to the address you provided.
               </p>
             ) : router.query.prints === 'cancelled' ? (
-              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-muted">
                 Print order cancelled — nothing was charged.
               </p>
             ) : null}
 
             {lowResOnly ? (
-              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-muted">
                 Uploads for this event have closed. These previews stay available for a
                 little longer before the gallery closes.
               </p>
             ) : !privileged && event.guestDownloadsBlocked === true ? (
-              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-ink/60">
+              <p className="mx-auto mt-6 max-w-lg rounded-xl bg-smoke px-4 py-3 text-center text-sm text-muted">
                 The host has kept downloads for this event to themselves, so these are
                 viewing copies. Ask them if you would like a full-size photo.
               </p>

@@ -77,7 +77,7 @@ export default function ModerationReviewPage() {
       </Head>
       <section className="mx-auto max-w-lg py-10">
         {loading ? (
-          <p className="text-center text-ink/60">Loading the photo…</p>
+          <p className="text-center text-muted">Loading the photo…</p>
         ) : !review ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
             <h1 className="font-display text-2xl font-bold">This link isn’t valid</h1>
@@ -88,7 +88,7 @@ export default function ModerationReviewPage() {
           </div>
         ) : (
           <>
-            <h1 className="font-display text-3xl font-extrabold">Photo held for review</h1>
+            <h1 className="font-display text-3xl font-bold">Photo held for review</h1>
             <p className="mt-2 text-ink/70">
               Our screening flagged this photo{review.eventName ? ` from ${review.eventName}` : ''}, so
               guests and the slideshow can’t see it yet.
@@ -167,7 +167,7 @@ export default function ModerationReviewPage() {
               </p>
             ) : null}
 
-            <p className="mt-6 text-xs text-ink/50">
+            <p className="mt-6 text-xs text-muted">
               Denying keeps the photo hidden from guests. To delete it permanently, open your
               event dashboard.
             </p>

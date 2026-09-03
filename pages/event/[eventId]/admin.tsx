@@ -376,7 +376,7 @@ function AdminDashboardPage() {
     <Layout title={event ? `Admin — ${event.name}` : 'Admin dashboard'}>
       <section className="py-8">
         {loading ? (
-          <p className="text-center text-ink/60">Loading dashboard…</p>
+          <p className="text-center text-muted">Loading dashboard…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open this dashboard.
@@ -389,9 +389,9 @@ function AdminDashboardPage() {
           <>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-wide text-ink/50">Admin dashboard</p>
-                <h1 className="font-display text-3xl font-extrabold">{event.name}</h1>
-                <p className="mt-1 text-sm text-ink/60">
+                <p className="text-sm uppercase tracking-wide text-muted">Admin dashboard</p>
+                <h1 className="font-display text-3xl font-bold">{event.name}</h1>
+                <p className="mt-1 text-sm text-muted">
                   {event.tier === 'corporate' ? 'Corporate' : tier?.name ?? event.tier} plan ·
                   Event code {event.eventCode}
                   {lifecycle.uploadWindowEndsAt
@@ -446,13 +446,13 @@ function AdminDashboardPage() {
             ) : null}
 
             <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
-              <div className="rounded-xl border border-ink/10 bg-white p-4 text-center">
+              <div className="rounded-xl border border-line bg-card shadow-card p-4 text-center">
                 <p className="font-display text-2xl font-bold">{photos.length}</p>
-                <p className="text-xs text-ink/60">Total photos</p>
+                <p className="text-xs text-muted">Total photos</p>
               </div>
-              <div className="rounded-xl border border-ink/10 bg-white p-4 text-center">
+              <div className="rounded-xl border border-line bg-card shadow-card p-4 text-center">
                 <p className="font-display text-2xl font-bold">{hiddenCount}</p>
-                <p className="text-xs text-ink/60">Hidden from gallery</p>
+                <p className="text-xs text-muted">Hidden from gallery</p>
               </div>
             </div>
 
@@ -467,7 +467,7 @@ function AdminDashboardPage() {
               }}
             />
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-display text-xl font-bold">Event settings</h2>
                 <div className="flex flex-wrap gap-2">
@@ -496,7 +496,7 @@ function AdminDashboardPage() {
                     value={editName}
                     disabled={detailsLocked || savingDetails}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-ink/50"
+                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-muted"
                   />
                 </label>
                 <label className="block">
@@ -506,14 +506,14 @@ function AdminDashboardPage() {
                     value={editDate}
                     disabled={detailsLocked || savingDetails}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-ink/50"
+                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-muted"
                   />
                 </label>
               </div>
 
               <div className="mt-4">
                 <span className="text-sm font-medium">
-                  Where it happened <span className="text-ink/50">(optional)</span>
+                  Where it happened <span className="text-muted">(optional)</span>
                 </span>
                 <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                   <input
@@ -537,14 +537,14 @@ function AdminDashboardPage() {
                     className="w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke"
                   />
                 </div>
-                <p className="mt-1 text-xs text-ink/55">
+                <p className="mt-1 text-xs text-muted">
                   City and state only — never a street address. Photos&apos; own location data
                   is always removed when they&apos;re uploaded.
                 </p>
               </div>
 
               {detailsLocked ? (
-                <p className="mt-2 text-xs text-ink/55">
+                <p className="mt-2 text-xs text-muted">
                   The name and date lock once the first photo is uploaded, so guests&apos;
                   memories keep the details they saw. You can still change the location.
                 </p>
@@ -566,7 +566,7 @@ function AdminDashboardPage() {
                   <p className="text-sm font-medium">
                     Uploads are {event.uploadsClosed ? 'closed' : 'open'}
                   </p>
-                  <p className="text-xs text-ink/55">
+                  <p className="text-xs text-muted">
                     {event.uploadsClosed
                       ? 'Guests cannot add new photos. The gallery stays viewable.'
                       : 'Close the event when you have all the photos you want.'}
@@ -594,7 +594,7 @@ function AdminDashboardPage() {
                   the bottom — the discount field used to sit between them. */}
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Photo screening</p>
-                <p className="text-xs text-ink/55">
+                <p className="text-xs text-muted">
                   Uploads are checked for explicit content. Alcohol, smoking, and kissing are
                   never flagged.
                 </p>
@@ -621,7 +621,7 @@ function AdminDashboardPage() {
                     );
                   })}
                 </div>
-                <p className="mt-2 text-xs text-ink/55">
+                <p className="mt-2 text-xs text-muted">
                   {(event.moderationMode ?? 'review') === 'allow_all'
                     ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
                     : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
@@ -630,13 +630,13 @@ function AdminDashboardPage() {
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Guest downloads</p>
-                    <p className="text-xs text-ink/55">
+                    <p className="text-xs text-muted">
                       {event.guestDownloadsBlocked === true
                         ? 'Off — guests can view the gallery but not download, and they see smaller viewing copies rather than full-size photos. You still have everything at full resolution.'
                         : 'On. Guests can save the photos at full resolution, no account needed. Turn this off for an event where you would rather the pictures stayed with you.'}
                     </p>
                     {event.guestDownloadsBlocked === true ? (
-                      <p className="mt-1 text-xs text-ink/45">
+                      <p className="mt-1 text-xs text-muted">
                         This lowers what a guest can take away — it cannot stop a screenshot.
                       </p>
                     ) : null}
@@ -658,13 +658,13 @@ function AdminDashboardPage() {
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Guest videos</p>
-                    <p className="text-xs text-ink/55">
+                    <p className="text-xs text-muted">
                       {event.videoUploadsEnabled === false
                         ? 'Off — guests can add photos only.'
                         : 'On. Videos are yours alone: guests can upload them but only you can watch them, which is also what keeps them from costing a fortune to serve. Screening checks photos but not videos, so turn this off if you want screened media only.'}
                     </p>
                     {event.videoUploadsEnabled !== false && event.videoLimit != null ? (
-                      <p className="mt-1 text-sm text-ink/60">
+                      <p className="mt-1 text-sm text-muted">
                         {event.videoCount ?? 0} of{' '}
                         {event.videoLimit + (event.extraVideoCredits ?? 0)} videos used.
                         {videosRemaining(event) === 0
@@ -691,9 +691,9 @@ function AdminDashboardPage() {
                   <div className="mt-3">
                     <label htmlFor="alert-email" className="text-sm font-medium">
                       Email me when a photo is held{' '}
-                      <span className="text-ink/50">(optional)</span>
+                      <span className="text-muted">(optional)</span>
                     </label>
-                    <p className="text-xs text-ink/55">
+                    <p className="text-xs text-muted">
                       You&apos;ll get the photo and Approve / Deny buttons, so you don&apos;t have
                       to watch your phone.
                     </p>
@@ -721,7 +721,7 @@ function AdminDashboardPage() {
 
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Add-ons</p>
-                <p className="text-xs text-ink/55">
+                <p className="text-xs text-muted">
                   Tick what you want and pay once.{' '}
                   {lifecycle.uploadWindowEndsAt
                     ? lifecycle.uploadOpen
@@ -773,7 +773,7 @@ function AdminDashboardPage() {
                               <span className="text-sm font-medium">{addon.label}</span>
                               <span className="shrink-0 text-sm font-medium">${addon.price}</span>
                             </span>
-                            <span className="mt-0.5 block text-xs text-ink/55">
+                            <span className="mt-0.5 block text-xs text-muted">
                               {addon.description}
                             </span>
                           </span>
@@ -783,7 +783,7 @@ function AdminDashboardPage() {
 
                     <div className="mt-4">
                       <label htmlFor="addon-discount" className="text-sm font-medium">
-                        Discount code <span className="text-ink/50">(optional)</span>
+                        Discount code <span className="text-muted">(optional)</span>
                       </label>
                       <input
                         id="addon-discount"
@@ -794,7 +794,7 @@ function AdminDashboardPage() {
                         autoComplete="off"
                         className="mt-1 w-full max-w-xs rounded-xl border border-ink/20 px-4 py-2.5 uppercase focus:border-accent focus:outline-none"
                       />
-                      <p className="mt-1 text-xs text-ink/55">
+                      <p className="mt-1 text-xs text-muted">
                         Applied to whichever ticked items the code covers. Anything it
                         doesn&apos;t cover stays full price.
                       </p>
@@ -814,7 +814,7 @@ function AdminDashboardPage() {
                     </button>
                   </>
                 ) : (
-                  <p className="mt-3 text-xs text-ink/60">
+                  <p className="mt-3 text-xs text-muted">
                     Everything available for this event is already active.
                   </p>
                 )}
@@ -831,7 +831,7 @@ function AdminDashboardPage() {
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
                 <div>
                   <p className="text-sm font-medium text-red-700">Delete event</p>
-                  <p className="text-xs text-ink/55">
+                  <p className="text-xs text-muted">
                     Permanently removes this event and all of its photos.
                   </p>
                 </div>

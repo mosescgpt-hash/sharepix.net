@@ -122,7 +122,7 @@ export default function PhotoCard({
         <div className="min-w-0">
           <p className="truncate font-medium">Uploaded by: {photo.uploadedBy || 'Anonymous'}</p>
           {uploadedAt ? (
-            <p className="text-ink/50">
+            <p className="text-muted">
               {uploadedAt.toLocaleDateString()} ·{' '}
               {uploadedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
             </p>

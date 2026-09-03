@@ -33,9 +33,22 @@ export default function HomepageEventAccess() {
   }, []);
 
   return (
-    <section className="mx-auto max-w-3xl py-10" aria-label="Host event access">
-      <div className="rounded-2xl border border-ink/10 bg-ink p-6 text-white shadow-sm sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.16em] text-mint">Event hosts</p>
+    <section className="mx-auto max-w-3xl py-6" aria-label="Host event access">
+      {/* A dark slab in the middle of a light page needs to look deliberate.
+          The gradient and the mint hairline give it depth; the float shadow
+          seats it on the page rather than pasting it onto it. */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-ink via-ink to-night p-7 text-white shadow-float sm:p-9">
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-mint/60 to-transparent"
+        />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-mint/10 blur-3xl"
+        />
+        {/* Positioned, so the decorative glow above stays behind the content. */}
+        <div className="relative">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-mint">Event hosts</p>
         {hostState === 'loading' ? (
           <div className="mt-3 space-y-3" aria-label="Checking host account">
             <div className="h-7 w-40 animate-pulse rounded bg-white/15" />
@@ -91,6 +104,7 @@ export default function HomepageEventAccess() {
         )}
         <div className="mt-5 text-sm text-white/75 [&_button]:text-mint">
           <InstallAppButton />
+        </div>
         </div>
       </div>
     </section>

@@ -21,13 +21,13 @@ const RENEWAL_DUE = DMCA_RENEWAL_DUE;
 export default function DmcaPage() {
   return (
     <Layout title="Copyright & DMCA">
-      <section className="mx-auto max-w-3xl py-10">
-        <h1 className="font-display text-3xl font-extrabold sm:text-4xl">
+      <section className="mx-auto max-w-3xl py-12 sm:py-16">
+        <h1 className="font-display text-3xl font-bold sm:text-4xl">
           Copyright and DMCA Policy
         </h1>
-        <p className="mt-2 text-sm text-ink/60">Last updated: {LAST_UPDATED}</p>
+        <p className="mt-3 text-sm text-muted">Last updated: {LAST_UPDATED}</p>
 
-        <div className="mt-8 space-y-8 text-ink/80 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
+        <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
               SharePix, a product of <strong>{LEGAL_ENTITY}</strong>, hosts photos and
@@ -49,16 +49,18 @@ export default function DmcaPage() {
               infringement, and have registered that designation with the U.S. Copyright
               Office:
             </p>
-            <div className="mt-3 rounded-xl border border-ink/15 bg-white p-4 text-sm not-italic">
+            <div className="mt-4 rounded-xl border border-line bg-smoke p-5 text-sm not-italic">
               <p className="mt-0 font-semibold text-ink">{AGENT.name}</p>
-              <p className="mt-0">{AGENT.organization}</p>
+              {/* BUSINESS_ADDRESS already opens with the legal entity, so
+                  printing AGENT.organization above it repeated the company
+                  name on consecutive lines. */}
               <p className="mt-0 whitespace-pre-line">{AGENT.address}</p>
               <p className="mt-0">Telephone: {AGENT.phone}</p>
               <p className="mt-0">
                 Email: <a href={`mailto:${AGENT.email}`}>{AGENT.email}</a>
               </p>
             </div>
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               This address is for copyright notices only. For anything else, please use{' '}
               <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
             </p>
@@ -189,7 +191,7 @@ export default function DmcaPage() {
           </div>
         </div>
 
-        <p className="mt-10 text-xs text-ink/45">
+        <p className="mt-10 text-xs text-muted">
           Our designated-agent registration with the U.S. Copyright Office is due for renewal
           by {RENEWAL_DUE}.
         </p>

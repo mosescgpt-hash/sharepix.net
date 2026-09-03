@@ -191,7 +191,7 @@ export default function PhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-ink/60">
+      <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-muted">
         {emptyMessage ?? 'No photos or videos yet. Scan the event QR code to add the first one.'}
       </p>
     );
@@ -199,7 +199,7 @@ export default function PhotoGrid({
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-ink/10 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-line bg-card shadow-card p-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="flex items-center gap-2 text-sm font-medium">
           Sort
           <select
@@ -232,7 +232,7 @@ export default function PhotoGrid({
               <button
                 type="button"
                 onClick={() => setSelected(new Set())}
-                className="px-2 py-2 text-ink/60 underline"
+                className="px-2 py-2 text-muted underline"
               >
                 Deselect all ({selected.size})
               </button>
@@ -262,7 +262,7 @@ export default function PhotoGrid({
             ) : null}
           </div>
         ) : downloadMessage ? (
-          <p className="text-sm text-ink/60">{downloadMessage}</p>
+          <p className="text-sm text-muted">{downloadMessage}</p>
         ) : null}
       </div>
 

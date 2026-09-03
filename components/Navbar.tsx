@@ -7,48 +7,57 @@ export default function Navbar() {
 
   const links = (
     <>
-      <Link href="/pricing" className="hover:text-accent">
+      <Link href="/pricing" className="font-medium text-ink/75 transition hover:text-accent">
         Pricing
+      </Link>
+      <Link href="/demo" className="font-medium text-ink/75 transition hover:text-accent">
+        Example
+      </Link>
+      <Link href="/my-events" className="font-medium text-ink/75 transition hover:text-accent">
+        Host access
       </Link>
       <Link
         href="/create-event"
-        className="rounded-full bg-ink px-4 py-1.5 font-medium text-white hover:bg-night"
+        className="rounded-full bg-ink px-5 py-2 font-medium text-white shadow-card transition duration-200 ease-out hover:bg-night hover:shadow-lift"
       >
         Create an event
-      </Link>
-      <Link href="/my-events" className="font-medium text-ink/75 hover:text-accent">
-        Host access
       </Link>
     </>
   );
 
   return (
-    <header className="sticky top-0 z-20 border-b border-ink/10 bg-smoke/95 backdrop-blur">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-display text-xl font-bold tracking-tight">
+    // Translucent over the page wash rather than an opaque bar: the gradient
+    // shows through, so the header reads as part of the page instead of a
+    // separate strip sitting on top of it.
+    <header className="sticky top-0 z-20 border-b border-line/70 bg-smoke/80 backdrop-blur-xl">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+        <Link
+          href="/"
+          className="flex items-center gap-2 font-display text-xl font-bold tracking-tight"
+        >
           <Logo />
           <span className="lowercase">
-            share<span className="text-accent">pix</span><span className="text-ink/55">.net</span>
+            share<span className="text-accent">pix</span><span className="text-muted">.net</span>
           </span>
         </Link>
 
         {/* Mobile menu button */}
         <button
           type="button"
-          className="rounded p-2 sm:hidden"
+          className="rounded-lg p-2 transition hover:bg-ink/5 sm:hidden"
           aria-label="Toggle menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
         >
-          <span className="block h-0.5 w-5 bg-ink" />
-          <span className="mt-1 block h-0.5 w-5 bg-ink" />
-          <span className="mt-1 block h-0.5 w-5 bg-ink" />
+          <span className="block h-0.5 w-5 rounded-full bg-ink" />
+          <span className="mt-1 block h-0.5 w-5 rounded-full bg-ink" />
+          <span className="mt-1 block h-0.5 w-5 rounded-full bg-ink" />
         </button>
 
-        <div className="hidden items-center gap-5 text-sm sm:flex">{links}</div>
+        <div className="hidden items-center gap-6 text-sm sm:flex">{links}</div>
       </nav>
       {menuOpen ? (
-        <div className="flex flex-col items-start gap-4 border-t border-ink/10 px-4 py-4 text-sm sm:hidden">
+        <div className="flex flex-col items-start gap-4 border-t border-line bg-card/90 px-4 py-5 text-sm sm:hidden">
           {links}
         </div>
       ) : null}

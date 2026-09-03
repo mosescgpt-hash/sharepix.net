@@ -17,10 +17,10 @@ function ArticleLink({ article }: { article: HelpArticle }) {
     <li>
       <Link
         href={`/help/${article.slug}`}
-        className="block rounded-xl border border-ink/10 bg-white p-4 transition hover:border-accent"
+        className="block rounded-xl border border-line bg-card shadow-card p-4 transition hover:border-accent"
       >
         <span className="font-medium">{article.title}</span>
-        <span className="mt-0.5 block text-sm text-ink/60">{article.summary}</span>
+        <span className="mt-0.5 block text-sm text-muted">{article.summary}</span>
       </Link>
     </li>
   );
@@ -43,7 +43,7 @@ export default function HelpIndexPage() {
   return (
     <Layout title="Help">
       <section className="mx-auto max-w-3xl py-10">
-        <h1 className="text-center font-display text-3xl font-extrabold sm:text-4xl">
+        <h1 className="text-center font-display text-3xl font-bold sm:text-4xl">
           How can we help?
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-center text-ink/70">
@@ -89,7 +89,7 @@ export default function HelpIndexPage() {
 
         {results ? (
           <div className="mt-8">
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               {visible.length} result{visible.length === 1 ? '' : 's'} for “{query}”
             </p>
             {visible.length > 0 ? (
@@ -126,7 +126,7 @@ export default function HelpIndexPage() {
           </div>
         )}
 
-        <div className="mt-12 rounded-2xl border border-ink/10 bg-white p-6 text-center">
+        <div className="mt-12 sp-card p-6 text-center">
           <h2 className="font-display text-lg font-bold">Still stuck?</h2>
           <p className="mt-2 text-sm text-ink/70">
             Email us the event name and what you saw on screen, and we will sort it out.

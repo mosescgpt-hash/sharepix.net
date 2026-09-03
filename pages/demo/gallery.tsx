@@ -31,7 +31,7 @@ export default function DemoGalleryPage() {
         </div>
 
         <div className="mt-6">
-          <h1 className="font-display text-3xl font-extrabold">{DEMO_EVENT.name}</h1>
+          <h1 className="font-display text-3xl font-bold">{DEMO_EVENT.name}</h1>
           <p className="mt-1 text-ink/70">
             {DEMO_EVENT.location} · {DEMO_PHOTOS.length} photos from {' '}
             {new Set(DEMO_PHOTOS.map((p) => p.uploadedBy)).size} guests
@@ -48,7 +48,7 @@ export default function DemoGalleryPage() {
           />
         </div>
 
-        <div className="mt-10 rounded-2xl border border-ink/10 bg-white p-6 text-center">
+        <div className="mt-10 sp-card p-6 text-center">
           <h2 className="font-display text-xl font-bold">Your gallery, with your photos</h2>
           <p className="mx-auto mt-2 max-w-lg text-sm text-ink/70">
             Every angle of your day in one place, from everyone who was there. Set it up in

@@ -124,8 +124,8 @@ function MyEventsPage() {
             <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">
               Host dashboard
             </p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold">My events</h1>
-            <p className="mt-2 text-ink/65">
+            <h1 className="mt-1 font-display text-3xl font-bold">My events</h1>
+            <p className="mt-2 text-muted">
               Open an event to manage uploads, download media, or update its QR code.
             </p>
           </div>
@@ -154,13 +154,13 @@ function MyEventsPage() {
         </div>
 
         {loading ? (
-          <p className="mt-10 text-center text-ink/60">Loading your events…</p>
+          <p className="mt-10 text-center text-muted">Loading your events…</p>
         ) : error ? (
           <p className="mt-8 rounded-xl bg-red-50 px-4 py-5 text-center text-red-700">{error}</p>
         ) : events.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-ink/20 bg-white px-6 py-12 text-center">
             <h2 className="font-display text-xl font-bold">No events yet</h2>
-            <p className="mt-2 text-ink/60">Create your first event and its upload QR code.</p>
+            <p className="mt-2 text-muted">Create your first event and its upload QR code.</p>
             <Link
               href="/create-event"
               className="mt-5 inline-block rounded-full bg-accent px-6 py-3 font-medium text-white hover:bg-accent/90"
@@ -171,10 +171,10 @@ function MyEventsPage() {
         ) : (
           <>
             {downloadableEvents.length > 0 ? (
-              <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-8 flex flex-col gap-3 sp-card p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-display font-bold">Download photos</p>
-                  <p className="text-sm text-ink/60">
+                  <p className="text-sm text-muted">
                     Check one or more events, then download them together as a ZIP (each
                     event in its own folder).
                   </p>
@@ -226,7 +226,7 @@ function MyEventsPage() {
                       ) : null}
                       <div>
                         <h2 className="font-display text-xl font-bold">{event.name}</h2>
-                        <p className="mt-1 text-sm text-ink/60">
+                        <p className="mt-1 text-sm text-muted">
                           {formatDate(event.date)} · {tier?.name ?? event.tier} plan
                         </p>
                       </div>
@@ -266,7 +266,7 @@ function MyEventsPage() {
                   ) : (
                     <>
                       {event.accessExpiresAt ? (
-                        <p className="mt-4 text-sm text-ink/55">
+                        <p className="mt-4 text-sm text-muted">
                           Gallery access through{' '}
                           {new Date(event.accessExpiresAt).toLocaleDateString()}
                         </p>

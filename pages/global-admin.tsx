@@ -552,7 +552,7 @@ function GlobalAdminPage() {
     <Layout title="Global admin">
       <section className="py-8">
         {loading && authorized === null ? (
-          <p className="text-center text-ink/60">Checking administrator access…</p>
+          <p className="text-center text-muted">Checking administrator access…</p>
         ) : authorized === false ? (
           <div className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
             <h1 className="font-display text-2xl font-bold">Administrator access required</h1>
@@ -563,8 +563,8 @@ function GlobalAdminPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-widest text-accent">Operations</p>
-                <h1 className="font-display text-3xl font-extrabold">Global admin</h1>
-                <p className="mt-1 text-ink/60">Monitor events and control complimentary pilot access.</p>
+                <h1 className="font-display text-3xl font-bold">Global admin</h1>
+                <p className="mt-1 text-muted">Monitor events and control complimentary pilot access.</p>
               </div>
               <button
                 type="button"
@@ -580,16 +580,16 @@ function GlobalAdminPage() {
             ) : null}
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-ink/10 bg-white p-5">
-                <p className="text-sm text-ink/60">Events</p>
+              <div className="sp-card p-5">
+                <p className="text-sm text-muted">Events</p>
                 <p className="font-display text-3xl font-bold">{events.length}</p>
               </div>
-              <div className="rounded-2xl border border-ink/10 bg-white p-5">
-                <p className="text-sm text-ink/60">Stored photos</p>
+              <div className="sp-card p-5">
+                <p className="text-sm text-muted">Stored photos</p>
                 <p className="font-display text-3xl font-bold">{totalPhotos.toLocaleString()}</p>
               </div>
-              <div className="rounded-2xl border border-ink/10 bg-white p-5">
-                <p className="text-sm text-ink/60">Active discount codes</p>
+              <div className="sp-card p-5">
+                <p className="text-sm text-muted">Active discount codes</p>
                 <p className="font-display text-3xl font-bold">{activeCodes}</p>
               </div>
             </div>
@@ -624,7 +624,7 @@ function GlobalAdminPage() {
               </div>
             </div>
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <h2 className="font-display text-xl font-bold">User management</h2>
               <p className="text-sm text-ink/70">
                 Reset a host&apos;s password (they get an email to set a new one — this also lets
@@ -676,7 +676,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <h2 className="font-display text-xl font-bold">Print provider check</h2>
               <p className="text-sm text-ink/70">
                 Asks Prodigi to price one of each print we sell. This only requests a{' '}
@@ -703,7 +703,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <h2 className="font-display text-xl font-bold">Alert email check</h2>
               <p className="text-sm text-ink/70">
                 Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
@@ -735,7 +735,7 @@ function GlobalAdminPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="font-display text-2xl font-bold">Events</h2>
-                    <p className="text-sm text-ink/60">
+                    <p className="text-sm text-muted">
                       Open a host dashboard, archive an event, or restore one that was
                       archived.
                     </p>
@@ -772,7 +772,7 @@ function GlobalAdminPage() {
                     </button>
                   ))}
                   {archivedCount > 0 && phaseFilter === 'all' ? (
-                    <span className="self-center text-ink/50">
+                    <span className="self-center text-muted">
                       {archivedCount} event{archivedCount === 1 ? '' : 's'} no longer reachable
                       by their host
                     </span>
@@ -780,11 +780,11 @@ function GlobalAdminPage() {
                 </div>
                 <div className="mt-4 space-y-3">
                   {filteredEvents.length === 0 ? (
-                    <p className="rounded-2xl border border-dashed border-ink/20 bg-white p-8 text-center text-ink/60">
+                    <p className="rounded-2xl border border-dashed border-ink/20 bg-white p-8 text-center text-muted">
                       No events match this search.
                     </p>
                   ) : filteredEvents.map((event) => (
-                    <article key={event.id} className="rounded-2xl border border-ink/10 bg-white p-4">
+                    <article key={event.id} className="sp-card p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <h3 className="truncate font-display text-lg font-bold">
@@ -798,14 +798,14 @@ function GlobalAdminPage() {
                               </span>
                             ) : null}
                           </h3>
-                          <p className="mt-1 text-sm text-ink/60">
+                          <p className="mt-1 text-sm text-muted">
                             {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
                             {event.photoLimit == null
                               ? ' photos (unlimited)'
                               : ` / ${event.photoLimit + (event.extraPhotoCredits ?? 0)} photos`}
                             {event.extraPhotoCredits ? ` (+${event.extraPhotoCredits} add-on)` : ''}
                           </p>
-                          <p className="mt-1 text-xs text-ink/50">
+                          <p className="mt-1 text-xs text-muted">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
                           </p>
                           {(() => {
@@ -822,7 +822,7 @@ function GlobalAdminPage() {
                                 className={`mt-2 inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                                   phase.recover
                                     ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-ink/5 text-ink/60'
+                                    : 'bg-ink/5 text-muted'
                                 }`}
                               >
                                 {phase.label}
@@ -892,7 +892,7 @@ function GlobalAdminPage() {
                               e.target.value = '';
                               if (phase) void handleSimulatePhase(event, phase);
                             }}
-                            className="rounded-full border border-dashed border-ink/30 px-2 py-1.5 text-ink/60 disabled:opacity-50"
+                            className="rounded-full border border-dashed border-ink/30 px-2 py-1.5 text-muted disabled:opacity-50"
                           >
                             <option value="">Simulate…</option>
                             <option value="open">Open (uploads)</option>
@@ -919,11 +919,11 @@ function GlobalAdminPage() {
 
               <section>
                 <h2 className="font-display text-2xl font-bold">Discount codes</h2>
-                <p className="text-sm text-ink/60">
+                <p className="text-sm text-muted">
                   Take a percentage off anything paid on the site. Default usage is one redemption.
                 </p>
 
-                <form onSubmit={handleCreateCode} className="mt-4 space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
+                <form onSubmit={handleCreateCode} className="mt-4 space-y-3 sp-card p-4">
                   <div>
                     <label htmlFor="new-code" className="text-sm font-medium">Code</label>
                     <div className="mt-1 flex gap-2">
@@ -951,7 +951,7 @@ function GlobalAdminPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">Applies to</label>
-                    <p className="mt-0.5 text-xs text-ink/55">
+                    <p className="mt-0.5 text-xs text-muted">
                       Which paid items this code can be used on. Prints are excluded.
                     </p>
                     <div ref={scopeMenuRef} className="relative mt-1">
@@ -962,10 +962,10 @@ function GlobalAdminPage() {
                         aria-expanded={scopeOpen}
                         className="flex w-full items-center justify-between gap-2 rounded-xl border border-ink/20 bg-white px-3 py-2.5 text-left text-sm focus:border-accent focus:outline-none"
                       >
-                        <span className={checkedScopes.size === 0 ? 'text-ink/40' : ''}>
+                        <span className={checkedScopes.size === 0 ? 'text-muted' : ''}>
                           {scopeButtonLabel}
                         </span>
-                        <span aria-hidden="true" className="shrink-0 text-ink/40">
+                        <span aria-hidden="true" className="shrink-0 text-muted">
                           {scopeOpen ? '▲' : '▼'}
                         </span>
                       </button>
@@ -974,7 +974,7 @@ function GlobalAdminPage() {
                         <div
                           role="listbox"
                           aria-multiselectable="true"
-                          className="absolute z-20 mt-1 w-full rounded-xl border border-ink/15 bg-white p-1 shadow-lg"
+                          className="absolute z-20 mt-1 w-full rounded-xl border border-line bg-card shadow-card p-1 shadow-lg"
                         >
                           <button
                             type="button"
@@ -1007,14 +1007,14 @@ function GlobalAdminPage() {
                         </div>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-xs text-ink/55">
+                    <p className="mt-2 text-xs text-muted">
                       Upload extensions and the live slideshow are redeemed on an event&apos;s{' '}
                       <span className="font-medium">Manage</span> page.
                     </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium">Discount</label>
-                    <p className="mt-0.5 text-xs text-ink/55">How much to take off.</p>
+                    <p className="mt-0.5 text-xs text-muted">How much to take off.</p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {([
                         ['percent', 'Percentage off'],
@@ -1038,7 +1038,7 @@ function GlobalAdminPage() {
                     {discountType === 'amount' ? (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-ink/60">$</span>
+                          <span className="text-sm text-muted">$</span>
                           <input
                             type="number"
                             min={1}
@@ -1047,9 +1047,9 @@ function GlobalAdminPage() {
                             onChange={(e) => setAmountOffDollars(Number(e.target.value))}
                             className="w-28 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
                           />
-                          <span className="text-sm text-ink/60">off</span>
+                          <span className="text-sm text-muted">off</span>
                         </div>
-                        <p className="mt-1 text-xs text-ink/55">
+                        <p className="mt-1 text-xs text-muted">
                           Taken off each qualifying purchase. If it&apos;s more than the item
                           costs, the item is simply free — never a negative total.
                         </p>
@@ -1091,13 +1091,13 @@ function GlobalAdminPage() {
                           onChange={(e) => setCustomPercent(Number(e.target.value))}
                           className="w-24 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
                         />
-                        <span className="text-sm text-ink/60">% off</span>
+                        <span className="text-sm text-muted">% off</span>
                       </div>
                     ) : null}
                   </div>
                   <div>
                     <label className="text-sm font-medium">Corporate subscriptions</label>
-                    <p className="mt-0.5 text-xs text-ink/55">
+                    <p className="mt-0.5 text-xs text-muted">
                       How long the discount lasts on a recurring Corporate plan. One-time purchases
                       (events, extensions, add-on) are unaffected.
                     </p>
@@ -1143,7 +1143,7 @@ function GlobalAdminPage() {
                         disabled={unlimitedUses}
                         placeholder="∞"
                         onChange={(e) => setMaxUses(Number(e.target.value))}
-                        className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-ink/5 disabled:text-ink/40"
+                        className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-ink/5 disabled:text-muted"
                       />
                     </div>
                   </div>
@@ -1156,7 +1156,7 @@ function GlobalAdminPage() {
                     />
                     <span>
                       <span className="font-medium">Unlimited uses</span>
-                      <span className="block text-xs text-ink/55">
+                      <span className="block text-xs text-muted">
                         The code never runs out. Redemptions are still counted, so you can see
                         how many people used it.
                       </span>
@@ -1186,11 +1186,11 @@ function GlobalAdminPage() {
                       item.unlimitedUses !== true && item.usedCount >= item.maxUses;
                     const status = !item.active ? 'Inactive' : expired ? 'Expired' : exhausted ? 'Used' : 'Active';
                     return (
-                      <article key={item.code} className="rounded-2xl border border-ink/10 bg-white p-4">
+                      <article key={item.code} className="sp-card p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-mono font-bold text-ink">{item.code}</p>
-                            <p className="mt-1 truncate text-xs text-ink/60">
+                            <p className="mt-1 truncate text-xs text-muted">
                               {item.discountType === 'amount'
                                 ? `$${((item.amountOffCents ?? 0) / 100).toFixed(2)} off`
                                 : (item.percentOff == null ? 100 : item.percentOff) >= 100
@@ -1207,7 +1207,7 @@ function GlobalAdminPage() {
                             {status}
                           </span>
                         </div>
-                        <p className="mt-3 text-xs text-ink/60">
+                        <p className="mt-3 text-xs text-muted">
                           {item.unlimitedUses
                             ? `${item.usedCount} ${item.usedCount === 1 ? 'use' : 'uses'} · unlimited`
                             : `${item.usedCount}/${item.maxUses} uses`}{' '}

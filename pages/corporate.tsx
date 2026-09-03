@@ -84,7 +84,7 @@ function CorporatePage() {
         <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">
           For businesses
         </p>
-        <h1 className="mt-1 font-display text-3xl font-extrabold sm:text-4xl">
+        <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">
           {CORPORATE_PLAN.name} plan
         </h1>
         <p className="mt-2 text-ink/70">
@@ -92,7 +92,7 @@ function CorporatePage() {
         </p>
 
         {loading ? (
-          <p className="mt-10 text-center text-ink/60">Loading your subscription…</p>
+          <p className="mt-10 text-center text-muted">Loading your subscription…</p>
         ) : active ? (
           <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
             <div className="flex items-center gap-2">
@@ -127,7 +127,7 @@ function CorporatePage() {
             </button>
           </div>
         ) : (
-          <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-6">
+          <div className="mt-8 sp-card p-6">
             {justSubscribed ? (
               <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Thanks! We&apos;re finalizing your subscription — this can take a few seconds.
@@ -145,7 +145,7 @@ function CorporatePage() {
             </ul>
             <div className="mt-6">
               <label htmlFor="corp-discount" className="text-sm font-medium">
-                Discount code <span className="text-ink/50">(optional)</span>
+                Discount code <span className="text-muted">(optional)</span>
               </label>
               <input
                 id="corp-discount"
@@ -165,7 +165,7 @@ function CorporatePage() {
             >
               {working ? 'Sending you to checkout…' : `Subscribe · ${CORPORATE_PLAN.priceLabel}`}
             </button>
-            <p className="mt-3 text-center text-xs text-ink/50">
+            <p className="mt-3 text-center text-xs text-muted">
               Secure recurring billing on Stripe. Cancel anytime from your account.
             </p>
           </div>
