@@ -88,7 +88,7 @@ export default function ModerationReviewPage() {
           </div>
         ) : (
           <>
-            <h1 className="font-display text-3xl font-extrabold">Photo held for review</h1>
+            <h1 className="font-display text-3xl font-bold">Photo held for review</h1>
             <p className="mt-2 text-ink/70">
               Our screening flagged this photo{review.eventName ? ` from ${review.eventName}` : ''}, so
               guests and the slideshow can’t see it yet.

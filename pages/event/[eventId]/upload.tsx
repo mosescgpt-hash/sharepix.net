@@ -59,7 +59,7 @@ export default function GuestUploadPage() {
                 : 'photos and videos'}{' '}
               to
             </p>
-            <h1 className="mt-1 text-center font-display text-3xl font-extrabold">
+            <h1 className="mt-1 text-center font-display text-3xl font-bold">
               {event.name}
             </h1>
             {event.date ? (

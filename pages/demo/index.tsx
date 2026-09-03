@@ -49,10 +49,10 @@ export default function DemoPage() {
     <Layout title="See how it works">
       <section className="py-10">
         <div className="text-center">
-          <p className="mb-3 font-medium uppercase tracking-[0.2em] text-accent">
+          <p className="sp-eyebrow">
             A worked example
           </p>
-          <h1 className="mx-auto max-w-2xl font-display text-3xl font-extrabold leading-tight sm:text-5xl">
+          <h1 className="mx-auto max-w-2xl font-display text-3xl font-bold leading-tight sm:text-5xl">
             This is what your guests will see.
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-lg text-ink/70">
@@ -64,13 +64,13 @@ export default function DemoPage() {
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/demo/gallery"
-            className="rounded-full bg-ink px-8 py-3 font-medium text-white hover:bg-night"
+            className="sp-btn-primary"
           >
             Open the sample gallery
           </Link>
           <Link
             href="/demo/live"
-            className="rounded-full border border-ink/20 px-8 py-3 font-medium hover:border-accent hover:text-accent"
+            className="sp-btn-ghost"
           >
             See the live slideshow
           </Link>
@@ -84,8 +84,14 @@ export default function DemoPage() {
         </h2>
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {SETUP_STEPS.map((step, i) => (
-            <div key={step.title} className="rounded-2xl border border-ink/10 bg-white p-5">
-              <span className="font-display text-3xl font-bold text-accent">{i + 1}</span>
+            <div key={step.title} className="sp-card sp-card-interactive relative overflow-hidden p-6">
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-4 top-3 select-none font-display text-6xl font-bold leading-none text-ink/[0.055]"
+              >
+                {i + 1}
+              </span>
+              <span className="sp-eyebrow">Step {i + 1}</span>
               <h3 className="mt-2 font-display text-lg font-bold">{step.title}</h3>
               <p className="mt-1 text-sm text-ink/70">{step.body}</p>
             </div>
@@ -106,7 +112,7 @@ export default function DemoPage() {
         <div className="mt-8 flex justify-center">
           {/* A still of the tent's front panel, at a readable size. The real
               thing is generated per event at /event/[id]/table-tent. */}
-          <div className="w-full max-w-sm rounded-2xl border border-ink/15 bg-white p-6 text-center shadow-sm">
+          <div className="w-full max-w-sm sp-card p-6 text-center">
             <p className="font-display text-xl font-extrabold leading-tight">{tent.eventName}</p>
             {tent.dateLine ? <p className="mt-1 text-sm text-ink/60">{tent.dateLine}</p> : null}
             {tent.locationLine ? (
@@ -134,7 +140,7 @@ export default function DemoPage() {
         <div className="grid gap-5 sm:grid-cols-2">
           <Link
             href="/demo/gallery"
-            className="group rounded-2xl border border-ink/10 bg-white p-6 transition hover:border-accent"
+            className="group sp-card sp-card-interactive p-6 hover:border-accent/40"
           >
             <h3 className="font-display text-xl font-bold group-hover:text-accent">
               The gallery →
@@ -146,7 +152,7 @@ export default function DemoPage() {
           </Link>
           <Link
             href="/demo/live"
-            className="group rounded-2xl border border-ink/10 bg-white p-6 transition hover:border-accent"
+            className="group sp-card sp-card-interactive p-6 hover:border-accent/40"
           >
             <h3 className="font-display text-xl font-bold group-hover:text-accent">
               The live slideshow →
@@ -161,7 +167,7 @@ export default function DemoPage() {
         <div className="mt-8 text-center">
           <Link
             href="/create-event"
-            className="rounded-full bg-ink px-8 py-3 font-medium text-white hover:bg-night"
+            className="sp-btn-primary"
           >
             Create your event
           </Link>

@@ -104,7 +104,7 @@ function AccountSecurityPage() {
     <Layout title="Account security">
       <section className="mx-auto max-w-xl py-10">
         <p className="text-sm font-medium uppercase tracking-wide text-accent">Your account</p>
-        <h1 className="mt-1 font-display text-3xl font-extrabold">Security</h1>
+        <h1 className="mt-1 font-display text-3xl font-bold">Security</h1>
         <p className="mt-2 text-ink/70">
           Add a six-digit authenticator code after your password for stronger protection.
         </p>
@@ -112,7 +112,7 @@ function AccountSecurityPage() {
         {error ? <p className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
         {message ? <p className="mt-5 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p> : null}
 
-        <div className="mt-6 rounded-2xl border border-ink/10 bg-white p-5">
+        <div className="mt-6 sp-card p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="font-display text-xl font-bold">Authenticator-app MFA</h2>

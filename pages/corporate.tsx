@@ -84,7 +84,7 @@ function CorporatePage() {
         <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">
           For businesses
         </p>
-        <h1 className="mt-1 font-display text-3xl font-extrabold sm:text-4xl">
+        <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">
           {CORPORATE_PLAN.name} plan
         </h1>
         <p className="mt-2 text-ink/70">
@@ -127,7 +127,7 @@ function CorporatePage() {
             </button>
           </div>
         ) : (
-          <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-6">
+          <div className="mt-8 sp-card p-6">
             {justSubscribed ? (
               <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Thanks! We&apos;re finalizing your subscription — this can take a few seconds.

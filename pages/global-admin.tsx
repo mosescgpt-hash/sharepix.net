@@ -563,7 +563,7 @@ function GlobalAdminPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-widest text-accent">Operations</p>
-                <h1 className="font-display text-3xl font-extrabold">Global admin</h1>
+                <h1 className="font-display text-3xl font-bold">Global admin</h1>
                 <p className="mt-1 text-ink/60">Monitor events and control complimentary pilot access.</p>
               </div>
               <button
@@ -580,15 +580,15 @@ function GlobalAdminPage() {
             ) : null}
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-ink/10 bg-white p-5">
+              <div className="sp-card p-5">
                 <p className="text-sm text-ink/60">Events</p>
                 <p className="font-display text-3xl font-bold">{events.length}</p>
               </div>
-              <div className="rounded-2xl border border-ink/10 bg-white p-5">
+              <div className="sp-card p-5">
                 <p className="text-sm text-ink/60">Stored photos</p>
                 <p className="font-display text-3xl font-bold">{totalPhotos.toLocaleString()}</p>
               </div>
-              <div className="rounded-2xl border border-ink/10 bg-white p-5">
+              <div className="sp-card p-5">
                 <p className="text-sm text-ink/60">Active discount codes</p>
                 <p className="font-display text-3xl font-bold">{activeCodes}</p>
               </div>
@@ -624,7 +624,7 @@ function GlobalAdminPage() {
               </div>
             </div>
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <h2 className="font-display text-xl font-bold">User management</h2>
               <p className="text-sm text-ink/70">
                 Reset a host&apos;s password (they get an email to set a new one — this also lets
@@ -676,7 +676,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <h2 className="font-display text-xl font-bold">Print provider check</h2>
               <p className="text-sm text-ink/70">
                 Asks Prodigi to price one of each print we sell. This only requests a{' '}
@@ -703,7 +703,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <h2 className="font-display text-xl font-bold">Alert email check</h2>
               <p className="text-sm text-ink/70">
                 Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
@@ -784,7 +784,7 @@ function GlobalAdminPage() {
                       No events match this search.
                     </p>
                   ) : filteredEvents.map((event) => (
-                    <article key={event.id} className="rounded-2xl border border-ink/10 bg-white p-4">
+                    <article key={event.id} className="sp-card p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <h3 className="truncate font-display text-lg font-bold">
@@ -923,7 +923,7 @@ function GlobalAdminPage() {
                   Take a percentage off anything paid on the site. Default usage is one redemption.
                 </p>
 
-                <form onSubmit={handleCreateCode} className="mt-4 space-y-3 rounded-2xl border border-ink/10 bg-white p-4">
+                <form onSubmit={handleCreateCode} className="mt-4 space-y-3 sp-card p-4">
                   <div>
                     <label htmlFor="new-code" className="text-sm font-medium">Code</label>
                     <div className="mt-1 flex gap-2">
@@ -974,7 +974,7 @@ function GlobalAdminPage() {
                         <div
                           role="listbox"
                           aria-multiselectable="true"
-                          className="absolute z-20 mt-1 w-full rounded-xl border border-ink/15 bg-white p-1 shadow-lg"
+                          className="absolute z-20 mt-1 w-full rounded-xl border border-line bg-card shadow-card p-1 shadow-lg"
                         >
                           <button
                             type="button"
@@ -1186,7 +1186,7 @@ function GlobalAdminPage() {
                       item.unlimitedUses !== true && item.usedCount >= item.maxUses;
                     const status = !item.active ? 'Inactive' : expired ? 'Expired' : exhausted ? 'Used' : 'Active';
                     return (
-                      <article key={item.code} className="rounded-2xl border border-ink/10 bg-white p-4">
+                      <article key={item.code} className="sp-card p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-mono font-bold text-ink">{item.code}</p>

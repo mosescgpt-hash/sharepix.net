@@ -20,7 +20,7 @@ export default function HostGuide({
   const sections = hostGuideSections(event);
 
   return (
-    <div className="mt-6 rounded-2xl border border-ink/10 bg-white">
+    <div className="mt-6 sp-card">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

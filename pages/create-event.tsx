@@ -168,7 +168,7 @@ function CreateEventPage() {
     return (
       <Layout title="Event created">
         <section className="mx-auto max-w-lg py-10">
-          <h1 className="text-center font-display text-3xl font-extrabold">
+          <h1 className="text-center font-display text-3xl font-bold">
             🎉 {createdEvent.name} is live
           </h1>
           <p className="mt-2 text-center text-ink/70">
@@ -205,7 +205,7 @@ function CreateEventPage() {
   return (
     <Layout title="Create an event">
       <section className="mx-auto max-w-lg py-10">
-        <h1 className="font-display text-3xl font-extrabold">Create your event</h1>
+        <h1 className="font-display text-3xl font-bold">Create your event</h1>
         <p className="mt-2 text-ink/70">
           Name your event and choose a plan. Pay securely on Stripe — or apply a pilot
           code — and your QR code is ready right after.
@@ -337,7 +337,7 @@ function CreateEventPage() {
             ) : null}
           </fieldset>
 
-          <div className="rounded-2xl border border-ink/10 bg-white p-4">
+          <div className="sp-card p-4">
             <label htmlFor="pilot-code" className="block font-display font-bold">
               Have a discount code?
             </label>

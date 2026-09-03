@@ -89,7 +89,7 @@ export default function UploadForm({
   const failedCount = counts.failed;
 
   return (
-    <div className="rounded-2xl border border-ink/10 bg-white p-5">
+    <div className="sp-card p-5">
       <label htmlFor="uploader-name" className="mb-4 block">
         <span className="text-sm font-medium">Your name or nickname (optional)</span>
         <input

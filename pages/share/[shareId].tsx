@@ -57,7 +57,7 @@ export default function DownloadSharePage() {
           <>
             <div className="text-center">
               <p className="text-sm font-semibold uppercase tracking-wide text-accent">Shared with you</p>
-              <h1 className="mt-1 font-display text-3xl font-extrabold sm:text-4xl">{share.eventName}</h1>
+              <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">{share.eventName}</h1>
               <p className="mt-2 text-ink/60">
                 Download one item, select several, or download the entire shared collection.
               </p>

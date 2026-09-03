@@ -124,7 +124,7 @@ function MyEventsPage() {
             <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">
               Host dashboard
             </p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold">My events</h1>
+            <h1 className="mt-1 font-display text-3xl font-bold">My events</h1>
             <p className="mt-2 text-ink/65">
               Open an event to manage uploads, download media, or update its QR code.
             </p>
@@ -171,7 +171,7 @@ function MyEventsPage() {
         ) : (
           <>
             {downloadableEvents.length > 0 ? (
-              <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-8 flex flex-col gap-3 sp-card p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-display font-bold">Download photos</p>
                   <p className="text-sm text-ink/60">

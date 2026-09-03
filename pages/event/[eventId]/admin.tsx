@@ -390,7 +390,7 @@ function AdminDashboardPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm uppercase tracking-wide text-ink/50">Admin dashboard</p>
-                <h1 className="font-display text-3xl font-extrabold">{event.name}</h1>
+                <h1 className="font-display text-3xl font-bold">{event.name}</h1>
                 <p className="mt-1 text-sm text-ink/60">
                   {event.tier === 'corporate' ? 'Corporate' : tier?.name ?? event.tier} plan ·
                   Event code {event.eventCode}
@@ -446,11 +446,11 @@ function AdminDashboardPage() {
             ) : null}
 
             <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
-              <div className="rounded-xl border border-ink/10 bg-white p-4 text-center">
+              <div className="rounded-xl border border-line bg-card shadow-card p-4 text-center">
                 <p className="font-display text-2xl font-bold">{photos.length}</p>
                 <p className="text-xs text-ink/60">Total photos</p>
               </div>
-              <div className="rounded-xl border border-ink/10 bg-white p-4 text-center">
+              <div className="rounded-xl border border-line bg-card shadow-card p-4 text-center">
                 <p className="font-display text-2xl font-bold">{hiddenCount}</p>
                 <p className="text-xs text-ink/60">Hidden from gallery</p>
               </div>
@@ -467,7 +467,7 @@ function AdminDashboardPage() {
               }}
             />
 
-            <div className="mt-8 rounded-2xl border border-ink/10 bg-white p-5">
+            <div className="mt-8 sp-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-display text-xl font-bold">Event settings</h2>
                 <div className="flex flex-wrap gap-2">

@@ -199,7 +199,7 @@ export default function PhotoGrid({
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-ink/10 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-line bg-card shadow-card p-3 sm:flex-row sm:items-center sm:justify-between">
         <label className="flex items-center gap-2 text-sm font-medium">
           Sort
           <select

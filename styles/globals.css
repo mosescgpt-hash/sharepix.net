@@ -4,6 +4,84 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /*
+   * A very quiet wash behind the page instead of one flat grey. It is barely
+   * perceptible on its own — the point is that white cards now sit on
+   * *something*, so they read as objects rather than as holes in the page.
+   * Anchored to the top and not fixed, so it scrolls away and never fights
+   * long pages or mobile scroll performance.
+   */
+  body {
+    background-color: theme('colors.smoke');
+    background-image:
+      radial-gradient(64rem 34rem at 50% -14rem, rgba(122, 216, 192, 0.22), transparent 62%),
+      radial-gradient(48rem 26rem at 108% -4rem, rgba(9, 147, 97, 0.07), transparent 58%);
+    background-repeat: no-repeat;
+  }
+
+  /* Display type at large sizes needs negative tracking to look set rather
+     than typed. Below ~24px it barely shows, which is why it is uniform. */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.022em;
+  }
+
+  /* Figures line up in price tables and stat rows. */
+  .tabular,
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* One visible, on-brand focus ring everywhere. The .tcc-theme rule below is
+     more specific, so the comic theme keeps its yellow one. */
+  :focus-visible {
+    outline: 2px solid theme('colors.accent');
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Shared surface and control primitives.
+ *
+ * These exist so elevation, radius and hover behaviour are decided once. A page
+ * that hand-rolls `rounded-2xl border border-ink/10 bg-white` gets a flat box;
+ * a page that uses `.sp-card` gets the same object every other page has.
+ */
+@layer components {
+  .sp-card {
+    @apply rounded-2xl border border-line bg-card shadow-card;
+  }
+
+  /* Add to a card that is a link or a target — a small, slow rise. */
+  .sp-card-interactive {
+    @apply transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lift;
+  }
+
+  .sp-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3 font-medium transition duration-200 ease-out;
+  }
+
+  .sp-btn-primary {
+    @apply sp-btn bg-ink text-white shadow-lift hover:-translate-y-0.5 hover:bg-night hover:shadow-float;
+  }
+
+  .sp-btn-ghost {
+    @apply sp-btn border border-line bg-card text-ink shadow-card hover:-translate-y-0.5 hover:border-ink/25 hover:shadow-lift;
+  }
+
+  /* The small tracked-out label above a heading. */
+  .sp-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.22em] text-accent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -11,6 +89,103 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+
+  /* Without a transition, a hover lift is a jump. Keep the shadow change,
+     drop the movement. */
+  .sp-card-interactive:hover,
+  .sp-btn-primary:hover,
+  .sp-btn-ghost:hover {
+    transform: none !important;
+  }
+}
+
+/* =========================================================================
+   Amplify UI (the hosted Authenticator) in SharePix colours.
+
+   `withAuthenticator` wraps nine pages, including /create-event — so the
+   sign-in card is the first thing a paying host sees. Out of the box it is
+   AWS teal on a mid-grey field, which looks like a different product
+   entirely. Amplify UI is driven by CSS custom properties, so all nine pages
+   are fixed here rather than by touching any of them.
+   ========================================================================= */
+:root,
+[data-amplify-theme] {
+  --amplify-fonts-default-variable: 'Inter', system-ui, sans-serif;
+  --amplify-fonts-default-static: 'Inter', system-ui, sans-serif;
+
+  /*
+   * The ramp that actually reaches the controls is `colors-primary-*`, which
+   * ships pointing at `colors-teal-*`. `brand-primary-*` is the legacy alias
+   * and is set too so either resolution path lands on the navy. 80/90/100 are
+   * the button rest/hover/active steps.
+   */
+  --amplify-colors-primary-10: #eaf0f4;
+  --amplify-colors-primary-20: #cddbe4;
+  --amplify-colors-primary-40: #7d9cb0;
+  --amplify-colors-primary-60: #3c6a89;
+  --amplify-colors-primary-80: #123851;
+  --amplify-colors-primary-90: #0e2e43;
+  --amplify-colors-primary-100: #0b2536;
+
+  --amplify-colors-brand-primary-10: #eaf0f4;
+  --amplify-colors-brand-primary-20: #cddbe4;
+  --amplify-colors-brand-primary-40: #7d9cb0;
+  --amplify-colors-brand-primary-60: #3c6a89;
+  --amplify-colors-brand-primary-80: #123851;
+  --amplify-colors-brand-primary-90: #0e2e43;
+  --amplify-colors-brand-primary-100: #0b2536;
+
+  /* The scrim behind the sign-in card. Black at 50% over a light page is the
+     mid-grey field that made this screen look like a different product. */
+  --amplify-colors-overlay-10: rgba(11, 37, 54, 0.1);
+  --amplify-colors-overlay-20: rgba(11, 37, 54, 0.2);
+  --amplify-colors-overlay-30: rgba(11, 37, 54, 0.3);
+  --amplify-colors-overlay-40: rgba(11, 37, 54, 0.45);
+  --amplify-colors-overlay-50: rgba(11, 37, 54, 0.93);
+  --amplify-colors-overlay-60: rgba(11, 37, 54, 0.78);
+  --amplify-colors-overlay-70: rgba(11, 37, 54, 0.84);
+  --amplify-colors-overlay-80: rgba(11, 37, 54, 0.9);
+  --amplify-colors-overlay-90: rgba(11, 37, 54, 0.95);
+
+  --amplify-colors-font-interactive: #099361;
+  --amplify-colors-font-hover: #0b2536;
+  --amplify-colors-font-focus: #099361;
+  --amplify-colors-border-focus: #099361;
+  --amplify-colors-background-secondary: #f4f6f5;
+
+  --amplify-radii-small: 0.5rem;
+  --amplify-radii-medium: 0.75rem;
+  --amplify-radii-large: 1rem;
+  --amplify-components-button-border-radius: 999px;
+  --amplify-components-fieldcontrol-border-radius: 0.75rem;
+
+  --amplify-components-authenticator-router-border-width: 1px;
+  --amplify-components-authenticator-router-border-color: #e3e9ea;
+  --amplify-components-authenticator-router-box-shadow:
+    0 2px 4px rgba(18, 56, 81, 0.05), 0 20px 44px -20px rgba(18, 56, 81, 0.28);
+}
+
+/* `withAuthenticator` renders the modal variation, which covers the viewport
+   with a scrim. Tint it navy and let a little mint through at the top so the
+   screen belongs to this site. */
+[data-amplify-authenticator][data-variation='modal'] {
+  background-image: radial-gradient(
+    70rem 36rem at 50% -10rem,
+    rgba(122, 216, 192, 0.16),
+    transparent 60%
+  );
+  background-repeat: no-repeat;
+}
+
+[data-amplify-authenticator] [data-amplify-router] {
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+[data-amplify-authenticator] .amplify-tabs__item {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* =========================================================================

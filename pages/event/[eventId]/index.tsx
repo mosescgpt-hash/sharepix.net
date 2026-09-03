@@ -83,7 +83,7 @@ export default function EventGalleryPage() {
         ) : event ? (
           <>
             <div className="flex flex-col items-center gap-2 text-center">
-              <h1 className="font-display text-3xl font-extrabold sm:text-4xl">{event.name}</h1>
+              <h1 className="font-display text-3xl font-bold sm:text-4xl">{event.name}</h1>
               {event.location ? <p className="text-ink/60">{event.location}</p> : null}
               <p className="text-ink/60">
                 {photos.length} item{photos.length === 1 ? '' : 's'} shared by guests
