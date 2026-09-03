@@ -1,39 +1,22 @@
 import Layout from '@/components/Layout';
+import { DMCA_AGENT, DMCA_RENEWAL_DUE, LEGAL_ENTITY, SUPPORT_EMAIL } from '@/lib/businessInfo';
 
 // Update this whenever the policy changes.
 const LAST_UPDATED = 'September 2, 2026';
 
 /**
- * The DMCA designated agent, exactly as registered with the U.S. Copyright
- * Office.
+ * The agent and the renewal date come from lib/businessInfo, which is the one
+ * place the business address is written. Safe harbour under 17 U.S.C. § 512(c)
+ * requires these details to be BOTH filed with the Copyright Office AND
+ * published here, and details that disagree with the registration are worse
+ * than none — a notice sent to the published address may never reach us, and
+ * the mismatch undermines the designation itself.
  *
- * ⚠️ THESE MUST MATCH THE REGISTRATION. Safe harbour under 17 U.S.C. § 512(c)
- * requires the agent's details to be BOTH filed with the Copyright Office AND
- * published on the site. Details that disagree with the registration are worse
- * than none: a notice sent to the published address may not reach you, and the
- * mismatch undermines the designation itself.
- *
- * __tests__/dmca.test.ts fails while any placeholder below is unchanged, so a
- * page with example contact details cannot reach production.
- *
- * The designation must be renewed with the Copyright Office every three years.
+ * docs/business-records.md lists the external records that carry the same
+ * address and cannot be updated from this repository.
  */
-const AGENT = {
-  name: 'Seth Calvin',
-  organization: 'Calvin Solutions LLC',
-  address: '617 Locust Street #1001\nMonticello, MN 55362',
-  phone: '(320) 295-2850',
-  email: 'seth@sharepix.net',
-};
-
-/**
- * When the designation must next be renewed.
- *
- * Three years from the September 2, 2026 registration. If the registration was
- * actually filed on a different date, correct this — a lapsed designation means
- * no safe harbour, and this line is the only thing that will remind anyone.
- */
-const RENEWAL_DUE = 'September 2, 2029';
+const AGENT = DMCA_AGENT;
+const RENEWAL_DUE = DMCA_RENEWAL_DUE;
 
 export default function DmcaPage() {
   return (
@@ -47,7 +30,7 @@ export default function DmcaPage() {
         <div className="mt-8 space-y-8 text-ink/80 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
-              SharePix, a product of <strong>Calvin Solutions LLC</strong>, hosts photos and
+              SharePix, a product of <strong>{LEGAL_ENTITY}</strong>, hosts photos and
               videos uploaded by the guests and hosts of events. We respect copyright and
               respond to notices of claimed infringement under the Digital Millennium
               Copyright Act (&ldquo;DMCA&rdquo;), 17 U.S.C. § 512.
@@ -77,7 +60,7 @@ export default function DmcaPage() {
             </div>
             <p className="text-sm text-ink/60">
               This address is for copyright notices only. For anything else, please use{' '}
-              <a href="mailto:support@sharepix.net">support@sharepix.net</a>.
+              <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
             </p>
           </div>
 
@@ -198,7 +181,7 @@ export default function DmcaPage() {
               <a href="/privacy">Privacy Policy</a>. If you want a photo of yourself removed for
               reasons other than copyright — for example, you did not want to be photographed —
               contact the event&rsquo;s host, or email{' '}
-              <a href="mailto:support@sharepix.net">support@sharepix.net</a> and we will help.
+              <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and we will help.
             </p>
             {/* Not a legal requirement, but the request we are most likely to
                 actually receive at an event. Sending someone to a copyright

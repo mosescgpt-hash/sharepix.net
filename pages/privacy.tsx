@@ -1,4 +1,5 @@
 import Layout from '@/components/Layout';
+import { BUSINESS_ADDRESS } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
@@ -265,8 +266,10 @@ export default function PrivacyPage() {
             <h2>Contact us</h2>
             <p>
               If you have questions about this Policy or your information, contact us at{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>, or write to us:
             </p>
+            {/* Same source as the Terms and DMCA pages — see lib/businessInfo. */}
+            <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
           </div>
         </div>
       </section>

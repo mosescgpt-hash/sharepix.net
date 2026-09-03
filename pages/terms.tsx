@@ -1,4 +1,5 @@
 import Layout from '@/components/Layout';
+import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Update this whenever the terms change.
 const LAST_UPDATED = 'July 28, 2026';
@@ -229,7 +230,14 @@ export default function TermsPage() {
             <h2>15. Contact</h2>
             <p>
               Questions about these Terms? Contact us at{' '}
-              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+              <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>, or write to us:
+            </p>
+            {/* The postal address comes from lib/businessInfo, the same place
+                the DMCA page reads it, so the two can never disagree. */}
+            <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
+            <p className="text-sm text-ink/60">
+              Copyright notices go to our designated agent instead — see our{' '}
+              <a href="/dmca">Copyright and DMCA Policy</a>.
             </p>
           </div>
         </div>
