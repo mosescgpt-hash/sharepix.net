@@ -48,6 +48,13 @@ export default function Layout({ title, children }: LayoutProps) {
           <Link href="/terms" className="text-white/70 underline hover:text-white">
             Terms of Service
           </Link>
+          <span className="mx-2 text-white/30">·</span>
+          {/* Safe harbour under 17 U.S.C. § 512(c) requires the designated
+              agent's details to be reachable from the site, not only filed with
+              the Copyright Office. This link is part of that. */}
+          <Link href="/dmca" className="text-white/70 underline hover:text-white">
+            Copyright / DMCA
+          </Link>
         </p>
       </footer>
     </div>
