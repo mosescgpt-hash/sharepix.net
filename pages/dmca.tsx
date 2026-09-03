@@ -19,15 +19,21 @@ const LAST_UPDATED = 'September 2, 2026';
  * The designation must be renewed with the Copyright Office every three years.
  */
 const AGENT = {
-  name: 'REPLACE_ME agent name',
+  name: 'Seth Calvin',
   organization: 'Calvin Solutions LLC',
-  address: 'REPLACE_ME street address, city, state, ZIP',
-  phone: 'REPLACE_ME phone',
-  email: 'REPLACE_ME email',
+  address: '13500 190th Ave NW\nElk River, MN 55330',
+  phone: '(320) 295-2850',
+  email: 'seth@sharepix.net',
 };
 
-/** When the designation must next be renewed. Every three years. */
-const RENEWAL_DUE = 'REPLACE_ME renewal date';
+/**
+ * When the designation must next be renewed.
+ *
+ * Three years from the September 2, 2026 registration. If the registration was
+ * actually filed on a different date, correct this — a lapsed designation means
+ * no safe harbour, and this line is the only thing that will remind anyone.
+ */
+const RENEWAL_DUE = 'September 2, 2029';
 
 export default function DmcaPage() {
   return (
