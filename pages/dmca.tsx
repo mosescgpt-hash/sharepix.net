@@ -21,7 +21,7 @@ const LAST_UPDATED = 'September 2, 2026';
 const AGENT = {
   name: 'Seth Calvin',
   organization: 'Calvin Solutions LLC',
-  address: '13500 190th Ave NW\nElk River, MN 55330',
+  address: '617 Locust Street #1001\nMonticello, MN 55362',
   phone: '(320) 295-2850',
   email: 'seth@sharepix.net',
 };
