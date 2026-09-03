@@ -1,0 +1,172 @@
+import Link from 'next/link';
+import { QRCodeSVG } from 'qrcode.react';
+import Layout from '@/components/Layout';
+import { DEMO_EVENT } from '@/lib/demoEvent';
+import { TENT_HEIGHT_IN, TENT_WIDTH_IN, tentContent } from '@/lib/tableTent';
+
+/**
+ * The public worked example: what a host sets up, what guests see, and what
+ * goes on the screen at the venue.
+ *
+ * Everything here is generated — see lib/demoEvent.ts. No real event is
+ * touched, and the QR codes point at the demo pages rather than at anything
+ * that would accept an upload.
+ */
+
+const SETUP_STEPS = [
+  {
+    title: 'Name it and pick a plan',
+    body: 'A minute of typing. You get an event code and a QR code straight away, before you have paid anything.',
+  },
+  {
+    title: 'Print the QR code',
+    body: 'A table tent on every table, a sign by the door, or on the back of the invitations. Guests need no app and no account.',
+  },
+  {
+    title: 'Guests scan and upload',
+    body: 'The camera opens, they shoot or pick from their gallery, and the photos land in your event within seconds.',
+  },
+  {
+    title: 'Everything in one place',
+    body: 'Browse every angle of your day, download the lot as a ZIP, and order prints of the ones you love.',
+  },
+];
+
+export default function DemoPage() {
+  const uploadUrl = 'https://www.sharepix.net/demo/gallery';
+  // The real generator, so the demo tent says exactly what a printed one says.
+  const tent = tentContent(
+    {
+      name: DEMO_EVENT.name,
+      eventCode: DEMO_EVENT.eventCode,
+      date: DEMO_EVENT.date,
+      location: DEMO_EVENT.location,
+    },
+    uploadUrl,
+  );
+
+  return (
+    <Layout title="See how it works">
+      <section className="py-10">
+        <div className="text-center">
+          <p className="mb-3 font-medium uppercase tracking-[0.2em] text-accent">
+            A worked example
+          </p>
+          <h1 className="mx-auto max-w-2xl font-display text-3xl font-extrabold leading-tight sm:text-5xl">
+            This is what your guests will see.
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-lg text-ink/70">
+            A pretend wedding, set up exactly the way a real one would be. Have a
+            look around — nothing here is live, and nothing you do can break it.
+          </p>
+        </div>
+
+        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link
+            href="/demo/gallery"
+            className="rounded-full bg-ink px-8 py-3 font-medium text-white hover:bg-night"
+          >
+            Open the sample gallery
+          </Link>
+          <Link
+            href="/demo/live"
+            className="rounded-full border border-ink/20 px-8 py-3 font-medium hover:border-accent hover:text-accent"
+          >
+            See the live slideshow
+          </Link>
+        </div>
+      </section>
+
+      {/* What the host sets up */}
+      <section className="py-8">
+        <h2 className="text-center font-display text-2xl font-bold sm:text-3xl">
+          What you set up
+        </h2>
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {SETUP_STEPS.map((step, i) => (
+            <div key={step.title} className="rounded-2xl border border-ink/10 bg-white p-5">
+              <span className="font-display text-3xl font-bold text-accent">{i + 1}</span>
+              <h3 className="mt-2 font-display text-lg font-bold">{step.title}</h3>
+              <p className="mt-1 text-sm text-ink/70">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* What goes on the table */}
+      <section className="py-8">
+        <h2 className="text-center font-display text-2xl font-bold sm:text-3xl">
+          What goes on the table
+        </h2>
+        <p className="mx-auto mt-2 max-w-xl text-center text-ink/70">
+          SharePix prints you a fold-in-half table tent — {TENT_WIDTH_IN}&Prime; ×{' '}
+          {TENT_HEIGHT_IN}&Prime;, two to a sheet of Letter paper. This is the front of one.
+        </p>
+
+        <div className="mt-8 flex justify-center">
+          {/* A still of the tent's front panel, at a readable size. The real
+              thing is generated per event at /event/[id]/table-tent. */}
+          <div className="w-full max-w-sm rounded-2xl border border-ink/15 bg-white p-6 text-center shadow-sm">
+            <p className="font-display text-xl font-extrabold leading-tight">{tent.eventName}</p>
+            {tent.dateLine ? <p className="mt-1 text-sm text-ink/60">{tent.dateLine}</p> : null}
+            {tent.locationLine ? (
+              <p className="text-sm text-ink/60">{tent.locationLine}</p>
+            ) : null}
+            <p className="mt-4 font-display text-lg font-bold">{tent.headline}</p>
+            <div className="mt-3 flex justify-center">
+              <QRCodeSVG value={tent.uploadUrl} size={148} />
+            </div>
+            <p className="mt-3 text-sm text-ink/60">{tent.message}</p>
+            {tent.code ? (
+              <p className="mt-4 text-xs uppercase tracking-widest text-ink/45">
+                Event code {tent.code}
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <p className="mt-4 text-center text-sm text-ink/50">
+          That QR code works — it opens the sample gallery below.
+        </p>
+      </section>
+
+      {/* Where to go next */}
+      <section className="py-10">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Link
+            href="/demo/gallery"
+            className="group rounded-2xl border border-ink/10 bg-white p-6 transition hover:border-accent"
+          >
+            <h3 className="font-display text-xl font-bold group-hover:text-accent">
+              The gallery →
+            </h3>
+            <p className="mt-2 text-sm text-ink/70">
+              What guests and the host see afterwards. Sort by uploader or by time, open a
+              photo full size, and select a batch to download.
+            </p>
+          </Link>
+          <Link
+            href="/demo/live"
+            className="group rounded-2xl border border-ink/10 bg-white p-6 transition hover:border-accent"
+          >
+            <h3 className="font-display text-xl font-bold group-hover:text-accent">
+              The live slideshow →
+            </h3>
+            <p className="mt-2 text-sm text-ink/70">
+              A venue screen that cycles photos as they arrive, with the QR code in the corner
+              so anyone watching can add theirs.
+            </p>
+          </Link>
+        </div>
+
+        <div className="mt-8 text-center">
+          <Link
+            href="/create-event"
+            className="rounded-full bg-ink px-8 py-3 font-medium text-white hover:bg-night"
+          >
+            Create your event
+          </Link>
+        </div>
+      </section>
+    </Layout>
+  );
+}

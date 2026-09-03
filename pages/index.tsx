@@ -59,6 +59,12 @@ export default function HomePage() {
             Create your event
           </Link>
           <Link
+            href="/demo"
+            className="rounded-full border border-ink/20 px-8 py-3 font-medium hover:border-accent hover:text-accent"
+          >
+            See an example
+          </Link>
+          <Link
             href="/pricing"
             className="rounded-full border border-ink/20 px-8 py-3 font-medium hover:border-accent hover:text-accent"
           >
@@ -86,6 +92,13 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+        {/* The steps describe it; the demo shows it. Prospects who want proof
+            rather than prose should not have to sign up to get it. */}
+        <p className="mt-8 text-center">
+          <Link href="/demo" className="font-medium text-accent underline">
+            See a worked example — a sample gallery and live slideshow →
+          </Link>
+        </p>
       </section>
 
       {/* Pricing preview */}
