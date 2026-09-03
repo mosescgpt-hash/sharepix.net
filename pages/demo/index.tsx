@@ -114,23 +114,23 @@ export default function DemoPage() {
               thing is generated per event at /event/[id]/table-tent. */}
           <div className="w-full max-w-sm sp-card p-6 text-center">
             <p className="font-display text-xl font-extrabold leading-tight">{tent.eventName}</p>
-            {tent.dateLine ? <p className="mt-1 text-sm text-ink/60">{tent.dateLine}</p> : null}
+            {tent.dateLine ? <p className="mt-1 text-sm text-muted">{tent.dateLine}</p> : null}
             {tent.locationLine ? (
-              <p className="text-sm text-ink/60">{tent.locationLine}</p>
+              <p className="text-sm text-muted">{tent.locationLine}</p>
             ) : null}
             <p className="mt-4 font-display text-lg font-bold">{tent.headline}</p>
             <div className="mt-3 flex justify-center">
               <QRCodeSVG value={tent.uploadUrl} size={148} />
             </div>
-            <p className="mt-3 text-sm text-ink/60">{tent.message}</p>
+            <p className="mt-3 text-sm text-muted">{tent.message}</p>
             {tent.code ? (
-              <p className="mt-4 text-xs uppercase tracking-widest text-ink/45">
+              <p className="mt-4 text-xs uppercase tracking-widest text-muted">
                 Event code {tent.code}
               </p>
             ) : null}
           </div>
         </div>
-        <p className="mt-4 text-center text-sm text-ink/50">
+        <p className="mt-4 text-center text-sm text-muted">
           That QR code works — it opens the sample gallery below.
         </p>
       </section>

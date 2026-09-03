@@ -229,7 +229,7 @@ function CreateEventPage() {
 
           <div>
             <label htmlFor="event-date" className="block text-sm font-medium">
-              Event date <span className="text-ink/50">(optional)</span>
+              Event date <span className="text-muted">(optional)</span>
             </label>
             <input
               id="event-date"
@@ -242,7 +242,7 @@ function CreateEventPage() {
 
           <div>
             <span className="block text-sm font-medium">
-              Where is it? <span className="text-ink/50">(optional)</span>
+              Where is it? <span className="text-muted">(optional)</span>
             </span>
             <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <input
@@ -266,7 +266,7 @@ function CreateEventPage() {
                 className="w-full rounded-xl border border-ink/20 bg-white px-4 py-3 focus:border-accent focus:outline-none"
               />
             </div>
-            <p className="mt-1 text-xs text-ink/55">
+            <p className="mt-1 text-xs text-muted">
               Shown with the event, so photos stay tied to the place years later. City and
               state only — we never store a street address, and photo location data is
               always removed on upload.
@@ -297,7 +297,7 @@ function CreateEventPage() {
                   />
                   <span className="block font-display font-bold">{tier.name}</span>
                   <span className="block text-ink/70">${tier.price} / event</span>
-                  <span className="block text-xs text-ink/50">
+                  <span className="block text-xs text-muted">
                     {tier.photoLimit ? `${tier.photoLimit.toLocaleString()} photos` : 'Unlimited photos'} ·{' '}
                     {tier.accessLabel}
                   </span>
@@ -329,7 +329,7 @@ function CreateEventPage() {
                   <span className="block text-emerald-700">
                     Free with your subscription — no per-event charge
                   </span>
-                  <span className="block text-xs text-ink/50">
+                  <span className="block text-xs text-muted">
                     Unlimited photos · 1-year host access
                   </span>
                 </span>
@@ -341,7 +341,7 @@ function CreateEventPage() {
             <label htmlFor="pilot-code" className="block font-display font-bold">
               Have a discount code?
             </label>
-            <p className="mt-1 text-sm text-ink/60">
+            <p className="mt-1 text-sm text-muted">
               Apply it to take a percentage off — or make your event free.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -387,7 +387,7 @@ function CreateEventPage() {
             {pilotCodeStatus === 'valid' ? (
               <p className="mt-3 text-sm font-medium text-ink">
                 {getTier(tierId)?.name}:{' '}
-                <span className="text-ink/50 line-through">${basePrice}</span>{' '}
+                <span className="text-muted line-through">${basePrice}</span>{' '}
                 <span className="text-accent">
                   {isComped ? '$0' : `$${discountedPrice}`}
                 </span>
@@ -415,7 +415,7 @@ function CreateEventPage() {
                   : `Continue to payment · $${isDiscounted ? discountedPrice : basePrice}`}
           </button>
           {tierId !== 'corporate' && !isComped ? (
-            <p className="text-center text-xs text-ink/50">
+            <p className="text-center text-xs text-muted">
               You&apos;ll enter payment on Stripe&apos;s secure checkout. Your event activates
               as soon as payment is confirmed.
             </p>

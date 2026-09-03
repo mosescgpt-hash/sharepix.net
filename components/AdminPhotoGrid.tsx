@@ -70,7 +70,7 @@ export default function AdminPhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-ink/60">
+      <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-muted">
         No photos or videos have been uploaded to this event yet.
       </p>
     );
@@ -133,7 +133,7 @@ export default function AdminPhotoGrid({
               <figcaption className="space-y-2 px-3 py-2 text-xs">
                 <p className="truncate font-medium">{photo.uploadedBy || 'Anonymous'}</p>
                 {photo.uploadedByUserId ? (
-                  <p className="truncate text-ink/50">User: {photo.uploadedByUserId}</p>
+                  <p className="truncate text-muted">User: {photo.uploadedByUserId}</p>
                 ) : null}
                 {hidden ? (
                   <p className="font-medium text-amber-600">Hidden from gallery</p>

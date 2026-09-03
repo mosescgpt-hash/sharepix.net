@@ -37,7 +37,7 @@ export default function Navbar() {
         >
           <Logo />
           <span className="lowercase">
-            share<span className="text-accent">pix</span><span className="text-ink/45">.net</span>
+            share<span className="text-accent">pix</span><span className="text-muted">.net</span>
           </span>
         </Link>
 

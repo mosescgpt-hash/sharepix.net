@@ -47,12 +47,12 @@ export default function GuestUploadPage() {
     <Layout title={event ? `Upload to ${event.name}` : 'Upload photos and videos'}>
       <section className="mx-auto max-w-lg py-8">
         {loading ? (
-          <p className="text-center text-ink/60">Loading event…</p>
+          <p className="text-center text-muted">Loading event…</p>
         ) : error ? (
           <p className="rounded-xl bg-red-50 px-4 py-6 text-center text-red-700">{error}</p>
         ) : event ? (
           <>
-            <p className="text-center text-sm uppercase tracking-wide text-ink/50">
+            <p className="text-center text-sm uppercase tracking-wide text-muted">
               You&apos;re adding{' '}
               {event.videoUploadsEnabled === false || videosRemaining(event) === 0
                 ? 'photos'
@@ -63,12 +63,12 @@ export default function GuestUploadPage() {
               {event.name}
             </h1>
             {event.date ? (
-              <p className="mt-1 text-center text-ink/60">
+              <p className="mt-1 text-center text-muted">
                 {new Date(`${event.date}T00:00:00`).toLocaleDateString()}
               </p>
             ) : null}
             {event.location ? (
-              <p className="mt-1 text-center text-ink/60">{event.location}</p>
+              <p className="mt-1 text-center text-muted">{event.location}</p>
             ) : null}
 
             <div className="mt-8">

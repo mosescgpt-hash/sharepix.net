@@ -101,25 +101,25 @@ export default function UploadForm({
           placeholder="Example: Aunt Maya"
           className="mt-1.5 w-full rounded-lg border border-ink/20 px-3 py-2.5 outline-none focus:border-accent"
         />
-        <span className="mt-1 block text-xs text-ink/50">
+        <span className="mt-1 block text-xs text-muted">
           This helps everyone sort by uploader. If left blank, this browser gets a reusable guest label.
         </span>
       </label>
       <div className="rounded-xl border-2 border-dashed border-ink/20 px-4 py-6 text-center">
         <span className="text-3xl" aria-hidden>📷</span>
         <p className="mt-2 font-medium">Add photos or videos</p>
-        <p className="mt-1 text-sm text-ink/60">
+        <p className="mt-1 text-sm text-muted">
           {allowVideo && videosRemaining !== 0
             ? `Photos up to 25 MB · MP4, MOV, or WEBM videos up to ${MAX_VIDEO_SIZE_LABEL}`
             : 'Photos up to 25 MB'}
         </p>
         {allowVideo && videosRemaining !== 0 ? (
-          <p className="mt-1 text-sm text-ink/60">
+          <p className="mt-1 text-sm text-muted">
             Videos go straight to the host — they won’t appear in the guest gallery.
           </p>
         ) : null}
         {allowVideo && videosRemaining !== null ? (
-          <p className="mt-1 text-sm text-ink/60">
+          <p className="mt-1 text-sm text-muted">
             {videosRemaining === 0
               ? 'This event’s videos are all used — photos only from here.'
               : `Room for ${videosRemaining} more video${videosRemaining === 1 ? '' : 's'}.`}
@@ -148,7 +148,7 @@ export default function UploadForm({
             <li key={item.id} className="rounded-lg bg-smoke px-3 py-2 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate">{item.file.name}</span>
-                <span className="shrink-0 text-xs text-ink/60">
+                <span className="shrink-0 text-xs text-muted">
                   {item.status === 'pending' && 'Ready'}
                   {item.status === 'uploading' && `${item.percent}%`}
                   {item.status === 'done' && '✓ Uploaded'}
@@ -171,7 +171,7 @@ export default function UploadForm({
       ) : null}
 
       {pendingCount > 0 ? (
-        <p className="mt-3 text-center text-xs text-ink/50">
+        <p className="mt-3 text-center text-xs text-muted">
           By uploading, you understand these photos and videos will be visible to other event guests.
         </p>
       ) : null}
@@ -200,7 +200,7 @@ export default function UploadForm({
       ) : null}
 
       {busy ? (
-        <p className="mt-3 text-center text-xs text-ink/50">
+        <p className="mt-3 text-center text-xs text-muted">
           Keep this screen open until it finishes — the phone can&apos;t upload while it&apos;s
           locked or on another app.
         </p>

@@ -60,7 +60,7 @@ export default function DmcaPage() {
                 Email: <a href={`mailto:${AGENT.email}`}>{AGENT.email}</a>
               </p>
             </div>
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               This address is for copyright notices only. For anything else, please use{' '}
               <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
             </p>
@@ -191,7 +191,7 @@ export default function DmcaPage() {
           </div>
         </div>
 
-        <p className="mt-10 text-xs text-ink/45">
+        <p className="mt-10 text-xs text-muted">
           Our designated-agent registration with the U.S. Copyright Office is due for renewal
           by {RENEWAL_DUE}.
         </p>

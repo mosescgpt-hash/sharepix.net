@@ -235,7 +235,7 @@ export default function TermsPage() {
             {/* The postal address comes from lib/businessInfo, the same place
                 the DMCA page reads it, so the two can never disagree. */}
             <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               Copyright notices go to our designated agent instead — see our{' '}
               <a href="/dmca">Copyright and DMCA Policy</a>.
             </p>

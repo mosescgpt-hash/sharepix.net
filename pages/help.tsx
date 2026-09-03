@@ -20,7 +20,7 @@ function ArticleLink({ article }: { article: HelpArticle }) {
         className="block rounded-xl border border-line bg-card shadow-card p-4 transition hover:border-accent"
       >
         <span className="font-medium">{article.title}</span>
-        <span className="mt-0.5 block text-sm text-ink/60">{article.summary}</span>
+        <span className="mt-0.5 block text-sm text-muted">{article.summary}</span>
       </Link>
     </li>
   );
@@ -89,7 +89,7 @@ export default function HelpIndexPage() {
 
         {results ? (
           <div className="mt-8">
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               {visible.length} result{visible.length === 1 ? '' : 's'} for “{query}”
             </p>
             {visible.length > 0 ? (

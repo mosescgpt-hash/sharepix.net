@@ -117,7 +117,7 @@ export default function EventQRCode({
       <p className="text-sm text-ink/70">
         Guests scan this code to upload photos and videos to <strong>{eventName}</strong>.
       </p>
-      <p className="max-w-full break-all text-xs text-ink/50">{uploadUrl}</p>
+      <p className="max-w-full break-all text-xs text-muted">{uploadUrl}</p>
 
       {allowCustomization ? (
         <div className="w-full space-y-4 rounded-xl bg-smoke p-4 text-left">
@@ -155,7 +155,7 @@ export default function EventQRCode({
 
           <div>
             <span className="block text-sm font-semibold">Center photo or logo</span>
-            <p className="mt-1 text-xs text-ink/55">
+            <p className="mt-1 text-xs text-muted">
               A simple square image scans best. SharePix keeps it small and uses high error correction.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -182,7 +182,7 @@ export default function EventQRCode({
           </div>
         </div>
       ) : (
-        <p className="rounded-lg bg-smoke px-3 py-2 text-xs text-ink/55">
+        <p className="rounded-lg bg-smoke px-3 py-2 text-xs text-muted">
           Starter includes the standard square QR design.
         </p>
       )}

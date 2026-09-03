@@ -116,11 +116,11 @@ function AccountSecurityPage() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="font-display text-xl font-bold">Authenticator-app MFA</h2>
-              <p className="mt-1 text-sm leading-6 text-ink/65">
+              <p className="mt-1 text-sm leading-6 text-muted">
                 Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy, and similar apps.
               </p>
             </div>
-            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${enabled ? 'bg-green-100 text-green-800' : 'bg-ink/5 text-ink/60'}`}>
+            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${enabled ? 'bg-green-100 text-green-800' : 'bg-ink/5 text-muted'}`}>
               {loading ? 'Checking…' : enabled ? 'Enabled' : 'Off'}
             </span>
           </div>
@@ -178,7 +178,7 @@ function AccountSecurityPage() {
                         setCode('');
                       }}
                       disabled={busy}
-                      className="w-full py-2 text-sm text-ink/60 hover:text-ink"
+                      className="w-full py-2 text-sm text-muted hover:text-ink"
                     >
                       Cancel
                     </button>

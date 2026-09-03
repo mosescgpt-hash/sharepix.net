@@ -59,7 +59,7 @@ export default function DownloadShareBuilder({
 
   if (approvedCount === 0) {
     return (
-      <p className="text-sm text-ink/60">
+      <p className="text-sm text-muted">
         Upload and approve media before creating a download QR code.
       </p>
     );
@@ -71,7 +71,7 @@ export default function DownloadShareBuilder({
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-accent">Guest downloads</p>
           <h2 className="font-display text-2xl font-bold">Create a download QR code</h2>
-          <p className="mt-1 max-w-2xl text-sm text-ink/60">
+          <p className="mt-1 max-w-2xl text-sm text-muted">
             Toggle photos in the gallery below to choose exactly what recipients may download,
             then create the code. A new QR keeps this selection even if you change it later.
           </p>
@@ -118,11 +118,11 @@ export default function DownloadShareBuilder({
           </div>
           <div className="min-w-0">
             <h3 className="font-display text-xl font-bold">Download QR code ready</h3>
-            <p className="mt-1 text-sm text-ink/60">
+            <p className="mt-1 text-sm text-muted">
               This link includes {share.photoIds.length} selected item
               {share.photoIds.length === 1 ? '' : 's'}.
             </p>
-            <p className="mt-2 break-all text-xs text-ink/50">{shareUrl}</p>
+            <p className="mt-2 break-all text-xs text-muted">{shareUrl}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={handleDownloadQr} className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white">
                 Download QR (PNG)
