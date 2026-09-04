@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'August 31, 2026';
+const LAST_UPDATED = 'September 4, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {

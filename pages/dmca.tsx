@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 import { DMCA_AGENT, DMCA_RENEWAL_DUE, LEGAL_ENTITY, SUPPORT_EMAIL } from '@/lib/businessInfo';
 
 // Update this whenever the policy changes.
-const LAST_UPDATED = 'September 2, 2026';
+const LAST_UPDATED = 'September 4, 2026';
 
 /**
  * The agent and the renewal date come from lib/businessInfo, which is the one

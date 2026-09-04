@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'July 28, 2026';
+const LAST_UPDATED = 'September 4, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
