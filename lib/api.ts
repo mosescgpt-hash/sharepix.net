@@ -9,10 +9,12 @@ import {
   CorporateSubscription,
   DiscountCode,
   DiscountRedemption,
+  DisplayPhoto,
   DownloadShare,
+  GuestBookEntry,
+  HostGuestBookEntry,
   QREvent,
   QRPhoto,
-  DisplayPhoto,
 } from '@/lib/types';
 import {
   buildDownloadFilename,
@@ -409,7 +411,7 @@ export function isCorporateActive(sub: CorporateSubscription | null): boolean {
 }
 
 /** The per-event add-ons a host can buy together in one checkout. */
-export type EventAddOnKey = 'extend' | 'live_slideshow';
+export type EventAddOnKey = 'extend' | 'live_slideshow' | 'guest_book';
 
 /**
  * Buy one or more per-event add-ons in a single checkout. The function re-derives
@@ -1011,6 +1013,101 @@ export async function uploadEventPhotoWithContext(
  * Load one event's photos the old (model) way. Used for moderation (needs
  * unapproved photos) and as a safety fallback for the public gallery.
  */
+/**
+ * One event's guest book, as guests see it: entries that are neither held for
+ * review nor hidden by the host, oldest first.
+ *
+ * Reads through the scoped `eventGuestBook` query rather than the model, for
+ * the same reason the gallery does — model list access would let anyone
+ * enumerate every note left at every event on the platform.
+ */
+export async function fetchGuestBook(eventId: string): Promise<GuestBookEntry[]> {
+  const { data, errors } = await client.queries.eventGuestBook(
+    { eventId },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+  return (data ?? [])
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .map((entry) => ({
+      id: entry.id,
+      eventId: entry.eventId,
+      name: entry.name,
+      message: entry.message ?? null,
+      photoId: entry.photoId ?? null,
+      createdAt: entry.createdAt ?? null,
+    }));
+}
+
+/**
+ * The host's view: every entry on their own event, including the ones held for
+ * review and the ones they have hidden. Reads the model directly, which owner
+ * auth scopes to events they own.
+ */
+export async function fetchGuestBookForHost(eventId: string): Promise<HostGuestBookEntry[]> {
+  const { data, errors } = await client.models.GuestBookEntry.list({
+    filter: { eventId: { eq: eventId } },
+    authMode: 'userPool',
+    limit: 1000,
+  });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+  return (data ?? [])
+    .map((entry) => ({
+      id: entry.id,
+      eventId: entry.eventId,
+      name: entry.name,
+      message: entry.message ?? null,
+      photoId: entry.photoId ?? null,
+      moderationStatus: entry.moderationStatus ?? null,
+      moderationReasons: entry.moderationReasons ?? null,
+      hidden: entry.hidden ?? false,
+      createdAt: entry.createdAt ?? null,
+    }))
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+}
+
+/**
+ * Leave a note. Every rule the form applies is re-applied by the function —
+ * this call is a convenience, not the control.
+ */
+export async function signGuestBook(input: {
+  eventId: string;
+  name: string;
+  message?: string;
+  photoId?: string | null;
+}): Promise<{ id: string; pending: boolean }> {
+  const { data, errors } = await client.mutations.signGuestBook(
+    {
+      eventId: input.eventId,
+      name: input.name,
+      message: input.message || undefined,
+      photoId: input.photoId || undefined,
+    },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+  if (!data) throw new Error('We could not save that note. Try again in a moment.');
+  return { id: data.id, pending: data.pending === true };
+}
+
+/** Show or hide one entry. Owner auth scopes this to the host's own events. */
+export async function setGuestBookEntryHidden(
+  entryId: string,
+  hidden: boolean,
+): Promise<void> {
+  const { errors } = await client.models.GuestBookEntry.update(
+    {
+      id: entryId,
+      hidden,
+      // Showing a held entry records the host's decision, so it stops appearing
+      // in the review queue rather than sitting there permanently answered.
+      ...(hidden ? {} : { moderationStatus: 'released' }),
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+}
+
 async function listEventPhotosViaModel(eventId: string): Promise<QRPhoto[]> {
   const { data } = await client.models.Photo.listPhotoByEventId(
     { eventId },

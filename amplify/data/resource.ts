@@ -12,6 +12,8 @@ import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/re
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
 import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/resource';
 import { mediaUrl as mediaUrlFn } from '../functions/media-url/resource';
+import { createGuestBookEntry as createGuestBookEntryFn } from '../functions/create-guest-book-entry/resource';
+import { listGuestBookEntries as listGuestBookEntriesFn } from '../functions/list-guest-book-entries/resource';
 
 /**
  * SharePix data models.
@@ -77,6 +79,15 @@ const schema = a.schema({
       // The live slideshow (a venue screen showing uploads as they arrive) is a
       // per-event paid add-on, available on any plan. Flipped by the webhook.
       liveSlideshowEnabled: a.boolean(),
+      // The guest book: signed notes guests leave alongside their photos.
+      // Included on Premium and Corporate; a per-event add-on on the cheaper
+      // plans, flipped by the Stripe webhook. Missing means off, which is safe
+      // because no event predates the feature — see lib/guestBook.ts.
+      guestBookEnabled: a.boolean(),
+      // Running count of guest book entries, maintained by
+      // createGuestBookEntry so the abuse ceiling can be enforced atomically
+      // without scanning. Not a product limit; see MAX_ENTRIES_PER_EVENT.
+      guestBookCount: a.integer(),
       // How uploads are screened for this event. 'review' (the default, and what
       // a missing value means) holds potentially explicit photos back for the
       // host; 'allow_all' skips screening entirely and shows everything
@@ -152,6 +163,44 @@ const schema = a.schema({
     // events). The host (eventOwner) and admins keep full access for
     // moderation/downloads; the public gallery reads through the scoped
     // listEventPhotos query.
+    .authorization((allow) => [
+      allow.ownerDefinedIn('eventOwner'),
+      allow.group('ADMINS'),
+    ]),
+
+  // A signed note a guest left at an event. Guest-created content the host
+  // moderates, so the auth mirrors Photo exactly: no direct `create` (entries
+  // come only from createGuestBookEntry, which is the only thing that can
+  // verify the event is paid, open, and actually has a guest book), and no
+  // guest read (that would let anyone enumerate every note at every event on
+  // the platform). The public album reads through listGuestBookEntries.
+  GuestBookEntry: a
+    .model({
+      eventId: a.id().required(),
+      // Stamped from the event row by the function, never sent by the client.
+      // This is what lets the host read and moderate every entry on their own
+      // event without being able to touch anyone else's.
+      eventOwner: a.string(),
+      // How the guest signed it. Required — an unsigned note is both less
+      // valuable to the couple and harder to moderate.
+      name: a.string().required(),
+      message: a.string(),
+      // A Photo in the SAME event, verified server-side before it is stored.
+      // Entries reference the existing Photo row rather than carrying media of
+      // their own, so a video message goes through createEventPhoto and picks
+      // up its limits, screening, preview generation and R2 mirroring for
+      // free — and correctly counts against the event's video allowance,
+      // because it costs exactly as much to serve.
+      photoId: a.string(),
+      // 'ok' shows immediately; 'flagged' waits for the host. Text screening is
+      // a link check, not a content classifier — see lib/guestBook.ts.
+      moderationStatus: a.string(),
+      moderationReasons: a.string(),
+      // The host's explicit decision to take an entry down. Beats the screening
+      // verdict in both directions.
+      hidden: a.boolean(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner'),
       allow.group('ADMINS'),
@@ -291,7 +340,7 @@ const schema = a.schema({
       appliesToTier: a.string().required(),
       // The paid items the code can be redeemed against, comma-separated:
       // event:starter, event:standard, event:premium, corporate, extend,
-      // live_slideshow. A code covers exactly what was selected. ('all' and a
+      // live_slideshow, guest_book. A code covers exactly what was selected. ('all' and a
       // bare 'event' are still honored for codes created earlier.) Missing on
       // legacy codes → fall back to appliesToTier.
       appliesToScopes: a.string(),
@@ -375,6 +424,58 @@ const schema = a.schema({
     .returns(a.ref('EventPhoto').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listEventPhotosFn)),
+
+  GuestBookEntryView: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    name: a.string().required(),
+    message: a.string(),
+    photoId: a.string(),
+    createdAt: a.string(),
+  }),
+
+  GuestBookEntryResult: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    name: a.string().required(),
+    message: a.string(),
+    photoId: a.string(),
+    // True when the note was held for the host. The guest is told, rather than
+    // being sent to a page their note silently is not on.
+    pending: a.boolean(),
+    createdAt: a.string(),
+  }),
+
+  // Leave a signed note. Named `signGuestBook` rather than
+  // createGuestBookEntry because the GuestBookEntry model already generates a
+  // mutation by that name, and a collision fails the whole deployment.
+  //
+  // Guests are unauthenticated, so this function is the
+  // whole control surface: it re-derives whether the event is paid, open and
+  // entitled to a guest book, re-applies every validation rule, and proves any
+  // attached photo belongs to this event before storing a reference to it.
+  signGuestBook: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      name: a.string().required(),
+      message: a.string(),
+      photoId: a.string(),
+    })
+    .returns(a.ref('GuestBookEntryResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(createGuestBookEntryFn)),
+
+  // Scoped read of one event's visible entries for the public album, so the
+  // GuestBookEntry model never needs to grant guests list access. Named
+  // `eventGuestBook` for the same reason signGuestBook is: the model already
+  // generates listGuestBookEntries.
+  eventGuestBook: a
+    .query()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('GuestBookEntryView').array())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(listGuestBookEntriesFn)),
 
   UserActionResult: a.customType({
     success: a.boolean().required(),

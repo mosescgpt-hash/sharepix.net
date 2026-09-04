@@ -209,6 +209,8 @@ export const handler = async (event: {
               await setEventFlag(eventId, 'guestDownloadEnabled', now);
             } else if (key === 'live_slideshow') {
               await setEventFlag(eventId, 'liveSlideshowEnabled', now);
+            } else if (key === 'guest_book') {
+              await setEventFlag(eventId, 'guestBookEnabled', now);
             }
           }
         } else if (kind === 'extend_window') {
@@ -238,7 +240,9 @@ export const handler = async (event: {
               ? 'guestDownloadEnabled'
               : kind === 'live_slideshow'
                 ? 'liveSlideshowEnabled'
-                : 'paid';
+                : kind === 'guest_book'
+                  ? 'guestBookEnabled'
+                  : 'paid';
           await dynamo.send(
             new UpdateItemCommand({
               TableName: EVENT_TABLE,

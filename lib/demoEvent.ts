@@ -18,7 +18,7 @@
  * it, `DEMO_PHOTOS` is the one place to change.
  */
 
-import type { DisplayPhoto, QREvent } from '@/lib/types';
+import type { DisplayPhoto, GuestBookEntry, QREvent } from '@/lib/types';
 
 /** Not a real event id. Nothing here touches the database. */
 export const DEMO_EVENT_ID = 'demo-sharepix-example';
@@ -124,6 +124,46 @@ export const DEMO_PHOTOS: DisplayPhoto[] = Array.from(
  * state, and the windows are far in the future so it never looks expired to
  * someone visiting the page a year from now.
  */
+/**
+ * Notes for the worked example, written the way real ones read: short, warm,
+ * and uneven in length. Two carry an attachment, one is a video message with
+ * no words, so the album shows every shape it can take.
+ */
+export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
+  {
+    id: 'demo-note-1',
+    eventId: DEMO_EVENT_ID,
+    name: 'Aunt Bea',
+    message:
+      'I have known one of you since you were small enough to fit in a laundry basket, and I never once doubted this day would come. Be kind to each other. Eat something.',
+    createdAt: new Date(Date.UTC(2026, 5, 20, 18, 12, 0)).toISOString(),
+  },
+  {
+    id: 'demo-note-2',
+    eventId: DEMO_EVENT_ID,
+    name: 'Dev',
+    message: 'Caught this one right as the light went. Congratulations, both of you.',
+    photoId: 'demo-photo-4',
+    createdAt: new Date(Date.UTC(2026, 5, 20, 19, 4, 0)).toISOString(),
+  },
+  {
+    id: 'demo-note-3',
+    eventId: DEMO_EVENT_ID,
+    name: 'Priya',
+    message: 'Best day. Best people. Thank you for having us.',
+    createdAt: new Date(Date.UTC(2026, 5, 20, 20, 41, 0)).toISOString(),
+  },
+  {
+    id: 'demo-note-4',
+    eventId: DEMO_EVENT_ID,
+    name: 'Theo',
+    message:
+      'Speech went better in my head.\n\nAnyway: to the two of you, and to whatever comes next.',
+    photoId: 'demo-photo-9',
+    createdAt: new Date(Date.UTC(2026, 5, 20, 21, 26, 0)).toISOString(),
+  },
+];
+
 export const DEMO_EVENT: QREvent = {
   id: DEMO_EVENT_ID,
   name: 'Sam & Riley’s Wedding',

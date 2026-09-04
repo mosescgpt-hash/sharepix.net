@@ -7,6 +7,7 @@ import { fetchEvent } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { videosRemaining } from '@/lib/pricing';
 import { themeKeyForEvent } from '@/lib/eventTheme';
+import { guestBookAvailable } from '@/lib/guestBook';
 import { QREvent } from '@/lib/types';
 
 export default function GuestUploadPage() {
@@ -95,6 +96,27 @@ export default function GuestUploadPage() {
                 </p>
               )}
             </div>
+
+            {/* Offered after the upload form, not before it: a guest who just
+                scanned the code came to add photos, and the note reads as a
+                nice extra once they have. */}
+            {guestBookAvailable(event) && canUpload ? (
+              <div className="sp-card mt-8 p-6 text-center">
+                <h2 className="font-display text-lg font-bold tracking-tight">
+                  Leave a note while you&apos;re here
+                </h2>
+                <p className="mt-2 text-sm text-muted">
+                  Sign the guest book — a message, and one of your photos or a
+                  video message if you like.
+                </p>
+                <Link
+                  href={`/event/${event.id}/guestbook`}
+                  className="sp-btn-ghost mt-5"
+                >
+                  Sign the guest book
+                </Link>
+              </div>
+            ) : null}
 
             <p className="mt-6 text-center text-sm">
               <Link href={`/event/${event.id}`} className="text-accent underline">
