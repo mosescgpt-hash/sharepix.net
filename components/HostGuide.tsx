@@ -20,7 +20,7 @@ export default function HostGuide({
   const sections = hostGuideSections(event);
 
   return (
-    <div className="mt-6 sp-card">
+    <div className="spx-card mt-8">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -28,25 +28,25 @@ export default function HostGuide({
         className="flex w-full items-center justify-between gap-3 p-5 text-left"
       >
         <span>
-          <span className="font-display text-xl font-bold">How to run your event</span>
-          <span className="mt-0.5 block text-sm text-muted">
+          <span className="font-sans text-xl font-bold tracking-[-0.02em]">How to run your event</span>
+          <span className="mt-0.5 block text-sm text-charcoal/60">
             Sharing with guests, the printable brochure{sections.includes('live') ? ', the live slideshow' : ''}
             {sections.includes('downloads') ? ', guest downloads' : ''}.
           </span>
         </span>
-        <span className="shrink-0 text-muted">{open ? '▲' : '▼'}</span>
+        <span className="shrink-0 text-charcoal/60">{open ? '▲' : '▼'}</span>
       </button>
 
       {open ? (
         <div className="space-y-6 border-t border-ink/10 p-5 text-sm leading-6 text-ink/75">
           {/* 1 — Guests upload */}
           <section>
-            <h3 className="font-display text-base font-bold text-ink">1. Get guests adding photos</h3>
+            <h3 className="font-sans text-base font-semibold text-charcoal">1. Get guests adding photos</h3>
             <ol className="mt-2 list-decimal space-y-1 pl-5">
               <li>
                 Show your QR code —{' '}
                 {onShowQR ? (
-                  <button type="button" onClick={onShowQR} className="font-medium text-accent hover:underline">
+                  <button type="button" onClick={onShowQR} className="font-medium text-pine underline">
                     open it here
                   </button>
                 ) : (
@@ -62,7 +62,7 @@ export default function HostGuide({
                 <strong className="text-ink">{event.eventCode}</strong>.
               </li>
             </ol>
-            <p className="mt-2 text-muted">
+            <p className="mt-2 text-charcoal/60">
               Tell guests to keep the page open while photos upload — a phone can’t upload while
               it’s locked or on another app.
             </p>
@@ -70,14 +70,14 @@ export default function HostGuide({
 
           {/* 2 — Brochure */}
           <section>
-            <h3 className="font-display text-base font-bold text-ink">2. Print the table brochure</h3>
+            <h3 className="font-sans text-base font-semibold text-charcoal">2. Print the table brochure</h3>
             <ol className="mt-2 list-decimal space-y-1 pl-5">
               <li>
                 Open the{' '}
                 <Link
                   href={`/event/${event.id}/brochure`}
                   target="_blank"
-                  className="font-medium text-accent hover:underline"
+                  className="font-medium text-pine underline"
                 >
                   printable brochure
                 </Link>{' '}
@@ -91,7 +91,7 @@ export default function HostGuide({
               <Link
                 href={`/event/${event.id}/table-tent`}
                 target="_blank"
-                className="font-medium text-accent hover:underline"
+                className="font-medium text-pine underline"
               >
                 table tent
               </Link>{' '}
@@ -103,7 +103,7 @@ export default function HostGuide({
           {/* 3 — Live slideshow (only when purchased) */}
           {sections.includes('live') ? (
             <section>
-              <h3 className="font-display text-base font-bold text-ink">3. Run the live slideshow</h3>
+              <h3 className="font-sans text-base font-semibold text-charcoal">3. Run the live slideshow</h3>
               <ol className="mt-2 list-decimal space-y-1 pl-5">
                 <li>On the computer driving the venue screen or projector, sign in and open this dashboard.</li>
                 <li>
@@ -112,7 +112,7 @@ export default function HostGuide({
                     href={`/event/${event.id}/live`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-medium text-accent hover:underline"
+                    className="font-medium text-pine underline"
                   >
                     live slideshow
                   </Link>{' '}
@@ -120,7 +120,7 @@ export default function HostGuide({
                 </li>
                 <li>Put that tab full screen and leave it running. New photos appear on their own.</li>
               </ol>
-              <p className="mt-2 text-muted">
+              <p className="mt-2 text-charcoal/60">
                 Photos wait about 90 seconds before appearing — that’s the screening buffer, so
                 nothing hits the big screen the instant it lands. Set the computer not to sleep.
               </p>
@@ -130,7 +130,7 @@ export default function HostGuide({
           {/* Guest downloads — included on every plan */}
           {sections.includes('downloads') ? (
             <section>
-              <h3 className="font-display text-base font-bold text-ink">
+              <h3 className="font-sans text-base font-semibold text-charcoal">
                 {sections.includes('live') ? '4' : '3'}. Let guests download
               </h3>
               <p className="mt-2">
@@ -141,9 +141,9 @@ export default function HostGuide({
             </section>
           ) : null}
 
-          <p className="border-t border-ink/10 pt-4 text-muted">
+          <p className="border-t border-charcoal/10 pt-4 text-charcoal/60">
             More detail is in the{' '}
-            <Link href="/help" className="font-medium text-accent hover:underline">
+            <Link href="/help" className="font-medium text-pine underline">
               help centre
             </Link>
             .

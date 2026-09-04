@@ -233,8 +233,8 @@
    ========================================================================= */
 :root,
 [data-amplify-theme] {
-  --amplify-fonts-default-variable: 'Inter', system-ui, sans-serif;
-  --amplify-fonts-default-static: 'Inter', system-ui, sans-serif;
+  --amplify-fonts-default-variable: 'Poppins', system-ui, sans-serif;
+  --amplify-fonts-default-static: 'Poppins', system-ui, sans-serif;
 
   /*
    * The ramp that actually reaches the controls is `colors-primary-*`, which
@@ -270,44 +270,52 @@
   --amplify-colors-overlay-80: rgba(11, 37, 54, 0.9);
   --amplify-colors-overlay-90: rgba(11, 37, 54, 0.95);
 
-  --amplify-colors-font-interactive: #099361;
-  --amplify-colors-font-hover: #0b2536;
-  --amplify-colors-font-focus: #099361;
-  --amplify-colors-border-focus: #099361;
-  --amplify-colors-background-secondary: #f4f6f5;
+  /* `pine`, not `accent`: this is small interactive text on a light ground,
+     which is exactly the case where #099361 fails contrast. */
+  --amplify-colors-font-interactive: #0b7a52;
+  --amplify-colors-font-hover: #152833;
+  --amplify-colors-font-focus: #0b7a52;
+  --amplify-colors-border-focus: #123851;
+  --amplify-colors-background-primary: #ffffff;
+  --amplify-colors-background-secondary: #faf8f4;
 
-  --amplify-radii-small: 0.5rem;
-  --amplify-radii-medium: 0.75rem;
-  --amplify-radii-large: 1rem;
-  --amplify-components-button-border-radius: 999px;
-  --amplify-components-fieldcontrol-border-radius: 0.75rem;
+  /* The system is square. Zero everywhere, including the two components that
+     carry their own radius token and ignore the ramp. */
+  --amplify-radii-small: 0;
+  --amplify-radii-medium: 0;
+  --amplify-radii-large: 0;
+  --amplify-components-button-border-radius: 0;
+  --amplify-components-fieldcontrol-border-radius: 0;
 
+  /* A hairline instead of elevation, matching `.spx-card`. */
   --amplify-components-authenticator-router-border-width: 1px;
-  --amplify-components-authenticator-router-border-color: #e3e9ea;
-  --amplify-components-authenticator-router-box-shadow:
-    0 2px 4px rgba(18, 56, 81, 0.05), 0 20px 44px -20px rgba(18, 56, 81, 0.28);
+  --amplify-components-authenticator-router-border-color: rgba(21, 40, 51, 0.12);
+  --amplify-components-authenticator-router-box-shadow: none;
 }
 
 /* `withAuthenticator` renders the modal variation, which covers the viewport
-   with a scrim. Tint it navy and let a little mint through at the top so the
-   screen belongs to this site. */
+   with a scrim. Under the old theme that scrim was navy, so the first screen a
+   host ever sees was a dark field with a floating rounded card — a different
+   product from the one they had just been reading. It is the warm page ground
+   now, with the same faint wash the marketing sections use. */
 [data-amplify-authenticator][data-variation='modal'] {
+  background-color: #faf8f4;
   background-image: radial-gradient(
     70rem 36rem at 50% -10rem,
-    rgba(122, 216, 192, 0.16),
+    rgba(122, 216, 192, 0.14),
     transparent 60%
   );
   background-repeat: no-repeat;
 }
 
 [data-amplify-authenticator] [data-amplify-router] {
-  border-radius: 1rem;
+  border-radius: 0;
   overflow: hidden;
 }
 
 [data-amplify-authenticator] .amplify-tabs__item {
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
-  font-weight: 700;
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 

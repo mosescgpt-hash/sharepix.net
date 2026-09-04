@@ -305,7 +305,7 @@ export default function DemoTryPage() {
 
           {/* Advance. Approving is the gate on step two — the whole point is
               that a held photo does not move until the host says so. */}
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6">
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-charcoal/12 pt-6">
             <button type="button" onClick={restart} className="text-sm text-charcoal/60 underline">
               Start over
             </button>

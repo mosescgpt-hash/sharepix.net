@@ -110,17 +110,17 @@ export default function EventQRCode({
   if (!uploadUrl) return null;
 
   return (
-    <div className="flex flex-col items-center gap-4 sp-card p-5 text-center sm:p-6">
-      <div className="sp-card p-2 shadow-sm">
+    <div className="spx-card flex flex-col items-center gap-4 p-5 text-center sm:p-6">
+      <div className="border border-charcoal/10 bg-paper p-2">
         <div ref={containerRef} className="h-[240px] w-[240px] overflow-hidden" aria-label="Event upload QR code" />
       </div>
       <p className="text-sm text-ink/70">
         Guests scan this code to upload photos and videos to <strong>{eventName}</strong>.
       </p>
-      <p className="max-w-full break-all text-xs text-muted">{uploadUrl}</p>
+      <p className="max-w-full break-all text-xs text-charcoal/60">{uploadUrl}</p>
 
       {allowCustomization ? (
-        <div className="w-full space-y-4 rounded-xl bg-smoke p-4 text-left">
+        <div className="w-full space-y-4 bg-sand p-4 text-left">
           <div>
             <span className="block text-sm font-semibold">QR style</span>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -132,8 +132,8 @@ export default function EventQRCode({
                   aria-pressed={dotStyle === option.value}
                   className={`rounded-lg border px-3 py-2 text-sm font-medium ${
                     dotStyle === option.value
-                      ? 'border-accent bg-accent/10 text-accent'
-                      : 'border-ink/15 bg-white hover:border-accent'
+                      ? 'border-ink bg-ink text-canvas'
+                      : 'border-charcoal/15 bg-paper hover:border-charcoal/40'
                   }`}
                 >
                   {option.label}
@@ -155,11 +155,11 @@ export default function EventQRCode({
 
           <div>
             <span className="block text-sm font-semibold">Center photo or logo</span>
-            <p className="mt-1 text-xs text-muted">
+            <p className="mt-1 text-xs text-charcoal/60">
               A simple square image scans best. SharePix keeps it small and uses high error correction.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-full border border-ink/20 bg-white px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
+              <label className="cursor-pointer border border-charcoal/25 bg-paper px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60">
                 {centerImage ? 'Change image' : 'Add image'}
                 <input
                   type="file"
@@ -182,7 +182,7 @@ export default function EventQRCode({
           </div>
         </div>
       ) : (
-        <p className="rounded-lg bg-smoke px-3 py-2 text-xs text-muted">
+        <p className="bg-sand px-3 py-2 text-xs text-charcoal/60">
           Starter includes the standard square QR design.
         </p>
       )}
@@ -190,7 +190,7 @@ export default function EventQRCode({
       <button
         type="button"
         onClick={handleDownloadPng}
-        className="rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent/90"
+        className="bg-ink px-5 py-3 text-sm font-medium text-canvas transition hover:bg-night"
       >
         Download QR code (PNG)
       </button>

@@ -70,7 +70,7 @@ export default function AdminPhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-muted">
+      <p className="border border-dashed border-charcoal/25 px-4 py-12 text-center text-charcoal/60">
         No photos or videos have been uploaded to this event yet.
       </p>
     );
@@ -95,7 +95,7 @@ export default function AdminPhotoGrid({
             <figure
               key={photo.id}
               className={`overflow-hidden rounded-xl border bg-white ${
-                hidden ? 'border-amber-400' : isSelected ? 'border-accent' : 'border-ink/10'
+                hidden ? 'border-amber-500' : isSelected ? 'border-ink' : 'border-charcoal/10'
               }`}
             >
               <div className="relative">
@@ -123,7 +123,7 @@ export default function AdminPhotoGrid({
                     aria-pressed={isSelected}
                     aria-label={isSelected ? 'Remove from download QR' : 'Add to download QR'}
                     className={`absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-full border-2 border-white text-sm font-bold shadow ${
-                      isSelected ? 'bg-accent text-white' : 'bg-black/40 text-white/90'
+                      isSelected ? 'bg-ink text-canvas' : 'bg-black/40 text-white/90'
                     }`}
                   >
                     {isSelected ? '✓' : ''}
@@ -133,7 +133,7 @@ export default function AdminPhotoGrid({
               <figcaption className="space-y-2 px-3 py-2 text-xs">
                 <p className="truncate font-medium">{photo.uploadedBy || 'Anonymous'}</p>
                 {photo.uploadedByUserId ? (
-                  <p className="truncate text-muted">User: {photo.uploadedByUserId}</p>
+                  <p className="truncate text-charcoal/60">User: {photo.uploadedByUserId}</p>
                 ) : null}
                 {hidden ? (
                   <p className="font-medium text-amber-600">Hidden from gallery</p>
@@ -162,7 +162,7 @@ export default function AdminPhotoGrid({
                     type="button"
                     disabled={busy}
                     onClick={() => handleToggleApproval(photo)}
-                    className="flex-1 rounded-full border border-ink/20 px-2 py-1 font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                    className="flex-1 border border-charcoal/25 px-2 py-1 font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                   >
                     {hidden ? 'Approve' : 'Hide'}
                   </button>

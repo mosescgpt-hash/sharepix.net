@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/router';
 import { withAuthenticator } from '@aws-amplify/ui-react';
-import { signOut } from 'aws-amplify/auth';
+import HostHeader from '@/components/HostHeader';
 import Layout from '@/components/Layout';
+import Notice from '@/components/Notice';
 import { deleteMyEvent, downloadEventsAsZip, listMyEvents, startCheckout } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
@@ -16,7 +16,6 @@ function formatDate(value?: string | null) {
 }
 
 function MyEventsPage() {
-  const router = useRouter();
   const [events, setEvents] = useState<QREvent[]>([]);
   const [admin, setAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -36,11 +35,6 @@ function MyEventsPage() {
       .catch(() => setError('We could not load your events. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
-
-  async function handleSignOut() {
-    await signOut();
-    await router.replace('/');
-  }
 
   async function handleCompletePayment(event: QREvent) {
     setWorking(event.id);
@@ -117,188 +111,176 @@ function MyEventsPage() {
   }
 
   return (
-    <Layout title="My events">
-      <section className="py-10">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">
-              Host dashboard
-            </p>
-            <h1 className="mt-1 font-display text-3xl font-bold">My events</h1>
-            <p className="mt-2 text-muted">
-              Open an event to manage uploads, download media, or update its QR code.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 sm:justify-end">
-            {admin ? (
-              <Link href="/global-admin" className="rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent hover:text-white">
-                Global admin
+    <Layout title="My events" width="bleed">
+      <HostHeader
+        eyebrow="Host dashboard"
+        title="My events."
+        serif="All in one place."
+        description="Open an event to manage uploads, download media, or update its QR code."
+        current="events"
+        admin={admin}
+        actions={
+          <Link href="/create-event" className="spx-btn-canvas">
+            Create another event
+          </Link>
+        }
+      />
+
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="spx-inner">
+          {loading ? (
+            <p className="spx-body text-center">Loading your events&hellip;</p>
+          ) : error ? (
+            <Notice tone="error">{error}</Notice>
+          ) : events.length === 0 ? (
+            <div className="spx-empty">
+              <p className="spx-display-serif text-2xl">No events yet.</p>
+              <p className="spx-body mt-2 max-w-sm text-sm">
+                Create your first event and its upload QR code.
+              </p>
+              <Link href="/create-event" className="spx-btn-ink mt-6">
+                Create an event
               </Link>
-            ) : null}
-            <Link href="/account" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
-              Account
-            </Link>
-            <Link href="/account-security" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
-              Security
-            </Link>
-            <button type="button" onClick={handleSignOut} className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-red-500 hover:text-red-700">
-              Sign out
-            </button>
-            <Link
-              href="/create-event"
-              className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white hover:bg-night"
-            >
-              Create another event
-            </Link>
-          </div>
-        </div>
-
-        {loading ? (
-          <p className="mt-10 text-center text-muted">Loading your events…</p>
-        ) : error ? (
-          <p className="mt-8 rounded-xl bg-red-50 px-4 py-5 text-center text-red-700">{error}</p>
-        ) : events.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-dashed border-ink/20 bg-white px-6 py-12 text-center">
-            <h2 className="font-display text-xl font-bold">No events yet</h2>
-            <p className="mt-2 text-muted">Create your first event and its upload QR code.</p>
-            <Link
-              href="/create-event"
-              className="mt-5 inline-block rounded-full bg-accent px-6 py-3 font-medium text-white hover:bg-accent/90"
-            >
-              Create an event
-            </Link>
-          </div>
-        ) : (
-          <>
-            {downloadableEvents.length > 0 ? (
-              <div className="mt-8 flex flex-col gap-3 sp-card p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-display font-bold">Download photos</p>
-                  <p className="text-sm text-muted">
-                    Check one or more events, then download them together as a ZIP (each
-                    event in its own folder).
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <button
-                    type="button"
-                    onClick={toggleSelectAll}
-                    className="rounded-full border border-ink/20 px-3 py-2 font-medium hover:border-accent"
-                  >
-                    {allSelected ? 'Unselect all' : 'Select all'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDownloadSelected()}
-                    disabled={zipping || selected.size === 0}
-                    className="rounded-full bg-ink px-4 py-2 font-medium text-white hover:bg-night disabled:opacity-50"
-                  >
-                    {zipping
-                      ? zipProgress || 'Preparing…'
-                      : `Download selected (${selected.size})`}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            {events.map((event) => {
-              const tier = getTier(event.tier);
-              const pending = event.paid === false;
-              const isSelected = selected.has(event.id);
-              return (
-                <article
-                  key={event.id}
-                  className={`rounded-2xl border p-5 shadow-sm ${
-                    pending ? 'border-amber-300 bg-amber-50/60' : 'border-ink/10 bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      {!pending ? (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(event.id)}
-                          aria-label={`Select ${event.name} for download`}
-                          className="mt-1.5 h-5 w-5 shrink-0 accent-accent"
-                        />
-                      ) : null}
-                      <div>
-                        <h2 className="font-display text-xl font-bold">{event.name}</h2>
-                        <p className="mt-1 text-sm text-muted">
-                          {formatDate(event.date)} · {tier?.name ?? event.tier} plan
-                        </p>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-accent">
-                      {event.eventCode}
-                    </span>
-                  </div>
-
-                  {pending ? (
-                    <>
-                      <p className="mt-4 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-900">
-                        Payment incomplete — this event isn&apos;t active and can&apos;t
-                        collect photos until payment is finished.
-                      </p>
-                      <div className="mt-5 grid gap-2 sm:grid-cols-2">
-                        <button
-                          type="button"
-                          disabled={working === event.id}
-                          onClick={() => void handleCompletePayment(event)}
-                          className="rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night disabled:opacity-50"
-                        >
-                          {working === event.id
-                            ? 'Working…'
-                            : `Complete payment · $${tier?.price ?? ''}`}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={working === event.id}
-                          onClick={() => void handleCancelEvent(event)}
-                          className="rounded-full border border-red-300 px-4 py-2.5 text-center text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                        >
-                          Cancel event
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {event.accessExpiresAt ? (
-                        <p className="mt-4 text-sm text-muted">
-                          Gallery access through{' '}
-                          {new Date(event.accessExpiresAt).toLocaleDateString()}
-                        </p>
-                      ) : null}
-                      <div className="mt-5 grid gap-2 sm:grid-cols-3">
-                        <Link
-                          href={`/event/${event.id}/admin#event-qr-code`}
-                          className="rounded-full bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-accent/90"
-                        >
-                          QR code
-                        </Link>
-                        <Link
-                          href={`/event/${event.id}/admin`}
-                          className="rounded-full bg-ink px-4 py-2.5 text-center text-sm font-medium text-white hover:bg-night"
-                        >
-                          Manage event
-                        </Link>
-                        <Link
-                          href={`/event/${event.id}`}
-                          className="rounded-full border border-ink/20 px-4 py-2.5 text-center text-sm font-medium hover:border-accent hover:text-accent"
-                        >
-                          View gallery
-                        </Link>
-                      </div>
-                    </>
-                  )}
-                </article>
-              );
-            })}
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              {downloadableEvents.length > 0 ? (
+                <div className="spx-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="font-sans font-semibold text-charcoal">Download photos</p>
+                    <p className="mt-1 text-sm text-charcoal/60">
+                      Check one or more events, then download them together as a ZIP (each event
+                      in its own folder).
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAll}
+                      className="border border-charcoal/25 px-4 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
+                    >
+                      {allSelected ? 'Unselect all' : 'Select all'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDownloadSelected()}
+                      disabled={zipping || selected.size === 0}
+                      className="bg-ink px-4 py-2 font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+                    >
+                      {zipping ? zipProgress || 'Preparing…' : `Download selected (${selected.size})`}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                {events.map((event) => {
+                  const tier = getTier(event.tier);
+                  const pending = event.paid === false;
+                  const isSelected = selected.has(event.id);
+                  return (
+                    <article
+                      key={event.id}
+                      className={`border p-6 ${
+                        // An unpaid event is marked by a left rule, the same
+                        // way a warning Notice is, rather than by tinting the
+                        // whole card — a full amber card outshouted the events
+                        // that are actually running.
+                        pending
+                          ? 'border-charcoal/10 border-l-2 border-l-amber-600 bg-paper'
+                          : 'border-charcoal/10 bg-paper'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          {!pending ? (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(event.id)}
+                              aria-label={`Select ${event.name} for download`}
+                              className="mt-1.5 h-5 w-5 shrink-0 accent-pine"
+                            />
+                          ) : null}
+                          <div>
+                            <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+                              {event.name}
+                            </h2>
+                            <p className="mt-1 text-sm text-charcoal/60">
+                              {formatDate(event.date)} · {tier?.name ?? event.tier} plan
+                            </p>
+                          </div>
+                        </div>
+                        <span className="shrink-0 bg-sand px-3 py-1 font-sans text-xs font-medium uppercase tracking-[0.14em] text-charcoal/70">
+                          {event.eventCode}
+                        </span>
+                      </div>
+
+                      {pending ? (
+                        <>
+                          <p className="mt-4 text-sm leading-relaxed text-charcoal/70">
+                            <span className="font-medium text-amber-700">Payment incomplete.</span>{' '}
+                            This event isn&rsquo;t active and can&rsquo;t collect photos until
+                            payment is finished.
+                          </p>
+                          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              disabled={working === event.id}
+                              onClick={() => void handleCompletePayment(event)}
+                              className="bg-ink px-4 py-3 text-center text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+                            >
+                              {working === event.id
+                                ? 'Working…'
+                                : `Complete payment · $${tier?.price ?? ''}`}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={working === event.id}
+                              onClick={() => void handleCancelEvent(event)}
+                              className="border border-red-300 px-4 py-3 text-center text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                            >
+                              Cancel event
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {event.accessExpiresAt ? (
+                            <p className="mt-4 text-sm text-charcoal/60">
+                              Gallery access through{' '}
+                              {new Date(event.accessExpiresAt).toLocaleDateString()}
+                            </p>
+                          ) : null}
+                          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+                            <Link
+                              href={`/event/${event.id}/admin`}
+                              className="bg-ink px-4 py-3 text-center text-sm font-medium text-canvas transition hover:bg-night"
+                            >
+                              Manage event
+                            </Link>
+                            <Link
+                              href={`/event/${event.id}/admin#event-qr-code`}
+                              className="border border-charcoal/25 px-4 py-3 text-center text-sm font-medium text-charcoal transition hover:border-charcoal/60"
+                            >
+                              QR code
+                            </Link>
+                            <Link
+                              href={`/event/${event.id}`}
+                              className="border border-charcoal/25 px-4 py-3 text-center text-sm font-medium text-charcoal transition hover:border-charcoal/60"
+                            >
+                              View gallery
+                            </Link>
+                          </div>
+                        </>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </section>
     </Layout>
   );

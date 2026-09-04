@@ -105,7 +105,7 @@ function Eyebrow() {
 
 function Heading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mt-3 font-display text-2xl font-extrabold leading-tight sm:text-3xl">{children}</h2>
+    <h2 className="mt-3 font-sans text-2xl font-extrabold leading-tight tracking-[-0.02em] sm:text-3xl">{children}</h2>
   );
 }
 

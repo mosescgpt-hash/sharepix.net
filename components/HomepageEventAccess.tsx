@@ -56,7 +56,7 @@ export default function HomepageEventAccess() {
           </div>
         ) : hostState === 'signed-out' ? (
           <>
-            <h2 id="host-access-heading" className="mt-1 font-display text-2xl font-bold">Already created an event?</h2>
+            <h2 id="host-access-heading" className="mt-1 font-sans text-2xl font-bold tracking-[-0.02em]">Already created an event?</h2>
             <p className="mt-2 text-sm text-white/75">
               Sign in to open your events, manage uploads, and get your event QR code anytime.
             </p>
@@ -70,7 +70,7 @@ export default function HomepageEventAccess() {
         ) : (
           <>
             <div className="mt-1 flex items-center justify-between gap-3">
-              <h2 id="host-access-heading" className="font-display text-2xl font-bold">Your events</h2>
+              <h2 id="host-access-heading" className="font-sans text-2xl font-bold tracking-[-0.02em]">Your events</h2>
               <Link href="/my-events" className="text-sm font-medium text-mint hover:underline">
                 View all
               </Link>

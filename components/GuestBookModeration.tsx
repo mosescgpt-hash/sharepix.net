@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import Notice from '@/components/Notice';
 import { fetchGuestBookForHost, setGuestBookEntryHidden } from '@/lib/api';
 import { entryNeedsReview } from '@/lib/guestBook';
 import type { HostGuestBookEntry } from '@/lib/types';
@@ -53,25 +54,27 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
   const held = entries.filter(entryNeedsReview);
 
   return (
-    <section className="sp-card mt-6 p-6" aria-labelledby="guest-book-heading">
+    <section className="spx-card mt-8 p-6" aria-labelledby="guest-book-heading">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="guest-book-heading" className="font-display text-lg font-bold tracking-tight">
+        <h2 id="guest-book-heading" className="font-sans text-lg font-bold tracking-[-0.02em]">
           Guest book
         </h2>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-charcoal/60">
           {entries.length} {entries.length === 1 ? 'note' : 'notes'}
           {held.length > 0 ? ` · ${held.length} waiting for you` : ''}
         </p>
       </div>
 
       {error ? (
-        <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+        <Notice tone="error" className="mt-4">
+          {error}
+        </Notice>
       ) : null}
 
       {loading ? (
-        <p className="mt-4 text-sm text-muted">Loading…</p>
+        <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
       ) : entries.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">
+        <p className="mt-4 text-sm text-charcoal/60">
           No notes yet. Guests can sign it from the upload page or the gallery.
         </p>
       ) : (
@@ -82,8 +85,10 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
             return (
               <li
                 key={entry.id}
-                className={`rounded-xl border p-4 ${
-                  waiting ? 'border-amber-300 bg-amber-50' : 'border-line bg-card'
+                className={`border p-4 ${
+                  waiting
+                    ? 'border-charcoal/10 border-l-2 border-l-amber-600 bg-paper'
+                    : 'border-charcoal/10 bg-paper'
                 }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -95,12 +100,12 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
                         {entry.message}
                       </p>
                     ) : (
-                      <p className="mt-1 text-sm italic text-muted">
+                      <p className="mt-1 text-sm italic text-charcoal/60">
                         Left a photo or video message.
                       </p>
                     )}
                     {entry.photoId ? (
-                      <p className="mt-1 text-xs text-muted">With an attachment.</p>
+                      <p className="mt-1 text-xs text-charcoal/60">With an attachment.</p>
                     ) : null}
                     {waiting ? (
                       <p className="mt-2 text-xs font-medium text-amber-800">
@@ -109,7 +114,7 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
                         can&apos;t see this yet.
                       </p>
                     ) : hidden ? (
-                      <p className="mt-2 text-xs font-medium text-muted">
+                      <p className="mt-2 text-xs font-medium text-charcoal/60">
                         Hidden from guests.
                       </p>
                     ) : null}
@@ -118,7 +123,7 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
                     type="button"
                     onClick={() => toggle(entry)}
                     disabled={busyId === entry.id}
-                    className="shrink-0 rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-60"
+                    className="shrink-0 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-60"
                   >
                     {busyId === entry.id ? 'Saving…' : hidden || waiting ? 'Show' : 'Hide'}
                   </button>

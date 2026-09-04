@@ -53,7 +53,7 @@ export default function CheckoutSuccessPage() {
         <span className="text-5xl" aria-hidden>
           🎉
         </span>
-        <h1 className="mt-4 font-display text-3xl font-bold">Payment received</h1>
+        <h1 className="mt-4 font-sans text-3xl font-bold tracking-[-0.02em]">Payment received</h1>
 
         {phase === 'checking' ? (
           <p className="mt-3 text-ink/70">

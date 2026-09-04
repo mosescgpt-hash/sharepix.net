@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
+import Notice from '@/components/Notice';
 import { createDownloadShare } from '@/lib/api';
 import { DownloadShare, QREvent } from '@/lib/types';
 
@@ -59,19 +60,19 @@ export default function DownloadShareBuilder({
 
   if (approvedCount === 0) {
     return (
-      <p className="text-sm text-muted">
+      <p className="text-sm text-charcoal/60">
         Upload and approve media before creating a download QR code.
       </p>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-accent/30 bg-white p-5">
+    <div className="border border-charcoal/10 bg-paper p-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-accent">Guest downloads</p>
-          <h2 className="font-display text-2xl font-bold">Create a download QR code</h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted">
+          <p className="spx-eyebrow">Guest downloads</p>
+          <h2 className="font-sans text-2xl font-bold tracking-[-0.02em]">Create a download QR code</h2>
+          <p className="mt-1 max-w-2xl text-sm text-charcoal/60">
             Toggle photos in the gallery below to choose exactly what recipients may download,
             then create the code. A new QR keeps this selection even if you change it later.
           </p>
@@ -80,14 +81,14 @@ export default function DownloadShareBuilder({
           <button
             type="button"
             onClick={() => { onSelectAll(); setShare(null); }}
-            className="rounded-full border border-ink/20 px-3 py-2 font-medium hover:border-accent"
+            className="border border-charcoal/25 px-3 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
           >
             Entire event
           </button>
           <button
             type="button"
             onClick={() => { onClear(); setShare(null); }}
-            className="rounded-full border border-ink/20 px-3 py-2 font-medium hover:border-accent"
+            className="border border-charcoal/25 px-3 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
           >
             Clear
           </button>
@@ -99,35 +100,37 @@ export default function DownloadShareBuilder({
       </p>
 
       {error ? (
-        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <Notice tone="error" className="mt-4">
+          {error}
+        </Notice>
       ) : null}
 
       <button
         type="button"
         onClick={handleCreate}
         disabled={busy || selectedIds.length === 0}
-        className="mt-4 rounded-full bg-ink px-5 py-3 font-medium text-white hover:bg-night disabled:opacity-50"
+        className="spx-btn-ink mt-5 disabled:opacity-50"
       >
         {busy ? 'Creating…' : 'Create sharing QR code'}
       </button>
 
       {share && shareUrl ? (
-        <div className="mt-6 grid gap-5 rounded-xl bg-smoke p-4 sm:grid-cols-[auto_1fr] sm:items-center">
-          <div id="download-share-qr" className="mx-auto rounded-lg bg-white p-2">
+        <div className="mt-6 grid gap-5 bg-sand p-5 sm:grid-cols-[auto_1fr] sm:items-center">
+          <div id="download-share-qr" className="mx-auto bg-paper p-2">
             <QRCodeCanvas value={shareUrl} size={190} includeMargin />
           </div>
           <div className="min-w-0">
-            <h3 className="font-display text-xl font-bold">Download QR code ready</h3>
-            <p className="mt-1 text-sm text-muted">
+            <h3 className="font-sans text-xl font-bold tracking-[-0.02em]">Download QR code ready</h3>
+            <p className="mt-1 text-sm text-charcoal/60">
               This link includes {share.photoIds.length} selected item
               {share.photoIds.length === 1 ? '' : 's'}.
             </p>
-            <p className="mt-2 break-all text-xs text-muted">{shareUrl}</p>
+            <p className="mt-2 break-all text-xs text-charcoal/60">{shareUrl}</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" onClick={handleDownloadQr} className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white">
+              <button type="button" onClick={handleDownloadQr} className="bg-ink px-4 py-2 text-sm font-medium text-canvas transition hover:bg-night">
                 Download QR (PNG)
               </button>
-              <button type="button" onClick={handleCopy} className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium">
+              <button type="button" onClick={handleCopy} className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60">
                 {copied ? 'Copied' : 'Copy link'}
               </button>
             </div>
