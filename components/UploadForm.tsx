@@ -1,4 +1,5 @@
 import { ChangeEvent } from 'react';
+import Notice from '@/components/Notice';
 import { MAX_VIDEO_SIZE_LABEL } from '@/lib/validation';
 import { EventThemeKey } from '@/lib/eventTheme';
 import { useMediaUpload } from '@/hooks/useMediaUpload';
@@ -89,9 +90,11 @@ export default function UploadForm({
   const failedCount = counts.failed;
 
   return (
-    <div className="sp-card p-5">
-      <label htmlFor="uploader-name" className="mb-4 block">
-        <span className="text-sm font-medium">Your name or nickname (optional)</span>
+    <div className="spx-card p-5 sm:p-6">
+      <label htmlFor="uploader-name" className="mb-5 block">
+        <span className="font-sans text-sm font-medium text-charcoal">
+          Your name or nickname (optional)
+        </span>
         <input
           id="uploader-name"
           type="text"
@@ -99,43 +102,39 @@ export default function UploadForm({
           maxLength={60}
           onChange={(event) => setUploaderName(event.target.value)}
           placeholder="Example: Aunt Maya"
-          className="mt-1.5 w-full rounded-lg border border-ink/20 px-3 py-2.5 outline-none focus:border-accent"
+          className="spx-input mt-2"
         />
-        <span className="mt-1 block text-xs text-muted">
+        <span className="mt-1.5 block text-xs text-charcoal/55">
           This helps everyone sort by uploader. If left blank, this browser gets a reusable guest label.
         </span>
       </label>
-      <div className="rounded-xl border-2 border-dashed border-ink/20 px-4 py-6 text-center">
-        <span className="text-3xl" aria-hidden>📷</span>
-        <p className="mt-2 font-medium">Add photos or videos</p>
-        <p className="mt-1 text-sm text-muted">
+      {/* Square and hairline, matching the empty state elsewhere. The camera
+          emoji is gone: it renders as a different picture on every platform
+          and was the least premium thing on the page. */}
+      <div className="border border-dashed border-charcoal/25 px-5 py-8 text-center">
+        <p className="spx-display-serif text-2xl">Add your photos.</p>
+        <p className="mt-2 text-sm text-charcoal/60">
           {allowVideo && videosRemaining !== 0
             ? `Photos up to 25 MB · MP4, MOV, or WEBM videos up to ${MAX_VIDEO_SIZE_LABEL}`
             : 'Photos up to 25 MB'}
         </p>
         {allowVideo && videosRemaining !== 0 ? (
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-1 text-sm text-charcoal/60">
             Videos go straight to the host — they won’t appear in the guest gallery.
           </p>
         ) : null}
         {allowVideo && videosRemaining !== null ? (
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-1 text-sm text-charcoal/60">
             {videosRemaining === 0
               ? 'This event’s videos are all used — photos only from here.'
               : `Room for ${videosRemaining} more video${videosRemaining === 1 ? '' : 's'}.`}
           </p>
         ) : null}
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label
-            htmlFor="photo-camera-input"
-            className="cursor-pointer rounded-full bg-accent px-4 py-3 font-medium text-white hover:bg-accent/90"
-          >
+          <label htmlFor="photo-camera-input" className="spx-btn-ink cursor-pointer">
             Camera
           </label>
-          <label
-            htmlFor="photo-library-input"
-            className="cursor-pointer rounded-full border border-ink/20 bg-white px-4 py-3 font-medium text-ink hover:border-accent"
-          >
+          <label htmlFor="photo-library-input" className="spx-btn-outline cursor-pointer">
             Choose from device
           </label>
         </div>
@@ -145,10 +144,10 @@ export default function UploadForm({
       {queue.length > 0 ? (
         <ul className="mt-4 space-y-2">
           {queue.map((item) => (
-            <li key={item.id} className="rounded-lg bg-smoke px-3 py-2 text-sm">
+            <li key={item.id} className="border border-charcoal/10 bg-sand/60 px-3 py-2.5 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate">{item.file.name}</span>
-                <span className="shrink-0 text-xs text-muted">
+                <span className="shrink-0 text-xs text-charcoal/55">
                   {item.status === 'pending' && 'Ready'}
                   {item.status === 'uploading' && `${item.percent}%`}
                   {item.status === 'done' && '✓ Uploaded'}
@@ -157,9 +156,9 @@ export default function UploadForm({
                 </span>
               </div>
               {item.status === 'uploading' ? (
-                <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-ink/10">
+                <div className="mt-2 h-1 w-full overflow-hidden bg-charcoal/10">
                   <div
-                    className="h-full bg-accent transition-all"
+                    className="h-full bg-pine transition-all"
                     style={{ width: `${item.percent}%` }}
                   />
                 </div>
@@ -171,7 +170,7 @@ export default function UploadForm({
       ) : null}
 
       {pendingCount > 0 ? (
-        <p className="mt-3 text-center text-xs text-muted">
+        <p className="mt-3 text-center text-xs text-charcoal/55">
           By uploading, you understand these photos and videos will be visible to other event guests.
         </p>
       ) : null}
@@ -182,7 +181,7 @@ export default function UploadForm({
         <button
           type="button"
           onClick={retryFailed}
-          className="mt-3 w-full rounded-full border border-ink/20 bg-white py-2.5 font-medium text-ink hover:border-accent"
+          className="spx-btn-outline mt-3 w-full"
         >
           Retry {retryable} failed file{retryable === 1 ? '' : 's'}
         </button>
@@ -193,29 +192,29 @@ export default function UploadForm({
           type="button"
           onClick={startUpload}
           disabled={busy}
-          className="mt-4 w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
+          className="spx-btn-ink mt-4 w-full disabled:opacity-50"
         >
           {busy ? 'Uploading…' : `Upload ${pendingCount} file${pendingCount === 1 ? '' : 's'}`}
         </button>
       ) : null}
 
       {busy ? (
-        <p className="mt-3 text-center text-xs text-muted">
+        <p className="mt-3 text-center text-xs text-charcoal/55">
           Keep this screen open until it finishes — the phone can&apos;t upload while it&apos;s
           locked or on another app.
         </p>
       ) : null}
 
       {successCount > 0 && !busy ? (
-        <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-center text-sm text-green-700">
-          {successCount} file{successCount === 1 ? '' : 's'} uploaded. Thanks for sharing! 🎉
-        </p>
+        <Notice tone="success" className="mt-4" label="Uploaded">
+          {successCount} file{successCount === 1 ? '' : 's'} added. Thanks for sharing.
+        </Notice>
       ) : null}
 
       {duplicateCount > 0 && !busy ? (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
-          Skipped {duplicateCount} file{duplicateCount === 1 ? '' : 's'} already in this event.
-        </p>
+        <Notice className="mt-3" label="Skipped">
+          {duplicateCount} file{duplicateCount === 1 ? '' : 's'} already in this event.
+        </Notice>
       ) : null}
     </div>
   );

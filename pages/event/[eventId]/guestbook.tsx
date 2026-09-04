@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import GuestBookAlbum from '@/components/GuestBookAlbum';
+import Notice from '@/components/Notice';
 import { isVideoFilename } from '@/lib/validation';
 import { fetchEvent, fetchEventPhotos, fetchGuestBook, signGuestBook } from '@/lib/api';
 import {
@@ -102,57 +103,58 @@ export default function GuestBookPage() {
   }
 
   return (
-    <Layout title={event ? `${event.name} guest book` : 'Guest book'}>
-      <section className="mx-auto max-w-2xl py-10">
+    <Layout title={event ? `${event.name} guest book` : 'Guest book'} width="bleed">
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="mx-auto w-full max-w-2xl">
         {loading ? (
-          <p className="text-center text-muted">Loading the guest book…</p>
+          <p className="spx-body text-center">Loading the guest book&hellip;</p>
         ) : error ? (
-          <p className="rounded-xl bg-red-50 px-4 py-6 text-center text-red-700">{error}</p>
+          <Notice tone="error">{error}</Notice>
         ) : !event ? null : !available ? (
-          <div className="sp-card p-8 text-center">
-            <h1 className="font-display text-2xl font-bold tracking-tight">
-              This event doesn&apos;t have a guest book
-            </h1>
-            <p className="mt-3 text-muted">
-              The host can add one from their dashboard. In the meantime you can still
-              add your photos.
+          <div className="spx-empty">
+            <p className="spx-display-serif text-2xl">No guest book here.</p>
+            <p className="spx-body mt-2 max-w-sm text-sm">
+              The host can add one from their dashboard. In the meantime you can still add
+              your photos.
             </p>
-            <Link href={`/event/${event.id}/upload`} className="sp-btn-primary mt-6">
+            <Link href={`/event/${event.id}/upload`} className="spx-btn-ink mt-6">
               Add your photos
             </Link>
           </div>
         ) : (
           <>
-            <div className="text-center">
-              <p className="sp-eyebrow">Guest book</p>
-              <h1 className="mt-4 font-display text-3xl font-bold tracking-[-0.03em] sm:text-4xl">
-                {event.name}
+            <div>
+              <p className="spx-eyebrow">Guest book</p>
+              <h1 className="mt-3">
+                <span className="spx-display block">{event.name}</span>
+                <span className="spx-display-serif block">Sign the book.</span>
               </h1>
-              <p className="mx-auto mt-4 max-w-md text-muted">
-                Leave a note for the host — and add one of your photos or a video
-                message if you like.
+              <p className="spx-body mt-4 max-w-md">
+                Leave a note for the host — and add one of your photos or a video message if
+                you like.
               </p>
             </div>
 
             {/* The form sits above the album: a guest arriving from the QR code
                 came to sign it, not to read it. */}
-            <form onSubmit={handleSubmit} className="sp-card mt-10 p-6 sm:p-8">
+            <form onSubmit={handleSubmit} className="spx-card mt-10 p-6 sm:p-8">
+              {/* role="status" rather than Notice's role="alert": this is
+                  confirmation of something the guest just did, so it should be
+                  announced politely rather than interrupt. */}
               {done ? (
-                <div
-                  className={`mb-6 rounded-xl px-4 py-3 text-sm ${
-                    done === 'pending'
-                      ? 'bg-amber-50 text-amber-900'
-                      : 'bg-accent/10 text-accent'
-                  }`}
-                  role="status"
-                >
-                  {done === 'pending'
-                    ? 'Thank you — your note is with the host and will appear once they approve it.'
-                    : 'Thank you — your note is in the book below.'}
+                <div role="status" className="mb-6">
+                  <Notice
+                    tone={done === 'pending' ? 'info' : 'success'}
+                    label={done === 'pending' ? 'With the host' : 'Signed'}
+                  >
+                    {done === 'pending'
+                      ? 'Thank you — your note is with the host and will appear once they approve it.'
+                      : 'Thank you — your note is in the book below.'}
+                  </Notice>
                 </div>
               ) : null}
 
-              <label htmlFor="gb-name" className="block text-sm font-medium">
+              <label htmlFor="gb-name" className="block font-sans text-sm font-medium text-charcoal">
                 Your name
               </label>
               <input
@@ -163,10 +165,10 @@ export default function GuestBookPage() {
                 required
                 autoComplete="name"
                 placeholder="Maya Patel"
-                className="mt-2 w-full rounded-xl border border-line bg-card px-4 py-3 focus:border-accent focus:outline-none"
+                className="spx-input mt-2"
               />
 
-              <label htmlFor="gb-message" className="mt-5 block text-sm font-medium">
+              <label htmlFor="gb-message" className="mt-5 block font-sans text-sm font-medium text-charcoal">
                 Your note
               </label>
               <textarea
@@ -176,22 +178,22 @@ export default function GuestBookPage() {
                 maxLength={MAX_MESSAGE_LENGTH}
                 rows={5}
                 placeholder="What a day. So happy for you both."
-                className="mt-2 w-full rounded-xl border border-line bg-card px-4 py-3 focus:border-accent focus:outline-none"
+                className="spx-input mt-2"
               />
-              <p className="mt-1 text-right text-xs text-muted">
+              <p className="mt-1 text-right text-xs text-charcoal/55">
                 {message.length} / {MAX_MESSAGE_LENGTH}
               </p>
 
               {attachable.length > 0 ? (
                 <>
-                  <label htmlFor="gb-photo" className="mt-4 block text-sm font-medium">
-                    Attach one of your photos or videos <span className="text-muted">(optional)</span>
+                  <label htmlFor="gb-photo" className="mt-4 block font-sans text-sm font-medium text-charcoal">
+                    Attach one of your photos or videos <span className="text-charcoal/55">(optional)</span>
                   </label>
                   <select
                     id="gb-photo"
                     value={photoId}
                     onChange={(e) => setPhotoId(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-line bg-card px-4 py-3 focus:border-accent focus:outline-none"
+                    className="spx-input mt-2"
                   >
                     <option value="">No attachment</option>
                     {attachable.map((photo, i) => (
@@ -201,17 +203,17 @@ export default function GuestBookPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-2 text-xs text-muted">
+                  <p className="mt-2 text-xs text-charcoal/55">
                     Haven&apos;t uploaded yet?{' '}
-                    <Link href={`/event/${event.id}/upload`} className="text-accent underline">
+                    <Link href={`/event/${event.id}/upload`} className="text-pine underline">
                       Add your photos first
                     </Link>
                     , then come back and attach one.
                   </p>
                 </>
               ) : (
-                <p className="mt-4 text-xs text-muted">
-                  <Link href={`/event/${event.id}/upload`} className="text-accent underline">
+                <p className="mt-4 text-xs text-charcoal/55">
+                  <Link href={`/event/${event.id}/upload`} className="text-pine underline">
                     Add a photo or a video message
                   </Link>{' '}
                   to attach one to your note.
@@ -219,15 +221,15 @@ export default function GuestBookPage() {
               )}
 
               {formError ? (
-                <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                <Notice tone="error" className="mt-4">
                   {formError}
-                </p>
+                </Notice>
               ) : null}
 
               <button
                 type="submit"
                 disabled={saving}
-                className="sp-btn-primary mt-6 w-full disabled:opacity-60"
+                className="spx-btn-ink mt-6 w-full disabled:opacity-60"
               >
                 {saving ? 'Signing…' : 'Sign the guest book'}
               </button>
@@ -249,12 +251,13 @@ export default function GuestBookPage() {
             </div>
 
             <p className="mt-12 text-center text-sm">
-              <Link href={`/event/${event.id}`} className="font-medium text-accent">
-                See the photo gallery →
+              <Link href={`/event/${event.id}`} className="font-medium text-pine underline">
+                See the photo gallery &rarr;
               </Link>
             </p>
           </>
         )}
+        </div>
       </section>
     </Layout>
   );
