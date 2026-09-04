@@ -62,9 +62,12 @@ export default function DemoPage() {
         </div>
 
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link href="/demo/try" className="sp-btn-primary">
+            Try it with your own photo
+          </Link>
           <Link
             href="/demo/gallery"
-            className="sp-btn-primary"
+            className="sp-btn-ghost"
           >
             Open the sample gallery
           </Link>
