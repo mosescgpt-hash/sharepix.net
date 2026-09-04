@@ -1,4 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600&display=swap');
+/* Redesign pairing — see docs/design-system.md. Loaded alongside the old
+   stack only until Phase 3 migrates the pages; the import above goes then. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;1,400;1,500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -80,6 +83,126 @@
   .sp-eyebrow {
     @apply text-xs font-semibold uppercase tracking-[0.22em] text-accent;
   }
+
+  /* ===================================================================
+     Redesign primitives (docs/design-system.md).
+
+     Namespaced `spx-` so they can be built and reviewed while every live
+     page still runs on the `sp-` classes above. Phase 3 migrates pages
+     across; the old set is deleted once nothing references it.
+
+     The palette is the brand navy and mint on a WARM ground: `ink` for
+     inverted sections and primary buttons, `mint` as the accent on top of
+     them, `pine` for small accent text on light grounds where `accent`
+     would fail contrast.
+
+     The system is SQUARE. No radius anywhere except `.spx-arch`, and
+     separation comes from background colour and hairlines rather than
+     shadow — that restraint is most of why the reference reads editorial
+     rather than SaaS.
+     =================================================================== */
+
+  /* Section wrapper. The background changes to mark the section, full
+     bleed, rather than cards floating on one continuous page colour. */
+  .spx-section {
+    @apply w-full px-5 py-16 sm:px-8 sm:py-24;
+  }
+  .spx-section-canvas { @apply spx-section bg-canvas text-charcoal; }
+  .spx-section-sand   { @apply spx-section bg-sand text-charcoal; }
+  .spx-section-ink    { @apply spx-section bg-ink text-canvas; }
+
+  /* Constrains content inside a full-bleed section. */
+  .spx-inner { @apply mx-auto w-full max-w-5xl; }
+
+  /* The tracked-out label above every heading. */
+  .spx-eyebrow {
+    @apply font-sans text-[0.7rem] font-medium uppercase tracking-[0.18em] text-pine;
+  }
+  /* On navy, `pine` goes muddy — mint is the accent that belongs there. */
+  .spx-section-ink .spx-eyebrow { @apply text-mint; }
+
+  /* Headline line one: bold geometric sans, tight. */
+  .spx-display {
+    @apply font-sans text-[2.1rem] font-bold leading-[1.08] tracking-[-0.02em] sm:text-5xl;
+  }
+  /* Headline line two: italic serif. The pairing is the brand. */
+  .spx-display-serif {
+    @apply font-serif text-[2.1rem] font-normal italic leading-[1.08] tracking-[-0.01em] sm:text-5xl;
+  }
+
+  .spx-body { @apply font-sans text-base leading-relaxed text-charcoal/70; }
+  .spx-section-ink .spx-body { @apply text-canvas/75; }
+
+  /* Buttons. Square, no shadow, arrow supplied by the caller. */
+  .spx-btn {
+    @apply inline-flex items-center justify-center gap-3 px-7 py-4 font-sans text-[0.95rem] font-medium transition duration-200;
+  }
+  .spx-btn-ink    { @apply spx-btn bg-ink text-canvas hover:bg-night; }
+  .spx-btn-canvas { @apply spx-btn bg-canvas text-charcoal hover:bg-sand; }
+  .spx-btn-outline {
+    @apply spx-btn border border-charcoal/25 bg-transparent text-charcoal hover:border-charcoal/60;
+  }
+  /* Without this the outline button is charcoal text on navy — effectively
+     invisible. Any button that can appear inside an inverted section needs
+     the inverted pair defined next to it. */
+  .spx-section-ink .spx-btn-outline {
+    @apply border-canvas/35 text-canvas hover:border-canvas;
+  }
+
+  /* A panel that lifts off canvas: white, hairline, still square. */
+  .spx-card { @apply border border-charcoal/10 bg-paper; }
+
+  /* MOST POPULAR and friends. */
+  .spx-badge {
+    @apply inline-block bg-pine px-4 py-2 font-sans text-[0.7rem] font-medium uppercase tracking-[0.16em] text-canvas;
+  }
+
+  .spx-input {
+    @apply w-full border border-charcoal/20 bg-paper px-4 py-3 font-sans text-charcoal placeholder:text-charcoal/40 focus:border-ink focus:outline-none;
+  }
+
+  /* The one rounded shape in the system. */
+  .spx-arch { @apply overflow-hidden rounded-arch; }
+
+  /* Soft circle behind a step icon. */
+  .spx-step-icon {
+    @apply flex h-14 w-14 items-center justify-center rounded-full bg-sage text-charcoal;
+  }
+
+  /* Serif italic numerals — step numbers, stat figures. */
+  .spx-numeral { @apply font-serif italic; }
+
+  /* A media tile: fixed ratio, square, caption sits on the image. */
+  .spx-tile { @apply relative overflow-hidden bg-sage; }
+  .spx-tile-caption {
+    @apply absolute bottom-0 left-0 right-0 px-4 pb-3 pt-10 font-serif text-lg italic text-white;
+  }
+
+  /* Big serif figure over a tracked-out label. */
+  .spx-stat-figure { @apply font-serif text-4xl italic leading-none text-pine; }
+  .spx-section-ink .spx-stat-figure { @apply text-mint; }
+  .spx-stat-label {
+    @apply mt-2 font-sans text-[0.7rem] uppercase tracking-[0.1em] text-charcoal/60;
+  }
+  .spx-section-ink .spx-stat-label { @apply text-canvas/60; }
+
+  /* Empty state. Centred, quiet, square — never a dashed rounded box. */
+  .spx-empty {
+    @apply flex flex-col items-center justify-center border border-dashed border-charcoal/20 px-6 py-14 text-center;
+  }
+
+  /* Modal. The backdrop is navy at depth rather than neutral black, so it
+     reads as part of the brand instead of a browser default. */
+  .spx-modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-end justify-center bg-night/70 p-0 sm:items-center sm:p-6;
+  }
+  .spx-modal {
+    @apply max-h-[92vh] w-full max-w-lg overflow-y-auto border border-charcoal/10 bg-paper p-6 sm:p-8;
+  }
+
+  /* A hairline that matches the system's contrast rather than the old one. */
+  .spx-rule { @apply border-t border-charcoal/12; }
+  .spx-section-ink .spx-rule { @apply border-canvas/20; }
 }
 
 @media (prefers-reduced-motion: reduce) {

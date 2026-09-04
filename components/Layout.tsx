@@ -10,8 +10,13 @@ interface LayoutProps {
    * `wide` gives the page a 1152px column instead of 1024px. Four pricing
    * columns in the narrow one leave ~230px per card, which wraps feature lines
    * after three words — the single most "unfinished" thing on the site.
+   *
+   * `bleed` removes the column and the padding entirely so a page can paint
+   * edge-to-edge colour blocks. The redesign marks sections by changing the
+   * background, which a centred max-width column cannot do. Pages using it
+   * supply their own horizontal padding, normally via `.spx-section`.
    */
-  width?: 'default' | 'wide';
+  width?: 'default' | 'wide' | 'bleed';
   children: ReactNode;
 }
 
@@ -43,9 +48,13 @@ export default function Layout({ title, width = 'default', children }: LayoutPro
       </Head>
       <Navbar />
       <main
-        className={`mx-auto w-full flex-1 px-4 pb-20 pt-8 sm:px-6 ${
-          width === 'wide' ? 'max-w-6xl' : 'max-w-5xl'
-        }`}
+        className={
+          width === 'bleed'
+            ? 'w-full flex-1'
+            : `mx-auto w-full flex-1 px-4 pb-20 pt-8 sm:px-6 ${
+                width === 'wide' ? 'max-w-6xl' : 'max-w-5xl'
+              }`
+        }
       >
         {children}
       </main>
