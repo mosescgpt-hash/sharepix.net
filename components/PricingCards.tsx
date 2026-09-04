@@ -1,34 +1,23 @@
 import Link from 'next/link';
-import { ReactNode } from 'react';
 import { CORPORATE_PLAN, PRICING_TIERS } from '@/lib/pricing';
 
 /**
- * A drawn tick in a tinted disc, rather than a bare "✓" glyph in green text.
- * The glyph renders differently on every platform and sits off the baseline;
- * this is the same mark everywhere and gives the feature list a left rail.
+ * A drawn tick rather than a bare "✓" glyph: the glyph renders differently on
+ * every platform and sits off the baseline. Square, no tinted disc — the disc
+ * was the old rounded system.
  */
-function Check() {
+function Check({ inverted }: { inverted: boolean }) {
   return (
-    <span
+    <svg
       aria-hidden
-      className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent"
+      viewBox="0 0 12 12"
+      className={`mt-[5px] h-3 w-3 shrink-0 ${inverted ? 'text-mint' : 'text-pine'}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
     >
-      <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M2.5 6.2 4.8 8.5 9.5 3.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
-  );
-}
-
-function Badge({ children, tone }: { children: ReactNode; tone: 'accent' | 'quiet' }) {
-  return (
-    <span
-      className={`self-start whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${
-        tone === 'accent' ? 'bg-accent text-white' : 'bg-ink/[0.06] text-ink/70'
-      }`}
-    >
-      {children}
-    </span>
+      <path d="M2 6.2 4.6 8.8 10 3.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -39,55 +28,65 @@ interface PlanCardProps {
   meta: string;
   features: string[];
   href: string;
-  badge?: { label: string; tone: 'accent' | 'quiet' };
-  highlight?: boolean;
+  badge?: string;
+  /** The recommended plan, rendered as a navy block instead of a white card. */
+  featured?: boolean;
 }
 
-function PlanCard({ name, price, unit, meta, features, href, badge, highlight }: PlanCardProps) {
+function PlanCard({ name, price, unit, meta, features, href, badge, featured = false }: PlanCardProps) {
   return (
     <div
-      className={`relative flex flex-col rounded-2xl p-7 transition duration-200 ease-out ${
-        highlight
-          ? // The recommended plan is raised off the row rather than merely
-            // outlined — height is what makes a choice look chosen.
-            'border border-accent/30 bg-card shadow-float ring-1 ring-accent/15 xl:-my-3 xl:py-10'
-          : 'sp-card sp-card-interactive'
+      className={`flex flex-col p-7 ${
+        // Depth is background colour, not elevation. The chosen plan is the
+        // only inverted block in the row, which is what makes it read chosen.
+        featured ? 'border border-ink bg-ink text-canvas' : 'spx-card'
       }`}
     >
-      {/* The badge gets its own line. Beside the plan name it wraps to two
-          lines in a four-column row and shoves the title around. */}
-      <div className="flex min-h-[26px] items-start">
-        {badge ? <Badge tone={badge.tone}>{badge.label}</Badge> : null}
+      {/* Reserved even when empty, so the plan names stay on one baseline
+          across the row instead of the badged card pushing its own down. */}
+      <div className="min-h-[30px]">
+        {badge ? (
+          <span className={`spx-badge ${featured ? 'bg-mint text-charcoal' : 'bg-pine text-canvas'}`}>
+            {badge}
+          </span>
+        ) : null}
       </div>
-      <h3 className="mt-3 font-display text-lg font-bold tracking-tight">{name}</h3>
 
-      <p className="mt-3 flex items-baseline gap-1">
-        <span className="font-display text-[2.75rem] font-bold leading-none tracking-[-0.04em] tabular">
+      <h3
+        className={`mt-4 font-sans text-xs font-medium uppercase tracking-[0.16em] ${
+          featured ? 'text-canvas/70' : 'text-charcoal/60'
+        }`}
+      >
+        {name}
+      </h3>
+
+      <p className="mt-2 flex items-baseline gap-1.5">
+        <span className="font-sans text-[2.75rem] font-bold leading-none tracking-[-0.03em]">
           ${price}
         </span>
-        <span className="text-sm text-muted">/ {unit}</span>
+        <span className={`text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>
+          / {unit}
+        </span>
       </p>
-      <p className="mt-2 text-sm text-muted">{meta}</p>
+      <p className={`mt-2 text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>{meta}</p>
 
-      <div className="my-6 h-px bg-line" />
+      <div className={`my-6 h-px ${featured ? 'bg-canvas/20' : 'bg-charcoal/10'}`} />
 
-      <ul className="flex-1 space-y-3 text-sm leading-relaxed text-ink/80">
+      <ul className="flex-1 space-y-3">
         {features.map((feature) => (
-          <li key={feature} className="flex gap-2.5">
-            <Check />
+          <li
+            key={feature}
+            className={`flex gap-2.5 text-sm leading-relaxed ${
+              featured ? 'text-canvas/80' : 'text-charcoal/75'
+            }`}
+          >
+            <Check inverted={featured} />
             <span>{feature}</span>
           </li>
         ))}
       </ul>
 
-      <Link
-        href={href}
-        className={`mt-8 rounded-full py-3 text-center text-sm font-semibold transition duration-200 ease-out ${
-          highlight
-            ? 'bg-ink text-white shadow-lift hover:bg-night hover:shadow-float'
-            : 'border border-line bg-card text-ink hover:border-ink/25 hover:shadow-card'
-        }`}
-      >
+      <Link href={href} className={`${featured ? 'spx-btn-canvas' : 'spx-btn-outline'} mt-8 w-full`}>
         Choose {name}
       </Link>
     </div>
@@ -96,7 +95,7 @@ function PlanCard({ name, price, unit, meta, features, href, badge, highlight }:
 
 export default function PricingCards() {
   return (
-    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {PRICING_TIERS.map((tier) => (
         <PlanCard
           key={tier.id}
@@ -106,8 +105,8 @@ export default function PricingCards() {
           meta={`${tier.accessLabel} · one-time payment`}
           features={tier.features}
           href={`/create-event?tier=${tier.id}`}
-          badge={tier.highlight ? { label: 'Most popular', tone: 'accent' } : undefined}
-          highlight={tier.highlight}
+          badge={tier.highlight ? 'Most popular' : undefined}
+          featured={tier.highlight}
         />
       ))}
       <PlanCard
@@ -117,7 +116,7 @@ export default function PricingCards() {
         meta={CORPORATE_PLAN.accessLabel}
         features={CORPORATE_PLAN.features}
         href="/corporate"
-        badge={{ label: 'For teams', tone: 'quiet' }}
+        badge="For teams"
       />
     </div>
   );

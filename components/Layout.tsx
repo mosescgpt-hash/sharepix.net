@@ -37,7 +37,7 @@ export default function Layout({ title, width = 'default', children }: LayoutPro
     ? `${title} — sharepix.net`
     : 'sharepix.net — Capture. Connect. Celebrate.';
   return (
-    <div className="flex min-h-screen flex-col bg-smoke font-body text-ink">
+    <div className="flex min-h-screen flex-col bg-canvas font-sans text-charcoal">
       <Head>
         <title>{pageTitle}</title>
         <meta
@@ -58,36 +58,41 @@ export default function Layout({ title, width = 'default', children }: LayoutPro
       >
         {children}
       </main>
-      <footer className="mt-auto bg-night text-white">
-        {/* A hairline, not a 4px slab. The old mint bar was the loudest thing
-            on every page and read as a template accent. */}
-        <div className="h-px bg-gradient-to-r from-transparent via-mint/50 to-transparent" />
-        <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
-          <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+      {/* Square, navy, no gradient hairline. The footer is the last full-bleed
+          colour block on every page rather than a decorated strip. */}
+      <footer className="mt-auto bg-ink text-canvas">
+        <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8">
+          <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-xs">
-              <p className="font-display text-lg font-bold tracking-tight">
+              <p className="font-sans text-lg font-bold tracking-[-0.02em]">
                 share<span className="text-mint">pix</span>
-                <span className="text-white/45">.net</span>
+                <span className="text-canvas/40">.net</span>
               </p>
-              <p className="mt-3 text-sm leading-relaxed text-white/60">
-                Capture. Connect. Celebrate. Every photo your guests took, in one
-                gallery — pay per event, or take the Corporate plan monthly.
+              <p className="mt-4 font-serif text-xl italic leading-snug text-canvas/85">
+                Every moment. Everyone&rsquo;s perspective.
+              </p>
+              <p className="mt-4 text-sm leading-relaxed text-canvas/60">
+                One gallery for every photo your guests took. Pay per event, or take the
+                Corporate plan monthly.
               </p>
             </div>
-            <nav aria-label="Footer" className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm sm:gap-x-16">
+            <nav
+              aria-label="Footer"
+              className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm sm:gap-x-16"
+            >
               {FOOTER_LINKS.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-white/65 transition hover:text-mint"
+                  className="text-canvas/65 transition hover:text-mint"
                 >
                   {link.label}
                 </Link>
               ))}
             </nav>
           </div>
-          <div className="mt-10 flex flex-col gap-2 border-t border-white/10 pt-6 text-sm text-white/45 sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} sharepix.net</p>
+          <div className="mt-12 flex flex-col gap-2 border-t border-canvas/15 pt-6 text-sm text-canvas/45 sm:flex-row sm:items-center sm:justify-between">
+            <p>&copy; {new Date().getFullYear()} sharepix.net</p>
             <a href={`mailto:${SUPPORT_EMAIL}`} className="transition hover:text-mint">
               {SUPPORT_EMAIL}
             </a>

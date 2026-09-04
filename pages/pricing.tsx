@@ -22,32 +22,37 @@ const faqs = [
 
 export default function PricingPage() {
   return (
-    <Layout title="Pricing" width="wide">
-      <section className="py-14 sm:py-20">
-        <div className="text-center">
-          <p className="sp-eyebrow">Pricing</p>
-          <h1 className="mx-auto mt-5 max-w-2xl font-display text-4xl font-bold tracking-[-0.035em] sm:text-5xl">
-            Pay per event, keep every memory
+    <Layout title="Pricing" width="bleed">
+      <section className="spx-section-canvas">
+        <div className="mx-auto w-full max-w-6xl">
+          <p className="spx-eyebrow">Pricing</p>
+          <h1 className="mt-3">
+            <span className="spx-display block">One event. One payment.</span>
+            <span className="spx-display-serif block">No surprises.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-muted">
-            No subscriptions, no per-guest fees. Pick a plan for your event, and
-            everyone you invite can upload for free.
+          <p className="spx-body mt-5 max-w-lg">
+            Priced per event, not per guest and not per photo. Everyone you invite uploads for
+            free, nothing renews, and nothing is charged until you publish.
           </p>
-        </div>
 
-        <div className="mt-14">
-          <PricingCards />
+          <div className="mt-12">
+            <PricingCards />
+          </div>
         </div>
+      </section>
 
-        <div className="mx-auto mt-20 max-w-2xl">
-          <h2 className="text-center font-display text-2xl font-bold tracking-[-0.03em]">
-            Common questions
+      <section className="spx-section-sand">
+        <div className="mx-auto w-full max-w-3xl">
+          <p className="spx-eyebrow">Common questions</p>
+          <h2 className="mt-3">
+            <span className="spx-display block">The things people</span>
+            <span className="spx-display-serif block">ask us first.</span>
           </h2>
-          <dl className="sp-card mt-8 divide-y divide-line">
+          <dl className="mt-10 border-t border-charcoal/12">
             {faqs.map((faq) => (
-              <div key={faq.q} className="p-6 sm:p-7">
-                <dt className="font-display font-bold tracking-tight text-ink">{faq.q}</dt>
-                <dd className="mt-2 text-sm leading-relaxed text-muted">{faq.a}</dd>
+              <div key={faq.q} className="border-b border-charcoal/12 py-7">
+                <dt className="font-sans text-lg font-semibold text-charcoal">{faq.q}</dt>
+                <dd className="spx-body mt-2 text-sm">{faq.a}</dd>
               </div>
             ))}
           </dl>
