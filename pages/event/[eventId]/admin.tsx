@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
+import GuestBookModeration from '@/components/GuestBookModeration';
 import EventQRCode from '@/components/EventQRCode';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
@@ -755,6 +756,21 @@ function AdminDashboardPage() {
                     </Link>
                   </div>
                 ) : null}
+                {guestBookAvailable(event) ? (
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-green-700">
+                      ✓ Guest book — guests can leave a signed note, photo, or video message.
+                    </p>
+                    <Link
+                      href={`/event/${event.id}/guestbook`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent/5"
+                    >
+                      Open guest book ↗
+                    </Link>
+                  </div>
+                ) : null}
 
                 {availableAddOns.length > 0 ? (
                   <>
@@ -861,6 +877,10 @@ function AdminDashboardPage() {
                 onClear={() => setShareSelected(new Set())}
               />
             </div>
+
+            {/* Below the photos: notes are the smaller half of the event, and
+                a host opening this page is usually here for the pictures. */}
+            {guestBookAvailable(event) ? <GuestBookModeration eventId={event.id} /> : null}
 
             <div className="mt-8">
               <AdminPhotoGrid

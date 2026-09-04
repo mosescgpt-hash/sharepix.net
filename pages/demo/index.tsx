@@ -74,6 +74,18 @@ export default function DemoPage() {
           >
             See the live slideshow
           </Link>
+          <Link
+            href="/demo/guestbook"
+            className="group sp-card sp-card-interactive p-6 hover:border-accent/40"
+          >
+            <h3 className="font-display text-xl font-bold group-hover:text-accent">
+              The guest book &rarr;
+            </h3>
+            <p className="mt-2 text-sm text-ink/70">
+              Signed notes guests leave alongside their photos &mdash; a message, a
+              picture, or a short video message.
+            </p>
+          </Link>
         </div>
       </section>
 
@@ -137,7 +149,7 @@ export default function DemoPage() {
 
       {/* Where to go next */}
       <section className="py-10">
-        <div className="grid gap-5 sm:grid-cols-2">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Link
             href="/demo/gallery"
             className="group sp-card sp-card-interactive p-6 hover:border-accent/40"

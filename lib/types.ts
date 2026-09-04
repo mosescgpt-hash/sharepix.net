@@ -26,6 +26,9 @@ export interface QREvent {
   /** Host withheld guest downloads. Absent/false = downloads allowed. */
   guestDownloadsBlocked?: boolean | null;
   liveSlideshowEnabled?: boolean | null;
+  /** Guest book bought as an add-on. Included on Premium/Corporate regardless. */
+  guestBookEnabled?: boolean | null;
+  guestBookCount?: number | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
   moderationMode?: string | null;
   /** Where to email the host when a photo is held for review. */
@@ -35,6 +38,25 @@ export interface QREvent {
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;
+}
+
+/** A signed note a guest left, as the public album sees it. */
+export interface GuestBookEntry {
+  id: string;
+  eventId: string;
+  name: string;
+  message?: string | null;
+  /** A Photo in the same event, verified server-side when the entry was made. */
+  photoId?: string | null;
+  createdAt?: string | null;
+}
+
+/** The host's view, which also carries the moderation state guests never see. */
+export interface HostGuestBookEntry extends GuestBookEntry {
+  /** 'ok' | 'flagged' | 'released'; missing reads as visible. */
+  moderationStatus?: string | null;
+  moderationReasons?: string | null;
+  hidden?: boolean | null;
 }
 
 export interface QRPhoto {

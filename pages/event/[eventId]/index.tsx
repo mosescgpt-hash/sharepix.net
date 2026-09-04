@@ -8,6 +8,7 @@ import { isGlobalAdmin } from '@/lib/admin';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { canDownloadEventMedia, galleryVariantFor, isEventHost } from '@/lib/gallery';
 import { DisplayPhoto, QREvent } from '@/lib/types';
+import { guestBookAvailable } from '@/lib/guestBook';
 
 export default function EventGalleryPage() {
   const router = useRouter();
@@ -97,10 +98,18 @@ export default function EventGalleryPage() {
                     Add your photos
                   </Link>
                 ) : null}
+                {guestBookAvailable(event) ? (
+                  <Link
+                    href={`/event/${event.id}/guestbook`}
+                    className="rounded-full border border-line bg-card px-5 py-2 font-medium hover:border-accent hover:text-accent"
+                  >
+                    Guest book
+                  </Link>
+                ) : null}
                 <button
                   type="button"
                   onClick={load}
-                  className="rounded-full border border-ink/20 px-5 py-2 font-medium hover:border-accent hover:text-accent"
+                  className="rounded-full border border-line bg-card px-5 py-2 font-medium hover:border-accent hover:text-accent"
                 >
                   Refresh
                 </button>
