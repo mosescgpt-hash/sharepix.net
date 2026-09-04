@@ -98,7 +98,7 @@ export default function TryDemoModal({
 
         <p className="mt-6 text-sm text-charcoal/60">
           Or{' '}
-          <Link href={DEMO_PATH} className="font-medium text-accent underline">
+          <Link href={DEMO_PATH} className="font-medium text-pine underline">
             open the demo here
           </Link>{' '}
           — the QR goes to the same place.

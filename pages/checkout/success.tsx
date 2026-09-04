@@ -69,7 +69,7 @@ export default function CheckoutSuccessPage() {
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link
                 href={`/event/${eventId}/admin#event-qr-code`}
-                className="rounded-full bg-accent px-6 py-3 font-medium text-white hover:bg-accent/90"
+                className="spx-btn-ink"
               >
                 Get your QR code
               </Link>
@@ -101,7 +101,7 @@ export default function CheckoutSuccessPage() {
               </button>
               <Link
                 href="/my-events"
-                className="rounded-full border border-ink/20 px-6 py-3 font-medium hover:border-accent"
+                className="spx-btn-outline"
               >
                 My events
               </Link>
@@ -119,7 +119,7 @@ export default function CheckoutSuccessPage() {
               </Link>
               <Link
                 href="/"
-                className="rounded-full border border-ink/20 px-6 py-3 font-medium hover:border-accent"
+                className="spx-btn-outline"
               >
                 Home
               </Link>

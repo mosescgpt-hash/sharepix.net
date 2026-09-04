@@ -242,7 +242,7 @@ function TableTentPage() {
     photoUrl !== null;
 
   return (
-    <div className="min-h-screen bg-smoke font-body text-ink">
+    <div className="min-h-screen bg-canvas font-sans text-charcoal">
       <Head>
         <title>{event ? `${event.name} — table tent` : 'Table tent'} — sharepix.net</title>
       </Head>
@@ -407,7 +407,7 @@ function TableTentPage() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link
             href={eventId ? `/event/${eventId}/admin` : '/my-events'}
-            className="text-sm font-medium text-ink/70 hover:text-accent"
+            className="text-sm font-medium text-charcoal/70 transition hover:text-charcoal"
           >
             ← Back to dashboard
           </Link>
@@ -415,7 +415,7 @@ function TableTentPage() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent/90"
+              className="bg-ink px-5 py-2.5 text-sm font-medium text-canvas transition hover:bg-night"
             >
               Print / Save as PDF
             </button>
@@ -425,7 +425,7 @@ function TableTentPage() {
 
       <main className="mx-auto max-w-5xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-muted">Loading table tent…</p>
+          <p className="text-center text-charcoal/60">Loading table tent…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open this table tent.
@@ -437,8 +437,8 @@ function TableTentPage() {
         ) : event && content ? (
           <>
             <div className="print:hidden mx-auto mb-6 max-w-2xl rounded-2xl border border-ink/10 bg-white p-5">
-              <h1 className="font-display text-xl font-bold">Table tent</h1>
-              <p className="mt-1 text-sm text-muted">
+              <h1 className="font-sans text-xl font-bold tracking-[-0.02em]">Table tent</h1>
+              <p className="mt-1 text-sm text-charcoal/60">
                 Print one sheet, fold it in half across the dashed line, and stand it on the
                 table. Both sides read right way up. It&apos;s ready to print as-is — the
                 options below are only if you want to change something.
@@ -457,12 +457,12 @@ function TableTentPage() {
             {/* Customization — everything below is optional. */}
             <div className="print:hidden mx-auto mt-8 max-w-2xl rounded-2xl border border-ink/10 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-display text-lg font-bold">Make it yours (optional)</h2>
+                <h2 className="font-sans text-lg font-bold tracking-[-0.02em]">Make it yours (optional)</h2>
                 {customized ? (
                   <button
                     type="button"
                     onClick={resetAll}
-                    className="text-sm font-medium text-muted underline hover:text-accent"
+                    className="text-sm font-medium text-charcoal/60 underline transition hover:text-charcoal"
                   >
                     Reset to the default
                   </button>
@@ -478,7 +478,7 @@ function TableTentPage() {
                     maxLength={MAX_HEADLINE}
                     placeholder={DEFAULT_HEADLINE}
                     onChange={(e) => setHeadline(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                    className="spx-input mt-2"
                   />
                 </label>
                 <label className="block">
@@ -489,7 +489,7 @@ function TableTentPage() {
                     rows={3}
                     placeholder={DEFAULT_MESSAGE}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                    className="spx-input mt-2"
                   />
                 </label>
               </div>
@@ -505,8 +505,8 @@ function TableTentPage() {
                       aria-pressed={themeKey === theme.key}
                       className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium ${
                         themeKey === theme.key
-                          ? 'border-accent text-accent'
-                          : 'border-ink/20 hover:border-accent'
+                          ? 'border-ink bg-ink text-canvas'
+                          : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                       }`}
                     >
                       <span
@@ -540,7 +540,7 @@ function TableTentPage() {
                     />
                     City and state
                     {!event.location ? (
-                      <span className="text-muted">(add one in Event settings)</span>
+                      <span className="text-charcoal/60">(add one in Event settings)</span>
                     ) : null}
                   </label>
                   <label className="flex items-center gap-2">
@@ -563,7 +563,7 @@ function TableTentPage() {
                       setPhotosOpen((open) => !open);
                       loadPhotos();
                     }}
-                    className="text-sm font-medium text-accent underline"
+                    className="text-sm font-medium text-pine underline"
                   >
                     {photosOpen ? 'Hide photos' : 'Pick from this event'}
                   </button>
@@ -572,16 +572,16 @@ function TableTentPage() {
                   <button
                     type="button"
                     onClick={() => setPhotoUrl(null)}
-                    className="mt-2 text-sm text-muted underline hover:text-accent"
+                    className="mt-2 text-sm text-charcoal/60 underline transition hover:text-charcoal"
                   >
                     Remove the photo
                   </button>
                 ) : null}
                 {photosOpen ? (
                   photosLoading ? (
-                    <p className="mt-3 text-sm text-muted">Loading photos…</p>
+                    <p className="mt-3 text-sm text-charcoal/60">Loading photos…</p>
                   ) : photos.length === 0 ? (
-                    <p className="mt-3 text-sm text-muted">
+                    <p className="mt-3 text-sm text-charcoal/60">
                       No photos yet. Once guests start uploading, you can put one on the tent.
                     </p>
                   ) : (
@@ -593,7 +593,7 @@ function TableTentPage() {
                           onClick={() => setPhotoUrl(photo.url)}
                           aria-pressed={photoUrl === photo.url}
                           className={`overflow-hidden rounded-lg border-2 ${
-                            photoUrl === photo.url ? 'border-accent' : 'border-transparent'
+                            photoUrl === photo.url ? 'border-ink' : 'border-transparent'
                           }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -611,7 +611,7 @@ function TableTentPage() {
               </div>
             </div>
 
-            <div className="print:hidden mx-auto mt-6 max-w-2xl rounded-2xl bg-white/60 p-5 text-sm text-muted">
+            <div className="print:hidden mx-auto mt-6 max-w-2xl border border-charcoal/10 bg-paper/70 p-5 text-sm text-charcoal/60">
               <p className="font-medium text-ink">Printing tips</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 <li>Use Letter paper, portrait, and set scale to 100% (not &ldquo;fit to page&rdquo;).</li>

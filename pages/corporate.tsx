@@ -81,10 +81,10 @@ function CorporatePage() {
   return (
     <Layout title="Corporate plan">
       <section className="mx-auto max-w-2xl py-10">
-        <p className="text-sm font-medium uppercase tracking-[0.16em] text-accent">
+        <p className="spx-eyebrow">
           For businesses
         </p>
-        <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">
+        <h1 className="spx-display mt-3">
           {CORPORATE_PLAN.name} plan
         </h1>
         <p className="mt-2 text-ink/70">
@@ -92,7 +92,7 @@ function CorporatePage() {
         </p>
 
         {loading ? (
-          <p className="mt-10 text-center text-muted">Loading your subscription…</p>
+          <p className="mt-10 text-center text-charcoal/60">Loading your subscription…</p>
         ) : active ? (
           <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
             <div className="flex items-center gap-2">
@@ -127,25 +127,25 @@ function CorporatePage() {
             </button>
           </div>
         ) : (
-          <div className="mt-8 sp-card p-6">
+          <div className="spx-card mt-8 p-7">
             {justSubscribed ? (
               <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Thanks! We&apos;re finalizing your subscription — this can take a few seconds.
                 If it doesn&apos;t appear shortly, refresh the page.
               </p>
             ) : null}
-            <p className="font-display text-2xl font-bold">{CORPORATE_PLAN.priceLabel}</p>
+            <p className="font-sans text-2xl font-bold tracking-[-0.02em]">{CORPORATE_PLAN.priceLabel}</p>
             <ul className="mt-4 space-y-2 text-sm text-ink/80">
               {CORPORATE_PLAN.features.map((feature) => (
                 <li key={feature} className="flex gap-2">
-                  <span className="text-accent">✓</span>
+                  <span className="text-pine">✓</span>
                   {feature}
                 </li>
               ))}
             </ul>
             <div className="mt-6">
               <label htmlFor="corp-discount" className="text-sm font-medium">
-                Discount code <span className="text-muted">(optional)</span>
+                Discount code <span className="text-charcoal/50">(optional)</span>
               </label>
               <input
                 id="corp-discount"
@@ -154,18 +154,18 @@ function CorporatePage() {
                 onChange={(e) => setDiscountCode(e.target.value)}
                 placeholder="Enter code"
                 autoComplete="off"
-                className="mt-1 w-full rounded-xl border border-ink/20 px-4 py-3 uppercase focus:border-accent focus:outline-none"
+                className="spx-input mt-2 uppercase"
               />
             </div>
             <button
               type="button"
               onClick={() => void handleSubscribe()}
               disabled={working}
-              className="mt-4 w-full rounded-full bg-accent py-3 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+              className="spx-btn-ink mt-5 w-full disabled:opacity-50"
             >
               {working ? 'Sending you to checkout…' : `Subscribe · ${CORPORATE_PLAN.priceLabel}`}
             </button>
-            <p className="mt-3 text-center text-xs text-muted">
+            <p className="mt-3 text-center text-xs text-charcoal/60">
               Secure recurring billing on Stripe. Cancel anytime from your account.
             </p>
           </div>

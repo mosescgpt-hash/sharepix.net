@@ -21,7 +21,7 @@ function RoleBadge({ role }: { role: 'guest' | 'host' }) {
   return (
     <span
       className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${
-        role === 'host' ? 'bg-ink text-white' : 'bg-accent/10 text-accent'
+        role === 'host' ? 'bg-ink text-canvas' : 'bg-sage text-pine'
       }`}
     >
       {role === 'host' ? 'You are the host' : 'You are a guest'}
@@ -243,7 +243,7 @@ export default function DemoTryPage() {
                       setPhoto(DEMO_PHOTOS[2].url);
                       setStep('held');
                     }}
-                    className="font-medium text-accent underline"
+                    className="font-medium text-pine underline"
                   >
                     Use one of ours instead
                   </button>
@@ -295,7 +295,7 @@ export default function DemoTryPage() {
                 <MiniSlideshow photos={galleryPhotos} />
                 <p className="mt-4 text-center text-sm text-charcoal/60">
                   On the night this runs full-screen on a TV or projector.{' '}
-                  <Link href="/demo/live" className="font-medium text-accent underline">
+                  <Link href="/demo/live" className="font-medium text-pine underline">
                     Open the full-screen version
                   </Link>
                 </p>

@@ -77,10 +77,10 @@ export default function ModerationReviewPage() {
       </Head>
       <section className="mx-auto max-w-lg py-10">
         {loading ? (
-          <p className="text-center text-muted">Loading the photo…</p>
+          <p className="text-center text-charcoal/60">Loading the photo…</p>
         ) : !review ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
-            <h1 className="font-display text-2xl font-bold">This link isn’t valid</h1>
+            <h1 className="font-sans text-2xl font-bold tracking-[-0.02em]">This link isn’t valid</h1>
             <p className="mt-2 text-sm">
               It may have expired or already been used. You can always review held photos
               from your event dashboard.
@@ -88,7 +88,7 @@ export default function ModerationReviewPage() {
           </div>
         ) : (
           <>
-            <h1 className="font-display text-3xl font-bold">Photo held for review</h1>
+            <h1 className="spx-display">Photo held for review</h1>
             <p className="mt-2 text-ink/70">
               Our screening flagged this photo{review.eventName ? ` from ${review.eventName}` : ''}, so
               guests and the slideshow can’t see it yet.
@@ -146,7 +146,7 @@ export default function ModerationReviewPage() {
                   type="button"
                   disabled={working}
                   onClick={() => void decide('release')}
-                  className="flex-1 rounded-full bg-accent py-3 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                  className="spx-btn-ink flex-1 disabled:opacity-50"
                 >
                   {working ? 'Working…' : 'Approve — show it'}
                 </button>
@@ -167,7 +167,7 @@ export default function ModerationReviewPage() {
               </p>
             ) : null}
 
-            <p className="mt-6 text-xs text-muted">
+            <p className="mt-6 text-xs text-charcoal/60">
               Denying keeps the photo hidden from guests. To delete it permanently, open your
               event dashboard.
             </p>

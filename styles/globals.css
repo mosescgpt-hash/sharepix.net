@@ -1,6 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600&display=swap');
-/* Redesign pairing — see docs/design-system.md. Loaded alongside the old
-   stack only until Phase 3 migrates the pages; the import above goes then. */
+/* The brand pairing — see docs/design-system.md. Bricolage Grotesque and
+   Inter were dropped once no page referenced them; two families is already
+   the page-weight budget. */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;1,400;1,500&display=swap');
 
 @tailwind base;
@@ -14,18 +14,13 @@
   }
 
   /*
-   * A very quiet wash behind the page instead of one flat grey. It is barely
-   * perceptible on its own — the point is that white cards now sit on
-   * *something*, so they read as objects rather than as holes in the page.
-   * Anchored to the top and not fixed, so it scrolls away and never fights
-   * long pages or mobile scroll performance.
+   * Flat, warm, and nothing else. The old page carried a mint radial wash so
+   * that white cards had *something* to sit on; the redesign marks sections by
+   * changing the background edge to edge instead, and a gradient underneath
+   * that fights every band it shows through.
    */
   body {
-    background-color: theme('colors.smoke');
-    background-image:
-      radial-gradient(64rem 34rem at 50% -14rem, rgba(122, 216, 192, 0.22), transparent 62%),
-      radial-gradient(48rem 26rem at 108% -4rem, rgba(9, 147, 97, 0.07), transparent 58%);
-    background-repeat: no-repeat;
+    background-color: theme('colors.canvas');
   }
 
   /* Display type at large sizes needs negative tracking to look set rather
@@ -45,45 +40,19 @@
   /* One visible, on-brand focus ring everywhere. The .tcc-theme rule below is
      more specific, so the comic theme keeps its yellow one. */
   :focus-visible {
-    outline: 2px solid theme('colors.accent');
+    outline: 2px solid theme('colors.ink');
     outline-offset: 2px;
   }
 }
 
 /*
- * Shared surface and control primitives.
+ * Surface and control primitives.
  *
- * These exist so elevation, radius and hover behaviour are decided once. A page
- * that hand-rolls `rounded-2xl border border-ink/10 bg-white` gets a flat box;
- * a page that uses `.sp-card` gets the same object every other page has.
+ * These exist so radius, border and hover behaviour are decided once. The old
+ * `sp-` set (rounded cards, pill buttons, shadow-based elevation) was deleted
+ * after Phase 5, when the last page stopped referencing it.
  */
 @layer components {
-  .sp-card {
-    @apply rounded-2xl border border-line bg-card shadow-card;
-  }
-
-  /* Add to a card that is a link or a target — a small, slow rise. */
-  .sp-card-interactive {
-    @apply transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lift;
-  }
-
-  .sp-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3 font-medium transition duration-200 ease-out;
-  }
-
-  .sp-btn-primary {
-    @apply sp-btn bg-ink text-white shadow-lift hover:-translate-y-0.5 hover:bg-night hover:shadow-float;
-  }
-
-  .sp-btn-ghost {
-    @apply sp-btn border border-line bg-card text-ink shadow-card hover:-translate-y-0.5 hover:border-ink/25 hover:shadow-lift;
-  }
-
-  /* The small tracked-out label above a heading. */
-  .sp-eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.22em] text-accent;
-  }
-
   /* ===================================================================
      Redesign primitives (docs/design-system.md).
 
@@ -213,13 +182,6 @@
     transition-duration: 0.01ms !important;
   }
 
-  /* Without a transition, a hover lift is a jump. Keep the shadow change,
-     drop the movement. */
-  .sp-card-interactive:hover,
-  .sp-btn-primary:hover,
-  .sp-btn-ghost:hover {
-    transform: none !important;
-  }
 }
 
 /* =========================================================================

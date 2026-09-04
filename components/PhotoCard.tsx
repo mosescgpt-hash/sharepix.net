@@ -57,7 +57,7 @@ export default function PhotoCard({
         failed
           ? 'border-red-500 ring-2 ring-red-500'
           : selected
-            ? 'border-accent ring-2 ring-accent'
+            ? 'border-ink ring-2 ring-ink'
             : 'border-ink/10'
       }`}
     >
@@ -109,8 +109,8 @@ export default function PhotoCard({
             aria-pressed={selected}
             className={`absolute left-2 top-2 grid h-8 w-8 place-items-center rounded-full border-2 text-sm font-bold shadow ${
               selected
-                ? 'border-white bg-accent text-white'
-                : 'border-white bg-black/40 text-white hover:bg-accent'
+                ? 'border-white bg-ink text-canvas'
+                : 'border-white bg-black/40 text-white hover:bg-ink'
             }`}
           >
             {selected ? '✓' : ''}
@@ -133,7 +133,7 @@ export default function PhotoCard({
             type="button"
             onClick={handleDownload}
             disabled={downloading}
-            className="shrink-0 rounded-full border border-ink/20 px-3 py-1 font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+            className="shrink-0 border border-charcoal/25 px-3 py-1 font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
           >
             {downloading ? '…' : 'Download'}
           </button>

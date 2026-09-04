@@ -52,7 +52,7 @@ export default function InstallAppButton() {
 
   return (
     <>
-      <button type="button" onClick={handleInstall} className="text-ink/70 hover:text-accent">
+      <button type="button" onClick={handleInstall} className="text-charcoal/70 transition hover:text-charcoal">
         Install app
       </button>
       {showIosHelp ? (

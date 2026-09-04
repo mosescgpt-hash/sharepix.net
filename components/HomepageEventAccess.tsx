@@ -37,7 +37,7 @@ export default function HomepageEventAccess() {
       {/* A dark slab in the middle of a light page needs to look deliberate.
           The gradient and the mint hairline give it depth; the float shadow
           seats it on the page rather than pasting it onto it. */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-ink via-ink to-night p-7 text-white shadow-float sm:p-9">
+      <div className="relative overflow-hidden bg-ink p-7 text-canvas sm:p-9">
         <span
           aria-hidden
           className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-mint/60 to-transparent"
