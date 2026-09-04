@@ -26,6 +26,8 @@ import { printFulfill } from './functions/print-fulfill/resource';
 import { printProviderCheck } from './functions/print-provider-check/resource';
 import { sendTestAlert } from './functions/send-test-alert/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
+import { createGuestBookEntry } from './functions/create-guest-book-entry/resource';
+import { listGuestBookEntries } from './functions/list-guest-book-entries/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
@@ -47,6 +49,8 @@ const backend = defineBackend({
   printProviderCheck,
   sendTestAlert,
   listEventPhotos,
+  createGuestBookEntry,
+  listGuestBookEntries,
   adminUserActions,
   stripeWebhook,
   corporatePortal,
@@ -63,6 +67,7 @@ const printOrderTable = backend.data.resources.tables.PrintOrder;
 const discountTable = backend.data.resources.tables.DiscountCode;
 const reviewTable = backend.data.resources.tables.ModerationReview;
 const hostProfileTable = backend.data.resources.tables.HostProfile;
+const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -276,6 +281,23 @@ printFulfillFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
 photoTable.grantReadData(listFn);
 listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// Guest book write: reads the event to re-derive entitlement and state, bumps
+// the entry counter atomically, reads the Photo table to prove an attached
+// photo really belongs to this event, and writes the entry. Photo access is
+// read-only — an entry references a photo, it never creates or changes one.
+const guestBookWriteFn = backend.createGuestBookEntry.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(guestBookWriteFn);
+photoTable.grantReadData(guestBookWriteFn);
+guestBookTable.grantWriteData(guestBookWriteFn);
+guestBookWriteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+guestBookWriteFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+guestBookWriteFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
+
+// Guest book read: one event's visible entries for the public album (read-only).
+const guestBookListFn = backend.listGuestBookEntries.resources.lambda as LambdaFunction;
+guestBookTable.grantReadData(guestBookListFn);
+guestBookListFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
 
 // Admin user-actions function: reset passwords and enable/disable accounts in
 // the Cognito user pool. Scoped to just these admin operations on this pool.

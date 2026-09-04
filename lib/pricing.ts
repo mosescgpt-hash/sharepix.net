@@ -127,6 +127,16 @@ export const CORPORATE_PLAN = {
  */
 export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
 
+/**
+ * One-time cost to add a guest book to a single event, on the plans that do not
+ * already include it (Starter and Standard - see lib/guestBook.ts).
+ *
+ * Priced under the Standard-to-Premium gap on purpose: at $19 a Standard host
+ * pays $58 all-in rather than $79 to upgrade, so the add-on is the cheaper
+ * answer for someone who wants the guest book and nothing else Premium offers.
+ */
+export const GUEST_BOOK_ADDON_PRICE = 19;
+
 export function getTier(id: string): PricingTier | undefined {
   return PRICING_TIERS.find((t) => t.id === id);
 }

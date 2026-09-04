@@ -409,7 +409,7 @@ export function isCorporateActive(sub: CorporateSubscription | null): boolean {
 }
 
 /** The per-event add-ons a host can buy together in one checkout. */
-export type EventAddOnKey = 'extend' | 'live_slideshow';
+export type EventAddOnKey = 'extend' | 'live_slideshow' | 'guest_book';
 
 /**
  * Buy one or more per-event add-ons in a single checkout. The function re-derives

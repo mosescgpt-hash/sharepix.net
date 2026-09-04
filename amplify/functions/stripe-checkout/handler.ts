@@ -79,8 +79,10 @@ async function resolveDiscount(
 
   // Scope check. New codes carry appliesToScopes: a comma-separated list of the
   // paid items ticked when the code was made — event:starter, event:standard,
-  // event:premium, corporate, extend. ('all' is still honored
-  // for codes created before plans were listed individually.) Legacy codes have
+  // event:premium, corporate, extend, live_slideshow, guest_book. ('all' is
+  // still honored for codes made before plans were listed individually.) This
+  // matching is generic, so a new add-on key works as soon as an admin can tick
+  // it. Legacy codes have
   // only appliesToTier, where 'all'/blank was universal and a specific tier only
   // ever applied to creating an event on that plan.
   const scopesRaw = (item.appliesToScopes?.S ?? '').toLowerCase().trim();
@@ -207,6 +209,8 @@ const TIER_PRICING: Record<string, { name: string; amount: number }> = {
 
 // Mirrors LIVE_SLIDESHOW_ADDON_PRICE in lib/pricing.ts (dollars → cents).
 const LIVE_SLIDESHOW_ADDON_CENTS = 2900;
+// Mirrors GUEST_BOOK_ADDON_PRICE in lib/pricing.ts.
+const GUEST_BOOK_ADDON_CENTS = 1900;
 
 export const handler: Handler = async (event) => {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -400,6 +404,23 @@ export const handler: Handler = async (event) => {
           },
         });
         scopes.push('live_slideshow');
+      } else if (key === 'guest_book') {
+        // Premium and Corporate already include it, and an event that has
+        // bought it must never be sold it twice. Both are re-derived from the
+        // event's own row - the client says which key it wants, never whether
+        // it is entitled to it. Skipped rather than rejected, so one
+        // already-covered selection does not fail the whole cart.
+        if (evTier === 'premium' || evTier === 'corporate') continue;
+        if (ev.guestBookEnabled?.BOOL === true) continue;
+        lineItems.push({
+          quantity: 1,
+          price_data: {
+            currency: 'usd',
+            unit_amount: GUEST_BOOK_ADDON_CENTS,
+            product_data: { name: 'SharePix guest book (one event)' },
+          },
+        });
+        scopes.push('guest_book');
       } else {
         throw new Error('That add-on is not recognized.');
       }

@@ -23,14 +23,9 @@ import {
   type EventAddOnKey,
   updateEventDetails,
 } from '@/lib/api';
-import {
-  CORPORATE_PLAN,
-  LIVE_SLIDESHOW_ADDON_PRICE,
-  extensionPrice,
-  getTier,
-  videosRemaining,
-} from '@/lib/pricing';
+import { CORPORATE_PLAN, GUEST_BOOK_ADDON_PRICE, LIVE_SLIDESHOW_ADDON_PRICE, extensionPrice, getTier, videosRemaining } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -173,6 +168,17 @@ function AdminDashboardPage() {
         label: 'Live slideshow',
         price: LIVE_SLIDESHOW_ADDON_PRICE,
         description: 'Show photos on a screen at your venue as guests upload them.',
+      });
+    }
+    // Premium and Corporate already include the guest book, and an event that
+    // bought it is not offered it again. The checkout function re-derives both
+    // server-side; this only decides what to show.
+    if (guestBookPurchasable(event)) {
+      items.push({
+        key: 'guest_book',
+        label: 'Guest book',
+        price: GUEST_BOOK_ADDON_PRICE,
+        description: 'Let guests leave a signed note, photo, or video message.',
       });
     }
     return items;
