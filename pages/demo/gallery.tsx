@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Layout from '@/components/Layout';
+import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
 import { DEMO_EVENT, DEMO_PHOTOS } from '@/lib/demoEvent';
 
@@ -15,30 +16,33 @@ import { DEMO_EVENT, DEMO_PHOTOS } from '@/lib/demoEvent';
  */
 export default function DemoGalleryPage() {
   return (
-    <Layout title="Sample gallery">
-      <section className="py-8">
-        <div className="rounded-2xl border border-accent/30 bg-accent/5 px-4 py-3 text-sm">
-          <strong className="font-semibold">This is a sample.</strong> The images are
-          illustrations, not photographs, and nothing here is a real event.{' '}
-          <Link href="/demo" className="text-accent underline">
+    <Layout title="Sample gallery" width="bleed">
+      <section className="spx-section-ink py-10 sm:py-14">
+        <div className="spx-inner">
+          <p className="spx-eyebrow">
+            {DEMO_PHOTOS.length} photos from{' '}
+            {new Set(DEMO_PHOTOS.map((photo) => photo.uploadedBy)).size} guests
+          </p>
+          <h1 className="spx-display mt-3">{DEMO_EVENT.name}</h1>
+          <p className="spx-display-serif mt-1 text-2xl sm:text-3xl">{DEMO_EVENT.location}</p>
+        </div>
+      </section>
+
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="spx-inner">
+        <Notice label="This is a sample">
+          The images are illustrations, not photographs, and nothing here is a real event.{' '}
+          <Link href="/demo" className="text-pine underline">
             See how it works
           </Link>{' '}
           or{' '}
-          <Link href="/create-event" className="text-accent underline">
+          <Link href="/create-event" className="text-pine underline">
             create your own event
           </Link>
           .
-        </div>
+        </Notice>
 
-        <div className="mt-6">
-          <h1 className="font-display text-3xl font-bold">{DEMO_EVENT.name}</h1>
-          <p className="mt-1 text-ink/70">
-            {DEMO_EVENT.location} · {DEMO_PHOTOS.length} photos from {' '}
-            {new Set(DEMO_PHOTOS.map((p) => p.uploadedBy)).size} guests
-          </p>
-        </div>
-
-        <div className="mt-6">
+        <div className="mt-8">
           <PhotoGrid
             photos={DEMO_PHOTOS}
             eventName={DEMO_EVENT.name}
@@ -48,18 +52,20 @@ export default function DemoGalleryPage() {
           />
         </div>
 
-        <div className="mt-10 sp-card p-6 text-center">
-          <h2 className="font-display text-xl font-bold">Your gallery, with your photos</h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-ink/70">
-            Every angle of your day in one place, from everyone who was there. Set it up in
-            about a minute.
+        <div className="spx-card mt-12 p-7">
+          <p className="spx-eyebrow">Your turn</p>
+          <h2 className="mt-2">
+            <span className="spx-display block text-3xl sm:text-4xl">Your gallery,</span>
+            <span className="spx-display-serif block text-3xl sm:text-4xl">with your photos.</span>
+          </h2>
+          <p className="spx-body mt-3 max-w-lg text-sm">
+            Every angle of your day in one place, from everyone who was there. Set it up in about
+            a minute.
           </p>
-          <Link
-            href="/create-event"
-            className="mt-5 inline-block rounded-full bg-ink px-8 py-3 font-medium text-white hover:bg-night"
-          >
+          <Link href="/create-event" className="spx-btn-ink mt-6">
             Create your event
           </Link>
+        </div>
         </div>
       </section>
     </Layout>
