@@ -4,12 +4,13 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
-import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
+import { fetchEvent, fetchEventMoments, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { canDownloadEventMedia, galleryVariantFor, isEventHost } from '@/lib/gallery';
-import { DisplayPhoto, QREvent } from '@/lib/types';
+import { DisplayPhoto, EventMoment, QREvent } from '@/lib/types';
 import { guestBookAvailable } from '@/lib/guestBook';
+import { groupPhotosByMoment } from '@/lib/moments';
 
 /**
  * The guest gallery, on the redesign system. Mobile first — most people reach
@@ -25,6 +26,7 @@ export default function EventGalleryPage() {
 
   const [event, setEvent] = useState<QREvent | null>(null);
   const [photos, setPhotos] = useState<DisplayPhoto[]>([]);
+  const [moments, setMoments] = useState<EventMoment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState(false);
@@ -63,6 +65,8 @@ export default function EventGalleryPage() {
         });
         setPhotos(items);
       }
+      // Never fatal. A gallery that cannot load its labels is still a gallery.
+      setMoments(await fetchEventMoments(eventId).catch(() => []));
     } catch {
       setError('Something went wrong loading the gallery. Try again in a moment.');
     } finally {
@@ -169,7 +173,7 @@ export default function EventGalleryPage() {
                       </Link>
                     ) : null}
                   </div>
-                ) : (
+                ) : moments.length === 0 ? (
                   <PhotoGrid
                     photos={photos}
                     canDownload={canDownload}
@@ -177,6 +181,36 @@ export default function EventGalleryPage() {
                     eventName={event.name}
                     eventId={event.id}
                   />
+                ) : (
+                  // Grouped only when the host actually set moments up. With
+                  // none, this page renders exactly as it did before moments
+                  // existed — one grid, no headings, nothing to explain.
+                  <div className="space-y-14">
+                    {groupPhotosByMoment(photos, moments).map((group) => (
+                      <section key={group.moment?.id ?? 'unfiled'}>
+                        <h2 className="spx-display-serif text-3xl">
+                          {group.moment ? group.moment.name : 'Everything else'}
+                        </h2>
+                        {group.moment?.description ? (
+                          <p className="spx-body mt-1 text-sm">{group.moment.description}</p>
+                        ) : null}
+                        <div className="mt-5">
+                          <PhotoGrid
+                            photos={group.photos}
+                            canDownload={canDownload}
+                            canViewOriginal={host || admin}
+                            eventName={event.name}
+                            eventId={event.id}
+                            emptyMessage={
+                              group.moment
+                                ? `Nothing from ${group.moment.name} yet.`
+                                : undefined
+                            }
+                          />
+                        </div>
+                      </section>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

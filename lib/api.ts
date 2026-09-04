@@ -11,6 +11,7 @@ import {
   DiscountRedemption,
   DisplayPhoto,
   DownloadShare,
+  EventMoment,
   GuestBookEntry,
   HostGuestBookEntry,
   QREvent,
@@ -785,12 +786,19 @@ export interface EventUploadContext {
   authMode: DataAuthMode;
   uploadedBy: string;
   uploadedByUserId: string | null;
+  /**
+   * The moment every photo in this batch is filed under, if any. Resolved once
+   * per batch rather than per file: a guest picks it (or scans a QR code that
+   * picks it) before choosing photos, and it cannot change mid-upload.
+   */
+  momentId: string | null;
 }
 
 /** Resolve auth, guest credentials, and the event once for an entire upload batch. */
 export async function prepareEventUpload(
   eventId: string,
   uploaderName?: string,
+  momentId?: string | null,
 ): Promise<EventUploadContext> {
   let user = await getCurrentUserInfo();
   let authMode: DataAuthMode = user ? 'userPool' : 'identityPool';
@@ -857,6 +865,9 @@ export async function prepareEventUpload(
     authMode,
     uploadedBy: user?.displayName ?? (uploaderName?.trim().slice(0, 60) || 'Anonymous'),
     uploadedByUserId: user?.userId ?? null,
+    // Passed through as the guest's claim. createEventPhoto proves the moment
+    // belongs to this event before filing anything under it.
+    momentId: momentId?.trim() || null,
   };
 }
 
@@ -994,6 +1005,7 @@ export async function uploadEventPhotoWithContext(
         uploadedBy: context.uploadedBy,
         uploadedByUserId: context.uploadedByUserId,
         contentHash: contentHash ?? undefined,
+        momentId: context.momentId ?? undefined,
       },
       { authMode: context.authMode },
     );
@@ -1585,4 +1597,86 @@ export async function downloadEventsAsZip(
   link.remove();
   URL.revokeObjectURL(blobUrl);
   return { skipped };
+}
+
+// ---------------------------------------------------------------------------
+// Moments — the named parts of an event. See lib/moments.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * One event's moments, for the guest upload picker and the gallery.
+ *
+ * Reads the scoped `eventMoments` query rather than the model, because the
+ * Moment model grants guests no list access at all — that would enumerate the
+ * structure of every event on the platform.
+ */
+export async function fetchEventMoments(eventId: string): Promise<EventMoment[]> {
+  const { data, errors } = await client.queries.eventMoments(
+    { eventId },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+  return (data ?? [])
+    .filter((moment): moment is NonNullable<typeof moment> => moment !== null)
+    .map((moment) => ({
+      id: moment.id,
+      eventId: moment.eventId,
+      name: moment.name,
+      description: moment.description ?? null,
+      sortOrder: moment.sortOrder ?? 0,
+      createdAt: moment.createdAt ?? null,
+    }));
+}
+
+/**
+ * Create a moment, or rename one by passing its id.
+ *
+ * Goes through the function rather than the model because `eventOwner` is a
+ * client-written field: the generated createMoment would let a host stamp
+ * their own owner id onto a row pointing at somebody else's event.
+ */
+export async function saveEventMoment(input: {
+  eventId: string;
+  momentId?: string | null;
+  name: string;
+  description?: string | null;
+  sortOrder?: number | null;
+}): Promise<EventMoment> {
+  const { data, errors } = await client.mutations.saveMoment(
+    {
+      eventId: input.eventId,
+      momentId: input.momentId || undefined,
+      name: input.name,
+      description: input.description || undefined,
+      sortOrder: typeof input.sortOrder === 'number' ? input.sortOrder : undefined,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+  if (!data) throw new Error('That moment could not be saved.');
+  return {
+    id: data.id,
+    eventId: data.eventId,
+    name: data.name,
+    description: data.description ?? null,
+    sortOrder: data.sortOrder ?? 0,
+    createdAt: data.createdAt ?? null,
+  };
+}
+
+/**
+ * Delete a moment. Unlike create and rename this goes straight at the model:
+ * deleting requires the STORED row to already name the caller as its owner,
+ * which is exactly the check we want, so no function is needed to add one.
+ *
+ * Photos filed under it are deliberately left alone. They keep a momentId
+ * pointing at nothing, which the gallery folds back into "no moment" — losing
+ * someone's photos because a label was renamed would be indefensible.
+ */
+export async function deleteEventMoment(momentId: string): Promise<void> {
+  const { errors } = await client.models.Moment.delete(
+    { id: momentId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
 }

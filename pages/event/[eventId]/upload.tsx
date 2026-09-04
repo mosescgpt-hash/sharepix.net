@@ -4,12 +4,13 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import UploadForm from '@/components/UploadForm';
-import { fetchEvent } from '@/lib/api';
+import { fetchEvent, fetchEventMoments } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { videosRemaining } from '@/lib/pricing';
 import { themeKeyForEvent } from '@/lib/eventTheme';
 import { guestBookAvailable } from '@/lib/guestBook';
-import { QREvent } from '@/lib/types';
+import { resolveMomentId, sortMoments } from '@/lib/moments';
+import { EventMoment, QREvent } from '@/lib/types';
 
 /**
  * Where a guest lands after scanning the code. This is the page that earns the
@@ -25,6 +26,8 @@ export default function GuestUploadPage() {
   const eventId = typeof router.query.eventId === 'string' ? router.query.eventId : null;
 
   const [event, setEvent] = useState<QREvent | null>(null);
+  const [moments, setMoments] = useState<EventMoment[]>([]);
+  const [momentId, setMomentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +54,33 @@ export default function GuestUploadPage() {
       cancelled = true;
     };
   }, [eventId]);
+
+  // Moments load separately and never block the upload form. An event with no
+  // moments is the common case, and a failure here must not stop a guest at a
+  // party from adding photos.
+  useEffect(() => {
+    if (!eventId) return;
+    let cancelled = false;
+    fetchEventMoments(eventId)
+      .then((found) => {
+        if (!cancelled) setMoments(found);
+      })
+      .catch(() => {
+        if (!cancelled) setMoments([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
+
+  // `?moment=` comes from the QR code the guest scanned. Resolved against the
+  // event's own list, so a card printed for a moment the host has since deleted
+  // simply uploads unfiled instead of erroring. The server re-derives the same
+  // answer; this is for the guest's benefit, not for security.
+  useEffect(() => {
+    const claimed = typeof router.query.moment === 'string' ? router.query.moment : null;
+    setMomentId(resolveMomentId(claimed, moments));
+  }, [router.query.moment, moments]);
 
   const canUpload = eventLifecycle(event).uploadOpen;
   const photosOnly =
@@ -89,6 +119,35 @@ export default function GuestUploadPage() {
 
           <section className="spx-section-canvas py-10 sm:py-14">
             <div className="mx-auto w-full max-w-lg">
+              {/* Shown only when the host actually set moments up. An event
+                  with none looks exactly as it did before this existed. */}
+              {moments.length > 0 && canUpload && event.paid !== false ? (
+                <div className="spx-card mb-6 p-5">
+                  <label
+                    htmlFor="moment-picker"
+                    className="block font-sans text-sm font-medium text-charcoal"
+                  >
+                    Which part of the day?
+                  </label>
+                  <select
+                    id="moment-picker"
+                    value={momentId ?? ''}
+                    onChange={(e) => setMomentId(e.target.value || null)}
+                    className="spx-input mt-2"
+                  >
+                    <option value="">Not sure / just add them</option>
+                    {sortMoments(moments).map((moment) => (
+                      <option key={moment.id} value={moment.id}>
+                        {moment.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-charcoal/55">
+                    Only helps the host group the gallery afterwards. Skip it if you would rather.
+                  </p>
+                </div>
+              ) : null}
+
               {event.paid === false ? (
                 <Notice tone="warn" label="Not open yet">
                   This event isn&rsquo;t active yet. The host needs to finish setting it up before
@@ -100,6 +159,7 @@ export default function GuestUploadPage() {
                   allowVideo={event.videoUploadsEnabled !== false}
                   videosRemaining={videosRemaining(event)}
                   themeKey={themeKeyForEvent(event)}
+                  momentId={momentId}
                 />
               ) : event.uploadsClosed ? (
                 <Notice tone="warn" label="Closed by the host">

@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import GuestBookModeration from '@/components/GuestBookModeration';
+import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
@@ -35,6 +36,13 @@ import { isGlobalAdmin } from '@/lib/admin';
 function AdminDashboardPage() {
   const router = useRouter();
   const eventId = typeof router.query.eventId === 'string' ? router.query.eventId : null;
+
+  // Read after mount: `window` does not exist during the server render, and the
+  // printed moment QR codes need an absolute URL.
+  const [origin, setOrigin] = useState('');
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   const [event, setEvent] = useState<QREvent | null>(null);
   const [photos, setPhotos] = useState<DisplayPhoto[]>([]);
@@ -884,6 +892,12 @@ function AdminDashboardPage() {
 
             {/* Below the photos: notes are the smaller half of the event, and
                 a host opening this page is usually here for the pictures. */}
+            {/* Available on every paid event rather than behind a tier gate:
+                the audit found tier strings are already load-bearing in five
+                places, and a sixth to sell a labelling feature would cost more
+                than it earns. */}
+            <MomentsManager eventId={event.id} origin={origin} />
+
             {guestBookAvailable(event) ? <GuestBookModeration eventId={event.id} /> : null}
 
             <div className="mt-8">

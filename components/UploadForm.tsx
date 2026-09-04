@@ -18,6 +18,12 @@ interface UploadFormProps {
   videosRemaining?: number | null;
   /** Event presentation theme; the default experience when null. */
   themeKey?: EventThemeKey | null;
+  /**
+   * The moment these uploads are filed under. Already resolved against the
+   * event's own list by the page, so an id from a QR code printed for a
+   * deleted moment arrives here as null.
+   */
+  momentId?: string | null;
 }
 
 export default function UploadForm({
@@ -26,8 +32,9 @@ export default function UploadForm({
   allowVideo = true,
   videosRemaining = null,
   themeKey = null,
+  momentId = null,
 }: UploadFormProps) {
-  const upload = useMediaUpload({ eventId, allowVideo, videosRemaining, onUploaded });
+  const upload = useMediaUpload({ eventId, allowVideo, videosRemaining, onUploaded, momentId });
   const {
     queue,
     busy,

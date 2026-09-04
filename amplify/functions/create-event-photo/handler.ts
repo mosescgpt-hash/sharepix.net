@@ -27,6 +27,7 @@ const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET_NAME = process.env.BUCKET_NAME as string;
 const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME as string;
+const MOMENT_TABLE = process.env.MOMENT_TABLE_NAME as string;
 
 /** How long a review link stays usable before the host must use the dashboard. */
 const REVIEW_TTL_DAYS = 14;
@@ -420,6 +421,36 @@ export const handler: Handler = async (event) => {
       ? { status: 'skipped', reasons: [] as string[] }
       : await screenPhoto(s3Key);
 
+  // The moment the guest was filing under, usually preselected by the QR code
+  // they scanned. A claim, not a fact: keep it only if that moment exists AND
+  // belongs to this event, otherwise the photo is simply unfiled.
+  //
+  // Deliberately never fatal. The commonest reason this fails is a card printed
+  // for a moment the host has since deleted, and refusing an upload the guest
+  // already waited through — at an event, on venue wifi — over a filing label
+  // would be the wrong trade every time.
+  let momentId: string | null = null;
+  const claimedMoment = (event.arguments.momentId ?? '').toString().trim();
+  if (claimedMoment) {
+    const moment = await dynamo
+      .send(
+        new GetItemCommand({
+          TableName: MOMENT_TABLE,
+          Key: { id: { S: claimedMoment } },
+          ProjectionExpression: 'id, eventId',
+        }),
+      )
+      .catch(() => null);
+    if (moment?.Item?.eventId?.S === eventId) {
+      momentId = claimedMoment;
+    } else {
+      console.warn('Upload referenced a moment outside its event', {
+        eventId,
+        momentId: claimedMoment,
+      });
+    }
+  }
+
   const now = new Date().toISOString();
   const item: Record<string, AttributeValue> = {
     id: { S: id },
@@ -440,6 +471,7 @@ export const handler: Handler = async (event) => {
   if (uploadedBy) item.uploadedBy = { S: uploadedBy };
   if (uploadedByUserId) item.uploadedByUserId = { S: uploadedByUserId };
   if (contentHash) item.contentHash = { S: contentHash };
+  if (momentId) item.momentId = { S: momentId };
 
   try {
     await dynamo.send(
