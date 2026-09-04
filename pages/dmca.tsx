@@ -30,7 +30,7 @@ export default function DmcaPage() {
         <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
-              SharePix, a product of <strong>{LEGAL_ENTITY}</strong>, hosts photos and
+              <strong>{LEGAL_ENTITY}</strong> operates SharePix, which hosts photos and
               videos uploaded by the guests and hosts of events. We respect copyright and
               respond to notices of claimed infringement under the Digital Millennium
               Copyright Act (&ldquo;DMCA&rdquo;), 17 U.S.C. § 512.

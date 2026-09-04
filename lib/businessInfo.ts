@@ -15,7 +15,7 @@
  */
 
 /** The legal entity behind the product. */
-export const LEGAL_ENTITY = 'Calvin Solutions LLC';
+export const LEGAL_ENTITY = 'SharePix LLC';
 
 /**
  * The business mailing address, one line per array entry.

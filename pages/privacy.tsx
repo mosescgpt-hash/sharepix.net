@@ -1,5 +1,5 @@
 import Layout from '@/components/Layout';
-import { BUSINESS_ADDRESS } from '@/lib/businessInfo';
+import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
         <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_h3]:font-semibold [&_h3]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
-              SharePix, a product of Calvin Solutions LLC (&ldquo;SharePix,&rdquo;
+              {LEGAL_ENTITY} (&ldquo;SharePix,&rdquo;
               &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;), provides an event
               photo-sharing service at{' '}
               <a href="https://www.sharepix.net">sharepix.net</a>{' '}(the

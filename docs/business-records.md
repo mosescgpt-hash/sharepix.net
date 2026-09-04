@@ -1,13 +1,13 @@
 # Business records and the address
 
-Several public records name Calvin Solutions LLC and its mailing address. They
+Several public records name SharePix LLC and its mailing address. They
 have to agree. This is the list, because most of them live outside this
 repository and are the ones that actually go stale.
 
 ## The address
 
 ```
-Calvin Solutions LLC
+SharePix LLC
 617 Locust Street #1001
 Monticello, MN 55362
 United States

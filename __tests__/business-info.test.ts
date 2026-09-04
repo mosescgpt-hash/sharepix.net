@@ -56,6 +56,16 @@ describe('no page hardcodes its own address', () => {
     expect(read(path)).toContain("from '@/lib/businessInfo'");
   });
 
+  it.each(LEGAL_PAGES)('%s names the entity from the module, not a literal', (path) => {
+    // The entity name was hardcoded on Terms and Privacy while businessInfo
+    // held the real one, so renaming the company missed two pages. Anything
+    // that looks like a company name spelled out in the page is the bug.
+    const source = read(path);
+    expect(source).not.toMatch(/\b[A-Z][a-z]+\s+(?:Solutions|Holdings|Ventures|Media|Group)\s+(?:LLC|Inc\.?|L\.L\.C\.)/);
+    // The one legitimate spelling of it is the constant.
+    expect(source).toContain('LEGAL_ENTITY');
+  });
+
   it.each(LEGAL_PAGES)('%s contains no street address of its own', (path) => {
     // A second copy is how two pages start disagreeing. The street number and
     // the "MN 55362" pattern are the shapes that would show up.
