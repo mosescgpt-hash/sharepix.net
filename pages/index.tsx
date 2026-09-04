@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
 import HomepageEventAccess from '@/components/HomepageEventAccess';
+import TryDemoModal from '@/components/TryDemoModal';
 import { getCurrentUserInfo } from '@/lib/api';
 import { PRICING_TIERS } from '@/lib/pricing';
 
@@ -38,6 +39,7 @@ const startingPrice = Math.min(...PRICING_TIERS.map((tier) => tier.price));
 
 export default function HomePage() {
   const router = useRouter();
+  const [demoOpen, setDemoOpen] = useState(false);
 
   // Signed-in hosts go straight to their account page; guests see the homepage.
   useEffect(() => {
@@ -76,9 +78,13 @@ export default function HomePage() {
           <Link href="/create-event" className="sp-btn-primary w-full sm:w-auto">
             Create your event
           </Link>
-          <Link href="/demo" className="sp-btn-ghost w-full sm:w-auto">
-            See a live example
-          </Link>
+          <button
+            type="button"
+            onClick={() => setDemoOpen(true)}
+            className="sp-btn-ghost w-full sm:w-auto"
+          >
+            Try the live demo
+          </button>
         </div>
         {/* Pricing is stated rather than made a third equal button. Three
             same-weight buttons is a menu, not a call to action. */}
@@ -155,6 +161,8 @@ export default function HomePage() {
           <PricingCards />
         </div>
       </section>
+
+      <TryDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </Layout>
   );
 }
