@@ -4,9 +4,9 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 // Update this whenever the terms change.
 const LAST_UPDATED = 'July 28, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
-// The U.S. state whose law governs these terms — set to where Calvin Solutions
-// LLC is registered.
-const GOVERNING_STATE = 'the State in which Calvin Solutions LLC is organized';
+// The U.S. state whose law governs these terms — set to where the company is
+// registered. Still a placeholder rather than a named state.
+const GOVERNING_STATE = `the State in which ${LEGAL_ENTITY} is organized`;
 
 export default function TermsPage() {
   return (
@@ -19,7 +19,7 @@ export default function TermsPage() {
           <div>
             <p>
               These Terms of Service (&ldquo;Terms&rdquo;) are a legal agreement between you
-              and <strong>SharePix, a product of Calvin Solutions LLC</strong>{' '}
+              and <strong>{LEGAL_ENTITY}</strong>{' '}
               (&ldquo;SharePix,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;),
               governing your use of the event photo-sharing service at{' '}
               <a href="https://www.sharepix.net">sharepix.net</a>{' '}(the &ldquo;Service&rdquo;). By
@@ -200,7 +200,7 @@ export default function TermsPage() {
           <div>
             <h2>12. Indemnification</h2>
             <p>
-              You agree to indemnify and hold harmless SharePix and Calvin Solutions LLC from claims,
+              You agree to indemnify and hold harmless {LEGAL_ENTITY} from claims,
               damages, and expenses (including reasonable legal fees) arising out of Your Content,
               your use of the Service, or your violation of these Terms or the rights of others.
             </p>
