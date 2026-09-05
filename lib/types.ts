@@ -26,7 +26,7 @@ export interface QREvent {
   /** Host withheld guest downloads. Absent/false = downloads allowed. */
   guestDownloadsBlocked?: boolean | null;
   liveSlideshowEnabled?: boolean | null;
-  /** Guest book bought as an add-on. Included on Premium/Corporate regardless. */
+  /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;
   guestBookCount?: number | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */

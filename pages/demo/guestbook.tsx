@@ -52,8 +52,8 @@ export default function DemoGuestBookPage() {
         </div>
 
         <p className="mt-8 text-center text-sm text-charcoal/60">
-          The guest book is included on Premium and Corporate, and a $19 add-on on the other
-          plans. <Link href="/pricing" className="text-pine underline">See pricing</Link>.
+          The guest book is included on Plus and Corporate, and a $19 add-on on Event.{' '}
+          <Link href="/pricing" className="text-pine underline">See pricing</Link>.
         </p>
         </div>
       </section>

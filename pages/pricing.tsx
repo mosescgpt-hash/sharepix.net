@@ -12,11 +12,11 @@ const faqs = [
   },
   {
     q: 'What happens after the upload window?',
-    a: 'Guests keep reduced-resolution viewing for a short time (3 weeks on Starter, 30 days on Standard/Premium), then it ends. As the host you keep full access and downloads for your plan’s retention — 3 weeks (Starter), 3 months (Standard), or 1 year (Premium) — after which photos are archived and later deleted. Download what you want to keep before retention ends.',
+    a: 'Guests keep reduced-resolution viewing for 30 days, then it ends. As the host you keep full access and downloads for your plan’s retention — 3 months on Event, 1 year on Plus — after which photos are archived and later deleted. Download what you want to keep before retention ends.',
   },
   {
     q: 'Can I moderate photos?',
-    a: 'Every plan lets you delete photos. Premium adds approve-before-showing moderation.',
+    a: 'Every plan lets you delete photos. Plus adds approve-before-showing moderation.',
   },
 ];
 

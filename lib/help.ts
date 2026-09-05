@@ -288,7 +288,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Guests can add photos for 30 days from when the event is created, and the host can extend that. After the upload window closes, guests keep viewing the gallery for a further period set by the plan — three weeks on Starter, 30 days on the others.',
+        text: 'Guests can add photos for 30 days from when the event is created, and the host can extend that. After the upload window closes, guests keep viewing the gallery for a further 30 days.',
       },
       {
         kind: 'text',
@@ -385,7 +385,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Your dashboard has Show QR code, which you can display on a phone or download as an image for a sign. Every plan above Starter lets you restyle the code to match your event.',
+        text: 'Your dashboard has Show QR code, which you can display on a phone or download as an image for a sign. Event and Plus both let you restyle the code to match your event.',
       },
       {
         kind: 'text',
@@ -654,11 +654,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     audience: 'host',
     category: 'Plans, billing and add-ons',
     summary: 'The differences are capacity, how long access lasts, and a few extra features.',
-    keywords: ['plan', 'pricing', 'compare', 'tier', 'starter', 'standard', 'premium', 'cost'],
+    keywords: ['plan', 'pricing', 'compare', 'tier', 'event', 'plus', 'cost'],
     blocks: [
       {
         kind: 'text',
-        text: 'Starter suits a small party: 100 photos, 2 videos, and three weeks of viewing after uploads close. Standard suits most weddings: 1,000 photos, 10 videos, and three months of host access. Premium adds unlimited photos, 30 videos, event branding, and a year of access.',
+        text: 'Event suits most weddings and parties: 1,000 photos, 10 videos, and three months of host access. Plus adds 3,000 photos, 30 videos, event branding, moderation, and a year of access — and includes the guest book and the live slideshow rather than selling them as add-ons.',
       },
       {
         kind: 'text',

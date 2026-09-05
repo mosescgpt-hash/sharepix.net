@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { QRCodeSVG } from 'qrcode.react';
 import { fetchEvent, fetchEventPhotoRecords, getPhotoDisplaySource } from '@/lib/api';
+import { liveSlideshowAvailable } from '@/lib/pricing';
 import { FallbackImage } from '@/components/FallbackMedia';
 import { initialSource, type MediaSource } from '@/lib/mediaSource';
 import {
@@ -133,10 +134,11 @@ export default function LiveSlideshowPage() {
           return;
         }
         setEvent(ev);
-        // The slideshow is a paid per-event add-on. The venue screen is usually
-        // not signed in, so the gate is the event's own flag rather than the
+        // The slideshow is included on Plus and Corporate, and sold as a
+        // per-event add-on everywhere else. The venue screen is usually not
+        // signed in, so the gate is the event's own row rather than the
         // viewer's identity.
-        if (ev.liveSlideshowEnabled !== true) {
+        if (!liveSlideshowAvailable(ev)) {
           setError(
             'The live slideshow is not enabled for this event. The host can turn it on from their event dashboard.',
           );

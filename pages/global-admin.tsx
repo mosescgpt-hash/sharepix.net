@@ -98,9 +98,14 @@ function defaultExpiryValue(): string {
 // feature later means adding one entry here and passing its key from that
 // checkout flow.
 const PAID_ITEM_SCOPES = [
-  { key: 'event:starter', label: 'Starter event' },
-  { key: 'event:standard', label: 'Standard event' },
-  { key: 'event:premium', label: 'Premium event' },
+  { key: 'event:event', label: 'Event plan' },
+  { key: 'event:plus', label: 'Plus event' },
+  // Retired plans. Kept so a code can still be issued against an event that
+  // already carries one - existing codes naming these keep working either way,
+  // because the scope matcher compares the stored string, not this list.
+  { key: 'event:starter', label: 'Starter event (retired)' },
+  { key: 'event:standard', label: 'Standard event (retired)' },
+  { key: 'event:premium', label: 'Premium event (retired)' },
   { key: 'corporate', label: 'Corporate subscription' },
   { key: 'extend', label: 'Upload extensions' },
   { key: 'live_slideshow', label: 'Live slideshow' },

@@ -26,7 +26,15 @@ import {
   type EventAddOnKey,
   updateEventDetails,
 } from '@/lib/api';
-import { CORPORATE_PLAN, GUEST_BOOK_ADDON_PRICE, LIVE_SLIDESHOW_ADDON_PRICE, extensionPrice, getTier, videosRemaining } from '@/lib/pricing';
+import {
+  CORPORATE_PLAN,
+  GUEST_BOOK_ADDON_PRICE,
+  LIVE_SLIDESHOW_ADDON_PRICE,
+  extensionPrice,
+  getTier,
+  liveSlideshowAvailable,
+  videosRemaining,
+} from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
@@ -172,7 +180,9 @@ function AdminDashboardPage() {
         description: 'Give guests another 30 days to add photos.',
       });
     }
-    if (!event.liveSlideshowEnabled) {
+    // Never offered to a plan that already includes it. The checkout
+    // function re-derives the same thing, so this only saves a wasted click.
+    if (!liveSlideshowAvailable(event)) {
       items.push({
         key: 'live_slideshow',
         label: 'Live slideshow',
@@ -180,7 +190,7 @@ function AdminDashboardPage() {
         description: 'Show photos on a screen at your venue as guests upload them.',
       });
     }
-    // Premium and Corporate already include the guest book, and an event that
+    // Plus and Corporate already include the guest book, and an event that
     // bought it is not offered it again. The checkout function re-derives both
     // server-side; this only decides what to show.
     if (guestBookPurchasable(event)) {
@@ -434,7 +444,7 @@ function AdminDashboardPage() {
                 </Link>
                 {/* Opens in its own tab so the venue screen can run the
                     slideshow while the host keeps managing the event here. */}
-                {event.liveSlideshowEnabled ? (
+                {liveSlideshowAvailable(event) ? (
                   <Link
                     href={`/event/${event.id}/live`}
                     target="_blank"
@@ -459,7 +469,7 @@ function AdminDashboardPage() {
                 <EventQRCode
                   eventId={event.id}
                   eventName={event.name}
-                  allowCustomization={tier?.id !== 'starter'}
+                  allowCustomization={tier?.customQrCode === true}
                 />
               </div>
             ) : null}
@@ -753,7 +763,7 @@ function AdminDashboardPage() {
                 <p className="mt-3 text-sm text-green-700">
                   ✓ Guest downloads — included, guests can download photos and videos.
                 </p>
-                {event.liveSlideshowEnabled ? (
+                {liveSlideshowAvailable(event) ? (
                   <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-green-700">
                       ✓ Live slideshow — ready for the screen at your venue.
