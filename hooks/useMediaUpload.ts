@@ -23,6 +23,13 @@ interface UseMediaUploadArgs {
   allowVideo: boolean;
   videosRemaining: number | null;
   onUploaded?: () => void;
+  /**
+   * Which moment this batch is filed under, if the guest picked one or scanned
+   * a QR code that did. Resolved once per batch — a guest cannot change it
+   * halfway through an upload — and only ever a claim: createEventPhoto proves
+   * the moment belongs to this event before filing anything under it.
+   */
+  momentId?: string | null;
 }
 
 /**
@@ -32,7 +39,13 @@ interface UseMediaUploadArgs {
  * `clearPending` are additions the previews need and the default simply doesn't
  * call.
  */
-export function useMediaUpload({ eventId, allowVideo, videosRemaining, onUploaded }: UseMediaUploadArgs) {
+export function useMediaUpload({
+  eventId,
+  allowVideo,
+  videosRemaining,
+  onUploaded,
+  momentId = null,
+}: UseMediaUploadArgs) {
   const [queue, setQueue] = useState<QueuedMedia[]>([]);
   const [busy, setBusy] = useState(false);
   const [successCount, setSuccessCount] = useState(0);
@@ -100,7 +113,7 @@ export function useMediaUpload({ eventId, allowVideo, videosRemaining, onUploade
     try {
       let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
       try {
-        uploadContext = await prepareEventUpload(eventId, uploadedBy);
+        uploadContext = await prepareEventUpload(eventId, uploadedBy, momentId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'The upload session could not be started.';
         setQueue((previous) => previous.map((item) =>

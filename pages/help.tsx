@@ -17,10 +17,10 @@ function ArticleLink({ article }: { article: HelpArticle }) {
     <li>
       <Link
         href={`/help/${article.slug}`}
-        className="block rounded-xl border border-line bg-card shadow-card p-4 transition hover:border-accent"
+        className="spx-card block p-5 transition hover:border-charcoal/30"
       >
         <span className="font-medium">{article.title}</span>
-        <span className="mt-0.5 block text-sm text-muted">{article.summary}</span>
+        <span className="mt-0.5 block text-sm text-charcoal/60">{article.summary}</span>
       </Link>
     </li>
   );
@@ -43,7 +43,7 @@ export default function HelpIndexPage() {
   return (
     <Layout title="Help">
       <section className="mx-auto max-w-3xl py-10">
-        <h1 className="text-center font-display text-3xl font-bold sm:text-4xl">
+        <h1 className="spx-display text-center">
           How can we help?
         </h1>
         <p className="mx-auto mt-3 max-w-xl text-center text-ink/70">
@@ -60,7 +60,7 @@ export default function HelpIndexPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search — try “video”, “download”, “QR code”"
-            className="w-full rounded-full border border-ink/20 px-5 py-3 outline-none focus:border-accent"
+            className="spx-input"
           />
         </div>
 
@@ -78,8 +78,8 @@ export default function HelpIndexPage() {
               onClick={() => setAudience(value)}
               className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
                 audience === value
-                  ? 'border-accent bg-accent text-white'
-                  : 'border-ink/20 bg-white text-ink hover:border-accent'
+                  ? 'border-ink bg-ink text-canvas'
+                   : 'border-charcoal/25 bg-paper text-charcoal hover:border-charcoal/60'
               }`}
             >
               {label}
@@ -89,7 +89,7 @@ export default function HelpIndexPage() {
 
         {results ? (
           <div className="mt-8">
-            <p className="text-sm text-muted">
+            <p className="text-sm text-charcoal/60">
               {visible.length} result{visible.length === 1 ? '' : 's'} for “{query}”
             </p>
             {visible.length > 0 ? (
@@ -99,7 +99,7 @@ export default function HelpIndexPage() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 rounded-xl bg-smoke px-4 py-6 text-center text-ink/70">
+              <p className="mt-3 bg-sand px-4 py-6 text-center text-charcoal/70">
                 Nothing matched. Try a single word — “print”, “slideshow”, “refund” — or
                 browse the categories by clearing the search.
               </p>
@@ -114,7 +114,7 @@ export default function HelpIndexPage() {
               if (articles.length === 0) return null;
               return (
                 <div key={category}>
-                  <h2 className="font-display text-xl font-bold">{category}</h2>
+                  <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">{category}</h2>
                   <ul className="mt-3 space-y-2">
                     {articles.map((article) => (
                       <ArticleLink key={article.slug} article={article} />
@@ -126,8 +126,8 @@ export default function HelpIndexPage() {
           </div>
         )}
 
-        <div className="mt-12 sp-card p-6 text-center">
-          <h2 className="font-display text-lg font-bold">Still stuck?</h2>
+        <div className="spx-card mt-12 p-7 text-center">
+          <h2 className="font-sans text-lg font-bold tracking-[-0.02em]">Still stuck?</h2>
           <p className="mt-2 text-sm text-ink/70">
             Email us the event name and what you saw on screen, and we will sort it out.
           </p>

@@ -43,13 +43,16 @@ export default function GuestBookAlbum({
 }) {
   if (entries.length === 0) {
     return (
-      <p className="text-center text-muted">No notes yet — yours would be the first.</p>
+      <div className="spx-empty">
+        <p className="spx-display-serif text-2xl">No notes yet.</p>
+        <p className="spx-body mt-2 text-sm">Yours would be the first.</p>
+      </div>
     );
   }
 
   return (
     <>
-      <h2 className="text-center font-display text-xl font-bold tracking-tight">
+      <h2 className="text-center font-serif text-2xl italic text-charcoal">
         {entries.length} {entries.length === 1 ? 'note' : 'notes'}
       </h2>
       <ul className="mt-8 space-y-6">
@@ -57,9 +60,9 @@ export default function GuestBookAlbum({
           const media = entry.photoId ? mediaFor(entry.photoId) : undefined;
           const isVideo = media ? isVideoFilename(media.s3Key) : false;
           return (
-            <li key={entry.id} className="sp-card overflow-hidden">
+            <li key={entry.id} className="spx-card overflow-hidden">
               {media ? (
-                <div className="bg-smoke">
+                <div className="bg-sand">
                   {isVideo ? (
                     <FallbackVideo
                       source={{ primary: media.url, fallback: media.fallbackUrl }}
@@ -86,12 +89,12 @@ export default function GuestBookAlbum({
                     {entry.message}
                   </p>
                 ) : (
-                  <p className="italic text-muted">
+                  <p className="font-serif italic text-charcoal/70">
                     {isVideo ? 'Left a video message.' : 'Left a photo.'}
                   </p>
                 )}
-                <p className="mt-5 text-sm text-muted">
-                  <span className="font-display font-bold tracking-tight text-ink">
+                <p className="mt-5 text-sm text-charcoal/60">
+                  <span className="font-sans font-semibold text-charcoal">
                     {entry.name}
                   </span>
                   {entryDate(entry.createdAt) ? (

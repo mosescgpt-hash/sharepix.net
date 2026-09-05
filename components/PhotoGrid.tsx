@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
+import Notice from '@/components/Notice';
 import PhotoCard from '@/components/PhotoCard';
 import PrintOrderModal from '@/components/PrintOrderModal';
 import { downloadPhoto, downloadPhotosAsZip, getOriginalMediaSource } from '@/lib/api';
@@ -191,21 +192,25 @@ export default function PhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-ink/20 bg-white px-4 py-12 text-center text-muted">
-        {emptyMessage ?? 'No photos or videos yet. Scan the event QR code to add the first one.'}
-      </p>
+      <div className="spx-empty">
+        <p className="spx-body max-w-sm text-sm">
+          {emptyMessage ?? 'No photos or videos yet. Scan the event QR code to add the first one.'}
+        </p>
+      </div>
     );
   }
 
   return (
     <div>
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-line bg-card shadow-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex items-center gap-2 text-sm font-medium">
+      {/* Square, hairline, no shadow. In this system a toolbar is a band on
+          the page, not a card floating above the grid. */}
+      <div className="mb-4 flex flex-col gap-3 border border-charcoal/10 bg-paper p-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="flex items-center gap-2 text-sm font-medium text-charcoal">
           Sort
           <select
             value={sort}
             onChange={(event) => changeSort(event.target.value as GallerySort)}
-            className="rounded-lg border border-ink/20 bg-white px-3 py-2"
+            className="border border-charcoal/20 bg-paper px-3 py-2 text-charcoal focus:border-ink focus:outline-none"
           >
             <option value="date-newest">Date — newest day</option>
             <option value="date-oldest">Date — oldest day</option>
@@ -224,7 +229,7 @@ export default function PhotoGrid({
                   allSelected ? new Set() : new Set(sortedPhotos.map((photo) => photo.id)),
                 )
               }
-              className="rounded-full border border-ink/20 px-3 py-2 font-medium hover:border-accent"
+              className="border border-charcoal/25 px-4 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
             >
               {allSelected ? 'Unselect all' : 'Select all'}
             </button>
@@ -232,7 +237,7 @@ export default function PhotoGrid({
               <button
                 type="button"
                 onClick={() => setSelected(new Set())}
-                className="px-2 py-2 text-muted underline"
+                className="px-2 py-2 text-charcoal/60 underline"
               >
                 Deselect all ({selected.size})
               </button>
@@ -241,7 +246,7 @@ export default function PhotoGrid({
               <button
                 type="button"
                 onClick={openPrints}
-                className="rounded-full border border-accent px-4 py-2 font-medium text-accent hover:bg-accent/5"
+                className="border border-pine px-4 py-2 font-medium text-pine transition hover:bg-pine/5"
               >
                 {selected.size ? `Order prints (${selected.size})` : 'Order prints'}
               </button>
@@ -251,7 +256,7 @@ export default function PhotoGrid({
                 type="button"
                 onClick={handleBulkDownload}
                 disabled={downloading}
-                className="rounded-full bg-ink px-4 py-2 font-medium text-white hover:bg-night disabled:opacity-50"
+                className="bg-ink px-4 py-2 font-medium text-canvas transition hover:bg-night disabled:opacity-50"
               >
                 {downloading
                   ? downloadProgress
@@ -262,12 +267,14 @@ export default function PhotoGrid({
             ) : null}
           </div>
         ) : downloadMessage ? (
-          <p className="text-sm text-muted">{downloadMessage}</p>
+          <p className="text-sm text-charcoal/60">{downloadMessage}</p>
         ) : null}
       </div>
 
       {error ? (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <Notice tone="error" className="mb-4">
+          {error}
+        </Notice>
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -393,7 +400,7 @@ export default function PhotoGrid({
                   closeEnlarge();
                   setPrintPhotos([photo]);
                 }}
-                className="rounded-full bg-accent px-6 py-2.5 text-sm font-medium text-white hover:bg-accent/90"
+                className="bg-pine px-6 py-2.5 text-sm font-medium text-white transition hover:bg-pine/90"
               >
                 Order print
               </button>
@@ -401,7 +408,7 @@ export default function PhotoGrid({
             <button
               type="button"
               onClick={() => downloadPhoto(enlarged, { eventName })}
-              className="rounded-full bg-white px-6 py-2.5 text-sm font-medium text-ink hover:bg-white/90"
+              className="bg-canvas px-6 py-2.5 text-sm font-medium text-charcoal transition hover:bg-white"
             >
               Download original
             </button>

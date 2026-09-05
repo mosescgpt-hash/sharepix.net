@@ -3,8 +3,10 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
+import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import GuestBookModeration from '@/components/GuestBookModeration';
+import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
@@ -34,6 +36,13 @@ import { isGlobalAdmin } from '@/lib/admin';
 function AdminDashboardPage() {
   const router = useRouter();
   const eventId = typeof router.query.eventId === 'string' ? router.query.eventId : null;
+
+  // Read after mount: `window` does not exist during the server render, and the
+  // printed moment QR codes need an absolute URL.
+  const [origin, setOrigin] = useState('');
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
   const [event, setEvent] = useState<QREvent | null>(null);
   const [photos, setPhotos] = useState<DisplayPhoto[]>([]);
@@ -380,25 +389,28 @@ function AdminDashboardPage() {
   }
 
   return (
-    <Layout title={event ? `Admin — ${event.name}` : 'Admin dashboard'}>
-      <section className="py-8">
+    <Layout title={event ? `Admin — ${event.name}` : 'Admin dashboard'} width="bleed">
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="spx-inner">
         {loading ? (
-          <p className="text-center text-muted">Loading dashboard…</p>
+          <p className="spx-body text-center">Loading dashboard&hellip;</p>
         ) : denied ? (
-          <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
-            Only the event host or a sharepix.net global administrator can open this dashboard.
-          </p>
+          <div className="mx-auto max-w-lg">
+            <Notice tone="warn" label="Not your event">
+              Only the event host or a sharepix.net global administrator can open this dashboard.
+            </Notice>
+          </div>
         ) : error ? (
-          <p className="mx-auto max-w-lg rounded-xl bg-red-50 px-4 py-6 text-center text-red-700">
-            {error}
-          </p>
+          <div className="mx-auto max-w-lg">
+            <Notice tone="error">{error}</Notice>
+          </div>
         ) : event ? (
           <>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-wide text-muted">Admin dashboard</p>
-                <h1 className="font-display text-3xl font-bold">{event.name}</h1>
-                <p className="mt-1 text-sm text-muted">
+                <p className="spx-eyebrow">Admin dashboard</p>
+                <h1 className="spx-display mt-3">{event.name}</h1>
+                <p className="mt-3 text-sm text-charcoal/60">
                   {event.tier === 'corporate' ? 'Corporate' : tier?.name ?? event.tier} plan ·
                   Event code {event.eventCode}
                   {lifecycle.uploadWindowEndsAt
@@ -406,17 +418,17 @@ function AdminDashboardPage() {
                     : ''}
                 </p>
               </div>
-              <div className="flex gap-2 text-sm">
+              <div className="flex flex-wrap gap-2 text-sm">
                 <button
                   type="button"
                   onClick={() => setShowQR((v) => !v)}
-                  className="rounded-full border border-ink/20 px-4 py-2 font-medium hover:border-accent hover:text-accent"
+                  className="border border-charcoal/25 px-4 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
                 >
                   {showQR ? 'Hide QR code' : 'Show QR code'}
                 </button>
                 <Link
                   href={`/event/${event.id}`}
-                  className="rounded-full border border-ink/20 px-4 py-2 font-medium hover:border-accent hover:text-accent"
+                  className="border border-charcoal/25 px-4 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
                 >
                   Public gallery
                 </Link>
@@ -427,15 +439,15 @@ function AdminDashboardPage() {
                     href={`/event/${event.id}/live`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="rounded-full border border-accent px-4 py-2 font-medium text-accent hover:bg-accent/5"
+                    className="border border-pine px-4 py-2 font-medium text-pine transition hover:bg-pine/5"
                   >
-                    Live slideshow ↗
+                    Live slideshow &#8599;
                   </Link>
                 ) : null}
                 <button
                   type="button"
                   onClick={load}
-                  className="rounded-full bg-ink px-4 py-2 font-medium text-white hover:bg-night"
+                  className="bg-ink px-4 py-2 font-medium text-canvas transition hover:bg-night"
                 >
                   Refresh
                 </button>
@@ -452,14 +464,14 @@ function AdminDashboardPage() {
               </div>
             ) : null}
 
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:max-w-md">
-              <div className="rounded-xl border border-line bg-card shadow-card p-4 text-center">
-                <p className="font-display text-2xl font-bold">{photos.length}</p>
-                <p className="text-xs text-muted">Total photos</p>
+            <div className="mt-8 grid grid-cols-2 gap-4 sm:max-w-md">
+              <div className="spx-card p-5">
+                <p className="spx-stat-figure">{photos.length}</p>
+                <p className="spx-stat-label">Total photos</p>
               </div>
-              <div className="rounded-xl border border-line bg-card shadow-card p-4 text-center">
-                <p className="font-display text-2xl font-bold">{hiddenCount}</p>
-                <p className="text-xs text-muted">Hidden from gallery</p>
+              <div className="spx-card p-5">
+                <p className="spx-stat-figure">{hiddenCount}</p>
+                <p className="spx-stat-label">Hidden from gallery</p>
               </div>
             </div>
 
@@ -474,21 +486,21 @@ function AdminDashboardPage() {
               }}
             />
 
-            <div className="mt-8 sp-card p-5">
+            <div className="spx-card mt-10 p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-display text-xl font-bold">Event settings</h2>
+                <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Event settings</h2>
                 <div className="flex flex-wrap gap-2">
                   <Link
                     href={`/event/${event.id}/table-tent`}
                     target="_blank"
-                    className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent"
+                    className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60"
                   >
                     Table tent →
                   </Link>
                   <Link
                     href={`/event/${event.id}/brochure`}
                     target="_blank"
-                    className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent"
+                    className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60"
                   >
                     Printable brochure →
                   </Link>
@@ -503,7 +515,7 @@ function AdminDashboardPage() {
                     value={editName}
                     disabled={detailsLocked || savingDetails}
                     onChange={(e) => setEditName(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-muted"
+                    className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
                   />
                 </label>
                 <label className="block">
@@ -513,14 +525,14 @@ function AdminDashboardPage() {
                     value={editDate}
                     disabled={detailsLocked || savingDetails}
                     onChange={(e) => setEditDate(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke disabled:text-muted"
+                    className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
                   />
                 </label>
               </div>
 
               <div className="mt-4">
                 <span className="text-sm font-medium">
-                  Where it happened <span className="text-muted">(optional)</span>
+                  Where it happened <span className="text-charcoal/50">(optional)</span>
                 </span>
                 <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                   <input
@@ -531,7 +543,7 @@ function AdminDashboardPage() {
                     onChange={(e) => setEditCity(e.target.value)}
                     placeholder="City"
                     aria-label="City"
-                    className="w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke"
+                    className="spx-input disabled:bg-sand"
                   />
                   <input
                     type="text"
@@ -541,17 +553,17 @@ function AdminDashboardPage() {
                     onChange={(e) => setEditState(e.target.value)}
                     placeholder="State"
                     aria-label="State"
-                    className="w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-smoke"
+                    className="spx-input disabled:bg-sand"
                   />
                 </div>
-                <p className="mt-1 text-xs text-muted">
+                <p className="mt-1 text-xs text-charcoal/60">
                   City and state only — never a street address. Photos&apos; own location data
                   is always removed when they&apos;re uploaded.
                 </p>
               </div>
 
               {detailsLocked ? (
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 text-xs text-charcoal/60">
                   The name and date lock once the first photo is uploaded, so guests&apos;
                   memories keep the details they saw. You can still change the location.
                 </p>
@@ -562,7 +574,7 @@ function AdminDashboardPage() {
                   type="button"
                   onClick={handleSaveDetails}
                   disabled={savingDetails}
-                  className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                  className="bg-ink px-5 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
                 >
                   {savingDetails ? 'Saving…' : 'Save details'}
                 </button>
@@ -573,7 +585,7 @@ function AdminDashboardPage() {
                   <p className="text-sm font-medium">
                     Uploads are {event.uploadsClosed ? 'closed' : 'open'}
                   </p>
-                  <p className="text-xs text-muted">
+                  <p className="text-xs text-charcoal/60">
                     {event.uploadsClosed
                       ? 'Guests cannot add new photos. The gallery stays viewable.'
                       : 'Close the event when you have all the photos you want.'}
@@ -583,10 +595,10 @@ function AdminDashboardPage() {
                   type="button"
                   onClick={handleToggleClosed}
                   disabled={closing}
-                  className={`rounded-full px-5 py-2.5 text-sm font-medium disabled:opacity-50 ${
+                  className={`px-5 py-3 text-sm font-medium transition disabled:opacity-50 ${
                     event.uploadsClosed
-                      ? 'bg-accent text-white hover:bg-accent/90'
-                      : 'border border-red-500 text-red-700 hover:bg-red-50'
+                      ? 'bg-ink text-canvas hover:bg-night'
+                      : 'border border-red-400 text-red-700 hover:bg-red-50'
                   }`}
                 >
                   {closing
@@ -601,7 +613,7 @@ function AdminDashboardPage() {
                   the bottom — the discount field used to sit between them. */}
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Photo screening</p>
-                <p className="text-xs text-muted">
+                <p className="text-xs text-charcoal/60">
                   Uploads are checked for explicit content. Alcohol, smoking, and kissing are
                   never flagged.
                 </p>
@@ -617,10 +629,10 @@ function AdminDashboardPage() {
                         type="button"
                         disabled={moderationWorking}
                         onClick={() => void handleModerationMode(value)}
-                        className={`rounded-full border px-3 py-1.5 text-sm disabled:opacity-50 ${
+                        className={`border px-4 py-2 text-sm transition disabled:opacity-50 ${
                           active
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-ink/20 hover:border-accent hover:text-accent'
+                            ? 'border-ink bg-ink text-canvas'
+                            : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                         }`}
                       >
                         {label}
@@ -628,7 +640,7 @@ function AdminDashboardPage() {
                     );
                   })}
                 </div>
-                <p className="mt-2 text-xs text-muted">
+                <p className="mt-2 text-xs text-charcoal/60">
                   {(event.moderationMode ?? 'review') === 'allow_all'
                     ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
                     : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
@@ -637,13 +649,13 @@ function AdminDashboardPage() {
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Guest downloads</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-charcoal/60">
                       {event.guestDownloadsBlocked === true
                         ? 'Off — guests can view the gallery but not download, and they see smaller viewing copies rather than full-size photos. You still have everything at full resolution.'
                         : 'On. Guests can save the photos at full resolution, no account needed. Turn this off for an event where you would rather the pictures stayed with you.'}
                     </p>
                     {event.guestDownloadsBlocked === true ? (
-                      <p className="mt-1 text-xs text-muted">
+                      <p className="mt-1 text-xs text-charcoal/60">
                         This lowers what a guest can take away — it cannot stop a screenshot.
                       </p>
                     ) : null}
@@ -652,7 +664,7 @@ function AdminDashboardPage() {
                     type="button"
                     disabled={downloadsWorking}
                     onClick={() => void handleGuestDownloads(event.guestDownloadsBlocked !== true)}
-                    className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                    className="shrink-0 border border-charcoal/25 px-5 py-3 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                   >
                     {downloadsWorking
                       ? 'Saving…'
@@ -665,13 +677,13 @@ function AdminDashboardPage() {
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                   <div className="min-w-0">
                     <p className="text-sm font-medium">Guest videos</p>
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-charcoal/60">
                       {event.videoUploadsEnabled === false
                         ? 'Off — guests can add photos only.'
                         : 'On. Videos are yours alone: guests can upload them but only you can watch them, which is also what keeps them from costing a fortune to serve. Screening checks photos but not videos, so turn this off if you want screened media only.'}
                     </p>
                     {event.videoUploadsEnabled !== false && event.videoLimit != null ? (
-                      <p className="mt-1 text-sm text-muted">
+                      <p className="mt-1 text-sm text-charcoal/60">
                         {event.videoCount ?? 0} of{' '}
                         {event.videoLimit + (event.extraVideoCredits ?? 0)} videos used.
                         {videosRemaining(event) === 0
@@ -684,7 +696,7 @@ function AdminDashboardPage() {
                     type="button"
                     disabled={videoWorking}
                     onClick={() => void handleVideoUploads(event.videoUploadsEnabled === false)}
-                    className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                    className="shrink-0 border border-charcoal/25 px-5 py-3 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                   >
                     {videoWorking
                       ? 'Saving…'
@@ -698,9 +710,9 @@ function AdminDashboardPage() {
                   <div className="mt-3">
                     <label htmlFor="alert-email" className="text-sm font-medium">
                       Email me when a photo is held{' '}
-                      <span className="text-muted">(optional)</span>
+                      <span className="text-charcoal/50">(optional)</span>
                     </label>
-                    <p className="text-xs text-muted">
+                    <p className="text-xs text-charcoal/60">
                       You&apos;ll get the photo and Approve / Deny buttons, so you don&apos;t have
                       to watch your phone.
                     </p>
@@ -711,13 +723,13 @@ function AdminDashboardPage() {
                         value={alertEmail}
                         onChange={(e) => setAlertEmail(e.target.value)}
                         placeholder="you@example.com"
-                        className="min-w-0 flex-1 rounded-xl border border-ink/20 px-4 py-2.5 focus:border-accent focus:outline-none"
+                        className="spx-input min-w-0 flex-1"
                       />
                       <button
                         type="button"
                         disabled={alertWorking}
                         onClick={() => void handleSaveAlertEmail()}
-                        className="shrink-0 rounded-full border border-ink/20 px-5 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                        className="shrink-0 border border-charcoal/25 px-5 py-3 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                       >
                         {alertWorking ? 'Saving…' : 'Save'}
                       </button>
@@ -728,7 +740,7 @@ function AdminDashboardPage() {
 
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Add-ons</p>
-                <p className="text-xs text-muted">
+                <p className="text-xs text-charcoal/60">
                   Tick what you want and pay once.{' '}
                   {lifecycle.uploadWindowEndsAt
                     ? lifecycle.uploadOpen
@@ -750,7 +762,7 @@ function AdminDashboardPage() {
                       href={`/event/${event.id}/live`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent/5"
+                      className="shrink-0 border border-pine px-4 py-2 text-sm font-medium text-pine transition hover:bg-pine/5"
                     >
                       Open slideshow ↗
                     </Link>
@@ -765,7 +777,7 @@ function AdminDashboardPage() {
                       href={`/event/${event.id}/guestbook`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="shrink-0 rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent hover:bg-accent/5"
+                      className="shrink-0 border border-pine px-4 py-2 text-sm font-medium text-pine transition hover:bg-pine/5"
                     >
                       Open guest book ↗
                     </Link>
@@ -778,24 +790,24 @@ function AdminDashboardPage() {
                       {availableAddOns.map((addon) => (
                         <label
                           key={addon.key}
-                          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                          className={`flex cursor-pointer items-start gap-3 border p-4 transition ${
                             selectedAddOns.has(addon.key)
-                              ? 'border-accent bg-accent/5'
-                              : 'border-ink/15'
+                              ? 'border-ink bg-sand'
+                              : 'border-charcoal/15 hover:border-charcoal/40'
                           }`}
                         >
                           <input
                             type="checkbox"
                             checked={selectedAddOns.has(addon.key)}
                             onChange={() => toggleAddOn(addon.key)}
-                            className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-pine"
                           />
                           <span className="min-w-0 flex-1">
                             <span className="flex items-baseline justify-between gap-3">
                               <span className="text-sm font-medium">{addon.label}</span>
                               <span className="shrink-0 text-sm font-medium">${addon.price}</span>
                             </span>
-                            <span className="mt-0.5 block text-xs text-muted">
+                            <span className="mt-0.5 block text-xs text-charcoal/60">
                               {addon.description}
                             </span>
                           </span>
@@ -805,7 +817,7 @@ function AdminDashboardPage() {
 
                     <div className="mt-4">
                       <label htmlFor="addon-discount" className="text-sm font-medium">
-                        Discount code <span className="text-muted">(optional)</span>
+                        Discount code <span className="text-charcoal/50">(optional)</span>
                       </label>
                       <input
                         id="addon-discount"
@@ -814,9 +826,9 @@ function AdminDashboardPage() {
                         onChange={(e) => setDiscountCode(e.target.value)}
                         placeholder="Enter code"
                         autoComplete="off"
-                        className="mt-1 w-full max-w-xs rounded-xl border border-ink/20 px-4 py-2.5 uppercase focus:border-accent focus:outline-none"
+                        className="spx-input mt-2 max-w-xs uppercase"
                       />
-                      <p className="mt-1 text-xs text-muted">
+                      <p className="mt-1 text-xs text-charcoal/60">
                         Applied to whichever ticked items the code covers. Anything it
                         doesn&apos;t cover stays full price.
                       </p>
@@ -826,7 +838,7 @@ function AdminDashboardPage() {
                       type="button"
                       onClick={() => void handleAddOnCheckout()}
                       disabled={checkoutWorking || selectedAddOns.size === 0}
-                      className="mt-3 w-full rounded-full bg-accent py-3 text-sm font-medium text-white hover:bg-accent/90 disabled:opacity-50 sm:w-auto sm:px-8"
+                      className="mt-4 w-full bg-ink py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50 sm:w-auto sm:px-8"
                     >
                       {checkoutWorking
                         ? 'Opening…'
@@ -836,7 +848,7 @@ function AdminDashboardPage() {
                     </button>
                   </>
                 ) : (
-                  <p className="mt-3 text-xs text-muted">
+                  <p className="mt-3 text-xs text-charcoal/60">
                     Everything available for this event is already active.
                   </p>
                 )}
@@ -853,7 +865,7 @@ function AdminDashboardPage() {
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
                 <div>
                   <p className="text-sm font-medium text-red-700">Delete event</p>
-                  <p className="text-xs text-muted">
+                  <p className="text-xs text-charcoal/60">
                     Permanently removes this event and all of its photos.
                   </p>
                 </div>
@@ -861,7 +873,7 @@ function AdminDashboardPage() {
                   type="button"
                   onClick={() => void handleDeleteEvent()}
                   disabled={deleting}
-                  className="rounded-full border border-red-500 px-5 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  className="border border-red-400 px-5 py-3 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                 >
                   {deleting ? 'Deleting…' : 'Delete event'}
                 </button>
@@ -880,6 +892,12 @@ function AdminDashboardPage() {
 
             {/* Below the photos: notes are the smaller half of the event, and
                 a host opening this page is usually here for the pictures. */}
+            {/* Available on every paid event rather than behind a tier gate:
+                the audit found tier strings are already load-bearing in five
+                places, and a sixth to sell a labelling feature would cost more
+                than it earns. */}
+            <MomentsManager eventId={event.id} origin={origin} />
+
             {guestBookAvailable(event) ? <GuestBookModeration eventId={event.id} /> : null}
 
             <div className="mt-8">
@@ -893,6 +911,7 @@ function AdminDashboardPage() {
             </div>
           </>
         ) : null}
+        </div>
       </section>
     </Layout>
   );

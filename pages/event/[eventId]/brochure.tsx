@@ -95,7 +95,7 @@ function EventBrochurePage() {
   }, [uploadUrl, event]);
 
   return (
-    <div className="min-h-screen bg-smoke font-body text-ink">
+    <div className="min-h-screen bg-canvas font-sans text-charcoal">
       <Head>
         <title>{event ? `${event.name} — brochure` : 'Event brochure'} — sharepix.net</title>
       </Head>
@@ -105,7 +105,7 @@ function EventBrochurePage() {
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <Link
             href={eventId ? `/event/${eventId}/admin` : '/my-events'}
-            className="text-sm font-medium text-ink/70 hover:text-accent"
+            className="text-sm font-medium text-charcoal/70 transition hover:text-charcoal"
           >
             ← Back to dashboard
           </Link>
@@ -113,7 +113,7 @@ function EventBrochurePage() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-white hover:bg-accent/90"
+              className="bg-ink px-5 py-2.5 text-sm font-medium text-canvas transition hover:bg-night"
             >
               Print / Save as PDF
             </button>
@@ -123,7 +123,7 @@ function EventBrochurePage() {
 
       <main className="mx-auto max-w-3xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-muted">Loading brochure…</p>
+          <p className="text-center text-charcoal/60">Loading brochure…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open this brochure.
@@ -134,42 +134,42 @@ function EventBrochurePage() {
           </p>
         ) : event ? (
           <>
-            <p className="print:hidden mb-4 text-center text-sm text-muted">
+            <p className="print:hidden mb-4 text-center text-sm text-charcoal/60">
               Print this and place it on tables, or share it digitally. Guests scan the
               code to add their photos — no app or account needed.
             </p>
 
             {/* The printable flyer */}
             <article className="mx-auto flex max-w-xl flex-col items-center rounded-3xl border border-ink/10 bg-white px-8 py-12 text-center shadow-sm print:border-0 print:shadow-none">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">
+              <p className="spx-eyebrow">
                 Share your photos
               </p>
-              <h1 className="mt-3 font-display text-4xl font-extrabold leading-tight">
+              <h1 className="mt-3 font-sans text-4xl font-extrabold leading-tight tracking-[-0.02em]">
                 {event.name}
               </h1>
               {formatDate(event.date) ? (
-                <p className="mt-2 text-lg text-muted">{formatDate(event.date)}</p>
+                <p className="mt-2 text-lg text-charcoal/60">{formatDate(event.date)}</p>
               ) : null}
 
               <div className="my-8 rounded-2xl border border-ink/10 bg-white p-4">
                 <div ref={qrContainerRef} className="h-[320px] w-[320px]" aria-label="Upload QR code" />
               </div>
 
-              <p className="font-display text-2xl font-bold">Scan to add your photos</p>
-              <p className="mt-2 max-w-sm text-muted">
+              <p className="font-serif text-2xl italic">Scan to add your photos</p>
+              <p className="mt-2 max-w-sm text-charcoal/60">
                 Point your phone&apos;s camera at the code, tap the link, and upload the
                 pictures and videos you took. Everyone&apos;s memories, all in one gallery.
               </p>
 
-              <div className="mt-6 rounded-xl bg-smoke px-5 py-3">
-                <p className="text-xs uppercase tracking-wide text-muted">Or visit</p>
+              <div className="mt-6 bg-sand px-5 py-3">
+                <p className="text-xs uppercase tracking-wide text-charcoal/60">Or visit</p>
                 <p className="break-all font-mono text-sm text-ink">{uploadUrl}</p>
-                <p className="mt-1 text-xs text-muted">
+                <p className="mt-1 text-xs text-charcoal/60">
                   Event code: <span className="font-semibold text-ink">{event.eventCode}</span>
                 </p>
               </div>
 
-              <p className="mt-8 text-sm text-muted">
+              <p className="mt-8 text-sm text-charcoal/60">
                 Powered by <span className="font-semibold">sharepix.net</span>
               </p>
             </article>

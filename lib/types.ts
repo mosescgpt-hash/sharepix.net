@@ -74,6 +74,22 @@ export interface QRPhoto {
   moderationStatus?: string | null;
   /** What the screener detected, when flagged. */
   moderationReasons?: string | null;
+  /**
+   * Which part of the event this photo belongs to, if any. Optional forever:
+   * every photo predating moments has no value here, and one pointing at a
+   * moment the host has since deleted is equally valid — see lib/moments.ts.
+   */
+  momentId?: string | null;
+  createdAt?: string | null;
+}
+
+/** A named part of an event: "Ceremony", "Reception". See lib/moments.ts. */
+export interface EventMoment {
+  id: string;
+  eventId: string;
+  name: string;
+  description?: string | null;
+  sortOrder?: number | null;
   createdAt?: string | null;
 }
 

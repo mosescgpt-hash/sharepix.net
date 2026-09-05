@@ -58,6 +58,7 @@ export const handler: Handler = async (event) => {
       approved: item.approved?.BOOL ?? true,
       eventOwner: item.eventOwner?.S ?? null,
       contentHash: item.contentHash?.S ?? null,
+      momentId: item.momentId?.S ?? null,
       createdAt: item.createdAt?.S ?? null,
     }));
 };

@@ -12,14 +12,14 @@ export default function HelpArticlePage({ article, related }: Props) {
   return (
     <Layout title={article.title}>
       <article className="mx-auto max-w-2xl py-10">
-        <Link href="/help" className="text-sm text-muted hover:text-accent">
+        <Link href="/help" className="text-sm text-charcoal/60 transition hover:text-charcoal">
           ← All help articles
         </Link>
 
-        <p className="mt-6 text-sm uppercase tracking-wide text-muted">
+        <p className="spx-eyebrow mt-6">
           {article.category} · {article.audience === 'guest' ? 'For guests' : 'For hosts'}
         </p>
-        <h1 className="mt-1 font-display text-3xl font-bold">{article.title}</h1>
+        <h1 className="spx-display mt-3">{article.title}</h1>
         <p className="mt-3 text-lg text-ink/70">{article.summary}</p>
 
         <div className="mt-8 space-y-5">
@@ -37,11 +37,11 @@ export default function HelpArticlePage({ article, related }: Props) {
             }
             if (block.kind === 'contact') {
               return (
-                <p key={index} className="rounded-xl border border-line bg-card shadow-card px-4 py-3">
+                <p key={index} className="spx-card px-4 py-3">
                   {block.text}{' '}
                   <a
                     href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(article.title)}`}
-                    className="font-medium text-accent hover:underline"
+                    className="font-medium text-pine underline"
                   >
                     {SUPPORT_EMAIL}
                   </a>
@@ -52,7 +52,7 @@ export default function HelpArticlePage({ article, related }: Props) {
               return (
                 <p
                   key={index}
-                  className="rounded-xl border border-accent/30 bg-accent/5 px-4 py-3 text-sm"
+                  className="border border-charcoal/10 border-l-2 border-l-pine bg-paper px-4 py-3 text-sm"
                 >
                   {block.text}
                 </p>
@@ -64,11 +64,11 @@ export default function HelpArticlePage({ article, related }: Props) {
 
         {related.length > 0 ? (
           <div className="mt-12 border-t border-ink/10 pt-6">
-            <h2 className="font-display text-lg font-bold">Related</h2>
+            <h2 className="font-sans text-lg font-bold tracking-[-0.02em]">Related</h2>
             <ul className="mt-3 space-y-2">
               {related.map((item) => (
                 <li key={item.slug}>
-                  <Link href={`/help/${item.slug}`} className="text-accent hover:underline">
+                  <Link href={`/help/${item.slug}`} className="text-pine underline">
                     {item.title}
                   </Link>
                 </li>

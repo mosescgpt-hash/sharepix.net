@@ -1,6 +1,7 @@
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
+import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
 import {
   DEMO_STEPS,
@@ -20,7 +21,7 @@ function RoleBadge({ role }: { role: 'guest' | 'host' }) {
   return (
     <span
       className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${
-        role === 'host' ? 'bg-ink text-white' : 'bg-accent/10 text-accent'
+        role === 'host' ? 'bg-ink text-canvas' : 'bg-sage text-pine'
       }`}
     >
       {role === 'host' ? 'You are the host' : 'You are a guest'}
@@ -45,7 +46,7 @@ function MiniSlideshow({ photos }: { photos: DisplayPhoto[] }) {
   if (!photo) return null;
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black">
+    <div className="relative aspect-video w-full overflow-hidden bg-black">
       <div
         aria-hidden
         className="absolute inset-0 scale-110 bg-cover bg-center opacity-30 blur-2xl"
@@ -146,17 +147,19 @@ export default function DemoTryPage() {
   }
 
   return (
-    <Layout title="Try the demo" width="wide">
-      <section className="mx-auto max-w-3xl py-10">
-        <div className="text-center">
-          <p className="sp-eyebrow">Try it yourself</p>
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-[-0.03em] sm:text-4xl">
-            {DEMO_EVENT.name}
+    <Layout title="Try the demo" width="bleed">
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="mx-auto w-full max-w-3xl">
+        <div>
+          <p className="spx-eyebrow">Try it yourself</p>
+          <h1 className="mt-3">
+            <span className="spx-display block">{DEMO_EVENT.name}</span>
+            <span className="spx-display-serif block">Both sides of it.</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-lg text-muted">
-            Play both parts: add a photo the way a guest would, then approve it
-            the way you would.{' '}
-            <strong className="font-semibold text-ink">
+          <p className="spx-body mt-4 max-w-lg">
+            Play both parts: add a photo the way a guest would, then approve it the way you
+            would.{' '}
+            <strong className="font-semibold text-charcoal">
               Your photo never leaves this device
             </strong>{' '}
             — nothing here is uploaded.
@@ -172,49 +175,49 @@ export default function DemoTryPage() {
               <li key={entry} className="flex items-center gap-2">
                 <span
                   aria-current={current ? 'step' : undefined}
-                  className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
+                  className={`flex h-8 w-8 items-center justify-center text-sm font-semibold ${
                     current
-                      ? 'bg-ink text-white'
+                      ? 'bg-ink text-canvas'
                       : done
-                        ? 'bg-accent/15 text-accent'
-                        : 'bg-ink/[0.06] text-muted'
+                        ? 'bg-sage text-pine'
+                        : 'bg-charcoal/[0.07] text-charcoal/55'
                   }`}
                 >
                   {done ? '✓' : i + 1}
                 </span>
                 {i < DEMO_STEPS.length - 1 ? (
-                  <span aria-hidden className="h-px w-6 bg-line sm:w-10" />
+                  <span aria-hidden className="h-px w-6 bg-charcoal/15 sm:w-10" />
                 ) : null}
               </li>
             );
           })}
         </ol>
 
-        <div className="sp-card mt-8 p-6 sm:p-9">
+        <div className="spx-card mt-10 p-6 sm:p-9">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
+              <p className="spx-eyebrow">
                 Step {stepNumber(step)} of {DEMO_STEPS.length}
               </p>
-              <h2 className="mt-2 font-display text-2xl font-bold tracking-tight">
+              <h2 className="mt-2 font-sans text-2xl font-bold tracking-[-0.02em]">
                 {copy.label}
               </h2>
             </div>
             <RoleBadge role={copy.role} />
           </div>
-          <p className="mt-3 leading-relaxed text-muted">{copy.blurb}</p>
+          <p className="spx-body mt-3">{copy.blurb}</p>
 
           <div className="mt-8">
             {step === 'add' ? (
               <>
                 <label
                   htmlFor="demo-photo"
-                  className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-line bg-smoke px-6 py-14 text-center transition hover:border-accent/50"
+                  className="flex cursor-pointer flex-col items-center justify-center border border-dashed border-charcoal/25 bg-sand/50 px-6 py-14 text-center transition hover:border-charcoal/50"
                 >
-                  <span className="font-display text-lg font-bold tracking-tight">
+                  <span className="font-serif text-2xl italic text-charcoal">
                     Choose a photo
                   </span>
-                  <span className="mt-2 max-w-sm text-sm text-muted">
+                  <span className="mt-2 max-w-sm text-sm text-charcoal/60">
                     On a phone this opens your camera or camera roll — exactly what a
                     guest sees after scanning the code.
                   </span>
@@ -228,11 +231,11 @@ export default function DemoTryPage() {
                   />
                 </label>
                 {error ? (
-                  <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <p className="mt-4 border border-charcoal/10 border-l-2 border-l-red-700 bg-paper px-4 py-3 text-sm text-red-700" role="alert">
                     {error}
                   </p>
                 ) : null}
-                <p className="mt-4 text-center text-sm text-muted">
+                <p className="mt-4 text-center text-sm text-charcoal/60">
                   Would rather not?{' '}
                   <button
                     type="button"
@@ -240,7 +243,7 @@ export default function DemoTryPage() {
                       setPhoto(DEMO_PHOTOS[2].url);
                       setStep('held');
                     }}
-                    className="font-medium text-accent underline"
+                    className="font-medium text-pine underline"
                   >
                     Use one of ours instead
                   </button>
@@ -249,7 +252,7 @@ export default function DemoTryPage() {
             ) : null}
 
             {step === 'held' && photoUrl ? (
-              <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5">
+              <div className="border border-charcoal/10 border-l-2 border-l-amber-600 bg-paper p-5">
                 <p className="text-sm font-semibold text-amber-900">
                   {approved ? 'Approved' : 'Waiting for your approval'}
                 </p>
@@ -258,7 +261,7 @@ export default function DemoTryPage() {
                     ? 'Guests can see it now.'
                     : 'Guests cannot see this yet. On a real event you would get an email, and you can review from your phone.'}
                 </p>
-                <div className="mt-4 overflow-hidden rounded-xl bg-white">
+                <div className="mt-4 overflow-hidden bg-paper">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={photoUrl}
@@ -271,11 +274,11 @@ export default function DemoTryPage() {
                     <button
                       type="button"
                       onClick={() => setApproved(true)}
-                      className="sp-btn-primary"
+                      className="spx-btn-ink"
                     >
                       Approve it
                     </button>
-                    <button type="button" onClick={restart} className="sp-btn-ghost">
+                    <button type="button" onClick={restart} className="spx-btn-outline">
                       Reject and start over
                     </button>
                   </div>
@@ -290,9 +293,9 @@ export default function DemoTryPage() {
             {step === 'live' ? (
               <>
                 <MiniSlideshow photos={galleryPhotos} />
-                <p className="mt-4 text-center text-sm text-muted">
+                <p className="mt-4 text-center text-sm text-charcoal/60">
                   On the night this runs full-screen on a TV or projector.{' '}
-                  <Link href="/demo/live" className="font-medium text-accent underline">
+                  <Link href="/demo/live" className="font-medium text-pine underline">
                     Open the full-screen version
                   </Link>
                 </p>
@@ -302,8 +305,8 @@ export default function DemoTryPage() {
 
           {/* Advance. Approving is the gate on step two — the whole point is
               that a held photo does not move until the host says so. */}
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6">
-            <button type="button" onClick={restart} className="text-sm text-muted underline">
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-charcoal/12 pt-6">
+            <button type="button" onClick={restart} className="text-sm text-charcoal/60 underline">
               Start over
             </button>
             {forward ? (
@@ -311,27 +314,28 @@ export default function DemoTryPage() {
                 type="button"
                 disabled={step === 'held' && !approved}
                 onClick={() => setStep(forward)}
-                className="sp-btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                className="spx-btn-ink disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {step === 'held' && !approved
                   ? 'Approve it first'
                   : `Next: ${DEMO_STEP_COPY[forward].label}`}
               </button>
             ) : (
-              <Link href="/create-event" className="sp-btn-primary">
+              <Link href="/create-event" className="spx-btn-ink">
                 Create your event
               </Link>
             )}
           </div>
         </div>
 
-        <p className="mt-8 text-center text-sm text-muted">
+        <p className="mt-8 text-center text-sm text-charcoal/60">
           The sample photos are illustrations, not photographs, and this is not a real
           event.{' '}
-          <Link href="/pricing" className="text-accent underline">
+          <Link href="/pricing" className="text-pine underline">
             See pricing
           </Link>
         </p>
+        </div>
       </section>
     </Layout>
   );

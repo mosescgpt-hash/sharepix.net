@@ -14,6 +14,8 @@ import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/r
 import { mediaUrl as mediaUrlFn } from '../functions/media-url/resource';
 import { createGuestBookEntry as createGuestBookEntryFn } from '../functions/create-guest-book-entry/resource';
 import { listGuestBookEntries as listGuestBookEntriesFn } from '../functions/list-guest-book-entries/resource';
+import { saveMoment as saveMomentFn } from '../functions/save-moment/resource';
+import { listMoments as listMomentsFn } from '../functions/list-moments/resource';
 
 /**
  * SharePix data models.
@@ -156,6 +158,14 @@ const schema = a.schema({
       moderationStatus: a.string(),
       // What the screener detected, for the host's review screen.
       moderationReasons: a.string(),
+      // Which part of the event this photo belongs to, if any. OPTIONAL and
+      // always will be: every photo taken before moments existed has no value
+      // here, and that is a valid, permanent state rather than a migration
+      // waiting to happen. Verified against the Moment's own eventId by
+      // createEventPhoto before it is stored — the client's claim is not
+      // trusted. A value pointing at a moment the host later deleted is also
+      // valid; the gallery folds it back to "no moment". See lib/moments.ts.
+      momentId: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create` (photos come only from createEventPhoto) and no
@@ -165,6 +175,37 @@ const schema = a.schema({
     // listEventPhotos query.
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner'),
+      allow.group('ADMINS'),
+    ]),
+
+  // A named part of an event: "Getting ready", "Ceremony", "Reception".
+  //
+  // Hosts create these, so unlike Photo and GuestBookEntry the caller is
+  // authenticated and `ownerDefinedIn` can do real work — but only on rows that
+  // already exist. There is deliberately NO create and NO update here:
+  // `eventOwner` is a client-written field on create, so a host could set it to
+  // their own id while pointing `eventId` at somebody else's event, and inject
+  // a labelled section into a stranger's gallery. `saveMoment` is the only
+  // writer, and it checks the event's stored owner first.
+  //
+  // `delete` IS granted, because deleting requires the stored row to already
+  // name the caller as its owner, which is exactly the check we want.
+  //
+  // Guests never read this model directly — that would enumerate every event's
+  // structure platform-wide. The upload page and gallery read `eventMoments`.
+  Moment: a
+    .model({
+      eventId: a.id().required(),
+      // Stamped from the event row by saveMoment, never sent by the client.
+      eventOwner: a.string(),
+      name: a.string().required(),
+      description: a.string(),
+      // The host's ordering. Ties break on createdAt — see lib/moments.ts.
+      sortOrder: a.integer(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [
+      allow.ownerDefinedIn('eventOwner').to(['get', 'list', 'delete']),
       allow.group('ADMINS'),
     ]),
 
@@ -413,6 +454,7 @@ const schema = a.schema({
     approved: a.boolean(),
     eventOwner: a.string(),
     contentHash: a.string(),
+    momentId: a.string(),
     createdAt: a.string(),
   }),
 
@@ -476,6 +518,48 @@ const schema = a.schema({
     .returns(a.ref('GuestBookEntryView').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listGuestBookEntriesFn)),
+
+  MomentView: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    name: a.string().required(),
+    description: a.string(),
+    sortOrder: a.integer(),
+    createdAt: a.string(),
+  }),
+
+  // Create or rename one moment. Named `saveMoment` rather than createMoment or
+  // updateMoment because the Moment model already generates BOTH of those, and
+  // a name collision fails the entire deployment rather than the one field —
+  // the same trap that broke deployments 124 and 125 with createEvent, and the
+  // reason signGuestBook is not called createGuestBookEntry.
+  //
+  // Omitting `momentId` creates; sending one renames that moment in place.
+  // Either way the event's stored owner is checked against the caller first, so
+  // a host cannot write into an event they do not own.
+  saveMoment: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      momentId: a.id(),
+      name: a.string().required(),
+      description: a.string(),
+      sortOrder: a.integer(),
+    })
+    .returns(a.ref('MomentView'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(saveMomentFn)),
+
+  // One event's moments, for the guest upload picker and the gallery. Scoped
+  // the same way listEventPhotos and eventGuestBook are, so the Moment model
+  // never has to grant guests list access. Named `eventMoments` because the
+  // model generates listMoments.
+  eventMoments: a
+    .query()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('MomentView').array())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(listMomentsFn)),
 
   UserActionResult: a.customType({
     success: a.boolean().required(),
@@ -649,6 +733,11 @@ const schema = a.schema({
       uploadedBy: a.string(),
       uploadedByUserId: a.string(),
       contentHash: a.string(),
+      // Which moment the guest was filing under, usually from the QR code they
+      // scanned. A claim, not a fact: the function checks the moment's stored
+      // eventId matches before keeping it, and silently drops it otherwise
+      // rather than failing an upload the guest has already waited through.
+      momentId: a.string(),
     })
     .returns(a.ref('PhotoUploadResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])

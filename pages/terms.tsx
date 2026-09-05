@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'July 28, 2026';
+const LAST_UPDATED = 'September 4, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
@@ -12,10 +12,10 @@ export default function TermsPage() {
   return (
     <Layout title="Terms of Service">
       <section className="mx-auto max-w-3xl py-12 sm:py-16">
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">Terms of Service</h1>
-        <p className="mt-3 text-sm text-muted">Last updated: {LAST_UPDATED}</p>
+        <h1 className="spx-display">Terms of Service</h1>
+        <p className="mt-3 text-sm text-charcoal/60">Last updated: {LAST_UPDATED}</p>
 
-        <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
+        <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
               These Terms of Service (&ldquo;Terms&rdquo;) are a legal agreement between you
@@ -235,7 +235,7 @@ export default function TermsPage() {
             {/* The postal address comes from lib/businessInfo, the same place
                 the DMCA page reads it, so the two can never disagree. */}
             <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-charcoal/60">
               Copyright notices go to our designated agent instead — see our{' '}
               <a href="/dmca">Copyright and DMCA Policy</a>.
             </p>

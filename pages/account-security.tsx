@@ -8,7 +8,9 @@ import {
   verifyTOTPSetup,
 } from 'aws-amplify/auth';
 import { QRCodeCanvas } from 'qrcode.react';
+import HostHeader from '@/components/HostHeader';
 import Layout from '@/components/Layout';
+import Notice from '@/components/Notice';
 
 type SetupDetails = {
   secret: string;
@@ -101,26 +103,39 @@ function AccountSecurityPage() {
   }
 
   return (
-    <Layout title="Account security">
-      <section className="mx-auto max-w-xl py-10">
-        <p className="text-sm font-medium uppercase tracking-wide text-accent">Your account</p>
-        <h1 className="mt-1 font-display text-3xl font-bold">Security</h1>
-        <p className="mt-2 text-ink/70">
-          Add a six-digit authenticator code after your password for stronger protection.
-        </p>
+    <Layout title="Account security" width="bleed">
+      <HostHeader
+        eyebrow="Your account"
+        title="Security."
+        serif="One more step to sign in."
+        description="Add a six-digit authenticator code after your password for stronger protection."
+        current="security"
+      />
 
-        {error ? <p className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
-        {message ? <p className="mt-5 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p> : null}
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="mx-auto w-full max-w-xl">
+        {error ? <Notice tone="error">{error}</Notice> : null}
+        {message ? (
+          <Notice tone="success" className={error ? 'mt-4' : ''}>
+            {message}
+          </Notice>
+        ) : null}
 
-        <div className="mt-6 sp-card p-5">
+        <div className={`spx-card p-6 ${error || message ? 'mt-6' : ''}`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display text-xl font-bold">Authenticator-app MFA</h2>
-              <p className="mt-1 text-sm leading-6 text-muted">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+                Authenticator-app MFA
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-charcoal/60">
                 Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy, and similar apps.
               </p>
             </div>
-            <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${enabled ? 'bg-green-100 text-green-800' : 'bg-ink/5 text-muted'}`}>
+            <span
+              className={`shrink-0 px-3 py-1 font-sans text-[0.7rem] font-medium uppercase tracking-[0.14em] ${
+                enabled ? 'bg-sage text-pine' : 'bg-charcoal/[0.07] text-charcoal/55'
+              }`}
+            >
               {loading ? 'Checking…' : enabled ? 'Enabled' : 'Off'}
             </span>
           </div>
@@ -130,29 +145,29 @@ function AccountSecurityPage() {
               type="button"
               onClick={beginSetup}
               disabled={busy}
-              className="mt-5 w-full rounded-full bg-ink py-3 font-medium text-white hover:bg-night disabled:opacity-50"
+              className="spx-btn-ink mt-6 w-full disabled:opacity-50"
             >
               {busy ? 'Starting…' : 'Set up MFA'}
             </button>
           ) : null}
 
           {setup ? (
-            <div className="mt-6 border-t border-ink/10 pt-6">
-              <ol className="space-y-5 text-sm text-ink/75">
+            <div className="mt-6 border-t border-charcoal/10 pt-6">
+              <ol className="space-y-5 text-sm text-charcoal/75">
                 <li>
-                  <strong className="text-ink">1. Scan this QR code</strong>
-                  <div className="mt-3 flex justify-center rounded-xl bg-white p-4">
+                  <strong className="text-charcoal">1. Scan this QR code</strong>
+                  <div className="mt-3 flex justify-center bg-paper p-4">
                     <QRCodeCanvas value={setup.uri} size={200} includeMargin />
                   </div>
                 </li>
                 <li>
-                  <strong className="text-ink">2. Or enter this setup key manually</strong>
-                  <code className="mt-2 block break-all rounded-lg bg-smoke px-3 py-2 text-center text-xs">
+                  <strong className="text-charcoal">2. Or enter this setup key manually</strong>
+                  <code className="mt-2 block break-all bg-sand px-3 py-2 text-center text-xs">
                     {setup.secret}
                   </code>
                 </li>
                 <li>
-                  <strong className="text-ink">3. Confirm the six-digit code</strong>
+                  <strong className="text-charcoal">3. Confirm the six-digit code</strong>
                   <form onSubmit={confirmSetup} className="mt-2 space-y-3">
                     <label htmlFor="totp-code" className="sr-only">Authenticator code</label>
                     <input
@@ -162,12 +177,12 @@ function AccountSecurityPage() {
                       inputMode="numeric"
                       autoComplete="one-time-code"
                       placeholder="123456"
-                      className="w-full rounded-xl border border-ink/20 px-4 py-3 text-center text-lg tracking-[0.35em] outline-none focus:border-accent"
+                      className="spx-input text-center text-lg tracking-[0.35em]"
                     />
                     <button
                       type="submit"
                       disabled={busy || code.length !== 6}
-                      className="w-full rounded-full bg-accent py-3 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+                      className="spx-btn-ink w-full disabled:opacity-50"
                     >
                       {busy ? 'Verifying…' : 'Verify and enable MFA'}
                     </button>
@@ -178,7 +193,7 @@ function AccountSecurityPage() {
                         setCode('');
                       }}
                       disabled={busy}
-                      className="w-full py-2 text-sm text-muted hover:text-ink"
+                      className="w-full py-2 text-sm text-charcoal/60 transition hover:text-charcoal"
                     >
                       Cancel
                     </button>
@@ -190,14 +205,14 @@ function AccountSecurityPage() {
 
           {!loading && enabled && !setup ? (
             <div className="mt-5">
-              <p className="rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">
+              <Notice tone="success" label="Protected">
                 MFA is {preferred ? 'your preferred sign-in protection' : 'enabled'}.
-              </p>
+              </Notice>
               <button
                 type="button"
                 onClick={disableMfa}
                 disabled={busy}
-                className="mt-4 w-full rounded-full border border-red-200 py-2.5 font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                className="mt-4 w-full border border-red-300 py-3 font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
               >
                 {busy ? 'Updating…' : 'Turn off MFA'}
               </button>
@@ -205,14 +220,16 @@ function AccountSecurityPage() {
           ) : null}
         </div>
 
-        <p className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-          Keep access to your authenticator app. If you lose it, an administrator must reset MFA before you can sign in again.
-        </p>
+        <Notice tone="warn" className="mt-6" label="Do not lose this">
+          Keep access to your authenticator app. If you lose it, an administrator must reset MFA
+          before you can sign in again.
+        </Notice>
 
-        <div className="mt-6">
-          <Link href="/account" className="rounded-full border border-ink/20 px-4 py-2 text-sm font-medium hover:border-accent hover:text-accent">
-            ← Name &amp; email
+        <div className="mt-8">
+          <Link href="/account" className="spx-btn-outline">
+            &larr; Name &amp; email
           </Link>
+        </div>
         </div>
       </section>
     </Layout>

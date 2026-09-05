@@ -15,14 +15,16 @@ export default function DemoGuestBookPage() {
   const photosById = new Map(DEMO_PHOTOS.map((photo) => [photo.id, photo]));
 
   return (
-    <Layout title="A sample guest book">
-      <section className="mx-auto max-w-2xl py-10">
-        <div className="text-center">
-          <p className="sp-eyebrow">A worked example</p>
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-[-0.03em] sm:text-4xl">
-            {DEMO_EVENT.name}
+    <Layout title="A sample guest book" width="bleed">
+      <section className="spx-section-canvas py-10 sm:py-14">
+        <div className="mx-auto w-full max-w-2xl">
+        <div>
+          <p className="spx-eyebrow">A worked example</p>
+          <h1 className="mt-3">
+            <span className="spx-display block">{DEMO_EVENT.name}</span>
+            <span className="spx-display-serif block">The guest book.</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-md text-muted">
+          <p className="spx-body mt-4 max-w-md">
             What guests leave behind besides photos. At a real event there is a
             form at the top of this page — here it is left out, so nothing you
             type ends up somewhere it does not belong.
@@ -41,18 +43,19 @@ export default function DemoGuestBookPage() {
         </div>
 
         <div className="mt-12 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <Link href="/demo/gallery" className="sp-btn-ghost">
+          <Link href="/demo/gallery" className="spx-btn-outline">
             See the sample gallery
           </Link>
-          <Link href="/create-event" className="sp-btn-primary">
+          <Link href="/create-event" className="spx-btn-ink">
             Create your event
           </Link>
         </div>
 
-        <p className="mt-8 text-center text-sm text-muted">
-          The guest book is included on Premium and Corporate, and a $19 add-on
-          on the other plans. <Link href="/pricing" className="text-accent underline">See pricing</Link>.
+        <p className="mt-8 text-center text-sm text-charcoal/60">
+          The guest book is included on Premium and Corporate, and a $19 add-on on the other
+          plans. <Link href="/pricing" className="text-pine underline">See pricing</Link>.
         </p>
+        </div>
       </section>
     </Layout>
   );

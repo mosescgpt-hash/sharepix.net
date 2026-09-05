@@ -27,6 +27,8 @@ import { printProviderCheck } from './functions/print-provider-check/resource';
 import { sendTestAlert } from './functions/send-test-alert/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { createGuestBookEntry } from './functions/create-guest-book-entry/resource';
+import { saveMoment } from './functions/save-moment/resource';
+import { listMoments } from './functions/list-moments/resource';
 import { listGuestBookEntries } from './functions/list-guest-book-entries/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
@@ -50,6 +52,8 @@ const backend = defineBackend({
   sendTestAlert,
   listEventPhotos,
   createGuestBookEntry,
+  saveMoment,
+  listMoments,
   listGuestBookEntries,
   adminUserActions,
   stripeWebhook,
@@ -68,6 +72,7 @@ const discountTable = backend.data.resources.tables.DiscountCode;
 const reviewTable = backend.data.resources.tables.ModerationReview;
 const hostProfileTable = backend.data.resources.tables.HostProfile;
 const guestBookTable = backend.data.resources.tables.GuestBookEntry;
+const momentTable = backend.data.resources.tables.Moment;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -149,6 +154,10 @@ eventTable.grantReadWriteData(createFn);
 photoTable.grantReadWriteData(createFn);
 createFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// Moments are READ-ONLY here: an upload proves a claimed moment belongs to this
+// event before filing under it, and never creates or changes one.
+momentTable.grantReadData(createFn);
+createFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 // Content screening: Rekognition reads the uploaded object straight from S3, so
 // the function needs bucket read plus the single detection action. Photos held
 // for review are hidden from guests until the host releases them.
@@ -298,6 +307,21 @@ guestBookWriteFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableNam
 const guestBookListFn = backend.listGuestBookEntries.resources.lambda as LambdaFunction;
 guestBookTable.grantReadData(guestBookListFn);
 guestBookListFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
+
+// Moment write: reads the event to prove the caller owns it before creating or
+// renaming anything. Event access is READ-ONLY — naming the parts of an event
+// must never be able to touch the event row itself, which is where the plan,
+// the limits, the counters and `paid` live.
+const momentWriteFn = backend.saveMoment.resources.lambda as LambdaFunction;
+eventTable.grantReadData(momentWriteFn);
+momentTable.grantReadWriteData(momentWriteFn);
+momentWriteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+momentWriteFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
+
+// Moment read: one event's moments for the guest upload picker and the gallery.
+const momentListFn = backend.listMoments.resources.lambda as LambdaFunction;
+momentTable.grantReadData(momentListFn);
+momentListFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 
 // Admin user-actions function: reset passwords and enable/disable accounts in
 // the Cognito user pool. Scoped to just these admin operations on this pool.

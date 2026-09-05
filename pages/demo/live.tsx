@@ -64,7 +64,7 @@ export default function DemoLivePage() {
           />
 
           {isNew ? (
-            <div className="absolute left-1/2 top-8 -translate-x-1/2 rounded-full bg-white/90 px-5 py-2 text-sm font-semibold text-black shadow-lg">
+            <div className="absolute left-1/2 top-8 -translate-x-1/2 bg-canvas/95 px-5 py-2 text-sm font-semibold text-charcoal shadow-lg">
               Just added
             </div>
           ) : null}
@@ -74,7 +74,7 @@ export default function DemoLivePage() {
               <p className="truncate text-2xl font-medium drop-shadow">{photo.uploadedBy}</p>
               <p className="truncate text-sm text-white/60">{DEMO_EVENT.name}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-3 rounded-2xl bg-white/95 p-3 text-black">
+            <div className="flex shrink-0 items-center gap-3 bg-canvas/95 p-3 text-charcoal">
               <QRCodeSVG value="https://www.sharepix.net/demo/gallery" size={84} />
               <p className="max-w-[8rem] text-xs font-medium leading-snug">
                 Scan to add your photos

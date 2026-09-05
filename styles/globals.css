@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Inter:wght@400;500;600&display=swap');
+/* The brand pairing — see docs/design-system.md. Bricolage Grotesque and
+   Inter were dropped once no page referenced them; two families is already
+   the page-weight budget. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;1,400;1,500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,18 +14,13 @@
   }
 
   /*
-   * A very quiet wash behind the page instead of one flat grey. It is barely
-   * perceptible on its own — the point is that white cards now sit on
-   * *something*, so they read as objects rather than as holes in the page.
-   * Anchored to the top and not fixed, so it scrolls away and never fights
-   * long pages or mobile scroll performance.
+   * Flat, warm, and nothing else. The old page carried a mint radial wash so
+   * that white cards had *something* to sit on; the redesign marks sections by
+   * changing the background edge to edge instead, and a gradient underneath
+   * that fights every band it shows through.
    */
   body {
-    background-color: theme('colors.smoke');
-    background-image:
-      radial-gradient(64rem 34rem at 50% -14rem, rgba(122, 216, 192, 0.22), transparent 62%),
-      radial-gradient(48rem 26rem at 108% -4rem, rgba(9, 147, 97, 0.07), transparent 58%);
-    background-repeat: no-repeat;
+    background-color: theme('colors.canvas');
   }
 
   /* Display type at large sizes needs negative tracking to look set rather
@@ -42,44 +40,138 @@
   /* One visible, on-brand focus ring everywhere. The .tcc-theme rule below is
      more specific, so the comic theme keeps its yellow one. */
   :focus-visible {
-    outline: 2px solid theme('colors.accent');
+    outline: 2px solid theme('colors.ink');
     outline-offset: 2px;
   }
 }
 
 /*
- * Shared surface and control primitives.
+ * Surface and control primitives.
  *
- * These exist so elevation, radius and hover behaviour are decided once. A page
- * that hand-rolls `rounded-2xl border border-ink/10 bg-white` gets a flat box;
- * a page that uses `.sp-card` gets the same object every other page has.
+ * These exist so radius, border and hover behaviour are decided once. The old
+ * `sp-` set (rounded cards, pill buttons, shadow-based elevation) was deleted
+ * after Phase 5, when the last page stopped referencing it.
  */
 @layer components {
-  .sp-card {
-    @apply rounded-2xl border border-line bg-card shadow-card;
+  /* ===================================================================
+     Redesign primitives (docs/design-system.md).
+
+     Namespaced `spx-` so they can be built and reviewed while every live
+     page still runs on the `sp-` classes above. Phase 3 migrates pages
+     across; the old set is deleted once nothing references it.
+
+     The palette is the brand navy and mint on a WARM ground: `ink` for
+     inverted sections and primary buttons, `mint` as the accent on top of
+     them, `pine` for small accent text on light grounds where `accent`
+     would fail contrast.
+
+     The system is SQUARE. No radius anywhere except `.spx-arch`, and
+     separation comes from background colour and hairlines rather than
+     shadow — that restraint is most of why the reference reads editorial
+     rather than SaaS.
+     =================================================================== */
+
+  /* Section wrapper. The background changes to mark the section, full
+     bleed, rather than cards floating on one continuous page colour. */
+  .spx-section {
+    @apply w-full px-5 py-16 sm:px-8 sm:py-24;
+  }
+  .spx-section-canvas { @apply spx-section bg-canvas text-charcoal; }
+  .spx-section-sand   { @apply spx-section bg-sand text-charcoal; }
+  .spx-section-ink    { @apply spx-section bg-ink text-canvas; }
+
+  /* Constrains content inside a full-bleed section. */
+  .spx-inner { @apply mx-auto w-full max-w-5xl; }
+
+  /* The tracked-out label above every heading. */
+  .spx-eyebrow {
+    @apply font-sans text-[0.7rem] font-medium uppercase tracking-[0.18em] text-pine;
+  }
+  /* On navy, `pine` goes muddy — mint is the accent that belongs there. */
+  .spx-section-ink .spx-eyebrow { @apply text-mint; }
+
+  /* Headline line one: bold geometric sans, tight. */
+  .spx-display {
+    @apply font-sans text-[2.1rem] font-bold leading-[1.08] tracking-[-0.02em] sm:text-5xl;
+  }
+  /* Headline line two: italic serif. The pairing is the brand. */
+  .spx-display-serif {
+    @apply font-serif text-[2.1rem] font-normal italic leading-[1.08] tracking-[-0.01em] sm:text-5xl;
   }
 
-  /* Add to a card that is a link or a target — a small, slow rise. */
-  .sp-card-interactive {
-    @apply transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lift;
+  .spx-body { @apply font-sans text-base leading-relaxed text-charcoal/70; }
+  .spx-section-ink .spx-body { @apply text-canvas/75; }
+
+  /* Buttons. Square, no shadow, arrow supplied by the caller. */
+  .spx-btn {
+    @apply inline-flex items-center justify-center gap-3 px-7 py-4 font-sans text-[0.95rem] font-medium transition duration-200;
+  }
+  .spx-btn-ink    { @apply spx-btn bg-ink text-canvas hover:bg-night; }
+  .spx-btn-canvas { @apply spx-btn bg-canvas text-charcoal hover:bg-sand; }
+  .spx-btn-outline {
+    @apply spx-btn border border-charcoal/25 bg-transparent text-charcoal hover:border-charcoal/60;
+  }
+  /* Without this the outline button is charcoal text on navy — effectively
+     invisible. Any button that can appear inside an inverted section needs
+     the inverted pair defined next to it. */
+  .spx-section-ink .spx-btn-outline {
+    @apply border-canvas/35 text-canvas hover:border-canvas;
   }
 
-  .sp-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-7 py-3 font-medium transition duration-200 ease-out;
+  /* A panel that lifts off canvas: white, hairline, still square. */
+  .spx-card { @apply border border-charcoal/10 bg-paper; }
+
+  /* MOST POPULAR and friends. */
+  .spx-badge {
+    @apply inline-block bg-pine px-4 py-2 font-sans text-[0.7rem] font-medium uppercase tracking-[0.16em] text-canvas;
   }
 
-  .sp-btn-primary {
-    @apply sp-btn bg-ink text-white shadow-lift hover:-translate-y-0.5 hover:bg-night hover:shadow-float;
+  .spx-input {
+    @apply w-full border border-charcoal/20 bg-paper px-4 py-3 font-sans text-charcoal placeholder:text-charcoal/40 focus:border-ink focus:outline-none;
   }
 
-  .sp-btn-ghost {
-    @apply sp-btn border border-line bg-card text-ink shadow-card hover:-translate-y-0.5 hover:border-ink/25 hover:shadow-lift;
+  /* The one rounded shape in the system. */
+  .spx-arch { @apply overflow-hidden rounded-arch; }
+
+  /* Soft circle behind a step icon. */
+  .spx-step-icon {
+    @apply flex h-14 w-14 items-center justify-center rounded-full bg-sage text-charcoal;
   }
 
-  /* The small tracked-out label above a heading. */
-  .sp-eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.22em] text-accent;
+  /* Serif italic numerals — step numbers, stat figures. */
+  .spx-numeral { @apply font-serif italic; }
+
+  /* A media tile: fixed ratio, square, caption sits on the image. */
+  .spx-tile { @apply relative overflow-hidden bg-sage; }
+  .spx-tile-caption {
+    @apply absolute bottom-0 left-0 right-0 px-4 pb-3 pt-10 font-serif text-lg italic text-white;
   }
+
+  /* Big serif figure over a tracked-out label. */
+  .spx-stat-figure { @apply font-serif text-4xl italic leading-none text-pine; }
+  .spx-section-ink .spx-stat-figure { @apply text-mint; }
+  .spx-stat-label {
+    @apply mt-2 font-sans text-[0.7rem] uppercase tracking-[0.1em] text-charcoal/60;
+  }
+  .spx-section-ink .spx-stat-label { @apply text-canvas/60; }
+
+  /* Empty state. Centred, quiet, square — never a dashed rounded box. */
+  .spx-empty {
+    @apply flex flex-col items-center justify-center border border-dashed border-charcoal/20 px-6 py-14 text-center;
+  }
+
+  /* Modal. The backdrop is navy at depth rather than neutral black, so it
+     reads as part of the brand instead of a browser default. */
+  .spx-modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-end justify-center bg-night/70 p-0 sm:items-center sm:p-6;
+  }
+  .spx-modal {
+    @apply max-h-[92vh] w-full max-w-lg overflow-y-auto border border-charcoal/10 bg-paper p-6 sm:p-8;
+  }
+
+  /* A hairline that matches the system's contrast rather than the old one. */
+  .spx-rule { @apply border-t border-charcoal/12; }
+  .spx-section-ink .spx-rule { @apply border-canvas/20; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -90,13 +182,6 @@
     transition-duration: 0.01ms !important;
   }
 
-  /* Without a transition, a hover lift is a jump. Keep the shadow change,
-     drop the movement. */
-  .sp-card-interactive:hover,
-  .sp-btn-primary:hover,
-  .sp-btn-ghost:hover {
-    transform: none !important;
-  }
 }
 
 /* =========================================================================
@@ -110,8 +195,8 @@
    ========================================================================= */
 :root,
 [data-amplify-theme] {
-  --amplify-fonts-default-variable: 'Inter', system-ui, sans-serif;
-  --amplify-fonts-default-static: 'Inter', system-ui, sans-serif;
+  --amplify-fonts-default-variable: 'Poppins', system-ui, sans-serif;
+  --amplify-fonts-default-static: 'Poppins', system-ui, sans-serif;
 
   /*
    * The ramp that actually reaches the controls is `colors-primary-*`, which
@@ -147,44 +232,52 @@
   --amplify-colors-overlay-80: rgba(11, 37, 54, 0.9);
   --amplify-colors-overlay-90: rgba(11, 37, 54, 0.95);
 
-  --amplify-colors-font-interactive: #099361;
-  --amplify-colors-font-hover: #0b2536;
-  --amplify-colors-font-focus: #099361;
-  --amplify-colors-border-focus: #099361;
-  --amplify-colors-background-secondary: #f4f6f5;
+  /* `pine`, not `accent`: this is small interactive text on a light ground,
+     which is exactly the case where #099361 fails contrast. */
+  --amplify-colors-font-interactive: #0b7a52;
+  --amplify-colors-font-hover: #152833;
+  --amplify-colors-font-focus: #0b7a52;
+  --amplify-colors-border-focus: #123851;
+  --amplify-colors-background-primary: #ffffff;
+  --amplify-colors-background-secondary: #faf8f4;
 
-  --amplify-radii-small: 0.5rem;
-  --amplify-radii-medium: 0.75rem;
-  --amplify-radii-large: 1rem;
-  --amplify-components-button-border-radius: 999px;
-  --amplify-components-fieldcontrol-border-radius: 0.75rem;
+  /* The system is square. Zero everywhere, including the two components that
+     carry their own radius token and ignore the ramp. */
+  --amplify-radii-small: 0;
+  --amplify-radii-medium: 0;
+  --amplify-radii-large: 0;
+  --amplify-components-button-border-radius: 0;
+  --amplify-components-fieldcontrol-border-radius: 0;
 
+  /* A hairline instead of elevation, matching `.spx-card`. */
   --amplify-components-authenticator-router-border-width: 1px;
-  --amplify-components-authenticator-router-border-color: #e3e9ea;
-  --amplify-components-authenticator-router-box-shadow:
-    0 2px 4px rgba(18, 56, 81, 0.05), 0 20px 44px -20px rgba(18, 56, 81, 0.28);
+  --amplify-components-authenticator-router-border-color: rgba(21, 40, 51, 0.12);
+  --amplify-components-authenticator-router-box-shadow: none;
 }
 
 /* `withAuthenticator` renders the modal variation, which covers the viewport
-   with a scrim. Tint it navy and let a little mint through at the top so the
-   screen belongs to this site. */
+   with a scrim. Under the old theme that scrim was navy, so the first screen a
+   host ever sees was a dark field with a floating rounded card — a different
+   product from the one they had just been reading. It is the warm page ground
+   now, with the same faint wash the marketing sections use. */
 [data-amplify-authenticator][data-variation='modal'] {
+  background-color: #faf8f4;
   background-image: radial-gradient(
     70rem 36rem at 50% -10rem,
-    rgba(122, 216, 192, 0.16),
+    rgba(122, 216, 192, 0.14),
     transparent 60%
   );
   background-repeat: no-repeat;
 }
 
 [data-amplify-authenticator] [data-amplify-router] {
-  border-radius: 1rem;
+  border-radius: 0;
   overflow: hidden;
 }
 
 [data-amplify-authenticator] .amplify-tabs__item {
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
-  font-weight: 700;
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-weight: 600;
   letter-spacing: -0.01em;
 }
 

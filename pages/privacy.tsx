@@ -3,17 +3,17 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'August 31, 2026';
+const LAST_UPDATED = 'September 4, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
   return (
     <Layout title="Privacy Policy">
       <section className="mx-auto max-w-3xl py-12 sm:py-16">
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">Privacy Policy</h1>
-        <p className="mt-3 text-sm text-muted">Last updated: {LAST_UPDATED}</p>
+        <h1 className="spx-display">Privacy Policy</h1>
+        <p className="mt-3 text-sm text-charcoal/60">Last updated: {LAST_UPDATED}</p>
 
-        <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_h3]:font-semibold [&_h3]:text-ink [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
+        <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_h3]:font-semibold [&_h3]:text-charcoal [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
               {LEGAL_ENTITY} (&ldquo;SharePix,&rdquo;

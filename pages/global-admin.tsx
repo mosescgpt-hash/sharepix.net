@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 're
 import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
+import Notice from '@/components/Notice';
 import { isGlobalAdmin } from '@/lib/admin';
 import {
   addEventPhotoCredits,
@@ -553,59 +554,61 @@ function GlobalAdminPage() {
     <Layout title="Global admin">
       <section className="py-8">
         {loading && authorized === null ? (
-          <p className="text-center text-muted">Checking administrator access…</p>
+          <p className="text-center text-charcoal/60">Checking administrator access…</p>
         ) : authorized === false ? (
-          <div className="mx-auto max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
-            <h1 className="font-display text-2xl font-bold">Administrator access required</h1>
+          <div className="mx-auto max-w-lg border border-charcoal/10 border-l-2 border-l-amber-600 bg-paper p-6 text-center">
+            <h1 className="font-sans text-2xl font-bold tracking-[-0.02em]">Administrator access required</h1>
             <p className="mt-2 text-sm">This dashboard is restricted to sharepix.net global administrators.</p>
           </div>
         ) : (
           <>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-widest text-accent">Operations</p>
-                <h1 className="font-display text-3xl font-bold">Global admin</h1>
-                <p className="mt-1 text-muted">Monitor events and control complimentary pilot access.</p>
+                <p className="spx-eyebrow">Operations</p>
+                <h1 className="font-sans text-3xl font-bold tracking-[-0.02em]">Global admin</h1>
+                <p className="mt-1 text-charcoal/60">Monitor events and control complimentary pilot access.</p>
               </div>
               <button
                 type="button"
                 onClick={() => void load()}
-                className="self-start rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white hover:bg-night"
+                className="self-start bg-ink px-5 py-3 text-sm font-medium text-canvas transition hover:bg-night"
               >
                 Refresh dashboard
               </button>
             </div>
 
             {error ? (
-              <p className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
+              <Notice tone="error" className="mt-6">
+                {error}
+              </Notice>
             ) : null}
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="sp-card p-5">
-                <p className="text-sm text-muted">Events</p>
-                <p className="font-display text-3xl font-bold">{events.length}</p>
+              <div className="spx-card p-5">
+                <p className="text-sm text-charcoal/60">Events</p>
+                <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{events.length}</p>
               </div>
-              <div className="sp-card p-5">
-                <p className="text-sm text-muted">Stored photos</p>
-                <p className="font-display text-3xl font-bold">{totalPhotos.toLocaleString()}</p>
+              <div className="spx-card p-5">
+                <p className="text-sm text-charcoal/60">Stored photos</p>
+                <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{totalPhotos.toLocaleString()}</p>
               </div>
-              <div className="sp-card p-5">
-                <p className="text-sm text-muted">Active discount codes</p>
-                <p className="font-display text-3xl font-bold">{activeCodes}</p>
+              <div className="spx-card p-5">
+                <p className="text-sm text-charcoal/60">Active discount codes</p>
+                <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{activeCodes}</p>
               </div>
             </div>
 
-            <div className="mt-8 rounded-2xl border border-dashed border-accent/40 bg-accent/5 p-5">
+            <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5">
               <div className="flex flex-col gap-1">
-                <h2 className="font-display text-xl font-bold">Payments — test mode</h2>
-                <p className="text-sm text-ink/70">
+                <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Payments — test mode</h2>
+                <p className="text-sm text-charcoal/70">
                   Run a real Stripe checkout with the test card <span className="font-mono">4242 4242 4242 4242</span>{' '}
                   (any future date / any CVC). No real money moves. Events stay free during the pilot — this only
                   confirms the payment flow works.
                 </p>
-                <p className="text-sm text-ink/70">
+                <p className="text-sm text-charcoal/70">
                   Payments recorded by the webhook:{' '}
-                  <span className="font-display text-base font-bold text-ink">
+                  <span className="font-sans text-base font-semibold text-charcoal">
                     {paymentsCount === null ? '—' : paymentsCount.toLocaleString()}
                   </span>
                 </p>
@@ -617,7 +620,7 @@ function GlobalAdminPage() {
                     type="button"
                     disabled={working === `checkout-${tier.id}`}
                     onClick={() => void handleTestCheckout(tier.id)}
-                    className="rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                    className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
                   >
                     {working === `checkout-${tier.id}` ? 'Starting…' : `Test ${tier.name} · $${tier.price}`}
                   </button>
@@ -625,9 +628,9 @@ function GlobalAdminPage() {
               </div>
             </div>
 
-            <div className="mt-8 sp-card p-5">
-              <h2 className="font-display text-xl font-bold">User management</h2>
-              <p className="text-sm text-ink/70">
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">User management</h2>
+              <p className="text-sm text-charcoal/70">
                 Reset a host&apos;s password (they get an email to set a new one — this also lets
                 them back in if they&apos;re locked out), or enable/disable an account.
               </p>
@@ -637,14 +640,14 @@ function GlobalAdminPage() {
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   placeholder="user@example.com"
-                  className="min-w-0 flex-1 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                  className="spx-input min-w-0 flex-1"
                 />
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     disabled={working === 'user-resetPassword'}
                     onClick={() => void handleUserAction('resetPassword')}
-                    className="rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                    className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
                   >
                     {working === 'user-resetPassword' ? 'Working…' : 'Reset password'}
                   </button>
@@ -652,7 +655,7 @@ function GlobalAdminPage() {
                     type="button"
                     disabled={working === 'user-enable'}
                     onClick={() => void handleUserAction('enable')}
-                    className="rounded-full border border-ink/20 px-4 py-2.5 text-sm font-medium hover:border-accent hover:text-accent disabled:opacity-50"
+                    className="border border-charcoal/25 px-4 py-3 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                   >
                     {working === 'user-enable' ? 'Working…' : 'Enable'}
                   </button>
@@ -660,7 +663,7 @@ function GlobalAdminPage() {
                     type="button"
                     disabled={working === 'user-disable'}
                     onClick={() => void handleUserAction('disable')}
-                    className="rounded-full border border-red-200 px-4 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    className="border border-red-300 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                   >
                     {working === 'user-disable' ? 'Working…' : 'Disable'}
                   </button>
@@ -668,7 +671,7 @@ function GlobalAdminPage() {
               </div>
               {userMessage ? (
                 <p
-                  className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                  className={`mt-3 border border-charcoal/10 px-3 py-2 text-sm ${
                     userMessage.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
                   }`}
                 >
@@ -677,9 +680,9 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-8 sp-card p-5">
-              <h2 className="font-display text-xl font-bold">Print provider check</h2>
-              <p className="text-sm text-ink/70">
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Print provider check</h2>
+              <p className="text-sm text-charcoal/70">
                 Asks Prodigi to price one of each print we sell. This only requests a{' '}
                 <strong>quote</strong> — nothing is printed, nothing is ordered and nothing is
                 charged — so it can be run any time. It confirms the API key works, that the
@@ -689,13 +692,13 @@ function GlobalAdminPage() {
                 type="button"
                 disabled={working === 'print-check'}
                 onClick={() => void handleCheckPrintProvider()}
-                className="mt-4 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                className="mt-4 bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
               >
                 {working === 'print-check' ? 'Checking…' : 'Check print provider'}
               </button>
               {printCheck ? (
                 <pre
-                  className={`mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
+                  className={`mt-3 overflow-x-auto whitespace-pre-wrap border border-charcoal/10 px-3 py-2 text-sm ${
                     printCheck.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
                   }`}
                 >
@@ -704,9 +707,9 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-8 sp-card p-5">
-              <h2 className="font-display text-xl font-bold">Alert email check</h2>
-              <p className="text-sm text-ink/70">
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Alert email check</h2>
+              <p className="text-sm text-charcoal/70">
                 Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
                 embedded preview, same buttons a host would see. Nothing is flagged and no
                 host is emailed. It goes to the address on your own admin account, so this
@@ -716,13 +719,13 @@ function GlobalAdminPage() {
                 type="button"
                 disabled={working === 'alert-test'}
                 onClick={() => void handleSendTestAlert()}
-                className="mt-4 rounded-full bg-ink px-4 py-2.5 text-sm font-medium text-white hover:bg-night disabled:opacity-50"
+                className="mt-4 bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
               >
                 {working === 'alert-test' ? 'Sending…' : 'Send test alert email'}
               </button>
               {alertTest ? (
                 <p
-                  className={`mt-3 rounded-lg px-3 py-2 text-sm ${
+                  className={`mt-3 border border-charcoal/10 px-3 py-2 text-sm ${
                     alertTest.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
                   }`}
                 >
@@ -735,8 +738,8 @@ function GlobalAdminPage() {
               <section>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="font-display text-2xl font-bold">Events</h2>
-                    <p className="text-sm text-muted">
+                    <h2 className="font-sans text-2xl font-bold tracking-[-0.02em]">Events</h2>
+                    <p className="text-sm text-charcoal/60">
                       Open a host dashboard, archive an event, or restore one that was
                       archived.
                     </p>
@@ -746,7 +749,7 @@ function GlobalAdminPage() {
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search events"
-                    className="rounded-xl border border-ink/20 bg-white px-4 py-2.5 text-sm focus:border-accent focus:outline-none"
+                    className="border border-charcoal/20 bg-paper px-4 py-2.5 text-sm text-charcoal focus:border-ink focus:outline-none"
                   />
                 </div>
 
@@ -763,17 +766,17 @@ function GlobalAdminPage() {
                       key={value}
                       type="button"
                       onClick={() => setPhaseFilter(value)}
-                      className={`rounded-full border px-3 py-1.5 font-medium transition ${
+                      className={`border px-3 py-1.5 font-medium transition ${
                         phaseFilter === value
-                          ? 'border-accent bg-accent text-white'
-                          : 'border-ink/20 bg-white text-ink/70 hover:border-accent'
+                          ? 'border-ink bg-ink text-canvas'
+                          : 'border-charcoal/25 bg-paper text-charcoal/70 hover:border-charcoal/60'
                       }`}
                     >
                       {label}
                     </button>
                   ))}
                   {archivedCount > 0 && phaseFilter === 'all' ? (
-                    <span className="self-center text-muted">
+                    <span className="self-center text-charcoal/60">
                       {archivedCount} event{archivedCount === 1 ? '' : 's'} no longer reachable
                       by their host
                     </span>
@@ -781,32 +784,32 @@ function GlobalAdminPage() {
                 </div>
                 <div className="mt-4 space-y-3">
                   {filteredEvents.length === 0 ? (
-                    <p className="rounded-2xl border border-dashed border-ink/20 bg-white p-8 text-center text-muted">
+                    <p className="border border-dashed border-charcoal/25 p-8 text-center text-charcoal/60">
                       No events match this search.
                     </p>
                   ) : filteredEvents.map((event) => (
-                    <article key={event.id} className="sp-card p-4">
+                    <article key={event.id} className="spx-card p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                          <h3 className="truncate font-display text-lg font-bold">
+                          <h3 className="truncate font-sans text-lg font-bold tracking-[-0.02em]">
                             {event.name}
                             {/* Themed events are rare, so say so plainly rather
                                 than leaving it only in the menu below — a theme
                                 pointed at the wrong event should be obvious. */}
                             {themeKeyForEvent(event) ? (
-                              <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 align-middle text-xs font-medium text-accent">
+                              <span className="ml-2 bg-sage px-2 py-0.5 align-middle text-xs font-medium text-pine">
                                 {themeLabel(themeKeyForEvent(event))}
                               </span>
                             ) : null}
                           </h3>
-                          <p className="mt-1 text-sm text-muted">
+                          <p className="mt-1 text-sm text-charcoal/60">
                             {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
                             {event.photoLimit == null
                               ? ' photos (unlimited)'
                               : ` / ${event.photoLimit + (event.extraPhotoCredits ?? 0)} photos`}
                             {event.extraPhotoCredits ? ` (+${event.extraPhotoCredits} add-on)` : ''}
                           </p>
-                          <p className="mt-1 text-xs text-muted">
+                          <p className="mt-1 text-xs text-charcoal/60">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
                           </p>
                           {(() => {
@@ -820,10 +823,10 @@ function GlobalAdminPage() {
                                 </p>
                               ) : null}
                               <span
-                                className={`mt-2 inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                                className={`mt-2 inline-block px-2.5 py-1 text-[11px] font-semibold ${
                                   phase.recover
                                     ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-ink/5 text-muted'
+                                    : 'bg-charcoal/[0.07] text-charcoal/60'
                                 }`}
                               >
                                 {phase.label}
@@ -833,10 +836,10 @@ function GlobalAdminPage() {
                           })()}
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs">
-                          <Link href={`/event/${event.id}`} className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent">
+                          <Link href={`/event/${event.id}`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
                             Gallery
                           </Link>
-                          <Link href={`/event/${event.id}/admin`} className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent">
+                          <Link href={`/event/${event.id}/admin`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
                             Manage
                           </Link>
                           {event.photoLimit != null ? (
@@ -844,7 +847,7 @@ function GlobalAdminPage() {
                               type="button"
                               disabled={working === `credits-${event.id}`}
                               onClick={() => void handleAddCredits(event)}
-                              className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent disabled:opacity-50"
+                              className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                             >
                               Add photos
                             </button>
@@ -854,7 +857,7 @@ function GlobalAdminPage() {
                               type="button"
                               disabled={working === `archive-${event.id}`}
                               onClick={() => void handleArchiveEvent(event)}
-                              className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent disabled:opacity-50"
+                              className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
                             >
                               {working === `archive-${event.id}` ? 'Archiving…' : 'Archive'}
                             </button>
@@ -864,7 +867,7 @@ function GlobalAdminPage() {
                               type="button"
                               disabled={working === `restore-${event.id}`}
                               onClick={() => void handleRestoreEvent(event)}
-                              className="rounded-full border border-accent px-3 py-1.5 text-accent hover:bg-accent hover:text-white disabled:opacity-50"
+                              className="border border-pine px-3 py-1.5 text-pine transition hover:bg-pine hover:text-canvas disabled:opacity-50"
                             >
                               {working === `restore-${event.id}` ? 'Restoring…' : 'Restore access'}
                             </button>
@@ -875,7 +878,7 @@ function GlobalAdminPage() {
                             disabled={working === `theme-${event.id}`}
                             value={themeKeyForEvent(event) ?? ''}
                             onChange={(e) => void handleSetTheme(event, e.target.value)}
-                            className="rounded-full border border-ink/30 px-2 py-1.5 disabled:opacity-50"
+                            className="border border-charcoal/30 px-2 py-1.5 text-charcoal disabled:opacity-50"
                           >
                             <option value="">Default experience</option>
                             {EVENT_THEMES.map((theme) => (
@@ -893,7 +896,7 @@ function GlobalAdminPage() {
                               e.target.value = '';
                               if (phase) void handleSimulatePhase(event, phase);
                             }}
-                            className="rounded-full border border-dashed border-ink/30 px-2 py-1.5 text-muted disabled:opacity-50"
+                            className="border border-dashed border-charcoal/30 px-2 py-1.5 text-charcoal/60 disabled:opacity-50"
                           >
                             <option value="">Simulate…</option>
                             <option value="open">Open (uploads)</option>
@@ -907,7 +910,7 @@ function GlobalAdminPage() {
                             type="button"
                             disabled={working === `event-${event.id}`}
                             onClick={() => void handleDeleteEvent(event)}
-                            className="rounded-full border border-red-200 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            className="border border-red-300 px-3 py-1.5 text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                           >
                             Remove
                           </button>
@@ -919,12 +922,12 @@ function GlobalAdminPage() {
               </section>
 
               <section>
-                <h2 className="font-display text-2xl font-bold">Discount codes</h2>
-                <p className="text-sm text-muted">
+                <h2 className="font-sans text-2xl font-bold tracking-[-0.02em]">Discount codes</h2>
+                <p className="text-sm text-charcoal/60">
                   Take a percentage off anything paid on the site. Default usage is one redemption.
                 </p>
 
-                <form onSubmit={handleCreateCode} className="mt-4 space-y-3 sp-card p-4">
+                <form onSubmit={handleCreateCode} className="spx-card mt-4 space-y-3 p-5">
                   <div>
                     <label htmlFor="new-code" className="text-sm font-medium">Code</label>
                     <div className="mt-1 flex gap-2">
@@ -933,9 +936,9 @@ function GlobalAdminPage() {
                         value={code}
                         onChange={(e) => setCode(e.target.value.toUpperCase())}
                         placeholder="PILOT-ALEX"
-                        className="min-w-0 flex-1 rounded-xl border border-ink/20 px-3 py-2.5 uppercase focus:border-accent focus:outline-none"
+                        className="spx-input min-w-0 flex-1 uppercase"
                       />
-                      <button type="button" onClick={generateCode} className="rounded-xl border border-ink/20 px-3 text-sm hover:border-accent hover:text-accent">
+                      <button type="button" onClick={generateCode} className="border border-charcoal/25 px-3 text-sm text-charcoal transition hover:border-charcoal/60">
                         Generate
                       </button>
                     </div>
@@ -947,12 +950,12 @@ function GlobalAdminPage() {
                       value={assignedTo}
                       onChange={(e) => setAssignedTo(e.target.value)}
                       placeholder="Alex's wedding test"
-                      className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                      className="spx-input mt-2"
                     />
                   </div>
                   <div>
                     <label className="text-sm font-medium">Applies to</label>
-                    <p className="mt-0.5 text-xs text-muted">
+                    <p className="mt-0.5 text-xs text-charcoal/60">
                       Which paid items this code can be used on. Prints are excluded.
                     </p>
                     <div ref={scopeMenuRef} className="relative mt-1">
@@ -961,12 +964,12 @@ function GlobalAdminPage() {
                         onClick={() => setScopeOpen((open) => !open)}
                         aria-haspopup="listbox"
                         aria-expanded={scopeOpen}
-                        className="flex w-full items-center justify-between gap-2 rounded-xl border border-ink/20 bg-white px-3 py-2.5 text-left text-sm focus:border-accent focus:outline-none"
+                        className="flex w-full items-center justify-between gap-2 border border-charcoal/20 bg-paper px-3 py-2.5 text-left text-sm text-charcoal focus:border-ink focus:outline-none"
                       >
-                        <span className={checkedScopes.size === 0 ? 'text-muted' : ''}>
+                        <span className={checkedScopes.size === 0 ? 'text-charcoal/60' : ''}>
                           {scopeButtonLabel}
                         </span>
-                        <span aria-hidden="true" className="shrink-0 text-muted">
+                        <span aria-hidden="true" className="shrink-0 text-charcoal/60">
                           {scopeOpen ? '▲' : '▼'}
                         </span>
                       </button>
@@ -975,7 +978,7 @@ function GlobalAdminPage() {
                         <div
                           role="listbox"
                           aria-multiselectable="true"
-                          className="absolute z-20 mt-1 w-full rounded-xl border border-line bg-card shadow-card p-1 shadow-lg"
+                          className="absolute z-20 mt-1 w-full border border-charcoal/15 bg-paper p-1 shadow-lg"
                         >
                           <button
                             type="button"
@@ -984,23 +987,23 @@ function GlobalAdminPage() {
                                 allScopesChecked ? new Set() : new Set(ALL_SCOPE_KEYS),
                               )
                             }
-                            className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-accent hover:bg-accent/5"
+                            className="w-full px-3 py-2 text-left text-xs font-medium text-pine hover:bg-pine/5"
                           >
                             {allScopesChecked ? 'Clear all' : 'Select all'}
                           </button>
-                          <div className="my-1 border-t border-ink/10" />
+                          <div className="my-1 border-t border-charcoal/10" />
                           {PAID_ITEM_SCOPES.map(({ key, label }) => (
                             <label
                               key={key}
                               role="option"
                               aria-selected={checkedScopes.has(key)}
-                              className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-ink/5"
+                              className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm hover:bg-charcoal/5"
                             >
                               <input
                                 type="checkbox"
                                 checked={checkedScopes.has(key)}
                                 onChange={() => toggleScope(key)}
-                                className="h-4 w-4 shrink-0 accent-accent"
+                                className="h-4 w-4 shrink-0 accent-pine"
                               />
                               <span>{label}</span>
                             </label>
@@ -1008,14 +1011,14 @@ function GlobalAdminPage() {
                         </div>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-xs text-muted">
+                    <p className="mt-2 text-xs text-charcoal/60">
                       Upload extensions and the live slideshow are redeemed on an event&apos;s{' '}
                       <span className="font-medium">Manage</span> page.
                     </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium">Discount</label>
-                    <p className="mt-0.5 text-xs text-muted">How much to take off.</p>
+                    <p className="mt-0.5 text-xs text-charcoal/60">How much to take off.</p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {([
                         ['percent', 'Percentage off'],
@@ -1025,10 +1028,10 @@ function GlobalAdminPage() {
                           key={value}
                           type="button"
                           onClick={() => setDiscountType(value)}
-                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                          className={`border px-3 py-1.5 text-sm ${
                             discountType === value
-                              ? 'border-accent bg-accent/10 text-accent'
-                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                              ? 'border-ink bg-ink text-canvas'
+                              : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                           }`}
                         >
                           {label}
@@ -1039,18 +1042,18 @@ function GlobalAdminPage() {
                     {discountType === 'amount' ? (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted">$</span>
+                          <span className="text-sm text-charcoal/60">$</span>
                           <input
                             type="number"
                             min={1}
                             step="0.01"
                             value={amountOffDollars}
                             onChange={(e) => setAmountOffDollars(Number(e.target.value))}
-                            className="w-28 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                            className="spx-input w-28"
                           />
-                          <span className="text-sm text-muted">off</span>
+                          <span className="text-sm text-charcoal/60">off</span>
                         </div>
-                        <p className="mt-1 text-xs text-muted">
+                        <p className="mt-1 text-xs text-charcoal/60">
                           Taken off each qualifying purchase. If it&apos;s more than the item
                           costs, the item is simply free — never a negative total.
                         </p>
@@ -1072,10 +1075,10 @@ function GlobalAdminPage() {
                           key={value}
                           type="button"
                           onClick={() => setPercentChoice(value)}
-                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                          className={`border px-3 py-1.5 text-sm ${
                             percentChoice === value
-                              ? 'border-accent bg-accent/10 text-accent'
-                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                              ? 'border-ink bg-ink text-canvas'
+                              : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                           }`}
                         >
                           {label}
@@ -1090,15 +1093,15 @@ function GlobalAdminPage() {
                           max={100}
                           value={customPercent}
                           onChange={(e) => setCustomPercent(Number(e.target.value))}
-                          className="w-24 rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none"
+                          className="spx-input w-24"
                         />
-                        <span className="text-sm text-muted">% off</span>
+                        <span className="text-sm text-charcoal/60">% off</span>
                       </div>
                     ) : null}
                   </div>
                   <div>
                     <label className="text-sm font-medium">Corporate subscriptions</label>
-                    <p className="mt-0.5 text-xs text-muted">
+                    <p className="mt-0.5 text-xs text-charcoal/60">
                       How long the discount lasts on a recurring Corporate plan. One-time purchases
                       (events, extensions, add-on) are unaffected.
                     </p>
@@ -1111,10 +1114,10 @@ function GlobalAdminPage() {
                           key={value}
                           type="button"
                           onClick={() => setRecurringDuration(value)}
-                          className={`rounded-full border px-3 py-1.5 text-sm ${
+                          className={`border px-3 py-1.5 text-sm ${
                             recurringDuration === value
-                              ? 'border-accent bg-accent/10 text-accent'
-                              : 'border-ink/20 hover:border-accent hover:text-accent'
+                              ? 'border-ink bg-ink text-canvas'
+                              : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                           }`}
                         >
                           {label}
@@ -1130,7 +1133,7 @@ function GlobalAdminPage() {
                         type="datetime-local"
                         value={expiresAt}
                         onChange={(e) => setExpiresAt(e.target.value)}
-                        className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 text-sm focus:border-accent focus:outline-none"
+                        className="spx-input mt-2 text-sm"
                       />
                     </div>
                     <div>
@@ -1144,7 +1147,7 @@ function GlobalAdminPage() {
                         disabled={unlimitedUses}
                         placeholder="∞"
                         onChange={(e) => setMaxUses(Number(e.target.value))}
-                        className="mt-1 w-full rounded-xl border border-ink/20 px-3 py-2.5 focus:border-accent focus:outline-none disabled:bg-ink/5 disabled:text-muted"
+                        className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
                       />
                     </div>
                   </div>
@@ -1153,11 +1156,11 @@ function GlobalAdminPage() {
                       type="checkbox"
                       checked={unlimitedUses}
                       onChange={(e) => setUnlimitedUses(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-pine"
                     />
                     <span>
                       <span className="font-medium">Unlimited uses</span>
-                      <span className="block text-xs text-muted">
+                      <span className="block text-xs text-charcoal/60">
                         The code never runs out. Redemptions are still counted, so you can see
                         how many people used it.
                       </span>
@@ -1166,7 +1169,7 @@ function GlobalAdminPage() {
                   <button
                     type="submit"
                     disabled={working === 'create-code'}
-                    className="w-full rounded-full bg-ink py-2.5 font-medium text-white hover:bg-night disabled:opacity-50"
+                    className="w-full bg-ink py-3 font-medium text-canvas transition hover:bg-night disabled:opacity-50"
                   >
                     {working === 'create-code'
                       ? 'Creating…'
@@ -1187,11 +1190,11 @@ function GlobalAdminPage() {
                       item.unlimitedUses !== true && item.usedCount >= item.maxUses;
                     const status = !item.active ? 'Inactive' : expired ? 'Expired' : exhausted ? 'Used' : 'Active';
                     return (
-                      <article key={item.code} className="sp-card p-4">
+                      <article key={item.code} className="spx-card p-5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate font-mono font-bold text-ink">{item.code}</p>
-                            <p className="mt-1 truncate text-xs text-muted">
+                            <p className="truncate font-mono font-bold text-charcoal">{item.code}</p>
+                            <p className="mt-1 truncate text-xs text-charcoal/60">
                               {item.discountType === 'amount'
                                 ? `$${((item.amountOffCents ?? 0) / 100).toFixed(2)} off`
                                 : (item.percentOff == null ? 100 : item.percentOff) >= 100
@@ -1204,11 +1207,11 @@ function GlobalAdminPage() {
                               {item.assignedTo || 'No note'}
                             </p>
                           </div>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
+                          <span className={`px-2.5 py-1 text-xs font-semibold ${status === 'Active' ? 'bg-sage text-pine' : 'bg-amber-50 text-amber-800'}`}>
                             {status}
                           </span>
                         </div>
-                        <p className="mt-3 text-xs text-muted">
+                        <p className="mt-3 text-xs text-charcoal/60">
                           {item.unlimitedUses
                             ? `${item.usedCount} ${item.usedCount === 1 ? 'use' : 'uses'} · unlimited`
                             : `${item.usedCount}/${item.maxUses} uses`}{' '}
@@ -1219,7 +1222,7 @@ function GlobalAdminPage() {
                             type="button"
                             disabled={working === `code-${item.code}` || expired || exhausted}
                             onClick={() => void handleToggleCode(item)}
-                            className="rounded-full border border-ink/20 px-3 py-1.5 hover:border-accent hover:text-accent disabled:opacity-40"
+                            className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
                           >
                             {item.active ? 'Expire now' : 'Reactivate'}
                           </button>
@@ -1227,7 +1230,7 @@ function GlobalAdminPage() {
                             type="button"
                             disabled={working === `code-${item.code}`}
                             onClick={() => void handleDeleteCode(item)}
-                            className="rounded-full border border-red-200 px-3 py-1.5 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            className="border border-red-300 px-3 py-1.5 text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                           >
                             Remove
                           </button>

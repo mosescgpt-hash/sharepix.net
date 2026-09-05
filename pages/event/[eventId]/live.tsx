@@ -236,7 +236,7 @@ export default function LiveSlideshowPage() {
         ) : waiting ? (
           <div className="flex h-full flex-col items-center justify-center gap-8 px-8 text-center">
             <div>
-              <h1 className="font-display text-4xl font-bold sm:text-6xl">
+              <h1 className="font-sans text-4xl font-bold tracking-[-0.02em] sm:text-6xl">
                 {event?.name ?? 'Waiting for photos'}
               </h1>
               <p className="mt-4 text-xl text-white/70 sm:text-2xl">

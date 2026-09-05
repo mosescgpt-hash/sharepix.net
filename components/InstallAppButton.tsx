@@ -52,13 +52,13 @@ export default function InstallAppButton() {
 
   return (
     <>
-      <button type="button" onClick={handleInstall} className="text-ink/70 hover:text-accent">
+      <button type="button" onClick={handleInstall} className="text-charcoal/70 transition hover:text-charcoal">
         Install app
       </button>
       {showIosHelp ? (
         <div className="fixed inset-0 z-50 flex items-end bg-black/40 p-4 sm:items-center sm:justify-center">
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-            <h2 className="font-display text-xl font-bold">Add sharepix.net to your Home Screen</h2>
+            <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Add sharepix.net to your Home Screen</h2>
             <p className="mt-2 text-sm leading-6 text-ink/70">
               In Safari, tap the Share button, scroll down, then choose <strong>Add to Home Screen</strong>.
             </p>

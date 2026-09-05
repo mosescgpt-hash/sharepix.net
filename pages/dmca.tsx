@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 import { DMCA_AGENT, DMCA_RENEWAL_DUE, LEGAL_ENTITY, SUPPORT_EMAIL } from '@/lib/businessInfo';
 
 // Update this whenever the policy changes.
-const LAST_UPDATED = 'September 2, 2026';
+const LAST_UPDATED = 'September 4, 2026';
 
 /**
  * The agent and the renewal date come from lib/businessInfo, which is the one
@@ -22,12 +22,12 @@ export default function DmcaPage() {
   return (
     <Layout title="Copyright & DMCA">
       <section className="mx-auto max-w-3xl py-12 sm:py-16">
-        <h1 className="font-display text-3xl font-bold sm:text-4xl">
+        <h1 className="spx-display">
           Copyright and DMCA Policy
         </h1>
-        <p className="mt-3 text-sm text-muted">Last updated: {LAST_UPDATED}</p>
+        <p className="mt-3 text-sm text-charcoal/60">Last updated: {LAST_UPDATED}</p>
 
-        <div className="sp-card mt-10 space-y-9 p-7 leading-relaxed text-ink/80 sm:p-10 [&_a]:text-accent [&_a]:underline [&_h2]:font-display [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-ink [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
+        <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
               <strong>{LEGAL_ENTITY}</strong> operates SharePix, which hosts photos and
@@ -49,7 +49,7 @@ export default function DmcaPage() {
               infringement, and have registered that designation with the U.S. Copyright
               Office:
             </p>
-            <div className="mt-4 rounded-xl border border-line bg-smoke p-5 text-sm not-italic">
+            <div className="mt-4 border border-charcoal/12 bg-sand p-5 text-sm not-italic">
               <p className="mt-0 font-semibold text-ink">{AGENT.name}</p>
               {/* BUSINESS_ADDRESS already opens with the legal entity, so
                   printing AGENT.organization above it repeated the company
@@ -60,7 +60,7 @@ export default function DmcaPage() {
                 Email: <a href={`mailto:${AGENT.email}`}>{AGENT.email}</a>
               </p>
             </div>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-charcoal/60">
               This address is for copyright notices only. For anything else, please use{' '}
               <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
             </p>
@@ -191,7 +191,7 @@ export default function DmcaPage() {
           </div>
         </div>
 
-        <p className="mt-10 text-xs text-muted">
+        <p className="mt-10 text-xs text-charcoal/60">
           Our designated-agent registration with the U.S. Copyright Office is due for renewal
           by {RENEWAL_DUE}.
         </p>

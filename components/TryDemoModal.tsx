@@ -63,42 +63,42 @@ export default function TryDemoModal({
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-night/70 backdrop-blur-sm"
       />
-      <div className="sp-card relative w-full max-w-md p-7 text-center shadow-float sm:p-9">
+      <div className="spx-card relative w-full max-w-md p-7 text-center sm:p-9">
         <button
           ref={closeRef}
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-ink/5 hover:text-ink"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center text-charcoal/60 transition hover:bg-charcoal/5 hover:text-charcoal"
         >
           <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 3l10 10M13 3L3 13" strokeLinecap="round" />
           </svg>
         </button>
 
-        <p className="sp-eyebrow">Try it yourself</p>
+        <p className="spx-eyebrow">Try it yourself</p>
         <h2
           id="try-demo-title"
-          className="mt-4 font-display text-2xl font-bold tracking-[-0.03em]"
+          className="mt-4 font-sans text-2xl font-bold tracking-[-0.02em]"
         >
           Scan to try it on your phone
         </h2>
-        <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-muted">
+        <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-charcoal/60">
           Add a photo, approve it as the host, and watch it reach the gallery and the
           venue screen. Your photo never leaves your device.
         </p>
 
-        <div className="mx-auto mt-7 w-fit rounded-2xl border border-line bg-white p-4">
+        <div className="mx-auto mt-7 w-fit border border-charcoal/12 bg-paper p-4">
           {url ? (
             <QRCodeSVG value={url} size={192} fgColor="#123851" bgColor="#FFFFFF" level="M" />
           ) : (
-            <div className="h-48 w-48 animate-pulse rounded-lg bg-ink/[0.06]" />
+            <div className="h-48 w-48 animate-pulse bg-charcoal/[0.06]" />
           )}
         </div>
 
-        <p className="mt-6 text-sm text-muted">
+        <p className="mt-6 text-sm text-charcoal/60">
           Or{' '}
-          <Link href={DEMO_PATH} className="font-medium text-accent underline">
+          <Link href={DEMO_PATH} className="font-medium text-pine underline">
             open the demo here
           </Link>{' '}
           — the QR goes to the same place.
