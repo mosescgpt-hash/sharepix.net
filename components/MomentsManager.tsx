@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { QRCodeCanvas } from 'qrcode.react';
 import Notice from '@/components/Notice';
+import StyledQrCode from '@/components/StyledQrCode';
 import { deleteEventMoment, fetchEventMoments, saveEventMoment } from '@/lib/api';
 import {
   MAX_MOMENTS_PER_EVENT,
@@ -17,6 +17,11 @@ interface MomentsManagerProps {
   eventId: string;
   /** Absolute origin for the printed QR codes, e.g. https://www.sharepix.net */
   origin: string;
+  /**
+   * The event's saved QR style, so a moment's card matches the event's own
+   * table tent rather than coming out plain.
+   */
+  branding?: { qrDotStyle?: string | null; qrColor?: string | null; qrLogo?: string | null } | null;
 }
 
 /**
@@ -27,7 +32,11 @@ interface MomentsManagerProps {
  * same event, but a photo scanned from one files differently from the other,
  * without the guest choosing anything.
  */
-export default function MomentsManager({ eventId, origin }: MomentsManagerProps) {
+export default function MomentsManager({
+  eventId,
+  origin,
+  branding = null,
+}: MomentsManagerProps) {
   const [moments, setMoments] = useState<EventMoment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -189,10 +198,11 @@ export default function MomentsManager({ eventId, origin }: MomentsManagerProps)
 
                   {showQrFor === moment.id ? (
                     <div className="mt-4 flex flex-col items-center gap-3 bg-sand p-5 text-center">
-                      <QRCodeCanvas
-                        value={`${origin}${momentUploadPath(eventId, moment.id)}`}
+                      <StyledQrCode
+                        data={`${origin}${momentUploadPath(eventId, moment.id)}`}
                         size={168}
-                        includeMargin
+                        branding={branding}
+                        label={`QR code for ${moment.name}`}
                       />
                       <p className="font-serif text-lg italic">{moment.name}</p>
                       <p className="break-all text-xs text-charcoal/60">

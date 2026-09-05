@@ -470,6 +470,10 @@ function AdminDashboardPage() {
                   eventId={event.id}
                   eventName={event.name}
                   allowCustomization={tier?.customQrCode === true}
+                  branding={event}
+                  // Re-read the event so the saved style is what the moment
+                  // codes and the print pages pick up straight away.
+                  onBrandingSaved={load}
                 />
               </div>
             ) : null}
@@ -906,7 +910,7 @@ function AdminDashboardPage() {
                 the audit found tier strings are already load-bearing in five
                 places, and a sixth to sell a labelling feature would cost more
                 than it earns. */}
-            <MomentsManager eventId={event.id} origin={origin} />
+            <MomentsManager eventId={event.id} origin={origin} branding={event} />
 
             {guestBookAvailable(event) ? <GuestBookModeration eventId={event.id} /> : null}
 

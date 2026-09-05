@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
 import type QRCodeStyling from 'qr-code-styling';
+import { brandingForEvent, qrStylingOptions } from '@/lib/qrBranding';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import { fetchEvent, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -165,21 +166,19 @@ function TableTentPage() {
     let active = true;
     import('qr-code-styling').then(async ({ default: QRCodeStylingConstructor }) => {
       if (!active) return;
-      const qrCode: QRCodeStyling = new QRCodeStylingConstructor({
-        width: 640,
-        height: 640,
-        type: 'canvas',
-        data: uploadUrl,
-        margin: 12,
-        // High correction so a fold crease, a smudge, or dim light still scans.
-        qrOptions: { errorCorrectionLevel: 'H' },
-        dotsOptions: { type: 'square', color: '#123851' },
-        cornersSquareOptions: { type: 'square', color: '#123851' },
-        cornersDotOptions: { type: 'square', color: '#123851' },
-        // Always white behind the code regardless of the tent's theme — a
-        // themed QR that looks good but will not scan is a wasted print.
-        backgroundOptions: { color: '#ffffff' },
-      });
+      // The host's saved design, not a hard-coded one. This page used to draw
+      // navy squares no matter what the host had styled on their dashboard, so
+      // the printed card and the on-screen code were different designs.
+      // High correction and a white background come from qrStylingOptions,
+      // which keeps them for every surface: a themed QR that looks good and
+      // will not scan is a wasted print run.
+      const qrCode: QRCodeStyling = new QRCodeStylingConstructor(
+        qrStylingOptions(brandingForEvent(event), {
+          data: uploadUrl,
+          size: 640,
+          margin: 12,
+        }),
+      );
       const blob = await qrCode.getRawData('png');
       if (!active || !blob) return;
       const reader = new FileReader();

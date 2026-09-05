@@ -1,65 +1,115 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type QRCodeStyling from 'qr-code-styling';
-import type { DotType, Options } from 'qr-code-styling';
+import type { Options } from 'qr-code-styling';
+import { saveEventQrBranding } from '@/lib/api';
+import type { QrDotStyle } from '@/lib/qrBranding';
+import {
+  DEFAULT_QR_COLOR,
+  QR_DOT_STYLES,
+  brandingForEvent,
+  qrColorVerdict,
+  qrStylingOptions,
+} from '@/lib/qrBranding';
+import { prepareQrLogo } from '@/lib/qrLogoImage';
 
 interface EventQRCodeProps {
   eventId: string;
   eventName: string;
-  /** Standard/Premium tiers can customize the QR style and center image. */
+  /** Plans above the retired Starter can restyle the code and add a logo. */
   allowCustomization?: boolean;
+  /**
+   * The event's saved style. Passing it makes this the editor for a real
+   * event: changes are saved and come back on the next visit. Without it the
+   * component still renders, just unsaved — which is how the create-event
+   * confirmation screen uses it, before there is anything to save against.
+   */
+  branding?: { qrDotStyle?: string | null; qrColor?: string | null; qrLogo?: string | null } | null;
+  /** Called after a successful save, so the page can refresh its event. */
+  onBrandingSaved?: () => void;
 }
 
-const STYLE_OPTIONS: Array<{ value: DotType; label: string }> = [
-  { value: 'square', label: 'Square' },
-  { value: 'rounded', label: 'Rounded' },
-  { value: 'dots', label: 'Dots' },
-  { value: 'classy-rounded', label: 'Modern' },
-];
+const STYLE_LABELS: Record<(typeof QR_DOT_STYLES)[number], string> = {
+  square: 'Square',
+  rounded: 'Rounded',
+  dots: 'Dots',
+  'classy-rounded': 'Modern',
+};
+// Typed as our own four rather than the library's wider DotType: the styles we
+// offer are the styles we store, and the two must not drift apart.
+const STYLE_OPTIONS: Array<{ value: QrDotStyle; label: string }> = QR_DOT_STYLES.map((value) => ({
+  value,
+  label: STYLE_LABELS[value],
+}));
 
 export default function EventQRCode({
   eventId,
   eventName,
   allowCustomization = false,
+  branding = null,
+  onBrandingSaved,
 }: EventQRCodeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const qrCodeRef = useRef<QRCodeStyling | null>(null);
-  const [fgColor, setFgColor] = useState('#123851');
-  const [dotStyle, setDotStyle] = useState<DotType>('square');
-  const [centerImage, setCenterImage] = useState<string>();
+  const saved = useMemo(() => brandingForEvent(branding), [branding]);
+
+  const [fgColor, setFgColor] = useState(saved.qrColor);
+  const [dotStyle, setDotStyle] = useState<QrDotStyle>(saved.qrDotStyle);
+  const [centerImage, setCenterImage] = useState<string | undefined>(saved.qrLogo ?? undefined);
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadUrl, setUploadUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+
+  // The event loads after the first render, so the saved style arrives late.
+  useEffect(() => {
+    setFgColor(saved.qrColor);
+    setDotStyle(saved.qrDotStyle);
+    setCenterImage(saved.qrLogo ?? undefined);
+  }, [saved]);
 
   useEffect(() => {
     setUploadUrl(`${window.location.origin}/event/${eventId}/upload`);
   }, [eventId]);
 
-  const qrOptions = useMemo<Options>(() => {
-    const roundedCorners = dotStyle === 'rounded' || dotStyle === 'classy-rounded';
-    return {
-      width: 240,
-      height: 240,
-      type: 'canvas',
-      data: uploadUrl,
-      image: centerImage,
-      margin: 10,
-      qrOptions: { errorCorrectionLevel: 'H' },
-      dotsOptions: { type: dotStyle, color: fgColor },
-      cornersSquareOptions: {
-        type: dotStyle === 'dots' ? 'dot' : roundedCorners ? 'extra-rounded' : 'square',
-        color: fgColor,
-      },
-      cornersDotOptions: {
-        type: dotStyle === 'dots' ? 'dot' : roundedCorners ? 'extra-rounded' : 'square',
-        color: fgColor,
-      },
-      backgroundOptions: { color: '#ffffff' },
-      imageOptions: {
-        hideBackgroundDots: true,
-        imageSize: 0.24,
-        margin: 5,
-      },
-    };
-  }, [centerImage, dotStyle, fgColor, uploadUrl]);
+  const dirty =
+    fgColor !== saved.qrColor ||
+    dotStyle !== saved.qrDotStyle ||
+    (centerImage ?? null) !== saved.qrLogo;
+
+  const colourVerdict = qrColorVerdict(fgColor);
+
+  async function handleSaveBranding() {
+    if (saving) return;
+    setSaving(true);
+    setSaveNote(null);
+    try {
+      await saveEventQrBranding(eventId, {
+        qrDotStyle: dotStyle,
+        qrColor: fgColor,
+        qrLogo: centerImage ?? null,
+      });
+      setSaveNote('Saved. This is the code on your table tent and brochure too.');
+      onBrandingSaved?.();
+    } catch (error) {
+      setSaveNote(
+        error instanceof Error ? error.message : 'Your QR code style could not be saved.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // One builder for every surface. Before this, the dashboard, the table tent
+  // and the brochure each described the code themselves, and only the dashboard
+  // was styleable — so the printed card never matched what the host designed.
+  const qrOptions = useMemo<Options>(
+    () =>
+      qrStylingOptions(
+        { qrDotStyle: dotStyle, qrColor: fgColor, qrLogo: centerImage ?? null },
+        { data: uploadUrl, size: 240, margin: 10 },
+      ) as Options,
+    [centerImage, dotStyle, fgColor, uploadUrl],
+  );
 
   useEffect(() => {
     if (!uploadUrl || !containerRef.current) return;
@@ -85,19 +135,15 @@ export default function EventQRCode({
     if (!file) return;
 
     setImageError(null);
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setImageError('Use a JPG, PNG, or WebP image.');
+    // Downscaled here rather than stored whole: the centre image renders at
+    // about a quarter of the code, and the small version is what makes storing
+    // it on the event row viable at all.
+    const prepared = await prepareQrLogo(file);
+    if (!prepared.ok) {
+      setImageError(prepared.reason);
       return;
     }
-    if (file.size > 3 * 1024 * 1024) {
-      setImageError('Choose an image smaller than 3 MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => setCenterImage(String(reader.result));
-    reader.onerror = () => setImageError('That image could not be read. Please try another one.');
-    reader.readAsDataURL(file);
+    setCenterImage(prepared.dataUrl);
   }
 
   async function handleDownloadPng() {
@@ -114,7 +160,7 @@ export default function EventQRCode({
       <div className="border border-charcoal/10 bg-paper p-2">
         <div ref={containerRef} className="h-[240px] w-[240px] overflow-hidden" aria-label="Event upload QR code" />
       </div>
-      <p className="text-sm text-ink/70">
+      <p className="text-sm text-charcoal/70">
         Guests scan this code to upload photos and videos to <strong>{eventName}</strong>.
       </p>
       <p className="max-w-full break-all text-xs text-charcoal/60">{uploadUrl}</p>
@@ -142,16 +188,38 @@ export default function EventQRCode({
             </div>
           </div>
 
-          <label className="flex items-center justify-between gap-3 text-sm font-semibold">
-            QR color
-            <input
-              type="color"
-              value={fgColor}
-              onChange={(e) => setFgColor(e.target.value)}
-              aria-label="QR code color"
-              className="h-10 w-16 cursor-pointer rounded border border-ink/15 bg-white p-1"
-            />
-          </label>
+          <div>
+            <label className="flex items-center justify-between gap-3 text-sm font-semibold">
+              QR color
+              <input
+                type="color"
+                value={fgColor}
+                onChange={(e) => setFgColor(e.target.value)}
+                aria-label="QR code color"
+                className="h-10 w-16 cursor-pointer border border-charcoal/20 bg-white p-1"
+              />
+            </label>
+            {/* A printed code that will not scan is discovered at the event,
+                after the cards are made. Blocked below the floor, warned above
+                it — the server refuses the same colours. */}
+            {colourVerdict === 'unscannable' ? (
+              <p className="mt-2 text-xs text-red-700" role="alert">
+                Too light to scan reliably once printed. Choose a darker shade.
+              </p>
+            ) : colourVerdict === 'marginal' ? (
+              <p className="mt-2 text-xs text-amber-700">
+                This scans in good light but can struggle in a dim room. A darker shade is safer
+                for printed cards.
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setFgColor(DEFAULT_QR_COLOR)}
+              className="mt-2 text-xs text-charcoal/60 underline transition hover:text-charcoal"
+            >
+              Reset to the SharePix navy
+            </button>
+          </div>
 
           <div>
             <span className="block text-sm font-semibold">Center photo or logo</span>
@@ -178,12 +246,35 @@ export default function EventQRCode({
                 </button>
               ) : null}
             </div>
-            {imageError ? <p className="mt-2 text-xs text-red-700">{imageError}</p> : null}
+            {imageError ? (
+              <p className="mt-2 text-xs text-red-700" role="alert">
+                {imageError}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Saving is explicit. A host tries several looks before settling, and
+              writing each experiment to the event would mean the table tent
+              changed under them while they were still deciding. */}
+          <div className="border-t border-charcoal/15 pt-4">
+            <button
+              type="button"
+              onClick={() => void handleSaveBranding()}
+              disabled={saving || !dirty || colourVerdict === 'unscannable'}
+              className="spx-btn-ink w-full disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : dirty ? 'Save this design' : 'Saved'}
+            </button>
+            <p className="mt-2 text-xs text-charcoal/60">
+              Saved once and used everywhere — the dashboard, the table tent, the brochure, and
+              every reprint, until you change it again.
+            </p>
+            {saveNote ? <p className="mt-2 text-xs text-charcoal/70">{saveNote}</p> : null}
           </div>
         </div>
       ) : (
         <p className="bg-sand px-3 py-2 text-xs text-charcoal/60">
-          Starter includes the standard square QR design.
+          This plan includes the standard square QR design.
         </p>
       )}
 
