@@ -12,6 +12,7 @@ import {
   DisplayPhoto,
   DownloadShare,
   EventMoment,
+  FreeEventClaimRow,
   GuestBookEntry,
   HostGuestBookEntry,
   QREvent,
@@ -362,6 +363,57 @@ export async function startCheckout(
  * Global-admin: total number of recorded payments. Confirms the Stripe webhook
  * is landing checkout.session.completed events into the Payment table.
  */
+/**
+ * Every account that has taken its free event.
+ *
+ * Admin-only: the FreeEventClaim model grants no owner rules at all, so a host
+ * cannot read their own claim, let alone delete it. That is the limit — if the
+ * browser could remove this row, "one free event per account" would mean
+ * nothing.
+ *
+ * The row id is the host's Cognito sub, which is what `clearFreeEventClaim`
+ * takes and what an event's `owner` string starts with.
+ */
+export async function listFreeEventClaims(): Promise<FreeEventClaimRow[]> {
+  const rows: FreeEventClaimRow[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await client.models.FreeEventClaim.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    for (const row of data ?? []) {
+      rows.push({
+        hostSub: row.id,
+        eventId: row.eventId ?? null,
+        claimedAt: row.claimedAt ?? row.createdAt ?? null,
+      });
+    }
+    nextToken = next;
+  } while (nextToken);
+  return rows;
+}
+
+/**
+ * Give an account its free event back.
+ *
+ * Deliberately a deliberate act. The claim is never released automatically —
+ * not when the event is deleted, not when it expires — because releasing it on
+ * deletion would turn "one free event" into "unlimited free events, one at a
+ * time". This is the only way one comes back, and a person has to decide it.
+ */
+export async function clearFreeEventClaim(hostSub: string): Promise<void> {
+  const id = hostSub.trim();
+  if (!id) throw new Error('Which account? A host id is required.');
+  const { errors } = await client.models.FreeEventClaim.delete(
+    { id },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
 export async function listPaymentsCount(): Promise<number> {
   let count = 0;
   let nextToken: string | null | undefined;

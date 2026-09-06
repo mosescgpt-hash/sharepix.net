@@ -115,6 +115,20 @@ export interface DisplayPhoto extends QRPhoto {
   fallbackUrl?: string;
 }
 
+/**
+ * An account that has taken its one free event.
+ *
+ * Admin-only reading material: the model grants no owner rules, so a host can
+ * neither see nor delete their own claim. `hostSub` is the Cognito subject and
+ * the row's primary key — the same value an event's `owner` string starts with.
+ */
+export interface FreeEventClaimRow {
+  hostSub: string;
+  /** The event the claim was spent on, so an admin sees more than a date. */
+  eventId: string | null;
+  claimedAt: string | null;
+}
+
 export interface DiscountCode {
   code: string;
   assignedTo?: string | null;

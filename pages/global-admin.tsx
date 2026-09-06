@@ -7,6 +7,7 @@ import { isGlobalAdmin } from '@/lib/admin';
 import {
   addEventPhotoCredits,
   checkPrintProvider,
+  clearFreeEventClaim,
   createDiscountCode,
   deleteDiscountCode,
   deleteEventAsGlobalAdmin,
@@ -14,6 +15,7 @@ import {
   listAllEvents,
   listAllPhotos,
   listDiscountCodes,
+  listFreeEventClaims,
   listPaymentsCount,
   manageUser,
   restoreEventAccess,
@@ -26,7 +28,7 @@ import {
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
-import { DiscountCode, QREvent } from '@/lib/types';
+import { DiscountCode, FreeEventClaimRow, QREvent } from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -98,11 +100,13 @@ function defaultExpiryValue(): string {
 // feature later means adding one entry here and passing its key from that
 // checkout flow.
 const PAID_ITEM_SCOPES = [
-  { key: 'event:event', label: 'Event plan' },
-  { key: 'event:plus', label: 'Plus event' },
+  { key: 'event:plus', label: 'Event plan' },
   // Retired plans. Kept so a code can still be issued against an event that
   // already carries one - existing codes naming these keep working either way,
   // because the scope matcher compares the stored string, not this list.
+  // The free tier is absent on purpose: there is nothing to discount, and a
+  // code scoped to it would only ever produce a confusing rejection.
+  { key: 'event:event', label: 'Event $39 (retired)' },
   { key: 'event:starter', label: 'Starter event (retired)' },
   { key: 'event:standard', label: 'Standard event (retired)' },
   { key: 'event:premium', label: 'Premium event (retired)' },
@@ -140,6 +144,10 @@ function GlobalAdminPage() {
   const [codes, setCodes] = useState<DiscountCode[]>([]);
   const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [paymentsCount, setPaymentsCount] = useState<number | null>(null);
+  // null while loading. Kept separate from `error` so a missing or empty claim
+  // table never blanks out the whole dashboard.
+  const [claims, setClaims] = useState<FreeEventClaimRow[] | null>(null);
+  const [claimsError, setClaimsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -242,6 +250,18 @@ function GlobalAdminPage() {
         setPaymentsCount(await listPaymentsCount());
       } catch {
         setPaymentsCount(null);
+      }
+
+      // Same treatment, and for the same reason: before anyone has taken a
+      // free event this table has never been written to.
+      try {
+        setClaims(await listFreeEventClaims());
+        setClaimsError(null);
+      } catch (err) {
+        setClaims([]);
+        setClaimsError(
+          err instanceof Error ? err.message : 'Free event claims could not be loaded.',
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The global dashboard could not be loaded.');
@@ -416,6 +436,30 @@ function GlobalAdminPage() {
         text: err instanceof Error ? err.message : 'The test could not be sent.',
         ok: false,
       });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleClearFreeClaim(hostSub: string) {
+    if (
+      !window.confirm(
+        `Give this account another free event?\n\n${hostSub}\n\nThey keep any event they already created. This cannot be undone from here — the claim is simply gone, and they can take another free event immediately.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`claim-${hostSub}`);
+    setClaimsError(null);
+    try {
+      await clearFreeEventClaim(hostSub);
+      // Drop it locally rather than reloading the whole dashboard: the delete
+      // either succeeded or threw, so there is nothing to re-read.
+      setClaims((current) => (current ?? []).filter((c) => c.hostSub !== hostSub));
+    } catch (err) {
+      setClaimsError(
+        err instanceof Error ? err.message : 'That claim could not be cleared.',
+      );
     } finally {
       setWorking(null);
     }
@@ -619,7 +663,7 @@ function GlobalAdminPage() {
                 </p>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                {PRICING_TIERS.map((tier) => (
+                {PRICING_TIERS.filter((tier) => !tier.trial).map((tier) => (
                   <button
                     key={tier.id}
                     type="button"
@@ -683,6 +727,66 @@ function GlobalAdminPage() {
                   {userMessage.text}
                 </p>
               ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
+              <p className="text-sm text-charcoal/70">
+                One free event per account, and taking it is permanent — the claim is not
+                released when the event is deleted or expires, because releasing it on deletion
+                would turn &ldquo;one free event&rdquo; into unlimited free events one at a time.
+                Clearing a claim here is the only way an account gets another, and it takes
+                effect immediately.
+              </p>
+              {claimsError ? (
+                <Notice tone="warn" className="mt-3">
+                  {claimsError}
+                </Notice>
+              ) : null}
+              {claims === null ? (
+                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+              ) : claims.length === 0 ? (
+                <p className="mt-4 text-sm text-charcoal/55">
+                  No account has taken a free event yet.
+                </p>
+              ) : (
+                <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                  {claims.map((claim) => {
+                    // The claim stores an event id; showing the event's name
+                    // when we have it loaded turns an opaque uuid into
+                    // something an admin can recognise from a support email.
+                    const claimed = claim.eventId
+                      ? events.find((e) => e.id === claim.eventId)
+                      : undefined;
+                    return (
+                      <li
+                        key={claim.hostSub}
+                        className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-mono text-xs text-charcoal/70">
+                            {claim.hostSub}
+                          </p>
+                          <p className="text-sm text-charcoal/60">
+                            {claimed ? claimed.name : (claim.eventId ?? 'no event recorded')}
+                            {claim.claimedAt
+                              ? ` · claimed ${new Date(claim.claimedAt).toLocaleDateString()}`
+                              : null}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={working === `claim-${claim.hostSub}`}
+                          onClick={() => void handleClearFreeClaim(claim.hostSub)}
+                          className="shrink-0 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                        >
+                          {working === `claim-${claim.hostSub}` ? 'Clearing…' : 'Clear claim'}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
 
             <div className="spx-card mt-8 p-5">
