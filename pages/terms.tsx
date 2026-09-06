@@ -2,7 +2,7 @@ import Layout from '@/components/Layout';
 import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'September 4, 2026';
+const LAST_UPDATED = 'September 5, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
@@ -125,8 +125,9 @@ export default function TermsPage() {
                 Every event includes a <strong>30-day upload window</strong>{' '}(extendable in
                 30-day blocks for half the plan price). After it closes, guests keep limited,
                 reduced-resolution viewing for a while, and the host keeps full access and
-                downloads for the plan&rsquo;s retention period (Starter ~3 weeks, Standard 3
-                months, Premium 1 year). After retention, photos move to a private archive for up
+                downloads for the plan&rsquo;s retention period (Event 3 months, Plus 1 year;
+                events on a retired plan keep the retention they were sold with). After
+                retention, photos move to a private archive for up
                 to 90 days and are then permanently deleted. Download what you want to keep before
                 your retention period ends. Full details are on our{' '}
                 <a href="/pricing">pricing page</a>.

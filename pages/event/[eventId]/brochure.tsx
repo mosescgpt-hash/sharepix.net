@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Head from 'next/head';
 import type QRCodeStyling from 'qr-code-styling';
+import { brandingForEvent, qrStylingOptions } from '@/lib/qrBranding';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import { fetchEvent, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -74,18 +75,14 @@ function EventBrochurePage() {
     let qrCode: QRCodeStyling | null = null;
     import('qr-code-styling').then(({ default: QRCodeStylingConstructor }) => {
       if (!active || !qrContainerRef.current) return;
-      qrCode = new QRCodeStylingConstructor({
-        width: 320,
-        height: 320,
-        type: 'canvas',
-        data: uploadUrl,
-        margin: 8,
-        qrOptions: { errorCorrectionLevel: 'H' },
-        dotsOptions: { type: 'square', color: '#123851' },
-        cornersSquareOptions: { type: 'square', color: '#123851' },
-        cornersDotOptions: { type: 'square', color: '#123851' },
-        backgroundOptions: { color: '#ffffff' },
-      });
+      // The host's saved design — see the same change in table-tent.tsx.
+      qrCode = new QRCodeStylingConstructor(
+        qrStylingOptions(brandingForEvent(event), {
+          data: uploadUrl,
+          size: 320,
+          margin: 8,
+        }),
+      );
       qrContainerRef.current.replaceChildren();
       qrCode.append(qrContainerRef.current);
     });

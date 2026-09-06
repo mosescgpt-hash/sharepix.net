@@ -109,7 +109,7 @@ describe('pricingSourceFor — who may pay', () => {
     expect(missing).toEqual(notMine);
   });
 
-  it('refuses an event whose plan is no longer sold', () => {
+  it('refuses an event whose plan cannot be priced at all', () => {
     expect(
       pricingSourceFor({
         eventId: 'evt-1',
@@ -119,6 +119,89 @@ describe('pricingSourceFor — who may pay', () => {
         caller: host,
       }).kind,
     ).toBe('refused');
+  });
+});
+
+/**
+ * Retiring a plan is two separate questions, and the reprice to Event/Plus made
+ * conflating them expensive: a host whose unpaid event still carries Standard
+ * has to be able to complete that payment, or they own an event they can never
+ * activate and never get back.
+ */
+describe('pricingSourceFor — sellable is not the same as priceable', () => {
+  // Only the new lineup is on sale; the old one is still priced, because the
+  // same map prices upload-window extensions for events already sold.
+  const sellableNow = (tier: string) => tier === 'event' || tier === 'plus';
+  const priceable = (tier: string) =>
+    ['event', 'plus', 'starter', 'standard', 'premium'].includes(tier);
+
+  it('lets a host activate an event still carrying a retired plan', () => {
+    const source = pricingSourceFor({
+      eventId: 'evt-1',
+      argumentTier: '',
+      stored: { tier: 'standard', owner },
+      sellableTier: sellableNow,
+      priceableTier: priceable,
+      caller: host,
+    });
+    expect(source).toEqual({ kind: 'event', tier: 'standard' });
+  });
+
+  it('still refuses to sell a retired plan to a new purchase', () => {
+    // The admin test checkout, which names a tier directly and activates
+    // nothing. This path is gated on what is on sale.
+    expect(
+      pricingSourceFor({
+        eventId: '',
+        argumentTier: 'standard',
+        stored: null,
+        sellableTier: sellableNow,
+        priceableTier: priceable,
+        caller: { sub: 'admin-1', groups: ['ADMINS'] },
+      }).kind,
+    ).toBe('refused');
+  });
+
+  it('sells the plans that are on sale', () => {
+    for (const tier of ['event', 'plus']) {
+      expect(
+        pricingSourceFor({
+          eventId: '',
+          argumentTier: tier,
+          stored: null,
+          sellableTier: sellableNow,
+          priceableTier: priceable,
+          caller: { sub: 'admin-1', groups: ['ADMINS'] },
+        }),
+      ).toEqual({ kind: 'argument', tier });
+    }
+  });
+
+  it('still refuses an event on a plan that is neither', () => {
+    expect(
+      pricingSourceFor({
+        eventId: 'evt-1',
+        argumentTier: '',
+        stored: { tier: 'legacy-gold', owner },
+        sellableTier: sellableNow,
+        priceableTier: priceable,
+        caller: host,
+      }).kind,
+    ).toBe('refused');
+  });
+
+  it('still prices from the stored row, never the request', () => {
+    // The forgery this module exists to prevent, re-checked with the split in
+    // place: pairing a Plus event with tier="event" must not charge $39.
+    const source = pricingSourceFor({
+      eventId: 'evt-1',
+      argumentTier: 'event',
+      stored: { tier: 'plus', owner },
+      sellableTier: sellableNow,
+      priceableTier: priceable,
+      caller: host,
+    });
+    expect(source).toEqual({ kind: 'event', tier: 'plus' });
   });
 });
 

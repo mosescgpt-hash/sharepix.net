@@ -576,6 +576,10 @@ async function updateEventSettings(
     videoUploadsEnabled?: boolean;
     guestDownloadsBlocked?: boolean;
     uploadsClosed?: boolean;
+    qrDotStyle?: string;
+    qrColor?: string;
+    /** '' clears the logo. Omit to leave the whole style alone. */
+    qrLogo?: string;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -594,6 +598,9 @@ async function updateEventSettings(
       videoUploadsEnabled: changes.videoUploadsEnabled,
       guestDownloadsBlocked: changes.guestDownloadsBlocked,
       uploadsClosed: changes.uploadsClosed,
+      qrDotStyle: changes.qrDotStyle,
+      qrColor: changes.qrColor,
+      qrLogo: changes.qrLogo,
     },
     { authMode: 'userPool' },
   );
@@ -1679,4 +1686,26 @@ export async function deleteEventMoment(momentId: string): Promise<void> {
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+}
+
+/**
+ * Save how this event's QR code looks.
+ *
+ * The whole style goes together on purpose: the function clears the logo when
+ * a style arrives without one, so sending only the colour would quietly drop
+ * the host's logo. Callers pass everything they currently have.
+ */
+export async function saveEventQrBranding(
+  eventId: string,
+  branding: { qrDotStyle: string; qrColor: string; qrLogo: string | null },
+): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    {
+      qrDotStyle: branding.qrDotStyle,
+      qrColor: branding.qrColor,
+      qrLogo: branding.qrLogo ?? '',
+    },
+    'Your QR code style could not be saved.',
+  );
 }

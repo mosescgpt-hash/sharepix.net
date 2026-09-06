@@ -1,5 +1,12 @@
+/**
+ * Every tier string the product has ever sold. Retired ones stay here forever:
+ * an event stamps its tier at creation precisely so a later pricing change
+ * cannot retroactively alter what someone already paid for.
+ */
+export type TierId = 'event' | 'plus' | 'starter' | 'standard' | 'premium';
+
 export interface PricingTier {
-  id: 'starter' | 'standard' | 'premium';
+  id: TierId;
   name: string;
   price: number;
   photoLimit: number | null; // null = unlimited
@@ -20,7 +27,21 @@ export interface PricingTier {
   // how long GUESTS keep low-resolution viewing before they see nothing.
   guestLowResDays: number;
   features: string[];
+  /** Renders the badge on the pricing page. */
   highlight?: boolean;
+  /**
+   * Whether the host can restyle the event's QR code. A capability flag rather
+   * than `tier.id !== 'starter'` scattered across pages: the audit flagged tier
+   * strings as load-bearing in five places, and comparing ids is how a new tier
+   * silently inherits the wrong behaviour.
+   */
+  customQrCode: boolean;
+  /**
+   * No longer sold, but fully understood. Existing events on this tier keep
+   * their limits, their retention, and their ability to extend the upload
+   * window at the right price.
+   */
+  retired?: boolean;
 }
 
 // The upload window is the same on every plan; it can be extended in 30-day
@@ -31,7 +52,81 @@ export const EXTENSION_DAYS = 30;
 // archive for this long before permanent deletion.
 export const ARCHIVE_DAYS = 90;
 
-export const PRICING_TIERS: PricingTier[] = [
+/**
+ * What is on sale today.
+ *
+ * The lineup moved from Starter $19 / Standard $39 / Premium $79 to
+ * Event $39 / Plus $69. Free $0 is deliberately NOT here yet: `paid` currently
+ * gates activation, so every live event has a card behind it, and a free tier
+ * is the first path to creating storage without one. It ships once there is
+ * rate limiting and a retention story to go with it.
+ */
+const SELLABLE_TIERS: PricingTier[] = [
+  {
+    id: 'event',
+    name: 'Event',
+    price: 39,
+    photoLimit: 1000,
+    videoLimit: 10,
+    accessDays: 90,
+    accessLabel: '30-day upload window',
+    retentionDays: 90,
+    guestLowResDays: 30,
+    customQrCode: true,
+    features: [
+      'Up to 1,000 photos and 10 videos',
+      '30-day upload window (extend +30 days anytime)',
+      'Guests view 30 days after uploads close; host access 3 months',
+      'Customizable QR code',
+      'Host individual and bulk ZIP downloads',
+      'Guests can download the photos too — full resolution, no account',
+      'Uploader names on photos',
+    ],
+  },
+  {
+    id: 'plus',
+    name: 'Plus',
+    price: 69,
+    // A real number rather than "unlimited". The old Premium tier advertised
+    // unlimited photos, which is an unbounded storage and egress bill on a
+    // one-off payment. Events already sold as Premium keep unlimited — they
+    // were sold that — but nothing new promises it.
+    photoLimit: 3000,
+    videoLimit: 30,
+    accessDays: 365,
+    accessLabel: '30-day upload window',
+    retentionDays: 365,
+    guestLowResDays: 30,
+    customQrCode: true,
+    // Badged "Best value" rather than "Most popular": it folds in $48 of
+    // add-ons for $30 more than Event, which is checkable, whereas nothing has
+    // sold yet so popularity would be invented.
+    highlight: true,
+    features: [
+      'Up to 3,000 photos and 30 videos',
+      '30-day upload window (extend +30 days anytime)',
+      'Guests view 30 days after uploads close; host access 1 year',
+      'Customizable QR code',
+      'Event branding',
+      'Moderation tools (approve before showing)',
+      'Guest book included — signed notes, photos, and video messages',
+      'Live slideshow included — a venue screen showing photos as they arrive',
+      'Host photo, video, and bulk ZIP downloads',
+      'Guests can download the photos too — full resolution, no account',
+    ],
+  },
+];
+
+/**
+ * Retired plans. NOT on sale, NOT removed.
+ *
+ * Every one of these is still stamped on live event rows, and dropping them
+ * would be silent and expensive: `videoLimitForTier` falls through to `null`
+ * for an unknown tier, and null means *unlimited*; `extensionPrice` falls back
+ * to $10 regardless of what the host actually paid. Both are wrong in the
+ * customer's favour or ours, and neither errors.
+ */
+const RETIRED_TIERS: PricingTier[] = [
   {
     id: 'starter',
     name: 'Starter',
@@ -42,6 +137,8 @@ export const PRICING_TIERS: PricingTier[] = [
     accessLabel: '30-day upload window',
     retentionDays: 21,
     guestLowResDays: 21,
+    customQrCode: false,
+    retired: true,
     features: [
       'Up to 100 photos and 2 videos',
       '30-day upload window (extend +30 days anytime)',
@@ -61,7 +158,8 @@ export const PRICING_TIERS: PricingTier[] = [
     accessLabel: '30-day upload window',
     retentionDays: 90,
     guestLowResDays: 30,
-    highlight: true,
+    customQrCode: true,
+    retired: true,
     features: [
       'Up to 1,000 photos and 10 videos',
       '30-day upload window (extend +30 days anytime)',
@@ -75,6 +173,7 @@ export const PRICING_TIERS: PricingTier[] = [
   {
     id: 'premium',
     name: 'Premium',
+    // Unlimited, permanently, for the events that bought it.
     price: 79,
     photoLimit: null,
     videoLimit: 30,
@@ -82,6 +181,8 @@ export const PRICING_TIERS: PricingTier[] = [
     accessLabel: '30-day upload window',
     retentionDays: 365,
     guestLowResDays: 30,
+    customQrCode: true,
+    retired: true,
     features: [
       'Unlimited photos and 30 videos',
       '30-day upload window (extend +30 days anytime)',
@@ -95,6 +196,12 @@ export const PRICING_TIERS: PricingTier[] = [
     ],
   },
 ];
+
+/** What the pricing page and the create-event form offer. Sellable only. */
+export const PRICING_TIERS: PricingTier[] = SELLABLE_TIERS;
+
+/** Every tier ever sold, for interpreting an event that already exists. */
+export const ALL_TIERS: PricingTier[] = [...SELLABLE_TIERS, ...RETIRED_TIERS];
 
 export const CORPORATE_PLAN = {
   name: 'Corporate',
@@ -131,16 +238,51 @@ export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
 
 /**
  * One-time cost to add a guest book to a single event, on the plans that do not
- * already include it (Starter and Standard - see lib/guestBook.ts).
+ * already include it — Event, and the retired Starter and Standard. See
+ * lib/guestBook.ts.
  *
- * Priced under the Standard-to-Premium gap on purpose: at $19 a Standard host
- * pays $58 all-in rather than $79 to upgrade, so the add-on is the cheaper
- * answer for someone who wants the guest book and nothing else Premium offers.
+ * Priced under the Event-to-Plus gap on purpose: at $19 an Event host pays $58
+ * all-in rather than $69 to upgrade, so the add-on stays the cheaper answer for
+ * someone who wants the guest book and nothing else Plus offers.
  */
 export const GUEST_BOOK_ADDON_PRICE = 19;
 
+/**
+ * Look up any tier an event might carry, retired ones included.
+ *
+ * This searches ALL_TIERS, never PRICING_TIERS. Everything that decides what an
+ * existing event is entitled to goes through here, so retiring a plan changes
+ * what can be bought and nothing else.
+ */
 export function getTier(id: string): PricingTier | undefined {
-  return PRICING_TIERS.find((t) => t.id === id);
+  return ALL_TIERS.find((t) => t.id === id);
+}
+
+/** Whether this tier can still be bought. The pricing page's question. */
+export function isSellableTier(id: string): boolean {
+  return SELLABLE_TIERS.some((t) => t.id === id);
+}
+
+/**
+ * Plans that include the live slideshow at no extra cost, mirroring
+ * GUEST_BOOK_INCLUDED_TIERS in lib/guestBook.ts. Plus folds in both add-ons,
+ * which is most of why it is $10 cheaper than the Premium it replaces and
+ * still better value.
+ */
+export const LIVE_SLIDESHOW_INCLUDED_TIERS = ['plus', 'corporate'] as const;
+
+/**
+ * Whether an event can run the live slideshow: the host bought the add-on, or
+ * their plan includes it. Same shape as guestBookAvailable, deliberately.
+ */
+export function liveSlideshowAvailable(event: {
+  tier?: string | null;
+  liveSlideshowEnabled?: boolean | null;
+} | null | undefined): boolean {
+  if (!event) return false;
+  if (event.liveSlideshowEnabled === true) return true;
+  const tier = (event.tier ?? '').toLowerCase();
+  return (LIVE_SLIDESHOW_INCLUDED_TIERS as readonly string[]).includes(tier);
 }
 
 /**

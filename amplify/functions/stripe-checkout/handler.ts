@@ -201,11 +201,34 @@ async function buildDiscount(
 // Mirrors PRICING_TIERS in lib/pricing.ts (dollars -> cents). These two lists
 // MUST move together: this one is what Stripe actually charges, the other is
 // what the site advertises, and a mismatch bills a price nobody was shown.
+/**
+ * What each plan costs, in cents. Mirrors PRICING_TIERS + RETIRED_TIERS in
+ * lib/pricing.ts by hand, because Amplify functions cannot import from lib/.
+ *
+ * RETIRED PLANS STAY IN THIS MAP. It prices upload-window extensions as well as
+ * new checkouts (`TIER_PRICING[extTier]`), so removing a retired tier would
+ * stop every event already sold on it from being able to extend — something
+ * those hosts paid for. What retires a plan is SELLABLE_TIERS below, not this.
+ */
 const TIER_PRICING: Record<string, { name: string; amount: number }> = {
+  event: { name: 'SharePix Event', amount: 3900 },
+  plus: { name: 'SharePix Plus event', amount: 6900 },
+  // Retired — priced, not sold.
   starter: { name: 'SharePix Starter event', amount: 1900 },
   standard: { name: 'SharePix Standard event', amount: 3900 },
   premium: { name: 'SharePix Premium event', amount: 7900 },
 };
+
+/** The plans a NEW purchase may name. Mirrors PRICING_TIERS in lib/pricing.ts. */
+const SELLABLE_TIERS = new Set(['event', 'plus']);
+
+/**
+ * Plans that already include these, so the add-on must never be sold twice.
+ * Mirror GUEST_BOOK_INCLUDED_TIERS in lib/guestBook.ts and
+ * LIVE_SLIDESHOW_INCLUDED_TIERS in lib/pricing.ts.
+ */
+const GUEST_BOOK_INCLUDED = new Set(['plus', 'premium', 'corporate']);
+const LIVE_SLIDESHOW_INCLUDED = new Set(['plus', 'corporate']);
 
 // Mirrors LIVE_SLIDESHOW_ADDON_PRICE in lib/pricing.ts (dollars → cents).
 const LIVE_SLIDESHOW_ADDON_CENTS = 2900;
@@ -394,6 +417,9 @@ export const handler: Handler = async (event) => {
         });
         scopes.push('extend');
       } else if (key === 'live_slideshow') {
+        // Plus and Corporate include it; an event that already bought it must
+        // never be sold it twice. Both re-derived from the event's own row.
+        if (LIVE_SLIDESHOW_INCLUDED.has(evTier)) continue;
         if (ev.liveSlideshowEnabled?.BOOL === true) continue;
         lineItems.push({
           quantity: 1,
@@ -405,12 +431,12 @@ export const handler: Handler = async (event) => {
         });
         scopes.push('live_slideshow');
       } else if (key === 'guest_book') {
-        // Premium and Corporate already include it, and an event that has
-        // bought it must never be sold it twice. Both are re-derived from the
-        // event's own row - the client says which key it wants, never whether
-        // it is entitled to it. Skipped rather than rejected, so one
+        // Plus, Premium and Corporate already include it, and an event that
+        // has bought it must never be sold it twice. Both are re-derived from
+        // the event's own row - the client says which key it wants, never
+        // whether it is entitled to it. Skipped rather than rejected, so one
         // already-covered selection does not fail the whole cart.
-        if (evTier === 'premium' || evTier === 'corporate') continue;
+        if (GUEST_BOOK_INCLUDED.has(evTier)) continue;
         if (ev.guestBookEnabled?.BOOL === true) continue;
         lineItems.push({
           quantity: 1,
@@ -492,7 +518,11 @@ export const handler: Handler = async (event) => {
     eventId,
     argumentTier: event.arguments.tier ?? '',
     stored: storedEvent,
-    sellableTier: (candidate) => Boolean(TIER_PRICING[candidate]),
+    // Buying something new is limited to what is on sale; paying for an event
+    // that already exists only needs a price, so a retired plan can still be
+    // activated by the host who created it.
+    sellableTier: (candidate) => SELLABLE_TIERS.has(candidate),
+    priceableTier: (candidate) => Boolean(TIER_PRICING[candidate]),
     caller: event.identity as { sub?: string; groups?: string[] | null } | undefined,
   });
   if (source.kind === 'refused') throw new Error(source.reason);

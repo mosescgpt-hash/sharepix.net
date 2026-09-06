@@ -4,7 +4,13 @@ import { withAuthenticator } from '@aws-amplify/ui-react';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import EventQRCode from '@/components/EventQRCode';
-import { CORPORATE_PLAN, PRICING_TIERS, applyDiscount, getTier } from '@/lib/pricing';
+import {
+  CORPORATE_PLAN,
+  PRICING_TIERS,
+  applyDiscount,
+  getTier,
+  isSellableTier,
+} from '@/lib/pricing';
 import {
   createNewEvent,
   getMyCorporateSubscription,
@@ -16,13 +22,15 @@ import { QREvent } from '@/lib/types';
 
 function CreateEventPage() {
   const router = useRouter();
-  const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'standard';
+  const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'event';
 
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
   const [city, setCity] = useState('');
   const [stateRegion, setStateRegion] = useState('');
-  const [tierId, setTierId] = useState(getTier(initialTier) ? initialTier : 'standard');
+  // A link to a retired plan (an old bookmark, a stale email) must not select
+  // something that is no longer for sale.
+  const [tierId, setTierId] = useState(isSellableTier(initialTier) ? initialTier : 'event');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdEvent, setCreatedEvent] = useState<QREvent | null>(null);
@@ -183,7 +191,7 @@ function CreateEventPage() {
             <EventQRCode
               eventId={createdEvent.id}
               eventName={createdEvent.name}
-              allowCustomization={tier?.id !== 'starter'}
+              allowCustomization={tier?.customQrCode === true}
             />
           </div>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">

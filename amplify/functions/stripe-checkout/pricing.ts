@@ -46,27 +46,37 @@ export function isAdminCaller(caller: Caller | null | undefined): boolean {
 /**
  * Decide where the price comes from.
  *
- * @param eventId      the event this payment would activate, or '' for the
- *                     admin test checkout
- * @param argumentTier the `tier` the request supplied — used ONLY when no event
- *                     is being activated
- * @param stored       the event's stored row, or null when it does not exist
- * @param sellableTier whether a tier is one we currently sell
- * @param caller       the signed-in identity
+ * @param eventId       the event this payment would activate, or '' for the
+ *                      admin test checkout
+ * @param argumentTier  the `tier` the request supplied — used ONLY when no
+ *                      event is being activated
+ * @param stored        the event's stored row, or null when it does not exist
+ * @param sellableTier  whether a tier can still be BOUGHT. Gates new purchases.
+ * @param priceableTier whether a tier can still be PRICED. Gates paying for an
+ *                      event that already exists. These are different
+ *                      questions and conflating them strands events: a host
+ *                      whose unpaid event carries a retired plan must still be
+ *                      able to complete the payment for it, or they own an
+ *                      event they can never activate.
+ * @param caller        the signed-in identity
  */
 export function pricingSourceFor({
   eventId,
   argumentTier,
   stored,
   sellableTier,
+  priceableTier,
   caller,
 }: {
   eventId: string;
   argumentTier: string;
   stored: StoredEvent | null;
   sellableTier: (tier: string) => boolean;
+  /** Defaults to `sellableTier` when a caller has no separate notion. */
+  priceableTier?: (tier: string) => boolean;
   caller: Caller | null | undefined;
 }): PricingSource {
+  const canPrice = priceableTier ?? sellableTier;
   if (!eventId) {
     const tier = (argumentTier ?? '').toLowerCase();
     return sellableTier(tier)
@@ -76,8 +86,10 @@ export function pricingSourceFor({
 
   if (!stored) return { kind: 'refused', reason: REFUSED };
 
+  // Priceable, not sellable: retiring a plan stops it being offered to new
+  // customers; it must not strand an event that already carries it.
   const tier = (stored.tier ?? '').toLowerCase();
-  if (!sellableTier(tier)) return { kind: 'refused', reason: REFUSED };
+  if (!canPrice(tier)) return { kind: 'refused', reason: REFUSED };
 
   // Pay for your own event. An admin can pay for any, so an event can be comped.
   if (isAdminCaller(caller)) return { kind: 'event', tier };

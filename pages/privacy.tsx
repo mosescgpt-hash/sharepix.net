@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'September 4, 2026';
+const LAST_UPDATED = 'September 5, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
@@ -191,8 +191,8 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>After the window closes,</strong> guests can view reduced-resolution
-                photos for a limited time (about 3 weeks on Starter, 30 days on Standard and
-                Premium), then guest access ends.
+                photos for 30 days (about 3 weeks on the retired Starter plan), then guest
+                access ends.
               </li>
               <li>
                 <strong>Host retention</strong> — the host keeps full access and downloads for a

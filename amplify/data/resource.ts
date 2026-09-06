@@ -102,6 +102,16 @@ const schema = a.schema({
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
       videoUploadsEnabled: a.boolean(),
+      // How this event's QR code is styled, so a host who adds their logo gets
+      // the same code every time — on the dashboard, the table tent, the
+      // brochure, and every reprint. Absent means the original navy squares,
+      // which is what every event created before this carries. The logo is
+      // stored inline as a downscaled data URL rather than in S3: a QR centre
+      // image renders at ~24% of the code, so it is tens of kilobytes and
+      // travels with the row to every consumer. See lib/qrBranding.ts.
+      qrDotStyle: a.string(),
+      qrColor: a.string(),
+      qrLogo: a.string(),
       // A branded guest upload experience for one event, e.g. 'tcc-2026'.
       // Missing means the default, which is every event unless an admin says
       // otherwise. Deliberately NOT on the updateEventSettings allow-list: only
@@ -716,6 +726,9 @@ const schema = a.schema({
       videoUploadsEnabled: a.boolean(),
       guestDownloadsBlocked: a.boolean(),
       uploadsClosed: a.boolean(),
+      qrDotStyle: a.string(),
+      qrColor: a.string(),
+      qrLogo: a.string(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])

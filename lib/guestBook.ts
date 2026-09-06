@@ -20,7 +20,7 @@
  * in the product (unlimited photos, 1-year retention); leaving it out would
  * make the most expensive plan the only one that has to pay extra.
  */
-export const GUEST_BOOK_INCLUDED_TIERS = ['premium', 'corporate'] as const;
+export const GUEST_BOOK_INCLUDED_TIERS = ['plus', 'premium', 'corporate'] as const;
 
 /** Longest a guest's signature may be. */
 export const MAX_NAME_LENGTH = 60;
@@ -65,7 +65,7 @@ export function guestBookAvailable(event: GuestBookEventFacts | null | undefined
 }
 
 /**
- * Whether the add-on is still worth offering this host. Premium and Corporate
+ * Whether the add-on is still worth offering this host. Plus and Corporate
  * already have it, and an event that has bought it must never be sold it twice
  * — the checkout function re-derives this server-side for exactly that reason.
  */

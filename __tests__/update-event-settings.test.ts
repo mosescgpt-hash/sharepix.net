@@ -26,6 +26,12 @@ describe('the allow-list is the whole surface', () => {
       'location',
       'moderationMode',
       'name',
+      // Presentation only — how the event's QR code looks. Added when QR
+      // styling became something a host saves rather than something that
+      // vanished on reload.
+      'qrColor',
+      'qrDotStyle',
+      'qrLogo',
       'uploadsClosed',
       'videoUploadsEnabled',
     ]);

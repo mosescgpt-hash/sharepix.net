@@ -18,6 +18,8 @@
  * dashboard grants extra capacity and moves an upload window.
  */
 
+import { validateQrBranding } from './qrBranding';
+
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
 
@@ -83,6 +85,10 @@ export interface SettingsRequest {
   videoUploadsEnabled?: boolean | null;
   guestDownloadsBlocked?: boolean | null;
   uploadsClosed?: boolean | null;
+  qrDotStyle?: string | null;
+  qrColor?: string | null;
+  /** A data URL, '' to clear the logo, or absent to leave the style alone. */
+  qrLogo?: string | null;
 }
 
 /** The event as stored, insofar as these rules care. */
@@ -163,6 +169,27 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
     }
   }
 
+  // QR branding travels together: a host changing the colour alone must not
+  // silently reset their logo, so all three are validated as one style and
+  // written as one. Absent fields fall back to the defaults inside
+  // validateQrBranding rather than erroring.
+  if (
+    request.qrDotStyle !== undefined ||
+    request.qrColor !== undefined ||
+    request.qrLogo !== undefined
+  ) {
+    const branding = validateQrBranding({
+      qrDotStyle: request.qrDotStyle,
+      qrColor: request.qrColor,
+      qrLogo: request.qrLogo,
+    });
+    if (!branding.ok) return { ok: false, reason: branding.reason };
+    set.qrDotStyle = branding.branding.qrDotStyle;
+    set.qrColor = branding.branding.qrColor;
+    if (branding.branding.qrLogo) set.qrLogo = branding.branding.qrLogo;
+    else remove.push('qrLogo');
+  }
+
   for (const flag of ['videoUploadsEnabled', 'guestDownloadsBlocked', 'uploadsClosed'] as const) {
     const value = request[flag];
     if (value === undefined) continue;
@@ -210,4 +237,9 @@ export const EDITABLE_FIELDS = [
   'videoUploadsEnabled',
   'guestDownloadsBlocked',
   'uploadsClosed',
+  // Presentation only. None of these touch price, limits, counters or dates,
+  // which is the rule this list exists to keep.
+  'qrDotStyle',
+  'qrColor',
+  'qrLogo',
 ];

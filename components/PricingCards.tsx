@@ -95,7 +95,7 @@ function PlanCard({ name, price, unit, meta, features, href, badge, featured = f
 
 export default function PricingCards() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {PRICING_TIERS.map((tier) => (
         <PlanCard
           key={tier.id}
@@ -105,7 +105,10 @@ export default function PricingCards() {
           meta={`${tier.accessLabel} · one-time payment`}
           features={tier.features}
           href={`/create-event?tier=${tier.id}`}
-          badge={tier.highlight ? 'Most popular' : undefined}
+          // "Best value", not "Most popular": Plus folds in $48 of add-ons
+          // for $30 more than Event, which is checkable. Nothing has sold yet,
+          // so popularity would be invented.
+          badge={tier.highlight ? 'Best value' : undefined}
           featured={tier.highlight}
         />
       ))}

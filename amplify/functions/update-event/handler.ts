@@ -75,6 +75,9 @@ export const handler: Handler = async (event) => {
       videoUploadsEnabled: event.arguments.videoUploadsEnabled,
       guestDownloadsBlocked: event.arguments.guestDownloadsBlocked,
       uploadsClosed: event.arguments.uploadsClosed,
+      qrDotStyle: event.arguments.qrDotStyle,
+      qrColor: event.arguments.qrColor,
+      qrLogo: event.arguments.qrLogo,
     },
     { photoCount: Number(found.Item.photoCount?.N ?? '0') },
   );

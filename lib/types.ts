@@ -26,7 +26,7 @@ export interface QREvent {
   /** Host withheld guest downloads. Absent/false = downloads allowed. */
   guestDownloadsBlocked?: boolean | null;
   liveSlideshowEnabled?: boolean | null;
-  /** Guest book bought as an add-on. Included on Premium/Corporate regardless. */
+  /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;
   guestBookCount?: number | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
@@ -35,6 +35,15 @@ export interface QREvent {
   alertEmail?: string | null;
   /** False when the host has turned video uploads off. Missing means allowed. */
   videoUploadsEnabled?: boolean | null;
+  /**
+   * The saved QR design, used by the dashboard, the table tent and the
+   * brochure alike. All absent means the original navy squares — see
+   * lib/qrBranding.ts.
+   */
+  qrDotStyle?: string | null;
+  qrColor?: string | null;
+  /** A downscaled data URL, small enough to live on the row. */
+  qrLogo?: string | null;
   createdBy?: string | null;
   owner?: string | null;
   createdAt?: string;

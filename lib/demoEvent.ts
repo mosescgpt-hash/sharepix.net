@@ -169,7 +169,7 @@ export const DEMO_EVENT: QREvent = {
   name: 'Sam & Riley’s Wedding',
   eventCode: 'DEMO26',
   date: '2026-06-20',
-  tier: 'standard',
+  tier: 'event',
   location: 'Minneapolis, MN',
   photoLimit: 1000,
   photoCount: DEMO_PHOTO_COUNT,
