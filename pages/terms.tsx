@@ -125,10 +125,11 @@ export default function TermsPage() {
                 Every event includes a <strong>60-day upload window</strong>{' '}(extendable in
                 30-day blocks for half the plan price). After it closes, the gallery stays
                 available for <strong>12 months</strong> — guests at reduced resolution, and the
-                host with full access and downloads throughout. Events on a retired plan keep the
-                shorter windows they were sold with. After the 12 months, photos move to a private
-                archive for up to 90 days and are then permanently deleted. Download what you want
-                to keep before then. Full details are on our{' '}
+                host with full access and downloads throughout. A <strong>free event</strong> keeps
+                its gallery for 30 days rather than 12 months, and events on a retired plan keep
+                the shorter windows they were sold with. After that period, photos move to a
+                private archive for up to 90 days and are then permanently deleted. Download what
+                you want to keep before then. Full details are on our{' '}
                 <a href="/pricing">pricing page</a>.
               </li>
               <li>

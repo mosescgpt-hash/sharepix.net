@@ -8,6 +8,8 @@ import {
   liveSlideshowAvailable,
   videoLimitForTier,
   computeAccessExpiresAt,
+  canPurchaseFor,
+  isTrialTier,
   UPLOAD_WINDOW_DAYS,
 } from '../lib/pricing';
 import { guestBookAvailable } from '../lib/guestBook';
@@ -23,17 +25,26 @@ import { guestBookAvailable } from '../lib/guestBook';
  * log, just the wrong limit or the wrong charge.
  */
 
-const RETIRED = ['starter', 'standard', 'premium'];
-const SELLABLE = ['event', 'plus'];
+const RETIRED = ['event', 'starter', 'standard', 'premium'];
+const SELLABLE = ['free', 'plus'];
+/** The plans a customer can actually be charged for. Excludes the free trial. */
+const PAID = ['plus'];
 
 describe('what is on sale', () => {
-  it('sells Event and Plus, and nothing retired', () => {
+  it('sells a free trial and one paid plan, and nothing retired', () => {
     expect(PRICING_TIERS.map((t) => t.id)).toEqual(SELLABLE);
   });
 
-  it('prices them at $39 and $89', () => {
-    expect(getTier('event')?.price).toBe(39);
-    expect(getTier('plus')?.price).toBe(89);
+  it('prices the one paid plan at $79, and the trial at nothing', () => {
+    expect(getTier('plus')?.price).toBe(79);
+    expect(getTier('free')?.price).toBe(0);
+  });
+
+  it('shows the paid plan as Event, since it is the only one', () => {
+    // The id stayed `plus`; the name did not. The retired $39 tier is
+    // disambiguated instead, so two tiers never answer to the same name.
+    expect(getTier('plus')?.name).toBe('Event');
+    expect(getTier('event')?.name).toBe('Event (original)');
   });
 
   it('keeps Corporate at $149/month', () => {
@@ -45,10 +56,13 @@ describe('what is on sale', () => {
     for (const id of SELLABLE) expect(isSellableTier(id)).toBe(true);
   });
 
-  it('does not offer a free tier yet', () => {
-    // Free removes the `paid` gate that currently means every live event has a
-    // card behind it. It ships with rate limiting, not before.
-    expect(PRICING_TIERS.some((t) => t.price === 0)).toBe(false);
+  it('offers exactly one free tier, and marks it as a trial', () => {
+    // `price === 0` is not what identifies a trial — a fully comped paid event
+    // also owes nothing — so the flag is what everything else reads.
+    const free = PRICING_TIERS.filter((t) => t.price === 0);
+    expect(free.map((t) => t.id)).toEqual(['free']);
+    expect(free[0].trial).toBe(true);
+    expect(PRICING_TIERS.filter((t) => t.trial).map((t) => t.id)).toEqual(['free']);
   });
 });
 
@@ -81,9 +95,9 @@ describe('retired plans still work for the events that bought them', () => {
     expect(extensionPrice('premium')).toBe(40); // half of $79, rounded
   });
 
-  it('charges the right extension price for the plans on sale', () => {
-    expect(extensionPrice('event')).toBe(20); // half of $39
-    expect(extensionPrice('plus')).toBe(45); // half of $89, rounded up
+  it('charges the right extension price for the plan on sale', () => {
+    expect(extensionPrice('plus')).toBe(40); // half of $79, rounded up
+    expect(extensionPrice('event')).toBe(20); // half of the retired $39
   });
 
   it('keeps retention and access windows for retired plans', () => {
@@ -101,14 +115,21 @@ describe('retired plans still work for the events that bought them', () => {
   });
 });
 
-describe('one retention policy across everything on sale', () => {
+describe('one retention policy across everything sold', () => {
   // Retention used to be a tier differentiator — 3 weeks, 3 months, 1 year —
   // which made "how long do I keep my photos" unanswerable without a table.
-  // Every plan on sale now gets the same answer, and these assert it stays one
-  // answer rather than quietly splitting again.
-  it.each(SELLABLE)('gives %s a 12-month gallery', (id) => {
+  // Every PAID plan now gets the same answer, and these assert it stays one
+  // answer rather than quietly splitting again. The free trial is the single
+  // deliberate exception, pinned separately below.
+  it.each(PAID)('gives %s a 12-month gallery', (id) => {
     expect(getTier(id)?.retentionDays).toBe(365);
     expect(getTier(id)?.guestLowResDays).toBe(365);
+  });
+
+  it('gives the free trial 30 days, which is most of the reason to upgrade', () => {
+    expect(getTier('free')?.retentionDays).toBe(30);
+    expect(getTier('free')?.guestLowResDays).toBe(30);
+    expect(getTier('free')?.accessDays).toBe(UPLOAD_WINDOW_DAYS + 30);
   });
 
   it('does not let guests lose the gallery before the host does', () => {
@@ -128,8 +149,8 @@ describe('one retention policy across everything on sale', () => {
     }
   });
 
-  it('runs access for the window plus the full twelve months', () => {
-    for (const id of SELLABLE) {
+  it('runs paid access for the window plus the full twelve months', () => {
+    for (const id of PAID) {
       expect(getTier(id)?.accessDays).toBe(UPLOAD_WINDOW_DAYS + 365);
     }
   });
@@ -142,8 +163,8 @@ describe('one retention policy across everything on sale', () => {
     expect(getTier('premium')?.guestLowResDays).toBe(30);
   });
 
-  it('says twelve months in the feature list of everything on sale', () => {
-    for (const id of SELLABLE) {
+  it('says twelve months in the feature list of every paid plan', () => {
+    for (const id of PAID) {
       const features = getTier(id)?.features ?? [];
       expect(features.some((f) => /12 months/.test(f))).toBe(true);
       // The old per-plan phrasing, which is the thing that stopped being true.
@@ -224,5 +245,49 @@ describe('capabilities are flags, not id comparisons', () => {
     for (const tier of ALL_TIERS) {
       expect(typeof tier.customQrCode).toBe('boolean');
     }
+  });
+});
+
+describe('nothing is sold against an event nobody paid for', () => {
+  it('identifies the trial by its flag, not by costing nothing', () => {
+    expect(isTrialTier('free')).toBe(true);
+    for (const id of [...PAID, ...RETIRED, 'corporate', 'nonsense']) {
+      expect(isTrialTier(id)).toBe(false);
+    }
+  });
+
+  it('refuses every purchase against a free event', () => {
+    expect(canPurchaseFor('free')).toBe(false);
+  });
+
+  it('still lets every paid plan buy, retired ones included', () => {
+    // Retiring a plan must never strand the host on it. A Starter event can
+    // still extend its window and still buy the guest book.
+    for (const id of [...PAID, ...RETIRED, 'corporate']) {
+      expect(canPurchaseFor(id)).toBe(true);
+    }
+  });
+
+  it('does not invent a one-dollar extension for a free event', () => {
+    // Half of $0 clamped to a $1 minimum is what the arithmetic would produce,
+    // and $1 is not a price anyone decided on. Zero here means "not for sale",
+    // which is what canPurchaseFor is the real check for.
+    expect(extensionPrice('free')).toBe(0);
+    expect(extensionPrice('plus')).toBeGreaterThan(0);
+  });
+
+  it('gives the free trial no customizable QR code', () => {
+    expect(getTier('free')?.customQrCode).toBe(false);
+    expect(getTier('plus')?.customQrCode).toBe(true);
+  });
+
+  it('includes the guest book and slideshow in the paid plan, not as add-ons', () => {
+    // The whole point of one plan: the two features that sell the product are
+    // in it rather than behind a second decision.
+    expect(guestBookAvailable({ tier: 'plus' })).toBe(true);
+    expect(liveSlideshowAvailable({ tier: 'plus' })).toBe(true);
+    // And neither is quietly granted to a trial.
+    expect(guestBookAvailable({ tier: 'free' })).toBe(false);
+    expect(liveSlideshowAvailable({ tier: 'free' })).toBe(false);
   });
 });

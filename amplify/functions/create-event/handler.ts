@@ -1,6 +1,7 @@
 // @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
 // dependency, so it's excluded from the backend type-check.
 import {
+  DeleteItemCommand,
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
@@ -15,6 +16,7 @@ import {
   eventCodeFrom,
   hostNameFrom,
   isCorporateStatusActive,
+  isTrialTier,
   newEventRow,
   normalizeTier,
   ownerStringFor,
@@ -28,6 +30,7 @@ const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
 const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 const HOST_PROFILE_TABLE = process.env.HOST_PROFILE_TABLE_NAME as string;
+const FREE_CLAIM_TABLE = process.env.FREE_CLAIM_TABLE_NAME as string;
 
 type Handler = Schema['createHostedEvent']['functionHandler'];
 
@@ -124,6 +127,64 @@ async function spendCode(code: string, nowISO: string): Promise<boolean> {
  * gallery. The conditional write makes a collision a retry rather than a
  * silent overwrite.
  */
+/**
+ * Take this account's one free event, or refuse.
+ *
+ * The row id is the host's Cognito sub, so this is a single-item conditional
+ * put: two requests racing each other cannot both succeed, and a host cannot
+ * get a second free event by clicking twice. The claim is never released on
+ * success, so "one per account" means one ever rather than one at a time —
+ * farming free storage by deleting the event and starting again is the whole
+ * thing this is here to stop. An admin can delete the row to grant another.
+ *
+ * A missing table name refuses rather than allowing. Every other optional
+ * table in this file degrades open because it is cosmetic or advisory; this
+ * one is the limit itself, and a deploy that lost the environment variable
+ * would otherwise hand out unlimited free events silently.
+ */
+async function claimFreeEvent(sub: string, eventId: string, nowISO: string): Promise<void> {
+  if (!FREE_CLAIM_TABLE) {
+    throw new Error('Free events are unavailable right now. Please try again later.');
+  }
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: FREE_CLAIM_TABLE,
+        Item: {
+          id: { S: sub },
+          __typename: { S: 'FreeEventClaim' },
+          eventId: { S: eventId },
+          claimedAt: { S: nowISO },
+          createdAt: { S: nowISO },
+          updatedAt: { S: nowISO },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') {
+      throw new Error(
+        'You have already used your free event. Create a paid event to run another.',
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Give the claim back, for when the event it was claimed for could not be
+ * written. Best-effort on purpose: if this delete fails the host has lost a
+ * free event they never received, which an admin can restore, and throwing
+ * here would replace a clear "could not create your event" with a confusing
+ * second error about something the host never asked about.
+ */
+async function releaseFreeEvent(sub: string): Promise<void> {
+  if (!FREE_CLAIM_TABLE) return;
+  await dynamo
+    .send(new DeleteItemCommand({ TableName: FREE_CLAIM_TABLE, Key: { id: { S: sub } } }))
+    .catch(() => undefined);
+}
+
 async function putEvent(item: Record<string, AttributeValue>): Promise<void> {
   await dynamo.send(
     new PutItemCommand({
@@ -150,9 +211,13 @@ export const handler: Handler = async (event) => {
   // A corporate event costs nothing per event, so a code has nothing to take
   // off one — and checking it there would only produce a confusing "does not
   // apply to this plan" on a plan where it was never needed. The subscription
-  // is the whole authorization for those.
+  // is the whole authorization for those. A free event is ignored for the same
+  // reason plus a sharper one: applying a code to a $0 plan would spend a use
+  // of it to discount nothing.
   const rawCode =
-    tier === 'corporate' ? '' : (event.arguments.discountCode ?? '').trim().toUpperCase();
+    tier === 'corporate' || isTrialTier(tier)
+      ? ''
+      : (event.arguments.discountCode ?? '').trim().toUpperCase();
 
   // Both of these are server state the request cannot influence: the caller's
   // own subscription row, and the code as the admin actually configured it.
@@ -221,7 +286,21 @@ export const handler: Handler = async (event) => {
   if (row.photoLimit !== null) item.photoLimit = { N: String(row.photoLimit) };
   if (row.videoLimit !== null) item.videoLimit = { N: String(row.videoLimit) };
 
-  await putEvent(item);
+  // Claim before writing, so two simultaneous requests cannot both produce a
+  // free event; release if the write then fails, so a failed creation does not
+  // silently burn the host's only free event. The gap between the two is one
+  // PutItem: a crash inside it leaves a claim with no event, which an admin can
+  // clear. Claiming afterwards instead would close that gap and open a much
+  // worse one — the race itself.
+  const trial = activation.kind === 'active' && activation.via === 'trial';
+  if (trial) await claimFreeEvent(sub, id, nowISO);
+
+  try {
+    await putEvent(item);
+  } catch (err) {
+    if (trial) await releaseFreeEvent(sub);
+    throw err;
+  }
 
   return {
     id,

@@ -62,11 +62,15 @@ function PlanCard({ name, price, unit, meta, features, href, badge, featured = f
 
       <p className="mt-2 flex items-baseline gap-1.5">
         <span className="font-sans text-[2.75rem] font-bold leading-none tracking-[-0.03em]">
-          ${price}
+          {price === 0 ? 'Free' : `$${price}`}
         </span>
-        <span className={`text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>
-          / {unit}
-        </span>
+        {/* "$0 / event" reads as a price someone forgot to fill in. A free plan
+            has a word, not a number, and no unit to divide by. */}
+        {price === 0 ? null : (
+          <span className={`text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>
+            / {unit}
+          </span>
+        )}
       </p>
       <p className={`mt-2 text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>{meta}</p>
 
@@ -87,20 +91,24 @@ function PlanCard({ name, price, unit, meta, features, href, badge, featured = f
       </ul>
 
       <Link href={href} className={`${featured ? 'spx-btn-canvas' : 'spx-btn-outline'} mt-8 w-full`}>
-        Choose {name}
+        {price === 0 ? 'Start free' : `Choose ${name}`}
       </Link>
     </div>
   );
 }
 
 /**
- * Two plans, side by side, and Corporate as a line of prose underneath.
+ * A free trial and the plan, side by side, with Corporate as a line of prose
+ * underneath.
  *
  * Corporate used to be a third card. It is a $149 monthly subscription sitting
- * in a row of one-time payments, which made the row read as three prices to
- * compare when only two of them are comparable — and pushed the two plans most
- * people want into two thirds of the width. It keeps its own page; what it
- * loses is equal billing with a decision it is not part of.
+ * beside one-time payments, which made the row read as prices to compare when
+ * they are not comparable. It keeps its own page; what it loses is equal
+ * billing with a decision it is not part of.
+ *
+ * Neither card carries a badge. With one paid plan there is nothing for it to
+ * be better value than, and "Best value" set against a free trial would be an
+ * odd claim to make about the thing that costs money.
  */
 export default function PricingCards() {
   return (
@@ -112,14 +120,13 @@ export default function PricingCards() {
             name={tier.name}
             price={tier.price}
             unit="event"
-            meta={`${tier.accessLabel} · one-time payment`}
+            meta={
+              tier.trial
+                ? `${tier.accessLabel} · no card required`
+                : `${tier.accessLabel} · one-time payment`
+            }
             features={tier.features}
             href={`/create-event?tier=${tier.id}`}
-            // "Best value", not "Most popular": nothing has sold yet, so
-            // popularity would be invented. Note this is NOT the claim that
-            // Plus undercuts buying the add-ons separately — at $89 it does
-            // not, by $2. See GUEST_BOOK_ADDON_PRICE in lib/pricing.ts.
-            badge={tier.highlight ? 'Best value' : undefined}
             featured={tier.highlight}
           />
         ))}

@@ -73,37 +73,66 @@ survey at all. See *What has to exist first* below.
 
 ---
 
-## 3. Pricing — Event $39, Plus $89, two plans
+## 3. Pricing — one paid plan at $79, plus a free trial event
 
 **Decided.** Shipped.
 
-| Plan | Price | Photos | Videos |
-| --- | --- | --- | --- |
-| Event | $39 one-time | 1,000 | 10 |
-| Plus | $89 one-time | 3,000 | 30 |
+| Plan | Price | Photos | Videos | Gallery |
+| --- | --- | --- | --- | --- |
+| Free | $0, one per account | 50 | 1 | 30 days |
+| Event | $79 one-time | 3,000 | 30 | 12 months |
 
-Plus includes the guest book and the live slideshow. Corporate stays at
-$149/month and keeps its own page, but is no longer a card in the pricing grid:
-a monthly subscription in a row of one-time payments made the row read as three
-prices to compare when only two of them are comparable.
+The paid plan includes everything: customizable QR code, event branding,
+approve-before-showing moderation, the guest book and the live slideshow.
+Nothing is sold on top of it. Corporate stays at $149/month, keeps its own
+page, and is a line of prose under the cards rather than a third card — a
+monthly subscription beside one-time payments reads as a price to compare when
+it is not comparable.
 
-**The add-on arithmetic changed and should not be misquoted.** At $89 the gap
-over Event is $50, while the two add-ons Plus includes come to $48. Buying
-Event plus both is $87 — two dollars cheaper. That is fine, and it buys 2,000
-more photos, 20 more videos, branding and moderation. What it means is that
-"Plus is cheaper than buying the add-ons" is **not** a claim we can make any
-more, and nothing on the site makes it. The "Best value" badge rests on
-capacity and features, not on that comparison.
+**Why one plan.** The previous $39/$89 split differentiated on capacity, which
+asked a host to predict how many photos an event that has not happened yet
+would produce. Nobody can do that, and faced with an unevaluable difference
+people take the cheaper option — so the split did not price-discriminate, it
+discounted. Putting the live slideshow and guest book in the base plan also
+turns the product's best demonstration from a revenue line into something every
+customer actually sees.
+
+**Why the free event rather than a cheap tier.** A stripped paid tier makes a
+bad first impression permanent. A free event makes a good one, and it produces
+the real events, demos and proof that most of the strategy documents are
+starved for. It is capped at 50 photos and 1 video with a 30-day gallery, and
+limited to one per account — one ever, not one at a time.
+
+**Two implementation notes that matter for later.**
+
+- The paid plan keeps the internal tier id `plus`, not `event`. `plus` was
+  already the all-in plan, so $89 → $79 is a price cut on a tier whose meaning
+  did not change. Redefining `event` from $39-basic to $79-everything would
+  rewrite an id that an unpaid event row could be carrying. For an event that
+  already exists, a price may only ever move down.
+- One free event per account is enforced by `FreeEventClaim`, a row keyed by
+  the host's Cognito sub that the browser cannot read, write or delete — only
+  the create-event Lambda writes it, with a conditional put, so two
+  simultaneous requests cannot both win. Deleting the event does not return the
+  claim. An admin can delete the row to grant another.
 
 **Supersedes** the $49 assumption used throughout the research documents. The
 knock-on effects, which nothing has yet been re-run against:
 
 - The two-stage research math ($25 incentive + $24 residual = $49) does not
-  hold at $39. The residual is $14.
-- *Unit Economics Model v1.0* has no $89 row. Its sensitivity analysis needs
-  rebuilding on $39/$89 before any of its conclusions are quotable.
-- Any survey question that states or implies a price needs the price corrected
-  before it is sent.
+  hold at $79. The residual is $54.
+- *Unit Economics Model v1.0* has no $79 row and no free tier at all. Its
+  sensitivity analysis needs rebuilding before any of its conclusions are
+  quotable, and it now needs a free-event cost line: roughly 50 photos and one
+  video held for about three months, which is cents per account but is not zero
+  and scales with sign-ups rather than with sales.
+- Any survey question that states or implies a price needs correcting before it
+  is sent.
+
+**The open exposure.** One free event per *account* is not one per *person* —
+someone can make more accounts. Email verification at sign-up is the only
+friction on that today, and it is the axis to watch if free events start
+appearing faster than sign-ups justify.
 
 ---
 

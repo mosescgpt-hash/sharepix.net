@@ -9,6 +9,7 @@ import {
   formatEventLocation,
   hostNameFrom,
   isCorporateStatusActive,
+  isTrialTier,
   newEventRow,
   normalizeTier,
   ownerStringFor,
@@ -48,6 +49,7 @@ describe('plans', () => {
     // is the one that should stop you.
     expect(Object.keys(TIER_PLANS).sort()).toEqual([
       'event',
+      'free',
       'plus',
       'premium',
       'standard',
@@ -56,15 +58,26 @@ describe('plans', () => {
     expect(planFor('corporate')).toBe(CORPORATE_EVENT_PLAN);
   });
 
-  it('prices the plans on sale at what the pricing page charges', () => {
-    // The two numbers a customer actually sees. Duplicated by hand from
+  it('prices the plan on sale at what the pricing page charges', () => {
+    // The number a customer actually sees. Duplicated by hand from
     // lib/pricing.ts because Amplify functions cannot import from lib/.
+    expect(TIER_PLANS.plus.priceCents).toBe(7900);
+    expect(TIER_PLANS.free.priceCents).toBe(0);
+    // The retired $39 tier, still priced so an unpaid event on it can be paid.
     expect(TIER_PLANS.event.priceCents).toBe(3900);
-    expect(TIER_PLANS.plus.priceCents).toBe(8900);
+  });
+
+  it('marks only the free tier as a trial', () => {
+    // A price of zero is not enough: a fully comped paid event owes zero too,
+    // and a comped event may buy add-ons while a trial may not.
+    expect(isTrialTier('free')).toBe(true);
+    for (const id of ['plus', 'event', 'starter', 'standard', 'premium', 'corporate']) {
+      expect(isTrialTier(id)).toBe(false);
+    }
   });
 
   it('refuses a tier we do not sell', () => {
-    for (const tier of ['', 'free', 'unlimited', 'PREMIUM ', 'admin']) {
+    for (const tier of ['', 'gratis', 'unlimited', 'PREMIUM ', 'admin']) {
       const plan = planFor(tier);
       // The trailing-space/uppercase one is real and must still resolve.
       if (tier.trim().toLowerCase() === 'premium') expect(plan).not.toBeNull();
@@ -273,8 +286,31 @@ describe('activation — the rule that used to be missing entirely', () => {
   });
 
   it('refuses a tier we do not sell', () => {
-    const decision = activationFor({ tier: 'free', corporateActive: false, discount: null });
+    const decision = activationFor({ tier: 'gratis', corporateActive: false, discount: null });
     expect(decision.kind).toBe('refused');
+  });
+
+  it('activates a free event owing nothing, flagged as a trial', () => {
+    // `via` is not decoration: the handler claims the account's one free event
+    // on 'trial' and spends a discount code on 'comped'. Confusing the two
+    // either hands out unlimited free events or burns a code for nothing.
+    expect(activationFor({ tier: 'free', corporateActive: false, discount: null })).toEqual({
+      kind: 'active',
+      via: 'trial',
+    });
+  });
+
+  it('never lets a discount code turn a free event into a comped one', () => {
+    // A code applied to a $0 plan would come back `comped`, spending a use of
+    // the code to discount nothing and disguising a trial as a purchase. The
+    // handler drops the code before this point; the trial branch here is the
+    // second line of that defence.
+    const decision = activationFor({
+      tier: 'free',
+      corporateActive: false,
+      discount: { row: code(), priceCents: 0 },
+    });
+    expect(decision).toEqual({ kind: 'active', via: 'trial' });
   });
 
   it('activates a corporate event only with a live subscription', () => {
@@ -370,7 +406,7 @@ describe('the row a new event starts as', () => {
 
   it('refuses an empty name and an unknown plan', () => {
     expect(() => newEventRow({ ...base, name: '   ' })).toThrow(/name/i);
-    expect(() => newEventRow({ ...base, tier: 'free' })).toThrow(/plan/i);
+    expect(() => newEventRow({ ...base, tier: 'gratis' })).toThrow(/plan/i);
   });
 
   it('never stores an empty host name', () => {

@@ -287,6 +287,27 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
 
+  // One row per account that has taken its free event, written by create-event
+  // and by nothing else. The row id IS the host's Cognito sub, so the claim is
+  // a single-item conditional put and two simultaneous requests cannot both win.
+  //
+  // The auth here is the whole point, so it is worth being explicit about what
+  // is NOT granted. There is no `allow.owner()`: if the host owned this row
+  // they could delete it and take another free event, which is the entire
+  // limit. There is no create or update for anyone — the Lambda writes to the
+  // table directly through the grant in backend.ts, the same way Payment is
+  // written. Admins can read and delete, which is how a free event gets
+  // re-granted deliberately rather than by whoever asks.
+  //
+  // `eventId` records what the claim was spent on, so an admin looking at a
+  // claim can see the event rather than just a date.
+  FreeEventClaim: a
+    .model({
+      eventId: a.string(),
+      claimedAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   // Recorded by the Stripe webhook when a checkout completes. Admins read these
   // to confirm payments landed; the webhook writes them directly (via the table
   // grant in backend.ts), so no model-level create/update is granted here.

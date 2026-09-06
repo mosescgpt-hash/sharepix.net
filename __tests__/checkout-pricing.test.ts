@@ -131,9 +131,12 @@ describe('pricingSourceFor — who may pay', () => {
 describe('pricingSourceFor — sellable is not the same as priceable', () => {
   // Only the new lineup is on sale; the old one is still priced, because the
   // same map prices upload-window extensions for events already sold.
-  const sellableNow = (tier: string) => tier === 'event' || tier === 'plus';
+  // Mirrors the live handler: `plus` is the one plan on sale, the old lineup is
+  // still priced so events already sold on it can be paid for and extended,
+  // and `free` is in NEITHER set.
+  const sellableNow = (tier: string) => tier === 'plus';
   const priceable = (tier: string) =>
-    ['event', 'plus', 'starter', 'standard', 'premium'].includes(tier);
+    ['plus', 'event', 'starter', 'standard', 'premium'].includes(tier);
 
   it('lets a host activate an event still carrying a retired plan', () => {
     const source = pricingSourceFor({
@@ -162,8 +165,8 @@ describe('pricingSourceFor — sellable is not the same as priceable', () => {
     ).toBe('refused');
   });
 
-  it('sells the plans that are on sale', () => {
-    for (const tier of ['event', 'plus']) {
+  it('sells the plan that is on sale', () => {
+    for (const tier of ['plus']) {
       expect(
         pricingSourceFor({
           eventId: '',
@@ -251,5 +254,57 @@ describe('isAdminCaller', () => {
     expect(isAdminCaller({ sub: 'x', groups: ['admins'] })).toBe(false);
     expect(isAdminCaller({ sub: 'x', groups: null })).toBe(false);
     expect(isAdminCaller(null)).toBe(false);
+  });
+});
+
+/**
+ * The free tier is absent from the checkout's price table, and that absence is
+ * the control rather than an oversight. These pin it, because "we just did not
+ * add it" is exactly the kind of thing a later tidy-up undoes.
+ */
+describe('a free event can never reach Stripe', () => {
+  const sellableNow = (tier: string) => tier === 'plus';
+  const priceable = (tier: string) =>
+    ['plus', 'event', 'starter', 'standard', 'premium'].includes(tier);
+
+  it('refuses to price an event stored on the free tier', () => {
+    // Not "charges zero" — refused. A $0 checkout that activates an event is
+    // the one outcome this whole module exists to prevent.
+    const source = pricingSourceFor({
+      eventId: 'evt-free',
+      argumentTier: '',
+      stored: { tier: 'free', owner },
+      sellableTier: sellableNow,
+      priceableTier: priceable,
+      caller: host,
+    });
+    expect(source.kind).toBe('refused');
+  });
+
+  it('refuses a free event even for an admin', () => {
+    // Admins can comp a paid event, which is a legitimate discount. There is
+    // nothing to comp on a plan that costs nothing, and letting it through
+    // would mint an activation with no payment behind it.
+    const source = pricingSourceFor({
+      eventId: 'evt-free',
+      argumentTier: '',
+      stored: { tier: 'free', owner },
+      sellableTier: sellableNow,
+      priceableTier: priceable,
+      caller: admin,
+    });
+    expect(source.kind).toBe('refused');
+  });
+
+  it('refuses free as a new purchase named by the request', () => {
+    const source = pricingSourceFor({
+      eventId: '',
+      argumentTier: 'free',
+      stored: null,
+      sellableTier: sellableNow,
+      priceableTier: priceable,
+      caller: admin,
+    });
+    expect(source.kind).toBe('refused');
   });
 });

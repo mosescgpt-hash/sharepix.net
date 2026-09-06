@@ -10,6 +10,7 @@ import {
   applyDiscount,
   getTier,
   isSellableTier,
+  isTrialTier,
 } from '@/lib/pricing';
 import {
   createNewEvent,
@@ -22,7 +23,7 @@ import { QREvent } from '@/lib/types';
 
 function CreateEventPage() {
   const router = useRouter();
-  const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'event';
+  const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'plus';
 
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
@@ -30,7 +31,7 @@ function CreateEventPage() {
   const [stateRegion, setStateRegion] = useState('');
   // A link to a retired plan (an old bookmark, a stale email) must not select
   // something that is no longer for sale.
-  const [tierId, setTierId] = useState(isSellableTier(initialTier) ? initialTier : 'event');
+  const [tierId, setTierId] = useState(isSellableTier(initialTier) ? initialTier : 'plus');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdEvent, setCreatedEvent] = useState<QREvent | null>(null);
@@ -125,6 +126,8 @@ function CreateEventPage() {
   // A code that covers the whole price comps the event (created free, no
   // Stripe). A partial code still goes through Stripe with the discount applied
   // there. This works the same whether the code is a percentage or an amount.
+  // A trial is not a purchase: no code, no checkout, no payment reassurance.
+  const isTrial = isTrialTier(tierId);
   const basePrice = getTier(tierId)?.price ?? 0;
   const discountedPrice = pilotDiscount ? applyDiscount(basePrice, pilotDiscount) : basePrice;
   const isComped = pilotCodeStatus === 'valid' && discountedPrice <= 0;
@@ -298,7 +301,7 @@ function CreateEventPage() {
 
           <fieldset>
             <legend className="text-sm font-medium text-charcoal">Plan</legend>
-            <div className="mt-2 grid gap-3 sm:grid-cols-3">
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {PRICING_TIERS.map((tier) => (
                 <label
                   key={tier.id}
@@ -321,7 +324,9 @@ function CreateEventPage() {
                     className="sr-only"
                   />
                   <span className="block font-sans font-semibold">{tier.name}</span>
-                  <span className="block text-charcoal/70">${tier.price} / event</span>
+                  <span className="block text-charcoal/70">
+                    {tier.trial ? 'Free · one per account' : `$${tier.price} / event`}
+                  </span>
                   <span className="block text-xs text-charcoal/55">
                     {tier.photoLimit ? `${tier.photoLimit.toLocaleString()} photos` : 'Unlimited photos'} ·{' '}
                     {tier.accessLabel}
@@ -364,6 +369,7 @@ function CreateEventPage() {
             ) : null}
           </fieldset>
 
+          {isTrial ? null : (
           <div className="spx-card p-5">
             <label htmlFor="pilot-code" className="block font-sans font-semibold text-charcoal">
               Have a discount code?
@@ -421,6 +427,7 @@ function CreateEventPage() {
               </p>
             ) : null}
           </div>
+          )}
 
           {error ? (
             <Notice tone="error">{error}</Notice>
@@ -432,16 +439,16 @@ function CreateEventPage() {
             className="spx-btn-ink w-full disabled:opacity-50"
           >
             {busy
-              ? tierId === 'corporate' || isComped
+              ? tierId === 'corporate' || isComped || isTrial
                 ? 'Creating…'
                 : 'Sending you to checkout…'
               : tierId === 'corporate'
                 ? 'Create corporate event & get QR code'
-                : isComped
+                : isComped || isTrial
                   ? 'Create free event & get QR code'
                   : `Continue to payment · $${isDiscounted ? discountedPrice : basePrice}`}
           </button>
-          {tierId !== 'corporate' && !isComped ? (
+          {tierId !== 'corporate' && !isComped && !isTrial ? (
             <p className="text-center text-xs text-charcoal/55">
               You&apos;ll enter payment on Stripe&apos;s secure checkout. Your event activates
               as soon as payment is confirmed.
