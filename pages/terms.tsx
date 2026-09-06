@@ -122,14 +122,13 @@ export default function TermsPage() {
                 Card details are entered on Stripe and are never stored by SharePix.
               </li>
               <li>
-                Every event includes a <strong>30-day upload window</strong>{' '}(extendable in
-                30-day blocks for half the plan price). After it closes, guests keep limited,
-                reduced-resolution viewing for a while, and the host keeps full access and
-                downloads for the plan&rsquo;s retention period (Event 3 months, Plus 1 year;
-                events on a retired plan keep the retention they were sold with). After
-                retention, photos move to a private archive for up
-                to 90 days and are then permanently deleted. Download what you want to keep before
-                your retention period ends. Full details are on our{' '}
+                Every event includes a <strong>60-day upload window</strong>{' '}(extendable in
+                30-day blocks for half the plan price). After it closes, the gallery stays
+                available for <strong>12 months</strong> — guests at reduced resolution, and the
+                host with full access and downloads throughout. Events on a retired plan keep the
+                shorter windows they were sold with. After the 12 months, photos move to a private
+                archive for up to 90 days and are then permanently deleted. Download what you want
+                to keep before then. Full details are on our{' '}
                 <a href="/pricing">pricing page</a>.
               </li>
               <li>

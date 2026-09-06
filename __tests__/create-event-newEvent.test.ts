@@ -39,9 +39,28 @@ function code(overrides: Partial<DiscountRow> = {}): DiscountRow {
 }
 
 describe('plans', () => {
-  it('sells exactly the three event tiers, plus corporate', () => {
-    expect(Object.keys(TIER_PLANS).sort()).toEqual(['premium', 'standard', 'starter']);
+  it('can create an event on every tier lib/pricing.ts knows about', () => {
+    // The list is pinned by name rather than counted, because the failure this
+    // guards is a MISSING key, not an extra one: planFor returns null for a
+    // tier it has never heard of and handler.ts turns the creation away. That
+    // is how the Event/Plus reprice shipped a create-event form that refused
+    // both live plans. If you retire or add a tier in lib/pricing.ts, this line
+    // is the one that should stop you.
+    expect(Object.keys(TIER_PLANS).sort()).toEqual([
+      'event',
+      'plus',
+      'premium',
+      'standard',
+      'starter',
+    ]);
     expect(planFor('corporate')).toBe(CORPORATE_EVENT_PLAN);
+  });
+
+  it('prices the plans on sale at what the pricing page charges', () => {
+    // The two numbers a customer actually sees. Duplicated by hand from
+    // lib/pricing.ts because Amplify functions cannot import from lib/.
+    expect(TIER_PLANS.event.priceCents).toBe(3900);
+    expect(TIER_PLANS.plus.priceCents).toBe(8900);
   });
 
   it('refuses a tier we do not sell', () => {
@@ -309,14 +328,22 @@ describe('activation — the rule that used to be missing entirely', () => {
 });
 
 describe('the row a new event starts as', () => {
-  const base = { name: 'Sam & Riley', tier: 'standard', hostName: 'Riley', active: false, now: NOW };
+  const base = { name: 'Sam & Riley', tier: 'event', hostName: 'Riley', active: false, now: NOW };
 
   it('stamps limits and dates from the plan, not from the caller', () => {
     const row = newEventRow(base);
     expect(row.photoLimit).toBe(1000);
     expect(row.videoLimit).toBe(10);
-    // 30-day upload window on every plan; access runs the plan's own length.
-    expect(row.uploadWindowEndsAt).toBe('2026-07-01T12:00:00.000Z');
+    // 60-day upload window on every plan, then a 12-month gallery.
+    expect(row.uploadWindowEndsAt).toBe('2026-07-31T12:00:00.000Z');
+    expect(row.accessExpiresAt).toBe('2027-07-31T12:00:00.000Z');
+  });
+
+  it('gives a retired plan the access window it was actually sold', () => {
+    // The window is global and lengthening it is a gift, but access length was
+    // part of what the plan was, so it stays stamped from the plan's own row.
+    const row = newEventRow({ ...base, tier: 'standard' });
+    expect(row.uploadWindowEndsAt).toBe('2026-07-31T12:00:00.000Z');
     expect(row.accessExpiresAt).toBe('2026-08-30T12:00:00.000Z');
   });
 

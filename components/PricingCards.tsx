@@ -93,34 +93,45 @@ function PlanCard({ name, price, unit, meta, features, href, badge, featured = f
   );
 }
 
+/**
+ * Two plans, side by side, and Corporate as a line of prose underneath.
+ *
+ * Corporate used to be a third card. It is a $149 monthly subscription sitting
+ * in a row of one-time payments, which made the row read as three prices to
+ * compare when only two of them are comparable — and pushed the two plans most
+ * people want into two thirds of the width. It keeps its own page; what it
+ * loses is equal billing with a decision it is not part of.
+ */
 export default function PricingCards() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {PRICING_TIERS.map((tier) => (
-        <PlanCard
-          key={tier.id}
-          name={tier.name}
-          price={tier.price}
-          unit="event"
-          meta={`${tier.accessLabel} · one-time payment`}
-          features={tier.features}
-          href={`/create-event?tier=${tier.id}`}
-          // "Best value", not "Most popular": Plus folds in $48 of add-ons
-          // for $30 more than Event, which is checkable. Nothing has sold yet,
-          // so popularity would be invented.
-          badge={tier.highlight ? 'Best value' : undefined}
-          featured={tier.highlight}
-        />
-      ))}
-      <PlanCard
-        name={CORPORATE_PLAN.name}
-        price={CORPORATE_PLAN.price}
-        unit="month"
-        meta={CORPORATE_PLAN.accessLabel}
-        features={CORPORATE_PLAN.features}
-        href="/corporate"
-        badge="For teams"
-      />
+    <div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {PRICING_TIERS.map((tier) => (
+          <PlanCard
+            key={tier.id}
+            name={tier.name}
+            price={tier.price}
+            unit="event"
+            meta={`${tier.accessLabel} · one-time payment`}
+            features={tier.features}
+            href={`/create-event?tier=${tier.id}`}
+            // "Best value", not "Most popular": nothing has sold yet, so
+            // popularity would be invented. Note this is NOT the claim that
+            // Plus undercuts buying the add-ons separately — at $89 it does
+            // not, by $2. See GUEST_BOOK_ADDON_PRICE in lib/pricing.ts.
+            badge={tier.highlight ? 'Best value' : undefined}
+            featured={tier.highlight}
+          />
+        ))}
+      </div>
+
+      <p className="spx-body mt-6 text-sm">
+        Running events for a company?{' '}
+        <Link href="/corporate" className="font-medium text-pine underline">
+          {CORPORATE_PLAN.name} is {CORPORATE_PLAN.priceLabel}
+        </Link>{' '}
+        and covers multiple active events under one account.
+      </p>
     </div>
   );
 }

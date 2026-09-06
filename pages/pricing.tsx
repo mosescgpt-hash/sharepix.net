@@ -8,11 +8,11 @@ const faqs = [
   },
   {
     q: 'How long is my event open?',
-    a: 'Guests can upload for 30 days on every plan. You can extend the upload window by 30 more days anytime for half the plan price.',
+    a: 'Guests can upload for 60 days on every plan. You can extend the upload window by 30 more days anytime for half the plan price.',
   },
   {
     q: 'What happens after the upload window?',
-    a: 'Guests keep reduced-resolution viewing for 30 days, then it ends. As the host you keep full access and downloads for your plan’s retention — 3 months on Event, 1 year on Plus — after which photos are archived and later deleted. Download what you want to keep before retention ends.',
+    a: 'The gallery stays up for 12 months. Guests keep viewing it at reduced resolution, and as the host you keep full access and downloads for the whole 12 months. After that the photos are archived and later deleted, so download anything you want to keep before then.',
   },
   {
     q: 'Can I moderate photos?',

@@ -38,7 +38,24 @@ export interface TierPlan {
   accessDays: number;
 }
 
+/**
+ * Every tier this function will create an event on, sellable and retired alike.
+ *
+ * Retired plans stay because `planFor` is also the gate on the create path used
+ * when an existing unpaid event is re-created, and because a missing key here
+ * does not degrade — it REFUSES. That is not hypothetical: the Event/Plus
+ * reprice landed in lib/pricing.ts without this table, so `planFor('event')`
+ * answered null and every new event on the live lineup was turned away with
+ * "Choose one of the available plans." Nothing errored, nothing logged; the
+ * form simply never worked. The pinned test below now lists the tiers by name
+ * so the next reprice cannot leave this file behind quietly.
+ */
 export const TIER_PLANS: Record<string, TierPlan> = {
+  // On sale.
+  event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 60 + 365 },
+  plus: { priceCents: 8900, photoLimit: 3000, videoLimit: 30, accessDays: 60 + 365 },
+  // Retired, but still creatable so an event that already carries one can be
+  // paid for. Their access windows are the ones those plans were sold with.
   starter: { priceCents: 1900, photoLimit: 100, videoLimit: 2, accessDays: 14 },
   standard: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 90 },
   premium: { priceCents: 7900, photoLimit: null, videoLimit: 30, accessDays: 365 },
@@ -58,11 +75,11 @@ export const CORPORATE_EVENT_PLAN: TierPlan = {
   priceCents: 0,
   photoLimit: null,
   videoLimit: 30,
-  accessDays: 30 + 365,
+  accessDays: 60 + 365,
 };
 
 /** The upload window every plan gets, in days. Mirrors UPLOAD_WINDOW_DAYS. */
-export const UPLOAD_WINDOW_DAYS = 30;
+export const UPLOAD_WINDOW_DAYS = 60;
 
 /** Stripe won't charge below this, so a remainder under it is comped instead. */
 export const STRIPE_MIN_CHARGE_CENTS = 50;

@@ -21,7 +21,7 @@ export interface PricingTier {
   videoLimit: number | null; // null = unlimited
   accessDays: number;
   accessLabel: string;
-  // Lifecycle (all measured from when the 30-day upload window closes):
+  // Lifecycle (all measured from when the upload window closes):
   // how long the HOST keeps full access + downloads before the event archives.
   retentionDays: number;
   // how long GUESTS keep low-resolution viewing before they see nothing.
@@ -44,10 +44,37 @@ export interface PricingTier {
   retired?: boolean;
 }
 
-// The upload window is the same on every plan; it can be extended in 30-day
-// blocks for half the plan price.
-export const UPLOAD_WINDOW_DAYS = 30;
+/**
+ * The upload window is the same on every plan; it can be extended in 30-day
+ * blocks for half the plan price.
+ *
+ * Sixty days, not thirty. A guest who took photos at a wedding does not empty
+ * their camera roll the same month, and the single most common way this product
+ * fails is a window that closed before the person with the good photos got
+ * round to it. Only NEW events are affected: `uploadWindowEndsAt` is stamped on
+ * the row at creation, so every existing event keeps the window it was sold.
+ */
+export const UPLOAD_WINDOW_DAYS = 60;
 export const EXTENSION_DAYS = 30;
+
+/**
+ * How long the gallery stays up after the upload window closes — for guests at
+ * reduced resolution, and for the host at full access with downloads.
+ *
+ * One number for every plan on sale. Retention used to be a tier
+ * differentiator (3 weeks / 3 months / 1 year), which made the single most
+ * important sentence on the site — how long do I keep my photos — impossible to
+ * say without a table. It now says twelve months and means it on everything
+ * sold today. Plans differ on capacity and features instead.
+ *
+ * Measured from the window closing rather than from creation, because that is
+ * the anchor every other lifecycle date already uses. The customer-facing
+ * promise is "twelve months"; what they actually get is the window plus twelve
+ * months, so the promise is met early rather than missed by a rounding
+ * argument about when an event "started".
+ */
+export const GALLERY_MONTHS = 12;
+const GALLERY_DAYS = 365;
 // After the host-retention period ends, photos sit in a hidden, admin-only
 // archive for this long before permanent deletion.
 export const ARCHIVE_DAYS = 90;
@@ -56,7 +83,7 @@ export const ARCHIVE_DAYS = 90;
  * What is on sale today.
  *
  * The lineup moved from Starter $19 / Standard $39 / Premium $79 to
- * Event $39 / Plus $69. Free $0 is deliberately NOT here yet: `paid` currently
+ * Event $39 / Plus $89. Free $0 is deliberately NOT here yet: `paid` currently
  * gates activation, so every live event has a card behind it, and a free tier
  * is the first path to creating storage without one. It ships once there is
  * rate limiting and a retention story to go with it.
@@ -68,15 +95,15 @@ const SELLABLE_TIERS: PricingTier[] = [
     price: 39,
     photoLimit: 1000,
     videoLimit: 10,
-    accessDays: 90,
-    accessLabel: '30-day upload window',
-    retentionDays: 90,
-    guestLowResDays: 30,
+    accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
+    accessLabel: '60-day upload window',
+    retentionDays: GALLERY_DAYS,
+    guestLowResDays: GALLERY_DAYS,
     customQrCode: true,
     features: [
       'Up to 1,000 photos and 10 videos',
-      '30-day upload window (extend +30 days anytime)',
-      'Guests view 30 days after uploads close; host access 3 months',
+      '60-day upload window (extend +30 days anytime)',
+      'Gallery stays up for 12 months after uploads close',
       'Customizable QR code',
       'Host individual and bulk ZIP downloads',
       'Guests can download the photos too — full resolution, no account',
@@ -86,26 +113,26 @@ const SELLABLE_TIERS: PricingTier[] = [
   {
     id: 'plus',
     name: 'Plus',
-    price: 69,
+    price: 89,
     // A real number rather than "unlimited". The old Premium tier advertised
     // unlimited photos, which is an unbounded storage and egress bill on a
     // one-off payment. Events already sold as Premium keep unlimited — they
     // were sold that — but nothing new promises it.
     photoLimit: 3000,
     videoLimit: 30,
-    accessDays: 365,
-    accessLabel: '30-day upload window',
-    retentionDays: 365,
-    guestLowResDays: 30,
+    accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
+    accessLabel: '60-day upload window',
+    retentionDays: GALLERY_DAYS,
+    guestLowResDays: GALLERY_DAYS,
     customQrCode: true,
-    // Badged "Best value" rather than "Most popular": it folds in $48 of
-    // add-ons for $30 more than Event, which is checkable, whereas nothing has
-    // sold yet so popularity would be invented.
+    // Badged "Best value" rather than "Most popular": nothing has sold yet, so
+    // popularity would be invented. The value is checkable — see the note on
+    // GUEST_BOOK_ADDON_PRICE for what the $50 gap actually buys.
     highlight: true,
     features: [
       'Up to 3,000 photos and 30 videos',
-      '30-day upload window (extend +30 days anytime)',
-      'Guests view 30 days after uploads close; host access 1 year',
+      '60-day upload window (extend +30 days anytime)',
+      'Gallery stays up for 12 months after uploads close',
       'Customizable QR code',
       'Event branding',
       'Moderation tools (approve before showing)',
@@ -241,9 +268,14 @@ export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
  * already include it — Event, and the retired Starter and Standard. See
  * lib/guestBook.ts.
  *
- * Priced under the Event-to-Plus gap on purpose: at $19 an Event host pays $58
- * all-in rather than $69 to upgrade, so the add-on stays the cheaper answer for
- * someone who wants the guest book and nothing else Plus offers.
+ * A note on the arithmetic, because it changed and the old rationale is worth
+ * not resurrecting: at Plus $89 the gap over Event is $50, while the two
+ * add-ons Plus includes come to $48. Buying Event plus both is therefore $87 —
+ * two dollars cheaper. That is deliberate and it is fine: the $2 buys 2,000
+ * more photos, 20 more videos, event branding and approve-before-showing
+ * moderation. What it means is that "Plus is cheaper than the add-ons" is NOT
+ * a claim we can make any more, and nothing on the site makes it. A host who
+ * wants only the guest book should buy only the guest book.
  */
 export const GUEST_BOOK_ADDON_PRICE = 19;
 
@@ -266,8 +298,7 @@ export function isSellableTier(id: string): boolean {
 /**
  * Plans that include the live slideshow at no extra cost, mirroring
  * GUEST_BOOK_INCLUDED_TIERS in lib/guestBook.ts. Plus folds in both add-ons,
- * which is most of why it is $10 cheaper than the Premium it replaces and
- * still better value.
+ * which is most of what separates it from Event.
  */
 export const LIVE_SLIDESHOW_INCLUDED_TIERS = ['plus', 'corporate'] as const;
 
@@ -360,7 +391,7 @@ export function applyDiscount(
   return applyPercentOff(price, discount.percentOff ?? 0);
 }
 
-/** When the initial 30-day upload window closes for a new event. */
+/** When the initial upload window closes for a new event. */
 export function computeUploadWindowEndsAt(from: Date = new Date()): string {
   return new Date(from.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS).toISOString();
 }

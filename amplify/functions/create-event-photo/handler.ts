@@ -17,6 +17,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
+import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
 
 const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
@@ -319,6 +320,12 @@ export const handler: Handler = async (event) => {
   // viewable. Enforce it here so a crafted request can't bypass the UI.
   if (ev.uploadsClosed?.BOOL === true) {
     throw new Error('This event is closed and is no longer accepting uploads.');
+  }
+
+  // The upload window, enforced here rather than only in the guest UI. See
+  // uploadWindow.ts for why that distinction is the whole point.
+  if (uploadWindowClosed(ev.uploadWindowEndsAt?.S)) {
+    throw new Error(UPLOAD_WINDOW_CLOSED_MESSAGE);
   }
 
   // A host can turn video off — automated screening covers stills but not

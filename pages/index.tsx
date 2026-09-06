@@ -6,11 +6,10 @@ import { PRICING_TIERS } from '@/lib/pricing';
 /**
  * The homepage, on the redesign system (docs/design-system.md).
  *
- * Pricing is read from `lib/pricing.ts` — Starter $19 / Standard $39 /
- * Premium $79, the live plans. The redesign brief proposes Free / $39 / $69,
- * but the audit found that change is a migration touching five places
- * including the tier string stamped on every existing event row, so it is a
- * separate decision and not something the homepage should quietly imply.
+ * Pricing is read from `lib/pricing.ts` — Event $39 / Plus $89, the live
+ * plans. Never hard-code a price here: the tier string is stamped on every
+ * existing event row, so the tier table is the only thing that knows what a
+ * given event was actually sold.
  *
  * Every image is a slot in `lib/imagery.ts`. With no licensed photography yet
  * each one renders a palette gradient at the right aspect ratio; when assets
