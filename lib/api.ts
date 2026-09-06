@@ -375,6 +375,43 @@ export async function startCheckout(
  * The row id is the host's Cognito sub, which is what `clearFreeEventClaim`
  * takes and what an event's `owner` string starts with.
  */
+/**
+ * Honour an unsubscribe link.
+ *
+ * Open to signed-out callers, because an unsubscribe link that required signing
+ * in is not an unsubscribe link — the person clicking it is often precisely the
+ * person who does not want an account with us. The address alone is not enough:
+ * the link's random token is checked against the stored one server-side.
+ *
+ * Never throws for a bad link. The page shows the same calm message either way,
+ * because the alternative — an error that distinguishes "wrong token" from
+ * "unknown address" — is an oracle for whether an email address belongs to a
+ * SharePix customer.
+ */
+export async function unsubscribeFromEmails(
+  email: string,
+  token: string,
+): Promise<{ unsubscribed: boolean; message: string }> {
+  try {
+    const { data, errors } = await client.mutations.unsubscribeEmail(
+      { email, token },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length || !data?.unsubscribed) {
+      return {
+        unsubscribed: false,
+        message: 'That unsubscribe link is not valid. It may have expired.',
+      };
+    }
+    return { unsubscribed: true, message: data.message ?? '' };
+  } catch {
+    return {
+      unsubscribed: false,
+      message: 'That unsubscribe link is not valid. It may have expired.',
+    };
+  }
+}
+
 export async function listFreeEventClaims(): Promise<FreeEventClaimRow[]> {
   const rows: FreeEventClaimRow[] = [];
   let nextToken: string | null | undefined;

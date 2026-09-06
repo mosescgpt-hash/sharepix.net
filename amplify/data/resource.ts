@@ -16,6 +16,7 @@ import { createGuestBookEntry as createGuestBookEntryFn } from '../functions/cre
 import { listGuestBookEntries as listGuestBookEntriesFn } from '../functions/list-guest-book-entries/resource';
 import { saveMoment as saveMomentFn } from '../functions/save-moment/resource';
 import { listMoments as listMomentsFn } from '../functions/list-moments/resource';
+import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe-email/resource';
 
 /**
  * SharePix data models.
@@ -81,7 +82,7 @@ const schema = a.schema({
       // city (no street address).
       location: a.string(),
       accessExpiresAt: a.datetime(),
-      // When the 30-day upload window closes (creation + 30 days, plus any paid
+      // When the upload window closes (creation + 60 days, plus any paid
       // extensions). Drives the whole lifecycle: uploads, guest view resolution,
       // host retention, and archival. Extended by the Stripe webhook.
       uploadWindowEndsAt: a.datetime(),
@@ -351,6 +352,52 @@ const schema = a.schema({
       /** Normalised name or per-browser guest label. See lib/successfulEvent.ts. */
       contributorKey: a.string(),
       firstUploadAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // One row per message we have sent about an event, written by the scheduled
+  // job with a conditional put.
+  //
+  // The id is `<eventId>#<kind>`, which is the whole idempotency story: a job
+  // that runs twice, or retries after a partial failure, cannot send the same
+  // reminder again. Getting this wrong is not a small bug — a scheduler that
+  // double-fires would mail every host with an expiring gallery twice, and the
+  // second copy is the one that makes people distrust the first.
+  //
+  // Admin-only. It is an operational record, not something a host needs.
+  EventNotification: a
+    .model({
+      eventId: a.string(),
+      /** e.g. "gallery-expiry-30". See lib/eventReminders.ts. */
+      kind: a.string(),
+      /** 'sent' or 'lapsed' — a milestone that went by unsent and never will be. */
+      outcome: a.string(),
+      sentAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // What one email address has asked us not to send it.
+  //
+  // Keyed by the lowercased address so the sender can answer "may I email
+  // this?" with a single get — no index, no scan, on a path that runs for
+  // every recipient of every batch.
+  //
+  // `unsubscribeToken` is random and is what an unsubscribe link carries. It
+  // exists so the link cannot be forged from someone's address alone: without
+  // it, anyone could unsubscribe anyone by guessing an email, and the first
+  // sign would be a customer wondering why they stopped hearing from us.
+  //
+  // No owner rule and no guest read: this table holds email addresses, and
+  // being able to list it is being able to harvest them. The unsubscribe page
+  // reaches it through the unsubscribeEmail mutation, which is the only thing
+  // that can check a token.
+  EmailPreference: a
+    .model({
+      email: a.string(),
+      unsubscribeToken: a.string(),
+      /** Set when they opt out of optional mail. Null means subscribed. */
+      unsubscribedAt: a.datetime(),
+      lastSentAt: a.datetime(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
@@ -642,6 +689,28 @@ const schema = a.schema({
     success: a.boolean().required(),
     message: a.string(),
   }),
+
+  UnsubscribeResult: a.customType({
+    unsubscribed: a.boolean().required(),
+    message: a.string(),
+  }),
+
+  // Honour an unsubscribe link. Open to anyone, because an unsubscribe link
+  // that required signing in is not an unsubscribe link — the person clicking
+  // it is often exactly the person who no longer wants an account with us.
+  //
+  // The address alone is not enough: the link also carries a random token that
+  // must match the one stored for it, so a stranger cannot opt someone out by
+  // guessing their email. Named `unsubscribeEmail` rather than anything
+  // starting with create/update/delete so it cannot collide with an operation
+  // the EmailPreference model generates — a name collision fails the whole
+  // deployment, which is how deployments 124 and 125 were lost.
+  unsubscribeEmail: a
+    .mutation()
+    .arguments({ email: a.string().required(), token: a.string().required() })
+    .returns(a.ref('UnsubscribeResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(unsubscribeEmailFn)),
 
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a

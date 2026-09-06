@@ -200,6 +200,56 @@ this metric: "Anonymous" is treated as *cannot tell*, which is neither one
 person nor forty. Historical events therefore have an honest gap rather than a
 back-filled guess.
 
+## 6. Scheduled work and email — daily job, and a real opt-out
+
+**Decided.** Shipped, sending switched **off**.
+
+A daily Lambda at 14:00 UTC (`amplify/functions/daily-tasks`), which is the
+first thing in SharePix that has ever run on a clock. Verified against a real
+CDK synth: it produces an `AWS::Scheduler::Schedule` with
+`cron(0 14 * * ? *)`, timezone UTC, targeting the function.
+
+A fixed hour rather than `every day`, which anchors to deploy time and moves
+whenever we ship — eventually mailing half the audience at 3am.
+
+**It ships unable to send.** `EMAIL_SENDING_ENABLED` gates every send and is
+unset, so the job runs, scans, decides exactly who it would email and logs all
+of it, and sends nothing. Nothing is recorded as sent during a dry run either,
+so switching it on later sends the reminders that were due rather than skipping
+them as already done. **Turning it on is a deliberate act**, and should follow
+watching a few days of dry-run logs.
+
+**The first job: gallery expiry reminders** at 60, 30 and 7 days, from the
+retention brief. Idempotent through an `EventNotification` row per event per
+milestone — a scheduler that double-fires cannot mail anyone twice, and the
+claim happens *before* the send, so a crash costs a reminder rather than
+duplicating one. Milestones that go by unsent are recorded as lapsed rather
+than retried: "60 days left" delivered to an event with nine is worse than
+silence.
+
+**The essential/optional line** (`lib/emailPreferences.ts`) is the part worth
+getting right. Essential is mail about an event someone owns and is about to
+lose; optional is everything we send because we want something. A host who
+opted out of a newsletter in March must not lose their wedding photos in
+December because of it — so essential mail ignores the opt-out, and, equally,
+never carries an unsubscribe link inviting someone to turn off the one message
+they will wish they had read.
+
+Every kind of email is categorised in one exhaustive table, so adding a new one
+is a deliberate decision about whether people can refuse it.
+
+**Unsubscribe** is a token, not just an address: the link carries a random value
+checked against the stored one, so nobody can opt a stranger out by guessing
+their email. The page needs a click — mail scanners follow links before a human
+sees them, and a GET that unsubscribed on arrival would silently opt people out
+of mail they never chose to leave.
+
+**Still open.** The retention brief also specifies a paid **12-month gallery
+extension**, which does not exist — we sell 30-day upload-window extensions,
+which is a different product. Until that ships the reminder tells hosts to
+download rather than offering to sell them time. That is a pricing decision,
+not a build.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric
@@ -210,11 +260,7 @@ email**.
 
 1. ~~Define Successful Event; count contributors per event.~~ **Done** — see
    decision 5 above.
-2. **Scheduled jobs (EventBridge) and transactional email.** Neither exists:
-   there is no EventBridge rule or cron anywhere in `amplify/` (the only
-   `Rule` hits are S3 lifecycle rules), and the only mail the product sends is
-   the SES moderation alert and its test button. No templating, no unsubscribe,
-   no send infrastructure.
+2. ~~Scheduled jobs and transactional email.~~ **Done** — see decision 6 below.
 3. Then one customer-facing programme at a time, on top of both.
 
 Documents describing programmes at layer 3 cannot be built before 2, however
