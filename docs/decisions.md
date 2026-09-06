@@ -250,6 +250,49 @@ which is a different product. Until that ships the reminder tells hosts to
 download rather than offering to sell them time. That is a pricing decision,
 not a build.
 
+## 7. The research survey and its gift card — built, switched off
+
+**Decided.** Shipped, dormant.
+
+A host whose event was a Successful Event is invited, once, some days after
+their upload window closes. Completing the survey creates a **$25 gift-card
+obligation** in an admin queue. A person buys and sends every card by hand.
+
+**Nothing automated can mark a card sent.** `AWAITING_MANUAL_FULFILLMENT →
+FULFILLED` is the only route into fulfilment, and the only thing that can take
+it is an admin pressing a button in the dashboard. The completion endpoint —
+the one a stranger with a link can reach — cannot write that status at all.
+
+**Eligibility never depends on what the feedback said.** Not a rating, not a
+recommendation, not a testimonial, not permission to use their photos.
+Criticism earns exactly the same $25. This is enforced rather than promised:
+`eligibilityFor` is given no access to the answers, so the discrimination
+cannot be written by accident, and a test asserts the input type stays free of
+every sentiment field.
+
+That is not politeness. Research paid for on condition of approval buys
+agreement and then reports it as evidence, and every decision made on it
+afterwards is made on something we told ourselves.
+
+**Three switches, all off:**
+
+| Setting | Effect when unset |
+| --- | --- |
+| `EMAIL_SENDING_ENABLED` | Nothing is ever sent |
+| `RESEARCH_SURVEY_URL` | No invitations, even with sending on |
+| `RESEARCH_FULFILMENT_DAYS` | No delivery time is promised |
+
+**The survey lives elsewhere.** The form provider is configuration, so choosing
+one is not a code change. The page we own explains the deal, sends people out,
+and takes their word when they come back — because a human checks the actual
+response before paying, a claimed completion is a queue item rather than a
+payment, and building a tamper-proof completion signal would be more work than
+the check already happening.
+
+**Before this can run:** the survey questions still say 90 days and imply $49.
+Both are wrong — 60 days and $79. Sending them as written would collect
+opinions about a product nobody used.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

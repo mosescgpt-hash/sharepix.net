@@ -17,6 +17,8 @@ import {
   listDiscountCodes,
   listFreeEventClaims,
   listPaymentsCount,
+  listResearchIncentives,
+  markIncentiveFulfilled,
   manageUser,
   restoreEventAccess,
   sendTestAlertEmail,
@@ -29,7 +31,8 @@ import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
-import { DiscountCode, FreeEventClaimRow, QREvent } from '@/lib/types';
+import { canTransition } from '@/lib/researchIncentive';
+import { DiscountCode, FreeEventClaimRow, QREvent, ResearchIncentiveRow } from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -149,6 +152,8 @@ function GlobalAdminPage() {
   // table never blanks out the whole dashboard.
   const [claims, setClaims] = useState<FreeEventClaimRow[] | null>(null);
   const [claimsError, setClaimsError] = useState<string | null>(null);
+  const [incentives, setIncentives] = useState<ResearchIncentiveRow[] | null>(null);
+  const [incentivesError, setIncentivesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
@@ -262,6 +267,16 @@ function GlobalAdminPage() {
         setClaims([]);
         setClaimsError(
           err instanceof Error ? err.message : 'Free event claims could not be loaded.',
+        );
+      }
+
+      try {
+        setIncentives(await listResearchIncentives());
+        setIncentivesError(null);
+      } catch (err) {
+        setIncentives([]);
+        setIncentivesError(
+          err instanceof Error ? err.message : 'The reward queue could not be loaded.',
         );
       }
     } catch (err) {
@@ -445,6 +460,46 @@ function GlobalAdminPage() {
         text: err instanceof Error ? err.message : 'The test could not be sent.',
         ok: false,
       });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleMarkFulfilled(row: ResearchIncentiveRow) {
+    // The confirmation names the amount and the address on purpose: this
+    // button records that a gift card was BOUGHT AND SENT, and it is the only
+    // route into FULFILLED. Nothing scheduled and nothing the customer touches
+    // can reach that state, so if this is pressed before the card actually
+    // goes out, the queue is quietly wrong and someone is owed $25 nobody is
+    // tracking any more.
+    if (
+      !window.confirm(
+        `Mark this reward as sent?\n\n$${row.amountUsd} to ${row.participantEmail}\n\nOnly do this after you have actually bought and sent the gift card. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`incentive-${row.id}`);
+    setIncentivesError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      await markIncentiveFulfilled(row.id, row.status, me?.loginId ?? 'admin');
+      setIncentives((current) =>
+        (current ?? []).map((item) =>
+          item.id === row.id
+            ? {
+                ...item,
+                status: 'FULFILLED',
+                fulfilledAt: new Date().toISOString(),
+                fulfilledBy: me?.loginId ?? 'admin',
+              }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setIncentivesError(
+        err instanceof Error ? err.message : 'That reward could not be marked sent.',
+      );
     } finally {
       setWorking(null);
     }
@@ -750,6 +805,70 @@ function GlobalAdminPage() {
                   {userMessage.text}
                 </p>
               ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+                Research rewards
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                Gift cards owed for completed research surveys. Every one is bought and sent
+                by hand — nothing here sends anything. Check the survey response first, then
+                send the card, <em>then</em> mark it below. The reward does not depend on what
+                the feedback said: critical answers earn exactly the same as praise.
+              </p>
+              {incentivesError ? (
+                <Notice tone="warn" className="mt-3">
+                  {incentivesError}
+                </Notice>
+              ) : null}
+              {incentives === null ? (
+                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+              ) : incentives.length === 0 ? (
+                <p className="mt-4 text-sm text-charcoal/55">
+                  Nothing owed. Invitations go out to successful events once their upload
+                  window has closed.
+                </p>
+              ) : (
+                <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                  {incentives.map((row) => {
+                    const owed = row.status === 'AWAITING_MANUAL_FULFILLMENT';
+                    const event = events.find((e) => e.id === row.eventId);
+                    return (
+                      <li
+                        key={row.id}
+                        className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-charcoal">
+                            ${row.amountUsd} · {row.participantEmail || 'no address'}
+                          </p>
+                          <p className="truncate text-xs text-charcoal/60">
+                            {event ? event.name : row.eventId} ·{' '}
+                            <span className={owed ? 'font-medium text-pine' : ''}>
+                              {row.status.toLowerCase().replace(/_/g, ' ')}
+                            </span>
+                            {row.completedAt
+                              ? ` · completed ${new Date(row.completedAt).toLocaleDateString()}`
+                              : ' · not completed yet'}
+                            {row.fulfilledBy ? ` · sent by ${row.fulfilledBy}` : ''}
+                          </p>
+                        </div>
+                        {canTransition(row.status, 'FULFILLED') ? (
+                          <button
+                            type="button"
+                            disabled={working === `incentive-${row.id}`}
+                            onClick={() => void handleMarkFulfilled(row)}
+                            className="shrink-0 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                          >
+                            {working === `incentive-${row.id}` ? 'Saving…' : 'Mark gift card sent'}
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
 
             <div className="spx-card mt-8 p-5">

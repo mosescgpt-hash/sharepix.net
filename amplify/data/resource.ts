@@ -17,6 +17,7 @@ import { listGuestBookEntries as listGuestBookEntriesFn } from '../functions/lis
 import { saveMoment as saveMomentFn } from '../functions/save-moment/resource';
 import { listMoments as listMomentsFn } from '../functions/list-moments/resource';
 import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe-email/resource';
+import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
 
 /**
  * SharePix data models.
@@ -401,6 +402,40 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // One gift-card obligation, owed to someone who completed the research
+  // survey. See lib/researchIncentive.ts.
+  //
+  // The id is `<eventId>#<surveyId>`, so a double submission, a job retry or a
+  // reloaded thank-you page cannot create two obligations from one piece of
+  // research. Money is owed here, and the failure worth engineering against is
+  // owing it twice.
+  //
+  // Admin-only, and that is not just about privacy: this is the fulfilment
+  // queue, and `status` reaching FULFILLED is a person saying they bought and
+  // sent a card. Nothing automated may write it, so nothing automated is given
+  // the ability to.
+  ResearchIncentive: a
+    .model({
+      /** The host's owner string — who earned it. */
+      customer: a.string(),
+      eventId: a.string(),
+      surveyId: a.string(),
+      participantEmail: a.string(),
+      /** AMAZON_GIFT_CARD_MANUAL. Named so a second kind is a visible change. */
+      incentiveType: a.string(),
+      amountUsd: a.integer(),
+      /** One of INCENTIVE_STATUSES. Transitions are pinned in lib/. */
+      status: a.string(),
+      completedAt: a.datetime(),
+      fulfilledAt: a.datetime(),
+      /** Random, minted with the invite. Proves the holder was sent the link. */
+      surveyToken: a.string(),
+      /** Which admin marked it sent, so the queue has an audit trail. */
+      fulfilledBy: a.string(),
+      notes: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   // Recorded by the Stripe webhook when a checkout completes. Admins read these
   // to confirm payments landed; the webhook writes them directly (via the table
   // grant in backend.ts), so no model-level create/update is granted here.
@@ -711,6 +746,25 @@ const schema = a.schema({
     .returns(a.ref('UnsubscribeResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(unsubscribeEmailFn)),
+
+  SurveyCompletionResult: a.customType({
+    recorded: a.boolean().required(),
+    message: a.string(),
+  }),
+
+  // Record that someone finished the research survey, from the link they were
+  // emailed. Open to signed-out callers because the link is the credential and
+  // the person clicking it should not need an account to be paid.
+  //
+  // It creates an OBLIGATION, never a payment: the only transition it can make
+  // is into AWAITING_MANUAL_FULFILLMENT, and nothing automated can move a
+  // record to FULFILLED. See lib/researchIncentive.ts.
+  completeResearchSurvey: a
+    .mutation()
+    .arguments({ link: a.string().required() })
+    .returns(a.ref('SurveyCompletionResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(completeSurveyFn)),
 
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a

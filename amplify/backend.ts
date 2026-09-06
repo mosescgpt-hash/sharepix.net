@@ -38,6 +38,7 @@ import { mediaUrl } from './functions/media-url/resource';
 import { moderatePhoto } from './functions/moderate-photo/resource';
 import { dailyTasks } from './functions/daily-tasks/resource';
 import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
+import { completeSurvey } from './functions/complete-survey/resource';
 
 const backend = defineBackend({
   auth,
@@ -65,6 +66,7 @@ const backend = defineBackend({
   moderatePhoto,
   dailyTasks,
   unsubscribeEmail,
+  completeSurvey,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -81,6 +83,7 @@ const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
 const contributorTable = backend.data.resources.tables.EventContributor;
 const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
+const incentiveTable = backend.data.resources.tables.ResearchIncentive;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -592,3 +595,28 @@ dailyTasksFn.addToRolePolicy(
 const unsubscribeFn = backend.unsubscribeEmail.resources.lambda as LambdaFunction;
 emailPreferenceTable.grantReadWriteData(unsubscribeFn);
 unsubscribeFn.addEnvironment('PREFERENCE_TABLE_NAME', emailPreferenceTable.tableName);
+
+// The research survey programme. The daily job opens an invitation (a PENDING
+// obligation carrying the link's token); the completion function turns it into
+// one that is owed. Neither can mark a gift card sent — that is a person, in
+// the admin queue, after reading the actual survey response.
+incentiveTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
+// Where the survey lives. Unset means no invitation is ever sent: the
+// programme is simply off, rather than mailing people a link to nowhere.
+dailyTasksFn.addEnvironment('RESEARCH_SURVEY_URL', process.env.RESEARCH_SURVEY_URL ?? '');
+dailyTasksFn.addEnvironment('RESEARCH_SURVEY_ID', process.env.RESEARCH_SURVEY_ID ?? 'post-event-v1');
+dailyTasksFn.addEnvironment(
+  'RESEARCH_SURVEY_DELAY_DAYS',
+  process.env.RESEARCH_SURVEY_DELAY_DAYS ?? '7',
+);
+
+const completeSurveyFn = backend.completeSurvey.resources.lambda as LambdaFunction;
+incentiveTable.grantReadWriteData(completeSurveyFn);
+completeSurveyFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
+// Optional. Omitted when unset rather than promising a delivery time the
+// business has not committed to.
+completeSurveyFn.addEnvironment(
+  'RESEARCH_FULFILMENT_DAYS',
+  process.env.RESEARCH_FULFILMENT_DAYS ?? '',
+);
