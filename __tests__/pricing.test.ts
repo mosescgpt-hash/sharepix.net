@@ -89,6 +89,10 @@ describe('pricing tiers stay in sync with the checkout function', () => {
   // it can't import this module. If a plan price changes here, update it there
   // too — this guard makes a drift visible in tests.
   it('has the expected published prices', () => {
+    // The one plan on sale, and the retired ones the function still prices.
+    expect(getTier('plus')?.price).toBe(79);
+    expect(getTier('free')?.price).toBe(0);
+    expect(getTier('event')?.price).toBe(39);
     expect(getTier('starter')?.price).toBe(19);
     expect(getTier('standard')?.price).toBe(39);
     expect(getTier('premium')?.price).toBe(79);
@@ -100,13 +104,28 @@ describe('pricing tiers stay in sync with the checkout function', () => {
     expect(LIVE_SLIDESHOW_ADDON_PRICE * 100).toBe(2900);
   });
 
-  it('prices every tier above the egress a full-resolution event can generate', () => {
+  it('prices every paid tier above the egress a full-resolution event can generate', () => {
     // Guest downloads are included now, so each plan has to carry its own
     // bandwidth. A ceiling-case event is roughly 6 GB of originals; at ~$0.09/GB
     // even 20 full-event downloads is about $11, which the cheapest plan must
     // still clear with room for Stripe's fee.
-    for (const tier of PRICING_TIERS) {
+    for (const tier of PRICING_TIERS.filter((t) => !t.trial)) {
       expect(tier.price).toBeGreaterThanOrEqual(15);
+    }
+  });
+
+  it('bounds a free event by capacity, since it cannot be bounded by price', () => {
+    // The rule above cannot apply to a $0 plan, so the same exposure has to be
+    // controlled at the other end: how much there is to download at all. 50
+    // photos and 1 video is well under a gigabyte of originals, so even
+    // repeated full downloads stay in cents. If either cap grows a lot, this is
+    // the test that should make someone re-do the arithmetic.
+    for (const tier of PRICING_TIERS.filter((t) => t.trial)) {
+      expect(tier.price).toBe(0);
+      expect(tier.photoLimit).not.toBeNull();
+      expect(tier.photoLimit!).toBeLessThanOrEqual(100);
+      expect(tier.videoLimit).not.toBeNull();
+      expect(tier.videoLimit!).toBeLessThanOrEqual(2);
     }
   });
 });

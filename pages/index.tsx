@@ -6,10 +6,10 @@ import { PRICING_TIERS } from '@/lib/pricing';
 /**
  * The homepage, on the redesign system (docs/design-system.md).
  *
- * Pricing is read from `lib/pricing.ts` — Event $39 / Plus $89, the live
- * plans. Never hard-code a price here: the tier string is stamped on every
- * existing event row, so the tier table is the only thing that knows what a
- * given event was actually sold.
+ * Pricing is read from `lib/pricing.ts` — a free trial and one paid plan.
+ * Never hard-code a price here: the tier string is stamped on every existing
+ * event row, so the tier table is the only thing that knows what a given event
+ * was actually sold.
  *
  * Every image is a slot in `lib/imagery.ts`. With no licensed photography yet
  * each one renders a palette gradient at the right aspect ratio; when assets
@@ -207,11 +207,11 @@ function Pricing() {
         <p className="spx-eyebrow">Pricing</p>
         <Heading first="One event. One payment." second="No surprises." />
         <p className="spx-body mt-5 max-w-lg">
-          Priced per event, not per guest or per photo. Nothing renews, and nothing is charged
-          until you publish.
+          One plan, priced per event rather than per guest or per photo. Nothing renews, and
+          nothing is charged until you publish. Try it first with a free event.
         </p>
 
-        <div className="mt-10 grid gap-4 lg:grid-cols-3">
+        <div className="mt-10 grid gap-4 md:grid-cols-2">
           {PRICING_TIERS.map((tier) => {
             const featured = tier.highlight === true;
             return (
@@ -223,15 +223,19 @@ function Pricing() {
                     : 'spx-card p-7'
                 }
               >
-                {featured ? <span className="spx-badge bg-mint text-charcoal">Most popular</span> : null}
+                {/* No "Most popular" badge: nothing has sold yet, so popularity
+                    would be invented, and with one paid plan there is nothing
+                    for it to be more popular than. */}
                 <p
-                  className={`${featured ? 'mt-4' : ''} font-sans text-xs font-medium uppercase tracking-[0.16em] ${
+                  className={`font-sans text-xs font-medium uppercase tracking-[0.16em] ${
                     featured ? 'text-canvas/70' : 'text-charcoal/60'
                   }`}
                 >
                   {tier.name}
                 </p>
-                <p className="mt-2 text-4xl font-bold tracking-[-0.02em]">${tier.price}</p>
+                <p className="mt-2 text-4xl font-bold tracking-[-0.02em]">
+                  {tier.price === 0 ? 'Free' : `$${tier.price}`}
+                </p>
                 <ul className="mt-5 space-y-2">
                   {tier.features.slice(0, 4).map((feature) => (
                     <li
@@ -248,7 +252,7 @@ function Pricing() {
                   href="/pricing"
                   className={`${featured ? 'spx-btn-canvas' : 'spx-btn-outline'} mt-7 w-full`}
                 >
-                  Choose {tier.name}
+                  {tier.price === 0 ? 'Start free' : `Choose ${tier.name}`}
                 </Link>
               </div>
             );
@@ -260,7 +264,7 @@ function Pricing() {
           <Link href="/pricing" className="text-pine underline">
             The Corporate plan
           </Link>{' '}
-          covers unlimited events on a monthly subscription.
+          covers multiple active events on a monthly subscription.
         </p>
       </div>
     </section>

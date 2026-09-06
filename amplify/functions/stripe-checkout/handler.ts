@@ -209,18 +209,24 @@ async function buildDiscount(
  * new checkouts (`TIER_PRICING[extTier]`), so removing a retired tier would
  * stop every event already sold on it from being able to extend — something
  * those hosts paid for. What retires a plan is SELLABLE_TIERS below, not this.
+ *
+ * THE FREE TIER IS ABSENT, AND THAT ABSENCE IS THE CONTROL. `priceableTier` is
+ * membership of this map, so a free event cannot reach Stripe by any route —
+ * not a plan purchase, not an upload-window extension, not an add-on. Adding a
+ * `free: { amount: 0 }` entry here to be tidy would create a $0 checkout that
+ * activates an event, which is the one thing the whole file exists to prevent.
  */
 const TIER_PRICING: Record<string, { name: string; amount: number }> = {
-  event: { name: 'SharePix Event', amount: 3900 },
-  plus: { name: 'SharePix Plus event', amount: 8900 },
+  plus: { name: 'SharePix Event', amount: 7900 },
   // Retired — priced, not sold.
+  event: { name: 'SharePix Event', amount: 3900 },
   starter: { name: 'SharePix Starter event', amount: 1900 },
   standard: { name: 'SharePix Standard event', amount: 3900 },
   premium: { name: 'SharePix Premium event', amount: 7900 },
 };
 
 /** The plans a NEW purchase may name. Mirrors PRICING_TIERS in lib/pricing.ts. */
-const SELLABLE_TIERS = new Set(['event', 'plus']);
+const SELLABLE_TIERS = new Set(['plus']);
 
 /**
  * Plans that already include these, so the add-on must never be sold twice.

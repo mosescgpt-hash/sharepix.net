@@ -73,6 +73,7 @@ const reviewTable = backend.data.resources.tables.ModerationReview;
 const hostProfileTable = backend.data.resources.tables.HostProfile;
 const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
+const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -207,10 +208,15 @@ eventTable.grantWriteData(createEventFn);
 corporateTable.grantReadData(createEventFn);
 discountTable.grantReadWriteData(createEventFn);
 hostProfileTable.grantReadData(createEventFn);
+// Read-write, not write-only: claiming the free event is a conditional put and
+// releasing it again (when the event it was claimed for fails to be written) is
+// a delete. This function is the only thing with any access to the table.
+freeEventClaimTable.grantReadWriteData(createEventFn);
 createEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 createEventFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 createEventFn.addEnvironment('DISCOUNT_TABLE_NAME', discountTable.tableName);
 createEventFn.addEnvironment('HOST_PROFILE_TABLE_NAME', hostProfileTable.tableName);
+createEventFn.addEnvironment('FREE_CLAIM_TABLE_NAME', freeEventClaimTable.tableName);
 
 // Update-event function: the only way a host changes their own event, now that
 // the model grants owners no `update`. It reads the row to check ownership and

@@ -51,15 +51,31 @@ export interface TierPlan {
  * so the next reprice cannot leave this file behind quietly.
  */
 export const TIER_PLANS: Record<string, TierPlan> = {
-  // On sale.
-  event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 60 + 365 },
-  plus: { priceCents: 8900, photoLimit: 3000, videoLimit: 30, accessDays: 60 + 365 },
+  // On sale. `plus` is the single paid plan, displayed as "Event"; see the
+  // note in lib/pricing.ts for why it kept that id instead of taking `event`.
+  free: { priceCents: 0, photoLimit: 50, videoLimit: 1, accessDays: 60 + 30 },
+  plus: { priceCents: 7900, photoLimit: 3000, videoLimit: 30, accessDays: 60 + 365 },
   // Retired, but still creatable so an event that already carries one can be
   // paid for. Their access windows are the ones those plans were sold with.
+  event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 60 + 365 },
   starter: { priceCents: 1900, photoLimit: 100, videoLimit: 2, accessDays: 14 },
   standard: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 90 },
   premium: { priceCents: 7900, photoLimit: null, videoLimit: 30, accessDays: 365 },
 };
+
+/**
+ * Tiers that cost nothing and are limited per ACCOUNT rather than per event.
+ *
+ * Mirrors `trial` in lib/pricing.ts. A price of zero is not enough to identify
+ * one — a fully comped paid event also owes zero — and the difference matters:
+ * a comped event is a purchase at a discount and may buy add-ons, while a
+ * trial may not buy anything at all.
+ */
+const TRIAL_TIERS = new Set(['free']);
+
+export function isTrialTier(tier: string): boolean {
+  return TRIAL_TIERS.has(normalizeTier(tier));
+}
 
 /**
  * Corporate events are included in a subscription rather than sold per event,
@@ -308,8 +324,14 @@ export function remainingCents(priceCents: number, row: DiscountRow): number {
 // ---------------------------------------------------------------------------
 
 export type Activation =
-  /** Live immediately. `paid` is written true and uploads work at once. */
-  | { kind: 'active'; via: 'corporate' | 'comped' }
+  /**
+   * Live immediately. `paid` is written true and uploads work at once.
+   *
+   * `via` is not decoration — the handler branches on it. `comped` spends a
+   * discount code, `trial` claims the account's one free event, and neither
+   * step may run for the other.
+   */
+  | { kind: 'active'; via: 'corporate' | 'comped' | 'trial' }
   /** Created but inactive until the Stripe webhook flips `paid`. */
   | { kind: 'pending'; owedCents: number }
   | { kind: 'refused'; reason: string };
@@ -349,6 +371,14 @@ export function activationFor({
           reason: 'An active Corporate subscription is required for corporate events.',
         };
   }
+
+  // Checked before the discount branch, and deliberately not reachable by one.
+  // A code applied to a $0 plan would return `comped`, which spends a use of
+  // the code for nothing and lets a host launder a free event into looking
+  // like a purchase. The handler still has to claim the account's free event
+  // before this becomes a real row — `active` here means "owes nothing", not
+  // "is allowed".
+  if (isTrialTier(id)) return { kind: 'active', via: 'trial' };
 
   if (discount) {
     const owed = remainingCents(discount.priceCents, discount.row);

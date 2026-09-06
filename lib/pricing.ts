@@ -3,7 +3,7 @@
  * an event stamps its tier at creation precisely so a later pricing change
  * cannot retroactively alter what someone already paid for.
  */
-export type TierId = 'event' | 'plus' | 'starter' | 'standard' | 'premium';
+export type TierId = 'free' | 'plus' | 'event' | 'starter' | 'standard' | 'premium';
 
 export interface PricingTier {
   id: TierId;
@@ -42,6 +42,15 @@ export interface PricingTier {
    * window at the right price.
    */
   retired?: boolean;
+  /**
+   * A trial rather than a purchase: nothing has been paid, so nothing may be
+   * sold against it. A trial event cannot buy add-ons, cannot extend its
+   * upload window, and can never reach Stripe at all — `extensionPrice` on a
+   * $0 plan would otherwise arrive at a $1 extension, which is not a price
+   * anyone decided on. It is also the only tier limited per ACCOUNT rather
+   * than per event; see FreeEventClaim in amplify/data/resource.ts.
+   */
+  trial?: boolean;
 }
 
 /**
@@ -82,38 +91,62 @@ export const ARCHIVE_DAYS = 90;
 /**
  * What is on sale today.
  *
- * The lineup moved from Starter $19 / Standard $39 / Premium $79 to
- * Event $39 / Plus $89. Free $0 is deliberately NOT here yet: `paid` currently
- * gates activation, so every live event has a card behind it, and a free tier
- * is the first path to creating storage without one. It ships once there is
- * rate limiting and a retention story to go with it.
+ * The lineup went Starter/Standard/Premium → Event $39 / Plus $89 → this: one
+ * free trial and one paid plan. Two paid plans differing on capacity asked a
+ * host to predict how many photos an event that has not happened yet would
+ * produce, which nobody can do; faced with an unevaluable difference people
+ * take the cheaper one, so the split did not price-discriminate, it just
+ * discounted. One plan with everything in it, and a free event to try it with,
+ * is the whole lineup.
+ *
+ * The paid plan keeps the tier id `plus` rather than taking over `event`. That
+ * looks odd until you remember what the ids mean: `plus` has always been the
+ * all-in plan — it is already in GUEST_BOOK_INCLUDED_TIERS and
+ * LIVE_SLIDESHOW_INCLUDED_TIERS — so this is a price cut on a plan whose
+ * meaning does not change. Redefining `event` to mean $79-with-everything
+ * would rewrite an id that an unpaid event row could be carrying right now,
+ * and that host would owe $79 having been quoted $39. For an event that
+ * already exists, a price may only ever move down.
  */
 const SELLABLE_TIERS: PricingTier[] = [
   {
-    id: 'event',
-    name: 'Event',
-    price: 39,
-    photoLimit: 1000,
-    videoLimit: 10,
-    accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
+    id: 'free',
+    // "Free event", not "Free": the card renders the plan name as an eyebrow
+    // above the price, and a plan called Free priced at Free reads as a
+    // rendering bug rather than a plan.
+    name: 'Free event',
+    price: 0,
+    trial: true,
+    // Enough to run a small real event and watch it work, which is the point;
+    // not enough to be a plan someone lives on. The cap is the upgrade prompt.
+    photoLimit: 50,
+    // One, not none. A host who never sees video work does not know the paid
+    // plan does it — and video is the one upload whose cost is not bounded by
+    // resizing, so this is the number that has to stay small.
+    videoLimit: 1,
+    // The same 60-day upload window as the paid plan, then a 30-day gallery
+    // rather than twelve months. The window is what makes the product work at
+    // an event; the twelve months is a large part of what people pay for.
+    accessDays: UPLOAD_WINDOW_DAYS + 30,
     accessLabel: '60-day upload window',
-    retentionDays: GALLERY_DAYS,
-    guestLowResDays: GALLERY_DAYS,
-    customQrCode: true,
+    retentionDays: 30,
+    guestLowResDays: 30,
+    customQrCode: false,
     features: [
-      'Up to 1,000 photos and 10 videos',
-      '60-day upload window (extend +30 days anytime)',
-      'Gallery stays up for 12 months after uploads close',
-      'Customizable QR code',
-      'Host individual and bulk ZIP downloads',
-      'Guests can download the photos too — full resolution, no account',
-      'Uploader names on photos',
+      'One free event per account',
+      'Up to 50 photos and 1 video',
+      '60-day upload window',
+      'Gallery stays up for 30 days after uploads close',
+      'Host and guest downloads — full resolution, no account',
     ],
   },
   {
     id: 'plus',
-    name: 'Plus',
-    price: 89,
+    // Displayed as "Event" because it is the only plan; the id stays `plus`
+    // for the reason above. The retired $39 tier below is the one that was
+    // called Event, so its display name is disambiguated rather than its id.
+    name: 'Event',
+    price: 79,
     // A real number rather than "unlimited". The old Premium tier advertised
     // unlimited photos, which is an unbounded storage and egress bill on a
     // one-off payment. Events already sold as Premium keep unlimited — they
@@ -125,9 +158,9 @@ const SELLABLE_TIERS: PricingTier[] = [
     retentionDays: GALLERY_DAYS,
     guestLowResDays: GALLERY_DAYS,
     customQrCode: true,
-    // Badged "Best value" rather than "Most popular": nothing has sold yet, so
-    // popularity would be invented. The value is checkable — see the note on
-    // GUEST_BOOK_ADDON_PRICE for what the $50 gap actually buys.
+    // The plan, rather than a plan. No badge text is set on the card any more:
+    // with one paid plan there is nothing to be better value than, and
+    // "Best value" against a free trial would be an odd thing to claim.
     highlight: true,
     features: [
       'Up to 3,000 photos and 30 videos',
@@ -154,6 +187,31 @@ const SELLABLE_TIERS: PricingTier[] = [
  * customer's favour or ours, and neither errors.
  */
 const RETIRED_TIERS: PricingTier[] = [
+  {
+    // The $39 tier from the two-plan lineup, retired at exactly what it was
+    // sold for. Its window is 60 days because that change was global and
+    // applied to every event; everything else here is what a buyer was shown.
+    id: 'event',
+    name: 'Event (original)',
+    price: 39,
+    photoLimit: 1000,
+    videoLimit: 10,
+    accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
+    accessLabel: '60-day upload window',
+    retentionDays: GALLERY_DAYS,
+    guestLowResDays: GALLERY_DAYS,
+    customQrCode: true,
+    retired: true,
+    features: [
+      'Up to 1,000 photos and 10 videos',
+      '60-day upload window (extend +30 days anytime)',
+      'Gallery stays up for 12 months after uploads close',
+      'Customizable QR code',
+      'Host individual and bulk ZIP downloads',
+      'Guests can download the photos too — full resolution, no account',
+      'Uploader names on photos',
+    ],
+  },
   {
     id: 'starter',
     name: 'Starter',
@@ -265,17 +323,13 @@ export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
 
 /**
  * One-time cost to add a guest book to a single event, on the plans that do not
- * already include it — Event, and the retired Starter and Standard. See
- * lib/guestBook.ts.
+ * already include it. See lib/guestBook.ts.
  *
- * A note on the arithmetic, because it changed and the old rationale is worth
- * not resurrecting: at Plus $89 the gap over Event is $50, while the two
- * add-ons Plus includes come to $48. Buying Event plus both is therefore $87 —
- * two dollars cheaper. That is deliberate and it is fine: the $2 buys 2,000
- * more photos, 20 more videos, event branding and approve-before-showing
- * moderation. What it means is that "Plus is cheaper than the add-ons" is NOT
- * a claim we can make any more, and nothing on the site makes it. A host who
- * wants only the guest book should buy only the guest book.
+ * Nothing on sale needs this any more: the one paid plan includes the guest
+ * book and the slideshow, and the free trial cannot buy add-ons at all. Both
+ * prices stay because the retired Starter, Standard and Event plans are still
+ * stamped on real event rows, and a host on one of those can still buy either.
+ * They are legacy prices now, not part of the lineup.
  */
 export const GUEST_BOOK_ADDON_PRICE = 19;
 
@@ -288,6 +342,28 @@ export const GUEST_BOOK_ADDON_PRICE = 19;
  */
 export function getTier(id: string): PricingTier | undefined {
   return ALL_TIERS.find((t) => t.id === id);
+}
+
+/**
+ * Whether this tier is a free trial rather than a purchase.
+ *
+ * The gate on everything that would charge money against an event nobody paid
+ * for: add-ons, upload-window extensions, and reaching Stripe at all. A
+ * capability flag rather than `tier === 'free'` for the same reason
+ * `customQrCode` is one — comparing ids is how the next tier silently inherits
+ * the wrong behaviour.
+ */
+export function isTrialTier(id: string): boolean {
+  return getTier(id)?.trial === true;
+}
+
+/**
+ * Whether an event can be sold anything at all — add-ons, extensions, a
+ * checkout. False for the free trial, true for every plan that was paid for,
+ * retired ones included: retiring a plan must never strand the host on it.
+ */
+export function canPurchaseFor(tierId: string): boolean {
+  return !isTrialTier(tierId);
 }
 
 /** Whether this tier can still be bought. The pricing page's question. */
@@ -348,8 +424,16 @@ export function videoLimitForTier(id: string): number | null {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Price to extend the upload window by 30 days: half the plan price (min $1). */
+/**
+ * Price to extend the upload window by 30 days: half the plan price (min $1).
+ *
+ * Returns 0 for a trial, which callers must read as "not for sale" rather than
+ * "free" — `canPurchaseFor` is the check, and this is what the number would be
+ * if anyone ignored it. Half of $0 clamped to a $1 minimum would otherwise
+ * quietly invent a one-dollar product.
+ */
 export function extensionPrice(tierId: string): number {
+  if (isTrialTier(tierId)) return 0;
   const tier = getTier(tierId);
   return Math.max(1, Math.round((tier?.price ?? 20) / 2));
 }

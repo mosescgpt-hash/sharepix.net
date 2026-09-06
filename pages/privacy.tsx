@@ -192,9 +192,10 @@ export default function PrivacyPage() {
               <li>
                 <strong>Gallery — 12 months</strong> from when the upload window closes. Guests
                 can view reduced-resolution photos and the host keeps full access and downloads
-                for the whole period. Events on a retired plan keep the shorter windows they were
-                sold with (about 3 weeks on Starter, 3 months on Standard, 1 year on Premium),
-                measured the same way.
+                for the whole period. A free event keeps its gallery for 30 days rather than 12
+                months. Events on a retired plan keep the shorter windows they were sold with
+                (about 3 weeks on Starter, 3 months on Standard, 1 year on Premium), measured the
+                same way.
               </li>
               <li>
                 <strong>Archive</strong> — after that, photos move to a private archive that

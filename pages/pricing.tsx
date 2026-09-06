@@ -16,7 +16,11 @@ const faqs = [
   },
   {
     q: 'Can I moderate photos?',
-    a: 'Every plan lets you delete photos. Plus adds approve-before-showing moderation.',
+    a: 'You can delete any photo on either plan. The paid plan adds approve-before-showing moderation, so nothing appears in the gallery until you have seen it.',
+  },
+  {
+    q: 'What is the free event?',
+    a: 'A real event, not a demo — your own QR code, your own guests, your own gallery. It holds up to 50 photos and 1 video, and the gallery stays up for 30 days after uploads close. One per account, so it is there to try SharePix at something small before you pay for something that matters.',
   },
 ];
 
@@ -31,8 +35,9 @@ export default function PricingPage() {
             <span className="spx-display-serif block">No surprises.</span>
           </h1>
           <p className="spx-body mt-5 max-w-lg">
-            Priced per event, not per guest and not per photo. Everyone you invite uploads for
-            free, nothing renews, and nothing is charged until you publish.
+            One plan, priced per event rather than per guest or per photo. Everyone you invite
+            uploads for free, nothing renews, and nothing is charged until you publish. Try it
+            first with a free event.
           </p>
 
           <div className="mt-12">

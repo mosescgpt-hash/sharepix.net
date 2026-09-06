@@ -288,11 +288,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Guests can add photos for 60 days from when the event is created, and the host can extend that. After the upload window closes, the gallery stays up for a further 12 months.',
+        text: 'Guests can add photos for 60 days from when the event is created, and the host can extend that. After the upload window closes, the gallery stays up for a further 12 months — or 30 days if the host is using their free event.',
       },
       {
         kind: 'text',
-        text: 'You keep viewing it that whole time, at a reduced resolution. Download anything you want to keep while the gallery is open — after the 12 months it closes for good.',
+        text: 'You keep viewing it that whole time, at a reduced resolution. Download anything you want to keep while the gallery is open — after that it closes for good.',
       },
     ],
     related: ['guest-download', 'host-extend-window'],
@@ -653,16 +653,20 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Which plan do I need?',
     audience: 'host',
     category: 'Plans, billing and add-ons',
-    summary: 'The differences are capacity and a few extra features — not how long you keep the photos.',
-    keywords: ['plan', 'pricing', 'compare', 'tier', 'event', 'plus', 'cost'],
+    summary: 'One paid plan at $79, and a free event to try it with first.',
+    keywords: ['plan', 'pricing', 'compare', 'tier', 'event', 'free', 'trial', 'cost'],
     blocks: [
       {
         kind: 'text',
-        text: 'Event suits most weddings and parties: 1,000 photos and 10 videos for $39. Plus is $89 and adds 3,000 photos, 30 videos, event branding and moderation — and includes the guest book and the live slideshow rather than selling them as add-ons.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers up to 3,000 photos and 30 videos, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',
-        text: 'Both plans get the same 60-day upload window, the same 12-month gallery afterwards, and the same QR code sharing. The live slideshow can be added to either.',
+        text: 'The free event is a real event with your own QR code and gallery, limited to 50 photos and 1 video, and the gallery stays up for 30 days after uploads close rather than 12 months. One per account. It is for trying SharePix at something small before you pay for something that matters.',
+      },
+      {
+        kind: 'text',
+        text: 'Both get the same 60-day upload window and the same QR code sharing. A free event cannot buy add-ons or extend its window — create a paid event for that.',
       },
       {
         kind: 'text',

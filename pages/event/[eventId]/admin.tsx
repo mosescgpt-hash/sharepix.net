@@ -30,6 +30,7 @@ import {
   CORPORATE_PLAN,
   GUEST_BOOK_ADDON_PRICE,
   LIVE_SLIDESHOW_ADDON_PRICE,
+  canPurchaseFor,
   extensionPrice,
   getTier,
   liveSlideshowAvailable,
@@ -171,6 +172,11 @@ function AdminDashboardPage() {
   // off the list once it's active.
   const availableAddOns = useMemo(() => {
     if (!event) return [];
+    // A free event has bought nothing, so nothing may be sold against it. The
+    // checkout function refuses it outright — the free tier is absent from its
+    // price table — so this only keeps the page from offering what the server
+    // would then reject.
+    if (!canPurchaseFor(event.tier)) return [];
     const items: { key: EventAddOnKey; label: string; price: number; description: string }[] = [];
     if (getTier(event.tier)) {
       items.push({
