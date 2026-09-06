@@ -18,6 +18,15 @@ export interface QREvent {
   videoLimit?: number | null;
   extraVideoCredits?: number | null;
   videoCount?: number | null;
+  /**
+   * Participation, as opposed to volume: uploads from someone other than the
+   * host, and how many distinct people they came from. Together they decide
+   * whether this is a Successful Event — see lib/successfulEvent.ts. Missing
+   * means zero, which is the honest answer for events created before these
+   * were counted.
+   */
+  guestUploadCount?: number | null;
+  contributorCount?: number | null;
   accessExpiresAt?: string | null;
   uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;

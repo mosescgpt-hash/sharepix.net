@@ -18,6 +18,7 @@ import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
+import { contributorKey, contributorRowId } from './successfulEvent';
 
 const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
@@ -29,6 +30,7 @@ const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET_NAME = process.env.BUCKET_NAME as string;
 const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME as string;
 const MOMENT_TABLE = process.env.MOMENT_TABLE_NAME as string;
+const CONTRIBUTOR_TABLE = process.env.CONTRIBUTOR_TABLE_NAME as string;
 
 /** How long a review link stays usable before the host must use the dashboard. */
 const REVIEW_TTL_DAYS = 14;
@@ -120,6 +122,88 @@ function readPhoto(item: Record<string, AttributeValue>, duplicate: boolean) {
     duplicate,
     createdAt: item.createdAt?.S ?? null,
   };
+}
+
+/**
+ * Record that this person has uploaded to this event, and if they had not
+ * before, add one to the event's contributor count.
+ *
+ * The conditional put on `<eventId>#<key>` is what makes "distinct people"
+ * cheap: it succeeds exactly once per person per event, so the count moves
+ * exactly when it should, with no scanning and no race between two guests
+ * uploading in the same second.
+ *
+ * Entirely best-effort. This runs after the photo is already stored, and a
+ * participation metric is never worth failing an upload over — a guest at a
+ * party would see their photo rejected because a counter did not move. A
+ * failure here undercounts, is logged, and nothing else happens.
+ *
+ * Returns whether this was a newly seen contributor, for the caller's log.
+ */
+async function recordContributor(
+  eventId: string,
+  uploadedBy: string | null | undefined,
+  nowISO: string,
+): Promise<boolean> {
+  // No table configured, or nothing that identifies a person. `contributorKey`
+  // returns null for a blank name and for the legacy "Anonymous" that every
+  // unnamed upload used to become — see lib/successfulEvent.ts for why that is
+  // deliberately not counted as somebody.
+  const key = contributorKey(uploadedBy);
+  if (!CONTRIBUTOR_TABLE || !key) return false;
+
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: CONTRIBUTOR_TABLE,
+        Item: {
+          id: { S: contributorRowId(eventId, key) },
+          __typename: { S: 'EventContributor' },
+          eventId: { S: eventId },
+          contributorKey: { S: key },
+          firstUploadAt: { S: nowISO },
+          createdAt: { S: nowISO },
+          updatedAt: { S: nowISO },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (error) {
+    // Already seen: the overwhelmingly common case after someone's first photo.
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
+      return false;
+    }
+    console.error('Could not record a contributor', {
+      at: nowISO,
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+
+  // New person. Bump the count on the event row, unconditionally — ADD creates
+  // the attribute when it is missing, which is what makes events that predate
+  // this simply start counting from their next upload.
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: 'ADD contributorCount :one',
+        ExpressionAttributeValues: { ':one': { N: '1' } },
+      }),
+    );
+  } catch (error) {
+    // The contributor row exists but the count did not move, so this person
+    // will never be counted. Logged loudly because it is silent otherwise, and
+    // the row is the record that lets it be recomputed later.
+    console.error('Recorded a contributor but could not increment the count', {
+      at: nowISO,
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return true;
 }
 
 async function fetchPhoto(id: string): Promise<Record<string, AttributeValue> | null> {
@@ -336,6 +420,23 @@ export const handler: Handler = async (event) => {
   }
 
   const eventOwner = ev.owner?.S ?? '';
+
+  // Is this the host uploading to their own event?
+  //
+  // Taken from the caller's verified identity and the event's stored owner —
+  // never from `uploadedByUserId`, which arrives in the request and is
+  // therefore a claim. Getting this from the client would let anyone mark
+  // their uploads as host uploads (or a host mark theirs as guest uploads) and
+  // the participation numbers would measure nothing.
+  //
+  // Guests reach this mutation through the identity pool and have no `sub` at
+  // all, so the check is simply: a verified sub that appears in the owner
+  // string. Anyone else is a guest, which is the safe default — the failure
+  // mode is counting a second signed-in admin as a guest, not the reverse.
+  const callerSub = (event.identity as { sub?: string } | undefined)?.sub ?? '';
+  const isHostUpload = Boolean(callerSub) && eventOwner.includes(callerSub);
+  const isGuestUpload = !isHostUpload;
+
   const isVideo = VIDEO_KEY.test(s3Key);
   const photoLimit = toInt(ev.photoLimit?.N);
   const extraCredits = toInt(ev.extraPhotoCredits?.N) ?? 0;
@@ -372,7 +473,16 @@ export const handler: Handler = async (event) => {
     // Both counters move in ONE update, so a video can never consume a photo
     // slot without also consuming a video slot (or vice versa) when the other
     // condition fails.
-    UpdateExpression: isVideo ? 'ADD photoCount :one, videoCount :one' : 'ADD photoCount :one',
+    // guestUploadCount rides along in the SAME update rather than in a second
+    // write, so it can never drift from photoCount: one succeeds or neither
+    // does, and the release below undoes both together.
+    UpdateExpression: [
+      'ADD photoCount :one',
+      isVideo ? 'videoCount :one' : '',
+      isGuestUpload ? 'guestUploadCount :one' : '',
+    ]
+      .filter(Boolean)
+      .join(', '),
     ExpressionAttributeValues: { ':one': { N: '1' } },
   };
   if (effectiveLimit !== null) {
@@ -410,9 +520,13 @@ export const handler: Handler = async (event) => {
         new UpdateItemCommand({
           TableName: EVENT_TABLE,
           Key: { id: { S: eventId } },
-          UpdateExpression: isVideo
-            ? 'ADD photoCount :neg, videoCount :neg'
-            : 'ADD photoCount :neg',
+          UpdateExpression: [
+            'ADD photoCount :neg',
+            isVideo ? 'videoCount :neg' : '',
+            isGuestUpload ? 'guestUploadCount :neg' : '',
+          ]
+            .filter(Boolean)
+            .join(', '),
           ConditionExpression: 'attribute_exists(photoCount) AND photoCount > :zero',
           ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
         }),
@@ -501,6 +615,13 @@ export const handler: Handler = async (event) => {
       if (winner) return readPhoto(winner, true);
     }
     throw error;
+  }
+
+  // Count the person, now that their photo is definitely stored. Host uploads
+  // are excluded: "the host uploaded forty photos" is exactly the case this
+  // metric exists to tell apart from an event that guests turned up to.
+  if (isGuestUpload) {
+    await recordContributor(eventId, uploadedBy, now);
   }
 
   // A held-back photo gets a review link so the host can decide on it without

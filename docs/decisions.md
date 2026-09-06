@@ -155,21 +155,73 @@ stale.
 
 ---
 
+## 5. Successful Event — 3 contributors and 10 guest uploads
+
+**Decided.** Shipped, in `lib/successfulEvent.ts`.
+
+    Successful Event = at least 3 unique guest contributors
+                       AND at least 10 guest uploads
+
+Both halves, never one. Ten uploads from one person is a host testing their own
+event; three people uploading once each is a gallery nobody came back to. The
+pair is what says the QR code actually went round a room. Thresholds are
+configurable; the numbers come from the Monthly Analytics Email Report brief.
+
+**It is admin-facing only.** "Your event was unsuccessful" is a horrible
+sentence to put in front of someone whose wedding it was. The number exists to
+tell us whether the product works, not to grade a customer.
+
+**Counting is cumulative, not live.** A host deleting a photo later does not
+un-count the guest who uploaded it — an event must not become retroactively
+unsuccessful because someone tidied their gallery. The only thing that
+decrements is an upload whose record failed to write, because that upload never
+happened.
+
+**Guest versus host is decided server-side** from the caller's verified Cognito
+identity against the event's stored owner, never from the `uploadedByUserId`
+the request supplies. Otherwise anyone could mark their uploads either way and
+the metric would measure nothing.
+
+**How much weight it can carry.** A contributor is identified by the name or
+per-browser label attached to an upload, which is a client-supplied string. It
+cannot be forged by accident but it can be forged on purpose, and the incentive
+becomes real once this gates a $25 gift card. That is survivable *only* because
+the gift card is issued by hand — a person looks at the event before paying.
+Treat it as a good measure and a weak control, and do not wire it to anything
+that spends money on its own.
+
+**A gap that came with it.** The upload form had always told guests "if left
+blank, this browser gets a reusable guest label". It did not — every unnamed
+upload was stored as "Anonymous", so one person's six photos and six people's
+one photo each were indistinguishable. That is now real (`lib/guestLabel.ts`),
+scoped per event so it never becomes a cross-event identifier for people who
+never made an account. Uploads made before it existed are not counted toward
+this metric: "Anonymous" is treated as *cannot tell*, which is neither one
+person nor forty. Historical events therefore have an honest gap rather than a
+back-filled guess.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric
-and a **contributor count**. Neither exists in the codebase. Every lifecycle
-programme in them — Founding Events outreach, the post-event growth loop, the
-monthly report, sending the survey at all — additionally needs **scheduled
-jobs** and **transactional email**, and neither of those exists either: there
-is no EventBridge rule or cron anywhere in `amplify/`, and the only mail the
-product sends is an SES moderation alert.
+and a **contributor count**. Every lifecycle programme in them — Founding
+Events outreach, the post-event growth loop, the monthly report, sending the
+survey at all — additionally needs **scheduled jobs** and **transactional
+email**.
 
-Order of work, unchanged by the decisions above:
-
-1. Define Successful Event; count contributors per event.
-2. Scheduled jobs (EventBridge) and transactional email.
+1. ~~Define Successful Event; count contributors per event.~~ **Done** — see
+   decision 5 above.
+2. **Scheduled jobs (EventBridge) and transactional email.** Neither exists:
+   there is no EventBridge rule or cron anywhere in `amplify/` (the only
+   `Rule` hits are S3 lifecycle rules), and the only mail the product sends is
+   the SES moderation alert and its test button. No templating, no unsubscribe,
+   no send infrastructure.
 3. Then one customer-facing programme at a time, on top of both.
 
-Documents describing programmes at layer 3 cannot be built before 1 and 2,
-however complete they are.
+Documents describing programmes at layer 3 cannot be built before 2, however
+complete they are.
+
+**Analytics is a fourth gap**, separate from these: there is no provider and no
+event tracking, which is the whole of *Funnel & Product Health* and most of
+*Intent Detection & Personalized Experiments*. The funnel those documents
+describe starts at website visitors, and nothing upstream of "event created" is
+measured today.

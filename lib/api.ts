@@ -25,6 +25,7 @@ import {
   buildThumbKey,
 } from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
+import { guestLabelFor } from '@/lib/guestLabel';
 import type { MediaSource } from '@/lib/mediaSource';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
@@ -922,7 +923,13 @@ export async function prepareEventUpload(
     eventId,
     eventOwner: event.owner ?? null,
     authMode,
-    uploadedBy: user?.displayName ?? (uploaderName?.trim().slice(0, 60) || 'Anonymous'),
+    // A signed-in host uploads under their own name. A guest uses what they
+    // typed, and failing that the label this browser already uses for this
+    // event — which is what the upload form has always promised, and what
+    // makes "how many people took part" answerable at all. See
+    // lib/guestLabel.ts and lib/successfulEvent.ts.
+    uploadedBy:
+      user?.displayName ?? (uploaderName?.trim().slice(0, 60) || guestLabelFor(eventId)),
     uploadedByUserId: user?.userId ?? null,
     // Passed through as the guest's claim. createEventPhoto proves the moment
     // belongs to this event before filing anything under it.

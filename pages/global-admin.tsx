@@ -28,6 +28,7 @@ import {
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
+import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { DiscountCode, FreeEventClaimRow, QREvent } from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -273,6 +274,14 @@ function GlobalAdminPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Participation across everything, for the tile. Cheap enough to derive on
+  // every render — the counters are already on the rows we loaded.
+  const successfulEvents = useMemo(
+    () => events.filter((event) => isSuccessfulEvent(event)).length,
+    [events],
+  );
+  const eventSuccessRate = useMemo(() => successRate(events), [events]);
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -632,10 +641,24 @@ function GlobalAdminPage() {
               </Notice>
             ) : null}
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="spx-card p-5">
                 <p className="text-sm text-charcoal/60">Events</p>
                 <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{events.length}</p>
+              </div>
+              <div className="spx-card p-5">
+                <p className="text-sm text-charcoal/60">Successful events</p>
+                <p className="font-sans text-3xl font-bold tracking-[-0.02em]">
+                  {successfulEvents}
+                </p>
+                {/* A rate of null means there are no events at all. Showing
+                    "0.0%" there reads as a catastrophe rather than as nothing
+                    having happened yet. */}
+                <p className="mt-1 text-xs text-charcoal/55">
+                  {eventSuccessRate === null
+                    ? '3+ contributors and 10+ guest uploads'
+                    : `${eventSuccessRate}% of all events`}
+                </p>
               </div>
               <div className="spx-card p-5">
                 <p className="text-sm text-charcoal/60">Stored photos</p>
@@ -921,6 +944,41 @@ function GlobalAdminPage() {
                           <p className="mt-1 text-xs text-charcoal/60">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
                           </p>
+                          {/* Participation, and it stays on this page only. A
+                              host must never be shown "your event was
+                              unsuccessful" — see lib/successfulEvent.ts. */}
+                          {(() => {
+                            const progress = successProgress(event);
+                            return (
+                              <p className="mt-1 text-xs">
+                                <span
+                                  className={
+                                    progress.successful
+                                      ? 'font-medium text-pine'
+                                      : 'text-charcoal/60'
+                                  }
+                                >
+                                  {progress.successful ? 'Successful event' : 'Not yet successful'}
+                                </span>
+                                <span className="text-charcoal/60">
+                                  {' · '}
+                                  {progress.contributors} contributor
+                                  {progress.contributors === 1 ? '' : 's'} ·{' '}
+                                  {progress.guestUploads} guest upload
+                                  {progress.guestUploads === 1 ? '' : 's'}
+                                  {progress.successful
+                                    ? ''
+                                    : ` · needs ${
+                                        progress.blockedBy === 'contributors'
+                                          ? `${progress.contributorsShort} more contributor${progress.contributorsShort === 1 ? '' : 's'}`
+                                          : progress.blockedBy === 'uploads'
+                                            ? `${progress.guestUploadsShort} more upload${progress.guestUploadsShort === 1 ? '' : 's'}`
+                                            : `${progress.contributorsShort} more contributor${progress.contributorsShort === 1 ? '' : 's'} and ${progress.guestUploadsShort} more upload${progress.guestUploadsShort === 1 ? '' : 's'}`
+                                      }`}
+                                </span>
+                              </p>
+                            );
+                          })()}
                           {(() => {
                             const phase = lifecyclePhase(event);
                             const archiveEnd = eventLifecycle(event).archiveEndsAt;
