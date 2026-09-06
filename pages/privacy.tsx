@@ -186,21 +186,18 @@ export default function PrivacyPage() {
             <p>Each event moves through a lifecycle:</p>
             <ul>
               <li>
-                <strong>Upload window — 30 days</strong> from creation (extendable in 30-day
+                <strong>Upload window — 60 days</strong> from creation (extendable in 30-day
                 blocks). Guests can upload and view the photos.
               </li>
               <li>
-                <strong>After the window closes,</strong> guests can view reduced-resolution
-                photos for 30 days (about 3 weeks on the retired Starter plan), then guest
-                access ends.
+                <strong>Gallery — 12 months</strong> from when the upload window closes. Guests
+                can view reduced-resolution photos and the host keeps full access and downloads
+                for the whole period. Events on a retired plan keep the shorter windows they were
+                sold with (about 3 weeks on Starter, 3 months on Standard, 1 year on Premium),
+                measured the same way.
               </li>
               <li>
-                <strong>Host retention</strong> — the host keeps full access and downloads for a
-                period set by the plan (about 3 weeks on Starter, 3 months on Standard, 1 year on
-                Premium) measured from when the upload window closes.
-              </li>
-              <li>
-                <strong>Archive</strong> — after retention, photos move to a private archive that
+                <strong>Archive</strong> — after that, photos move to a private archive that
                 hosts can&rsquo;t see, kept for up to 90 days (a global administrator can restore
                 them on request), and are then permanently deleted.
               </li>

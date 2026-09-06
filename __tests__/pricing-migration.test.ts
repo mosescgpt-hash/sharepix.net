@@ -8,6 +8,7 @@ import {
   liveSlideshowAvailable,
   videoLimitForTier,
   computeAccessExpiresAt,
+  UPLOAD_WINDOW_DAYS,
 } from '../lib/pricing';
 import { guestBookAvailable } from '../lib/guestBook';
 
@@ -30,9 +31,9 @@ describe('what is on sale', () => {
     expect(PRICING_TIERS.map((t) => t.id)).toEqual(SELLABLE);
   });
 
-  it('prices them at $39 and $69', () => {
+  it('prices them at $39 and $89', () => {
     expect(getTier('event')?.price).toBe(39);
-    expect(getTier('plus')?.price).toBe(69);
+    expect(getTier('plus')?.price).toBe(89);
   });
 
   it('keeps Corporate at $149/month', () => {
@@ -82,7 +83,7 @@ describe('retired plans still work for the events that bought them', () => {
 
   it('charges the right extension price for the plans on sale', () => {
     expect(extensionPrice('event')).toBe(20); // half of $39
-    expect(extensionPrice('plus')).toBe(35); // half of $69, rounded
+    expect(extensionPrice('plus')).toBe(45); // half of $89, rounded up
   });
 
   it('keeps retention and access windows for retired plans', () => {
@@ -97,6 +98,57 @@ describe('retired plans still work for the events that bought them', () => {
 
   it('leaves Premium unlimited on photos, because that is what it sold', () => {
     expect(getTier('premium')?.photoLimit).toBeNull();
+  });
+});
+
+describe('one retention policy across everything on sale', () => {
+  // Retention used to be a tier differentiator — 3 weeks, 3 months, 1 year —
+  // which made "how long do I keep my photos" unanswerable without a table.
+  // Every plan on sale now gets the same answer, and these assert it stays one
+  // answer rather than quietly splitting again.
+  it.each(SELLABLE)('gives %s a 12-month gallery', (id) => {
+    expect(getTier(id)?.retentionDays).toBe(365);
+    expect(getTier(id)?.guestLowResDays).toBe(365);
+  });
+
+  it('does not let guests lose the gallery before the host does', () => {
+    // Guests seeing nothing while the host still has access is the state that
+    // generates support mail, because the host is looking at a live gallery
+    // while being told by a guest that it is gone.
+    for (const id of SELLABLE) {
+      const tier = getTier(id);
+      expect(tier?.guestLowResDays).toBe(tier?.retentionDays);
+    }
+  });
+
+  it('opens the upload window for 60 days on every plan', () => {
+    expect(UPLOAD_WINDOW_DAYS).toBe(60);
+    for (const id of SELLABLE) {
+      expect(getTier(id)?.accessLabel).toBe('60-day upload window');
+    }
+  });
+
+  it('runs access for the window plus the full twelve months', () => {
+    for (const id of SELLABLE) {
+      expect(getTier(id)?.accessDays).toBe(UPLOAD_WINDOW_DAYS + 365);
+    }
+  });
+
+  it('leaves retired plans on the retention they were sold', () => {
+    // Lengthening retention is a gift and could safely apply to everyone, but
+    // these rows describe what a plan WAS. Editing them rewrites history.
+    expect(getTier('starter')?.guestLowResDays).toBe(21);
+    expect(getTier('standard')?.guestLowResDays).toBe(30);
+    expect(getTier('premium')?.guestLowResDays).toBe(30);
+  });
+
+  it('says twelve months in the feature list of everything on sale', () => {
+    for (const id of SELLABLE) {
+      const features = getTier(id)?.features ?? [];
+      expect(features.some((f) => /12 months/.test(f))).toBe(true);
+      // The old per-plan phrasing, which is the thing that stopped being true.
+      expect(features.some((f) => /host access (3 months|1 year)/i.test(f))).toBe(false);
+    }
   });
 });
 
@@ -116,7 +168,7 @@ describe('the unlimited claim is not carried forward', () => {
   // Corporate is deliberately excluded from the rule above and still advertises
   // unlimited photos. It was left unchanged in this reprice, and it is a
   // recurring subscription rather than a one-off, so the exposure can be ended
-  // by cancelling rather than being unbounded against a single $69 payment.
+  // by cancelling rather than being unbounded against a single $89 payment.
   // Asserted rather than ignored so the claim cannot quietly move without
   // someone deciding to move it.
   it('knowingly leaves the unlimited claim on Corporate', () => {

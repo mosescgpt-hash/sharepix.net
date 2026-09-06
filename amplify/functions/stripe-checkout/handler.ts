@@ -212,7 +212,7 @@ async function buildDiscount(
  */
 const TIER_PRICING: Record<string, { name: string; amount: number }> = {
   event: { name: 'SharePix Event', amount: 3900 },
-  plus: { name: 'SharePix Plus event', amount: 6900 },
+  plus: { name: 'SharePix Plus event', amount: 8900 },
   // Retired — priced, not sold.
   starter: { name: 'SharePix Starter event', amount: 1900 },
   standard: { name: 'SharePix Standard event', amount: 3900 },

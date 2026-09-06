@@ -283,16 +283,16 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'How long do the photos stay up?',
     audience: 'guest',
     category: 'Finding and viewing photos',
-    summary: 'Uploads run for 30 days, then viewing continues for a while, then the gallery closes.',
+    summary: 'Uploads run for 60 days, and the gallery stays up for 12 months after that.',
     keywords: ['how long', 'expire', 'deleted', 'closed', 'window', 'access'],
     blocks: [
       {
         kind: 'text',
-        text: 'Guests can add photos for 30 days from when the event is created, and the host can extend that. After the upload window closes, guests keep viewing the gallery for a further 30 days.',
+        text: 'Guests can add photos for 60 days from when the event is created, and the host can extend that. After the upload window closes, the gallery stays up for a further 12 months.',
       },
       {
         kind: 'text',
-        text: 'After that, guest viewing ends but the host still has full access and downloads for months, so ask them if you need a picture later. Download anything you want to keep while the gallery is open.',
+        text: 'You keep viewing it that whole time, at a reduced resolution. Download anything you want to keep while the gallery is open — after the 12 months it closes for good.',
       },
     ],
     related: ['guest-download', 'host-extend-window'],
@@ -408,7 +408,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'The upload window runs 30 days from when the event was created. On your dashboard, tick Extend upload window in the Add-ons list and pay once — it adds another 30 days, and you can do it more than once.',
+        text: 'The upload window runs 60 days from when the event was created. On your dashboard, tick Extend upload window in the Add-ons list and pay once — it adds another 30 days, and you can do it more than once.',
       },
       {
         kind: 'text',
@@ -653,16 +653,16 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Which plan do I need?',
     audience: 'host',
     category: 'Plans, billing and add-ons',
-    summary: 'The differences are capacity, how long access lasts, and a few extra features.',
+    summary: 'The differences are capacity and a few extra features — not how long you keep the photos.',
     keywords: ['plan', 'pricing', 'compare', 'tier', 'event', 'plus', 'cost'],
     blocks: [
       {
         kind: 'text',
-        text: 'Event suits most weddings and parties: 1,000 photos, 10 videos, and three months of host access. Plus adds 3,000 photos, 30 videos, event branding, moderation, and a year of access — and includes the guest book and the live slideshow rather than selling them as add-ons.',
+        text: 'Event suits most weddings and parties: 1,000 photos and 10 videos for $39. Plus is $89 and adds 3,000 photos, 30 videos, event branding and moderation — and includes the guest book and the live slideshow rather than selling them as add-ons.',
       },
       {
         kind: 'text',
-        text: 'Every plan has the same 30-day upload window and the same QR code sharing. The live slideshow can be added to any plan.',
+        text: 'Both plans get the same 60-day upload window, the same 12-month gallery afterwards, and the same QR code sharing. The live slideshow can be added to either.',
       },
       {
         kind: 'text',
