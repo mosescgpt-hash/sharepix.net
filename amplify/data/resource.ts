@@ -52,6 +52,29 @@ const schema = a.schema({
       // Running count of videos, maintained alongside photoCount so the limit
       // can be reserved atomically rather than by scanning.
       videoCount: a.integer(),
+      // Uploads that came from someone other than the signed-in host, and how
+      // many distinct people those came from. Together they decide whether this
+      // is a Successful Event — see lib/successfulEvent.ts for the definition
+      // and for how much weight it can carry.
+      //
+      // Separate from photoCount because that counts everything including the
+      // host's own uploads, and "the host uploaded forty photos" is precisely
+      // the case this metric exists to tell apart from a working event. Both
+      // are maintained by create-event-photo in the same atomic update as the
+      // slot reservation, so a released slot releases these too.
+      //
+      // Missing means zero, which is correct for every event created before
+      // this existed: those events genuinely have no measured participation,
+      // and back-filling a guess would be worse than an honest gap.
+      //
+      // CUMULATIVE, not a live count of what is stored. A host deleting a
+      // photo later does not decrement these — the guest did turn up and did
+      // upload, and un-counting that would let an event become retroactively
+      // unsuccessful because someone tidied their gallery. The one thing that
+      // does decrement is an upload whose record failed to write, because that
+      // upload never happened at all.
+      guestUploadCount: a.integer(),
+      contributorCount: a.integer(),
       // "City, State" the host sets for the event — a memory label shown on
       // photos and used in downloads. NOT derived from photo GPS, which is
       // still stripped from every upload, and deliberately no finer than a
@@ -305,6 +328,29 @@ const schema = a.schema({
     .model({
       eventId: a.string(),
       claimedAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // One row per distinct person who has uploaded to an event, written by
+  // create-event-photo and by nothing else.
+  //
+  // The row id is `<eventId>#<contributorKey>`, so recording a contributor is a
+  // conditional put on a single item: it succeeds the first time that person
+  // uploads and fails every time after, which is exactly the signal needed to
+  // decide whether to increment the event's contributorCount. Counting by
+  // scanning the photo table would work too and would get slower with every
+  // upload, on the hot path of a guest waiting at a party.
+  //
+  // Admin-only, like Payment. A host has no reason to enumerate their guests
+  // as data, and guests certainly have no reason to see each other. The event
+  // dashboard shows uploader names on photos, which is the participation view
+  // a host actually needs.
+  EventContributor: a
+    .model({
+      eventId: a.string(),
+      /** Normalised name or per-browser guest label. See lib/successfulEvent.ts. */
+      contributorKey: a.string(),
+      firstUploadAt: a.datetime(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 

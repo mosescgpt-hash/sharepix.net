@@ -74,6 +74,7 @@ const hostProfileTable = backend.data.resources.tables.HostProfile;
 const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
 const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
+const contributorTable = backend.data.resources.tables.EventContributor;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -159,6 +160,11 @@ createFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 // event before filing under it, and never creates or changes one.
 momentTable.grantReadData(createFn);
 createFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
+// Participation counting. Write-only: the function records a contributor with a
+// conditional put and never needs to read one back — a failed condition IS the
+// "already seen" answer, so there is nothing to query.
+contributorTable.grantWriteData(createFn);
+createFn.addEnvironment('CONTRIBUTOR_TABLE_NAME', contributorTable.tableName);
 // Content screening: Rekognition reads the uploaded object straight from S3, so
 // the function needs bucket read plus the single detection action. Photos held
 // for review are hidden from guests until the host releases them.
