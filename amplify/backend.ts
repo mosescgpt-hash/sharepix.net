@@ -36,6 +36,8 @@ import { corporatePortal } from './functions/corporate-portal/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
 import { mediaUrl } from './functions/media-url/resource';
 import { moderatePhoto } from './functions/moderate-photo/resource';
+import { dailyTasks } from './functions/daily-tasks/resource';
+import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
 
 const backend = defineBackend({
   auth,
@@ -61,6 +63,8 @@ const backend = defineBackend({
   sanitizeUpload,
   mediaUrl,
   moderatePhoto,
+  dailyTasks,
+  unsubscribeEmail,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -75,6 +79,8 @@ const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
 const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
 const contributorTable = backend.data.resources.tables.EventContributor;
+const notificationTable = backend.data.resources.tables.EventNotification;
+const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -93,9 +99,9 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
 //   1. Clean up abandoned multipart uploads after 7 days (pure cost savings;
 //      never touches a completed object).
 //   2. A hard backstop that expires event media well beyond the longest
-//      legitimate event lifecycle (≈485 days: 30-day upload window + up to
-//      365-day host retention + 90-day archive). 800 days leaves comfortable
-//      margin for extensions, so no normal event is ever cut short — it only
+//      legitimate event lifecycle (≈515 days: 60-day upload window + up to
+//      365-day gallery + 90-day archive). 800 days leaves comfortable margin
+//      for extensions, so no normal event is ever cut short — it only
 //      guarantees nothing lives in the bucket indefinitely.
 const s3Bucket = bucket as Bucket;
 s3Bucket.addLifecycleRule({
@@ -542,3 +548,47 @@ backend.addOutput({
     alertsTopicArn: alertsTopic.topicArn,
   },
 });
+
+// ---------------------------------------------------------------------------
+// Scheduled work, and the mail it sends.
+// ---------------------------------------------------------------------------
+
+// The daily job. Reads every event to work out whose gallery is closing soon,
+// writes a notification row per reminder so it can never send one twice, and
+// reads/creates an email preference row per recipient.
+//
+// Event access is READ-ONLY on purpose: a job that runs unattended every night
+// against every row should not be able to modify an event, and nothing it does
+// needs to.
+const dailyTasksFn = backend.dailyTasks.resources.lambda as LambdaFunction;
+eventTable.grantReadData(dailyTasksFn);
+notificationTable.grantReadWriteData(dailyTasksFn);
+emailPreferenceTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+dailyTasksFn.addEnvironment('NOTIFICATION_TABLE_NAME', notificationTable.tableName);
+dailyTasksFn.addEnvironment('PREFERENCE_TABLE_NAME', emailPreferenceTable.tableName);
+dailyTasksFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+dailyTasksFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+dailyTasksFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
+// The master switch on sending. Unset means the job runs, decides, logs every
+// recipient it would have mailed, and sends nothing — which is how a job that
+// mails real customers gets watched in production before it is trusted.
+dailyTasksFn.addEnvironment(
+  'EMAIL_SENDING_ENABLED',
+  process.env.EMAIL_SENDING_ENABLED ?? '',
+);
+dailyTasksFn.addToRolePolicy(
+  new PolicyStatement({
+    // Simple content rather than raw MIME here (no inline attachment), but both
+    // are granted to match the alert path — see the note on createFn.
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+    resources: ['*'],
+  }),
+);
+
+// Honours an unsubscribe link. Touches nothing but the preference table, and
+// the token check lives in the function rather than in the client, because the
+// alternative is letting a signed-out visitor read a table of email addresses.
+const unsubscribeFn = backend.unsubscribeEmail.resources.lambda as LambdaFunction;
+emailPreferenceTable.grantReadWriteData(unsubscribeFn);
+unsubscribeFn.addEnvironment('PREFERENCE_TABLE_NAME', emailPreferenceTable.tableName);
