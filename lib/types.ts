@@ -168,6 +168,25 @@ export interface ResearchIncentiveRow {
   fulfilledBy: string | null;
 }
 
+/**
+ * A row in the refund ledger. Hosts can read their own; admins read all.
+ *
+ * `status` is one of REFUND_STATUSES and `reason` one of REFUND_REASONS in
+ * lib/refunds.ts. Amounts are cents, like everything Stripe touches.
+ */
+export interface RefundRow {
+  id: string;
+  eventId: string;
+  reason: string;
+  status: 'REQUESTED' | 'APPROVED' | 'RECORDED' | 'DECLINED';
+  amountCents: number;
+  hostNote: string | null;
+  adminNote: string | null;
+  decidedBy: string | null;
+  recordedAt: string | null;
+  createdAt: string | null;
+}
+
 export interface DiscountCode {
   code: string;
   assignedTo?: string | null;

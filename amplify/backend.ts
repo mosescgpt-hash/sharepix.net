@@ -40,6 +40,7 @@ import { dailyTasks } from './functions/daily-tasks/resource';
 import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
 import { completeSurvey } from './functions/complete-survey/resource';
 import { monthlyReport } from './functions/monthly-report/resource';
+import { claimRefund } from './functions/claim-refund/resource';
 
 const backend = defineBackend({
   auth,
@@ -69,6 +70,7 @@ const backend = defineBackend({
   unsubscribeEmail,
   completeSurvey,
   monthlyReport,
+  claimRefund,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -86,6 +88,7 @@ const contributorTable = backend.data.resources.tables.EventContributor;
 const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
 const incentiveTable = backend.data.resources.tables.ResearchIncentive;
+const refundTable = backend.data.resources.tables.Refund;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -641,3 +644,22 @@ monthlyReportFn.addToRolePolicy(
     resources: ['*'],
   }),
 );
+
+// Files a Guest Upload Promise claim. Reads the event to check ownership and
+// eligibility, reads Payment to find what was actually paid, reads Refund to
+// see what has already gone back, and writes exactly one REQUESTED row.
+//
+// It cannot refund anything: there is no Stripe client in it, and no code path
+// anywhere in this repository calls Stripe's refund API. A person issues the
+// refund and records it.
+const claimRefundFn = backend.claimRefund.resources.lambda as LambdaFunction;
+eventTable.grantReadData(claimRefundFn);
+paymentTable.grantReadData(claimRefundFn);
+refundTable.grantReadWriteData(claimRefundFn);
+claimRefundFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+claimRefundFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
+claimRefundFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
+
+// The monthly report counts refunds, so it reads the ledger too.
+refundTable.grantReadData(monthlyReportFn);
+monthlyReportFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);

@@ -13,6 +13,7 @@ import {
   DownloadShare,
   EventMoment,
   FreeEventClaimRow,
+  RefundRow,
   ResearchIncentiveRow,
   GuestBookEntry,
   HostGuestBookEntry,
@@ -28,6 +29,7 @@ import {
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import { guestLabelFor } from '@/lib/guestLabel';
 import { canTransition, type IncentiveStatus } from '@/lib/researchIncentive';
+import { canTransition as canTransitionRefund } from '@/lib/refunds';
 import type { MediaSource } from '@/lib/mediaSource';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
@@ -469,6 +471,100 @@ export async function runScheduledJob(
     dryRun: data?.dryRun ?? false,
     summary: data?.summary ?? 'The job ran but reported nothing.',
   };
+}
+
+/**
+ * File a Guest Upload Promise claim for an event you own.
+ *
+ * Sends the event id, the attestation and an optional note. Everything that
+ * decides whether money goes back — ownership, whether it was paid for, whether
+ * any guest uploaded, whether the window is open, and how much — is re-derived
+ * server-side. This call cannot name an amount.
+ */
+export async function claimGuestUploadPromise(
+  eventId: string,
+  attested: boolean,
+  note?: string,
+): Promise<{ filed: boolean; message: string }> {
+  const { data, errors } = await client.mutations.claimGuestUploadPromise(
+    { eventId, attested, note: note?.trim() || undefined },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { filed: data?.filed ?? false, message: data?.message ?? '' };
+}
+
+function readRefund(row: Record<string, unknown>): RefundRow {
+  return {
+    id: String(row.id ?? ''),
+    eventId: String(row.eventId ?? ''),
+    reason: String(row.reason ?? ''),
+    status: (row.status ?? 'REQUESTED') as RefundRow['status'],
+    amountCents: Number(row.amountCents ?? 0),
+    hostNote: (row.hostNote as string) ?? null,
+    adminNote: (row.adminNote as string) ?? null,
+    decidedBy: (row.decidedBy as string) ?? null,
+    recordedAt: (row.recordedAt as string) ?? null,
+    createdAt: (row.createdAt as string) ?? null,
+  };
+}
+
+/** This host's own refund rows, so they can see what happened to a claim. */
+export async function listMyRefunds(): Promise<RefundRow[]> {
+  const { data, errors } = await client.models.Refund.list({
+    limit: 200,
+    authMode: 'userPool',
+  });
+  if (errors?.length) return [];
+  return (data ?? []).map((row) => readRefund(row as Record<string, unknown>));
+}
+
+/** The whole ledger, newest first. Admin-only: it names amounts owed back. */
+export async function listRefunds(): Promise<RefundRow[]> {
+  const rows: RefundRow[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await client.models.Refund.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    for (const row of data ?? []) rows.push(readRefund(row as Record<string, unknown>));
+    nextToken = next;
+  } while (nextToken);
+  return rows.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+}
+
+/**
+ * Move a refund through the queue.
+ *
+ * `RECORDED` means a person issued the refund in Stripe and is saying so. This
+ * function does not refund anything, and nothing in this codebase does — see
+ * lib/refunds.ts.
+ */
+export async function decideRefund(
+  row: RefundRow,
+  next: RefundRow['status'],
+  decidedBy: string,
+  adminNote?: string,
+): Promise<void> {
+  if (!canTransitionRefund(row.status, next)) {
+    throw new Error(`A ${row.status.toLowerCase()} refund cannot become ${next.toLowerCase()}.`);
+  }
+  const now = new Date().toISOString();
+  const { errors } = await client.models.Refund.update(
+    {
+      id: row.id,
+      status: next,
+      decidedBy,
+      decidedAt: now,
+      ...(next === 'RECORDED' ? { recordedAt: now } : {}),
+      ...(adminNote ? { adminNote } : {}),
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
 }
 
 export async function listResearchIncentives(): Promise<ResearchIncentiveRow[]> {
