@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import Notice from '@/components/Notice';
 import PhotoCard from '@/components/PhotoCard';
+import PhotoEngagement from '@/components/PhotoEngagement';
 import PrintOrderModal from '@/components/PrintOrderModal';
 import { downloadPhoto, downloadPhotosAsZip, getOriginalMediaSource } from '@/lib/api';
 import { FallbackImage } from '@/components/FallbackMedia';
 import type { MediaSource } from '@/lib/mediaSource';
 import { GallerySort, sortGalleryPhotos } from '@/lib/gallery';
+import { likeCountOf } from '@/lib/photoEngagement';
+import { guestKeyFor, guestLabelFor } from '@/lib/guestLabel';
+import { listMyPhotoLikes } from '@/lib/api';
 import { isVideoFilename } from '@/lib/validation';
 
 interface PhotoGridProps {
@@ -24,6 +28,28 @@ interface PhotoGridProps {
   eventId?: string;
   /** Whether print ordering is offered (defaults to the same gate as downloads). */
   canOrderPrints?: boolean;
+  /** Guest likes and comments, from the event's own switches. Both default on. */
+  likesOn?: boolean;
+  commentsOn?: boolean;
+  /**
+   * The host's chosen layout — 'grid', 'mosaic' or 'feed'. See
+   * lib/galleryTheme.ts. Anything unrecognised falls back to the grid, so an
+   * event with a stale or absent value renders exactly as it always did.
+   */
+  layout?: string;
+}
+
+/**
+ * The container class for a layout.
+ *
+ * Mosaic uses CSS columns rather than a grid: a grid has to be told each row's
+ * height, and the point of mosaic is that it is not told. Feed is a single
+ * column with a wider gap so one photo reads as one moment.
+ */
+function layoutClassFor(layout: string | undefined): string {
+  if (layout === 'mosaic') return 'columns-2 gap-3 sm:columns-3 md:columns-4 [&>*]:mb-3';
+  if (layout === 'feed') return 'mx-auto flex max-w-xl flex-col gap-6';
+  return 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4';
 }
 
 const SORT_STORAGE_KEY = 'sharepix-gallery-sort';
@@ -43,6 +69,9 @@ export default function PhotoGrid({
   downloadMessage,
   canViewOriginal = false,
   eventId,
+  layout,
+  likesOn = false,
+  commentsOn = false,
   canOrderPrints,
 }: PhotoGridProps) {
   const [sort, setSort] = useState<GallerySort>('time-newest');
@@ -52,6 +81,15 @@ export default function PhotoGrid({
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [enlargedIndex, setEnlargedIndex] = useState<number | null>(null);
+  // Which photos THIS browser has liked, read from the server rather than
+  // remembered locally: a heart that shows filled because we optimistically
+  // stored it, on a like that never saved, is a lie the guest cannot see.
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+  // Minted in an effect, never during render — both touch localStorage, and
+  // reading it during render breaks server rendering and hydration.
+  const [guestKey, setGuestKey] = useState('');
+  const [guestLabel, setGuestLabel] = useState('a guest');
+  const engagementEventId = eventId ?? photos[0]?.eventId ?? '';
   const [printPhotos, setPrintPhotos] = useState<DisplayPhoto[] | null>(null);
   const [originalSource, setOriginalSource] = useState<MediaSource | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
@@ -62,6 +100,23 @@ export default function PhotoGrid({
     () => sortedPhotos.filter((photo) => !isVideoFilename(photo.s3Key)),
     [sortedPhotos],
   );
+  useEffect(() => {
+    if (!engagementEventId || (!likesOn && !commentsOn)) return;
+    setGuestKey(guestKeyFor(engagementEventId));
+    setGuestLabel(guestLabelFor(engagementEventId));
+  }, [engagementEventId, likesOn, commentsOn]);
+
+  useEffect(() => {
+    if (!engagementEventId || !likesOn || !guestKey) return;
+    let live = true;
+    void listMyPhotoLikes(engagementEventId, guestKey).then((ids) => {
+      if (live) setLikedIds(ids);
+    });
+    return () => {
+      live = false;
+    };
+  }, [engagementEventId, likesOn, guestKey]);
+
   const enlarged = enlargedIndex != null ? enlargeablePhotos[enlargedIndex] ?? null : null;
   const hasPrevEnlarged = enlargedIndex != null && enlargedIndex > 0;
   const hasNextEnlarged = enlargedIndex != null && enlargedIndex < enlargeablePhotos.length - 1;
@@ -277,7 +332,11 @@ export default function PhotoGrid({
         </Notice>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      {/* The host's layout. Mosaic keeps each photo's own shape by letting the
+          columns flow, which is what makes it read as a scrapboard rather than
+          a contact sheet; feed is one large photo at a time, for a small chosen
+          set. Both fall back to the grid for any value we do not know. */}
+      <div className={layoutClassFor(layout)}>
         {sortedPhotos.map((photo, i) => (
           <PhotoCard
             key={photo.id}
@@ -388,6 +447,33 @@ export default function PhotoGrid({
               />
             ) : null}
           </div>
+          {/* Likes and comments sit under the photo, in the lightbox rather
+              than on the grid card: looking at one photo is when somebody has
+              something to say about it, and a tap target on a card competes
+              with selecting and downloading. */}
+          {engagementEventId && (likesOn || commentsOn) ? (
+            <div onClick={(event) => event.stopPropagation()}>
+              <PhotoEngagement
+                photoId={enlarged.id}
+                eventId={engagementEventId}
+                guestKey={guestKey}
+                guestLabel={guestLabel}
+                likesOn={likesOn}
+                commentsOn={commentsOn}
+                likeCount={likeCountOf(enlarged)}
+                liked={likedIds.has(enlarged.id)}
+                onLikedChange={(liked) =>
+                  setLikedIds((current) => {
+                    const next = new Set(current);
+                    if (liked) next.add(enlarged.id);
+                    else next.delete(enlarged.id);
+                    return next;
+                  })
+                }
+              />
+            </div>
+          ) : null}
+
           <div
             className="flex justify-center gap-3 px-4 py-3"
             onClick={(event) => event.stopPropagation()}

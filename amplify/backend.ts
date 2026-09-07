@@ -43,6 +43,7 @@ import { monthlyReport } from './functions/monthly-report/resource';
 import { claimRefund } from './functions/claim-refund/resource';
 import { submitFeedback } from './functions/submit-feedback/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
+import { photoEngagement } from './functions/photo-engagement/resource';
 
 const backend = defineBackend({
   auth,
@@ -75,6 +76,7 @@ const backend = defineBackend({
   claimRefund,
   submitFeedback,
   reclaimStorage,
+  photoEngagement,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -96,6 +98,8 @@ const refundTable = backend.data.resources.tables.Refund;
 const feedbackTable = backend.data.resources.tables.EventFeedback;
 const mediaTable = backend.data.resources.tables.MediaObject;
 const settingTable = backend.data.resources.tables.AppSetting;
+const reactionTable = backend.data.resources.tables.PhotoReaction;
+const commentTable = backend.data.resources.tables.PhotoComment;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -709,6 +713,24 @@ claimRefundFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
 // The monthly report counts refunds, so it reads the ledger too.
 refundTable.grantReadData(monthlyReportFn);
 monthlyReportFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
+
+// Guest likes and comments. Its own function because the count on a photo and
+// the row that causes it have to move together: a browser that could write
+// either directly could set a count with no like behind it, and the two would
+// drift apart on the first failure.
+//
+// It reads the event because that is where the host's switches live, and reads
+// the photo because the client sends a photo id and does not get to say which
+// event it is in.
+const engagementFn = backend.photoEngagement.resources.lambda as LambdaFunction;
+photoTable.grantReadWriteData(engagementFn);
+eventTable.grantReadData(engagementFn);
+reactionTable.grantReadWriteData(engagementFn);
+commentTable.grantReadWriteData(engagementFn);
+engagementFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+engagementFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+engagementFn.addEnvironment('REACTION_TABLE_NAME', reactionTable.tableName);
+engagementFn.addEnvironment('COMMENT_TABLE_NAME', commentTable.tableName);
 
 // Deletes the media of events whose archive window has closed — the 12-month
 // gallery, then the 90-day archive, then gone. Everything except this last step

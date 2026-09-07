@@ -1,7 +1,7 @@
 /* The brand pairing — see docs/design-system.md. Bricolage Grotesque and
    Inter were dropped once no page referenced them; two families is already
    the page-weight budget. */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;1,400;1,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,500;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -409,4 +409,40 @@
     transform: translate(var(--tcc-dx, 0), var(--tcc-dy, -40px)) scale(1) rotate(var(--tcc-rot, 90deg));
     opacity: 0;
   }
+}
+
+/*
+ * A host's chosen gallery style.
+ *
+ * Applied as CSS custom properties on one wrapper, set from validated values in
+ * lib/galleryTheme.ts. The variables have no defaults here on purpose: an event
+ * with no theme sets none of them, `var(--x, fallback)` resolves to the brand
+ * font, and the page renders exactly as it always did.
+ *
+ * Deliberately narrow. This restyles the event's own headings and body text and
+ * nothing else — not the buttons, not the notices, not the upload flow's
+ * instructions. A host is dressing their gallery, not restyling the product,
+ * and a guest who cannot find the upload button because of a font choice is a
+ * failure of the thing SharePix is for.
+ */
+.spx-themed-event .spx-display,
+.spx-themed-event .spx-display-serif,
+.spx-themed-event h1,
+.spx-themed-event h2 {
+  font-family: var(--spx-event-heading, inherit);
+}
+
+.spx-themed-event .spx-body,
+.spx-themed-event .spx-eyebrow {
+  font-family: var(--spx-event-body, inherit);
+}
+
+/* The accent colours rules and fills, and text only when it passes contrast —
+   themeStyle() sets --spx-event-accent-text to `inherit` when it does not. */
+.spx-themed-event .spx-eyebrow {
+  color: var(--spx-event-accent-text, inherit);
+}
+
+.spx-themed-event .spx-rule {
+  background-color: var(--spx-event-accent, currentColor);
 }

@@ -1,8 +1,9 @@
 import Layout from '@/components/Layout';
 import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
+import { FAIR_USE_NOTICE } from '@/lib/fairUse';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'September 5, 2026';
+const LAST_UPDATED = 'September 7, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
@@ -133,6 +134,12 @@ export default function TermsPage() {
                 <a href="/pricing">pricing page</a>.
               </li>
               <li>
+                The paid event includes <strong>unlimited photo uploads</strong> and unlimited
+                guests. Video is not unlimited: each event includes a set number of videos, shown
+                on the <a href="/pricing">pricing page</a>, because a video is served at full size
+                every time it is played and so costs differently from a photo.
+              </li>
+              <li>
                 Prices and plan features may change; changes apply to future purchases. Except where
                 required by law, payments are non-refundable. If you believe you were charged in
                 error, contact us at <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
@@ -141,7 +148,29 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>7. Availability and changes to the Service</h2>
+            <h2 id="fair-use">7. Fair use of unlimited uploads</h2>
+            <p>{FAIR_USE_NOTICE}</p>
+            <p>
+              In practice this means SharePix is for collecting the photos and videos from{' '}
+              <strong>an event</strong>. It is not a backup service, a file-transfer service, or
+              general cloud storage, and it is not intended for automated or scripted uploading.
+            </p>
+            <p>
+              We do not publish a photo limit, and a large event is not a problem: a wedding, a
+              conference, a school fundraiser or a reunion producing thousands of photos is
+              exactly what &ldquo;unlimited&rdquo; is for, and we will not restrict an event
+              simply because it was popular. Where usage is far outside anything an event could
+              produce, we may review the event and, if necessary, limit further uploads. Where we
+              can, we will contact the host first.
+            </p>
+            <p>
+              Uploads also remain subject to the per-file size limits shown when you upload, and
+              to section 5 above.
+            </p>
+          </div>
+
+          <div>
+            <h2>8. Availability and changes to the Service</h2>
             <p>
               We work to keep the Service available and reliable, but we provide it on an
               as-available basis and may modify, suspend, or discontinue features. We are not
@@ -151,7 +180,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>8. Termination</h2>
+            <h2>9. Termination</h2>
             <p>
               You may stop using the Service and delete your events at any time. We may suspend or
               terminate access if you violate these Terms or to protect the Service or its users.
@@ -161,7 +190,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>9. Copyright and DMCA</h2>
+            <h2>10. Copyright and DMCA</h2>
             <p>
               SharePix hosts photos and videos uploaded by hosts and their guests. We respond to
               notices of claimed copyright infringement under the Digital Millennium Copyright
@@ -176,7 +205,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>10. Disclaimers</h2>
+            <h2>11. Disclaimers</h2>
             <p>
               THE SERVICE IS PROVIDED &ldquo;AS IS&rdquo; AND &ldquo;AS AVAILABLE,&rdquo; WITHOUT
               WARRANTIES OF ANY KIND, WHETHER EXPRESS OR IMPLIED, INCLUDING IMPLIED WARRANTIES OF
@@ -187,9 +216,9 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>11. Limitation of liability</h2>
+            <h2>12. Limitation of liability</h2>
             <p>
-              TO THE MAXIMUM EXTENT PERMITTED BY LAW, SHAREPIX AND CALVIN SOLUTIONS LLC WILL NOT BE
+              TO THE MAXIMUM EXTENT PERMITTED BY LAW, SHAREPIX AND {LEGAL_ENTITY.toUpperCase()} WILL NOT BE
               LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR
               FOR ANY LOSS OF DATA, CONTENT, PROFITS, OR GOODWILL. OUR TOTAL LIABILITY FOR ANY CLAIM
               RELATING TO THE SERVICE WILL NOT EXCEED THE AMOUNT YOU PAID US FOR THE EVENT GIVING
@@ -199,7 +228,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>12. Indemnification</h2>
+            <h2>13. Indemnification</h2>
             <p>
               You agree to indemnify and hold harmless {LEGAL_ENTITY} from claims,
               damages, and expenses (including reasonable legal fees) arising out of Your Content,
@@ -208,7 +237,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>13. Governing law</h2>
+            <h2>14. Governing law</h2>
             <p>
               These Terms are governed by the laws of {GOVERNING_STATE}, without regard to its
               conflict-of-laws rules. You agree to the exclusive jurisdiction of the state and
@@ -218,7 +247,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>14. Changes to these Terms</h2>
+            <h2>15. Changes to these Terms</h2>
             <p>
               We may update these Terms from time to time. When we do, we will revise the
               &ldquo;Last updated&rdquo; date above, and for significant changes we will provide a
@@ -228,7 +257,7 @@ export default function TermsPage() {
           </div>
 
           <div>
-            <h2>15. Contact</h2>
+            <h2>16. Contact</h2>
             <p>
               Questions about these Terms? Contact us at{' '}
               <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>, or write to us:

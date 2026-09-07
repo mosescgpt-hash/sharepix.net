@@ -8,6 +8,9 @@ import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
+import GalleryStyleSettings from '@/components/GalleryStyleSettings';
+import CommentModeration from '@/components/CommentModeration';
+import { commentsEnabled } from '@/lib/photoEngagement';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
 import {
@@ -499,6 +502,22 @@ function AdminDashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* The host's gallery style, next to the QR branding — both are
+                "make this look like my event", and separating them would make
+                a host look in two places for one idea. */}
+            <div className="mt-8">
+              <GalleryStyleSettings event={event} onSaved={load} />
+            </div>
+
+            {/* Only when the event actually has comments on. A moderation
+                queue for a feature the host switched off is a panel that
+                explains nothing and worries them. */}
+            {commentsEnabled(event) ? (
+              <div className="mt-8">
+                <CommentModeration eventId={event.id} />
+              </div>
+            ) : null}
 
             {showQR ? (
               <div id="event-qr-code" className="mx-auto mt-6 max-w-sm scroll-mt-24">

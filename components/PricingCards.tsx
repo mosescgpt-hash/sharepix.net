@@ -107,9 +107,14 @@ export default function PricingCards() {
         </Link>
 
         <p className="mt-6 text-xs leading-relaxed text-canvas/55">
-          {/* The asterisk has something behind it. One that did not would be
-              worse than no asterisk at all. */}
-          *{FAIR_USE_NOTICE}
+          {/* The asterisk has something behind it — both this sentence and a
+              real section in the terms. One that did not would be worse than no
+              asterisk at all. */}
+          *{FAIR_USE_NOTICE}{' '}
+          <Link href="/terms#fair-use" className="underline">
+            Read the fair-use section
+          </Link>
+          .
         </p>
       </div>
 

@@ -21,6 +21,7 @@ import { completeSurvey as completeSurveyFn } from '../functions/complete-survey
 import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
 import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
 import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
+import { photoEngagement as photoEngagementFn } from '../functions/photo-engagement/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
 import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/resource';
 
@@ -109,6 +110,20 @@ const schema = a.schema({
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
       mediaReclaimedAt: a.datetime(),
+      // How the host wants their gallery to look. See lib/galleryTheme.ts —
+      // a curated set of keys plus one free-form accent colour, all validated
+      // server-side before they are stored, because every one of them reaches
+      // a guest's browser.
+      galleryFontSet: a.string(),
+      galleryLayout: a.string(),
+      galleryAccent: a.string(),
+      // Whether guests can like and comment on photos. ABSENT MEANS ON: every
+      // event created before this existed has no value, and the honest reading
+      // of that is "nobody turned this off". See lib/photoEngagement.ts, which
+      // also explains why these are switches at all — SharePix is used for
+      // memorials, and a like button is the wrong object in that room.
+      reactionsEnabled: a.boolean(),
+      commentsEnabled: a.boolean(),
       // "City, State" the host sets for the event — a memory label shown on
       // photos and used in downloads. NOT derived from photo GPS, which is
       // still stripped from every upload, and deliberately no finer than a
@@ -240,6 +255,11 @@ const schema = a.schema({
       // trusted. A value pointing at a moment the host later deleted is also
       // valid; the gallery folds it back to "no moment". See lib/moments.ts.
       momentId: a.string(),
+      // Likes and comments, maintained by the photo-engagement function in the
+      // same atomic update as the row that causes them. Soft counts by design:
+      // a like is keyed to a browser, not a person. See lib/photoEngagement.ts.
+      likeCount: a.integer(),
+      commentCount: a.integer(),
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create` (photos come only from createEventPhoto) and no
@@ -518,6 +538,54 @@ const schema = a.schema({
       notes: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
+
+  // One browser's like on one photo.
+  //
+  // The id is `<photoId>#<guestKey>`, so a conditional put IS the one-like-per-
+  // browser rule: no scanning, and no race between two taps. Deleting the row
+  // is the unlike.
+  //
+  // Guests can read (a gallery shows what it has been given) and write nothing
+  // directly — the count on the photo and this row move together in one
+  // function, or they would drift apart on the first failure.
+  PhotoReaction: a
+    .model({
+      photoId: a.string(),
+      eventId: a.string(),
+      /** Identifies a browser, badly, and only so one tap is not counted twice. */
+      guestKey: a.string(),
+    })
+    .authorization((allow) => [allow.guest().to(['get', 'list']), allow.authenticated().to(['get', 'list']), allow.group('ADMINS')]),
+
+  // A comment on a photo.
+  //
+  // Free text written by anonymous people at a party. There is NO automatic
+  // screening of it — photo screening is Rekognition, text screening is a
+  // different service and a different cost, and implying a filter that does not
+  // exist is worse than saying so. What exists is the host: they can hide any
+  // comment, and turn comments off entirely.
+  //
+  // `hidden` rather than a delete, so a host who hides something can change
+  // their mind, and so the count stays reconcilable.
+  PhotoComment: a
+    .model({
+      photoId: a.string(),
+      eventId: a.string(),
+      /** The host's owner string, so they can moderate their own event. */
+      eventOwner: a.string(),
+      body: a.string(),
+      /** What the comment is signed with — a typed name or a guest label. */
+      author: a.string(),
+      guestKey: a.string(),
+      hidden: a.boolean(),
+      hiddenBy: a.string(),
+    })
+    .authorization((allow) => [
+      allow.guest().to(['get', 'list']),
+      allow.authenticated().to(['get', 'list']),
+      allow.ownerDefinedIn('eventOwner').to(['get', 'list', 'update']),
+      allow.group('ADMINS'),
+    ]),
 
   // One stored object, and how big it is.
   //
@@ -930,6 +998,15 @@ const schema = a.schema({
     message: a.string(),
   }),
 
+  LikeResult: a.customType({
+    liked: a.boolean().required(),
+  }),
+
+  CommentResult: a.customType({
+    id: a.string().required(),
+    createdAt: a.string(),
+  }),
+
   FeedbackResult: a.customType({
     recorded: a.boolean().required(),
     message: a.string(),
@@ -1017,6 +1094,33 @@ const schema = a.schema({
     .returns(a.ref('SurveyCompletionResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(completeSurveyFn)),
+
+  // Like a photo, or take the like back. Open to signed-out guests because
+  // guests are the point — the whole product works without an account.
+  //
+  // The guest key identifies a BROWSER and is not a credential. A like is a
+  // soft count by design; see lib/photoEngagement.ts for why making it
+  // tamper-proof would mean identifying guests, which is the one thing
+  // SharePix promises not to make them do.
+  togglePhotoLike: a
+    .mutation()
+    .arguments({ photoId: a.string().required(), guestKey: a.string().required() })
+    .returns(a.ref('LikeResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(photoEngagementFn)),
+
+  // Leave a comment on a photo. Nothing screens the text — see the function.
+  addPhotoComment: a
+    .mutation()
+    .arguments({
+      photoId: a.string().required(),
+      guestKey: a.string().required(),
+      body: a.string().required(),
+      author: a.string(),
+    })
+    .returns(a.ref('CommentResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(photoEngagementFn)),
 
   // Record what a host thought of their event, from the link they were
   // emailed. Open to signed-out callers because the link is the credential and
@@ -1199,6 +1303,11 @@ const schema = a.schema({
       qrDotStyle: a.string(),
       qrColor: a.string(),
       qrLogo: a.string(),
+      galleryFontSet: a.string(),
+      galleryLayout: a.string(),
+      galleryAccent: a.string(),
+      reactionsEnabled: a.boolean(),
+      commentsEnabled: a.boolean(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])

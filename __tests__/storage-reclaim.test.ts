@@ -10,6 +10,7 @@ import {
   storedKeysOf,
 } from '../lib/storageReclaim';
 import { ARCHIVE_DAYS, getTier } from '../lib/pricing';
+import { codeOnly } from './sourceGuards';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -199,16 +200,8 @@ describe('what the operator is told', () => {
 
 describe('the job itself', () => {
   const handler = read('amplify/functions/reclaim-storage/handler.ts');
-  /**
-   * The handler with its prose removed.
-   *
-   * Guards that assert something is ABSENT have to read code, not comments —
-   * twice now a guard here has passed or failed on a sentence explaining why
-   * the thing it was looking for is deliberately not there.
-   */
-  const handlerCode = handler
-    .replace(/\/\*\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/[^\n]*/g, '');
+  // Absence checks read code, never prose — see __tests__/sourceGuards.ts.
+  const handlerCode = codeOnly(handler);
   const resource = read('amplify/functions/reclaim-storage/resource.ts');
   const backend = read('amplify/backend.ts');
 
