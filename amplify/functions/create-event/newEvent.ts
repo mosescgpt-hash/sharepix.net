@@ -54,7 +54,10 @@ export const TIER_PLANS: Record<string, TierPlan> = {
   // On sale. `plus` is the single paid plan, displayed as "Event"; see the
   // note in lib/pricing.ts for why it kept that id instead of taking `event`.
   free: { priceCents: 0, photoLimit: 50, videoLimit: 1, accessDays: 60 + 30 },
-  plus: { priceCents: 7900, photoLimit: 3000, videoLimit: 30, accessDays: 60 + 365 },
+  // photoLimit null means unlimited, and is the number actually stamped on the
+  // row. Bounded by retention and fair use rather than by a count — see
+  // lib/pricing.ts for the reasoning and lib/fairUse.ts for the safeguards.
+  plus: { priceCents: 7900, photoLimit: null, videoLimit: 30, accessDays: 60 + 365 },
   // Retired, but still creatable so an event that already carries one can be
   // paid for. Their access windows are the ones those plans were sold with.
   event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 60 + 365 },

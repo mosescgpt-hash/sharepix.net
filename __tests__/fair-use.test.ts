@@ -263,3 +263,71 @@ describe('what the customer is told', () => {
     expect(FAIR_USE_NOTICE).not.toMatch(/\d{3,}/);
   });
 });
+
+describe('what the pricing page claims', () => {
+  const cards = read('components/PricingCards.tsx');
+  const pricing = read('pages/pricing.tsx');
+  const home = read('pages/index.tsx');
+  /**
+   * Source with its prose removed.
+   *
+   * A guard that looks for a forbidden phrase has to read the copy, not the
+   * comment explaining why the phrase is forbidden. This is the fourth guard
+   * in this codebase to fail on its own explanation.
+   */
+  const strip = (source: string) =>
+    source.replace(/\/\*\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+  it('claims unlimited photos, and carries the asterisk', () => {
+    expect(cards).toContain('Unlimited photo uploads*');
+    // An asterisk with nothing behind it is worse than no asterisk. This one
+    // renders FAIR_USE_NOTICE directly rather than restating it, so the two
+    // cannot drift.
+    expect(cards).toContain('FAIR_USE_NOTICE');
+  });
+
+  it('does not claim unlimited video anywhere a customer reads', () => {
+    // Video is the one upload whose cost is not bounded by resizing, and the
+    // allowance must not be set before real usage data exists.
+    for (const source of [cards, pricing, home]) {
+      expect(source.toLowerCase()).not.toContain('unlimited video');
+    }
+  });
+
+  it('does not advertise features SharePix does not have', () => {
+    // Three items on the pricing brief's list do not exist in the product:
+    // per-event password/PIN protection, co-host access, and photo challenges.
+    // Listing them would be a claim discovered by a customer rather than by us.
+    //
+    // Password is deliberately NOT checked as a forbidden substring: the FAQ
+    // legitimately says the gallery is "not password-protected", and a
+    // substring cannot tell a denial from a claim. The honest statement is
+    // asserted positively in the test below instead.
+    const claims = `${strip(cards)} ${strip(pricing)}`.toLowerCase();
+    for (const absent of ['co-host', 'cohost', 'photo challenge', 'missions']) {
+      expect(claims).not.toContain(absent);
+    }
+  });
+
+  it('calls the gallery unlisted rather than private-with-a-password', () => {
+    // "Private" invites the assumption of a password. The gallery is unlisted,
+    // which is a real and different promise, and the FAQ says so plainly.
+    expect(pricing).toContain('It is unlisted');
+    expect(pricing).toContain('not password-protected');
+  });
+
+  it('uses no discount theatre', () => {
+    // No strikethrough, no "was", no countdown. A single confident price does
+    // not need decoration and decoration would undercut it.
+    const copy = `${strip(cards)} ${strip(pricing)}`.toLowerCase();
+    for (const trick of ['line-through', 'normally $', 'was $', 'countdown', 'limited time']) {
+      expect(copy).not.toContain(trick);
+    }
+  });
+
+  it('tells the customer the media is eventually deleted', () => {
+    // Retention is what funds the unlimited promise, so it has to be stated
+    // rather than discovered.
+    expect(pricing).toContain('archived for 90 days and then permanently deleted');
+  });
+});

@@ -92,7 +92,9 @@ survey at all. See *What has to exist first* below.
 | Plan | Price | Photos | Videos | Gallery |
 | --- | --- | --- | --- | --- |
 | Free | $0, one per account | 50 | 1 | 30 days |
-| Event | $79 one-time | 3,000 | 30 | 12 months |
+| Event | $79 one-time | **Unlimited\*** | 30 | 12 months |
+
+\*Unlimited as of decision 14 below, which also records what makes it honest.
 
 The paid plan includes everything: customizable QR code, event branding,
 approve-before-showing moderation, the guest book and the live slideshow.
@@ -587,6 +589,65 @@ That is the correct trade: a report going nowhere is visible on the settings
 screen, where a report going to the wrong inbox is visible nowhere. The
 `REPORT_TO_ADDRESS` env var survives as a fallback for a deployment that wants
 to pin one.
+
+## 14. Unlimited photos, and what pays for the promise
+
+**Decided.** Shipped. `photoLimit` on the paid plan is now `null`.
+
+The old comment beside `photoLimit: 3000` argued that unlimited on a one-time
+payment is an unbounded storage and egress bill. **That argument was right.** It
+is not overruled here — it is answered:
+
+| The objection | What answers it |
+| --- | --- |
+| Storage grows without bound | Media is deleted at 12 months + 90-day archive (decision 12) |
+| Nobody can see an abusive event | Bytes are measured per event, thresholds flag it (decision 12) |
+| One event could write forever | Velocity is measured; abuse ceilings block |
+
+Unlimited is defensible only while all three hold. `__tests__/pricing-migration.test.ts`
+pins them, so removing reclamation or the thresholds fails the test that guards
+the claim rather than quietly making it a lie.
+
+What made 3,000 wrong as a *customer promise* is separate from whether it was
+wrong as a *limit*: nobody can predict how many photos an event that has not
+happened yet will produce, so the number could only ever reassure or alarm by
+accident.
+
+**Video is not unlimited and is not advertised as such.** A still is resized
+before it is served; a clip streams at full size on every play, so video is the
+one upload a photo cap never bounded. The brief is explicit that no
+customer-facing video allowance should be set before real usage and cost data
+exist, and there is none. When there is, the honest unit is gigabytes, not a
+count — video sizes vary by an order of magnitude.
+
+### Three things the pricing brief asked for that do not exist
+
+Left off the page rather than written into it, because a feature list is a set
+of promises:
+
+- **Password/PIN protection.** Galleries are *unlisted*, not password-protected.
+  The FAQ says so in those words rather than saying "private" and letting the
+  reader assume something stronger.
+- **Co-host capability.** Not built.
+- **Missions / photo challenges.** Not built. Moments are event sections, which
+  is a different thing and is described as what it is.
+
+A test asserts the first two stay absent from the copy. The third could not be a
+substring guard: the FAQ legitimately contains "not password-protected", and a
+substring cannot tell a denial from a claim — so the honest statement is
+asserted positively instead.
+
+### The page
+
+One plan, presented as one plan: no comparison row, no badge, no strikethrough,
+no "was $129". The free event is an invitation underneath rather than an equal
+column, because setting a trial beside the paid plan invites the wrong question
+— *which of these do I need?* — about a product whose pitch is that there is one
+price covering everything.
+
+**This is not reversible for events already created under it.** `photoLimit` is
+stamped at creation, so unlimited can stop being sold at any time but cannot be
+retracted from anyone who bought it.
 
 ## What has to exist first
 

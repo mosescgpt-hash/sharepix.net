@@ -147,11 +147,29 @@ const SELLABLE_TIERS: PricingTier[] = [
     // called Event, so its display name is disambiguated rather than its id.
     name: 'Event',
     price: 79,
-    // A real number rather than "unlimited". The old Premium tier advertised
-    // unlimited photos, which is an unbounded storage and egress bill on a
-    // one-off payment. Events already sold as Premium keep unlimited — they
-    // were sold that — but nothing new promises it.
-    photoLimit: 3000,
+    // Unlimited, and meant.
+    //
+    // This was 3,000, with a comment arguing that "unlimited" on a one-time
+    // payment is an unbounded storage and egress bill. That argument was right
+    // and is now answered rather than ignored: storage is measured per event,
+    // media is deleted at the end of the archive window instead of being kept
+    // forever, and fair-use thresholds make an abnormal event visible. The
+    // liability is bounded by retention now, not by a number a host has to
+    // count against.
+    //
+    // What made 3,000 wrong as a customer promise is that nobody can predict
+    // how many photos an event that has not happened yet will produce, so the
+    // number could only ever be reassuring or alarming by accident.
+    //
+    // See lib/fairUse.ts for what stops abuse, and lib/storageReclaim.ts for
+    // what stops it being forever.
+    photoLimit: null,
+    // Video is NOT unlimited and is not advertised as such. It is the one
+    // upload whose cost is not bounded by resizing — a clip streams at full
+    // size on every play — and the brief is explicit that a customer-facing
+    // video allowance should not be set before real usage and cost data exist.
+    // There is none yet. When there is, the honest unit is gigabytes rather
+    // than a count, because video sizes vary by an order of magnitude.
     videoLimit: 30,
     accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
     accessLabel: '60-day upload window',
@@ -163,7 +181,8 @@ const SELLABLE_TIERS: PricingTier[] = [
     // "Best value" against a free trial would be an odd thing to claim.
     highlight: true,
     features: [
-      'Up to 3,000 photos and 30 videos',
+      'Unlimited photos, and up to 30 videos',
+      'Unlimited guests — no app, no accounts',
       '60-day upload window (extend +30 days anytime)',
       'Gallery stays up for 12 months after uploads close',
       'Customizable QR code',

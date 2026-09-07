@@ -1,17 +1,18 @@
 import Link from 'next/link';
-import { CORPORATE_PLAN, PRICING_TIERS } from '@/lib/pricing';
+import { CORPORATE_PLAN, getTier } from '@/lib/pricing';
+import { FAIR_USE_NOTICE } from '@/lib/fairUse';
 
 /**
  * A drawn tick rather than a bare "✓" glyph: the glyph renders differently on
  * every platform and sits off the baseline. Square, no tinted disc — the disc
  * was the old rounded system.
  */
-function Check({ inverted }: { inverted: boolean }) {
+function Check() {
   return (
     <svg
       aria-hidden
       viewBox="0 0 12 12"
-      className={`mt-[5px] h-3 w-3 shrink-0 ${inverted ? 'text-mint' : 'text-pine'}`}
+      className="mt-[5px] h-3 w-3 shrink-0 text-mint"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -21,116 +22,114 @@ function Check({ inverted }: { inverted: boolean }) {
   );
 }
 
-interface PlanCardProps {
-  name: string;
-  price: number;
-  unit: string;
-  meta: string;
-  features: string[];
-  href: string;
-  badge?: string;
-  /** The recommended plan, rendered as a navy block instead of a white card. */
-  featured?: boolean;
-}
-
-function PlanCard({ name, price, unit, meta, features, href, badge, featured = false }: PlanCardProps) {
-  return (
-    <div
-      className={`flex flex-col p-7 ${
-        // Depth is background colour, not elevation. The chosen plan is the
-        // only inverted block in the row, which is what makes it read chosen.
-        featured ? 'border border-ink bg-ink text-canvas' : 'spx-card'
-      }`}
-    >
-      {/* Reserved even when empty, so the plan names stay on one baseline
-          across the row instead of the badged card pushing its own down. */}
-      <div className="min-h-[30px]">
-        {badge ? (
-          <span className={`spx-badge ${featured ? 'bg-mint text-charcoal' : 'bg-pine text-canvas'}`}>
-            {badge}
-          </span>
-        ) : null}
-      </div>
-
-      <h3
-        className={`mt-4 font-sans text-xs font-medium uppercase tracking-[0.16em] ${
-          featured ? 'text-canvas/70' : 'text-charcoal/60'
-        }`}
-      >
-        {name}
-      </h3>
-
-      <p className="mt-2 flex items-baseline gap-1.5">
-        <span className="font-sans text-[2.75rem] font-bold leading-none tracking-[-0.03em]">
-          {price === 0 ? 'Free' : `$${price}`}
-        </span>
-        {/* "$0 / event" reads as a price someone forgot to fill in. A free plan
-            has a word, not a number, and no unit to divide by. */}
-        {price === 0 ? null : (
-          <span className={`text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>
-            / {unit}
-          </span>
-        )}
-      </p>
-      <p className={`mt-2 text-sm ${featured ? 'text-canvas/60' : 'text-charcoal/55'}`}>{meta}</p>
-
-      <div className={`my-6 h-px ${featured ? 'bg-canvas/20' : 'bg-charcoal/10'}`} />
-
-      <ul className="flex-1 space-y-3">
-        {features.map((feature) => (
-          <li
-            key={feature}
-            className={`flex gap-2.5 text-sm leading-relaxed ${
-              featured ? 'text-canvas/80' : 'text-charcoal/75'
-            }`}
-          >
-            <Check inverted={featured} />
-            <span>{feature}</span>
-          </li>
-        ))}
-      </ul>
-
-      <Link href={href} className={`${featured ? 'spx-btn-canvas' : 'spx-btn-outline'} mt-8 w-full`}>
-        {price === 0 ? 'Start free' : `Choose ${name}`}
-      </Link>
-    </div>
-  );
-}
+/**
+ * Everything the paid event includes.
+ *
+ * Written here rather than taken from the tier's `features` array because that
+ * array is the short summary used in the create-event flow, and this is the
+ * full list. Both are checked against the same rule:
+ *
+ *   **Nothing on this list is a feature SharePix does not have.**
+ *
+ * Three things asked for in the pricing brief are deliberately absent, because
+ * they do not exist in the product: per-event password or PIN protection
+ * (galleries are unlisted, which is a different promise and is described as
+ * such), co-host access, and photo challenges. Listing them would be the kind
+ * of claim that is discovered by a customer rather than by us.
+ */
+const INCLUDED: string[] = [
+  'Unlimited guests — no app, no accounts, no passwords to share',
+  'Unlimited photo uploads*',
+  'Up to 30 videos',
+  'Full-resolution originals, kept and downloadable',
+  'A private, unlisted gallery only your link and QR code reach',
+  '60-day upload window, extendable any time',
+  'Gallery stays up for 12 months after uploads close',
+  'Your own event URL and customizable QR code',
+  'Moments — separate parts of the day, each with its own QR code',
+  'Guest book — signed notes, photos and video messages',
+  'Live slideshow for a venue screen, updating as photos arrive',
+  'ZIP download of everything, in one click',
+  'Guest names and captions on every upload',
+  'Approve-before-showing moderation, and delete anything at any time',
+  'Your own event colours and branding',
+];
 
 /**
- * A free trial and the plan, side by side, with Corporate as a line of prose
- * underneath.
+ * One plan, presented as one plan.
  *
- * Corporate used to be a third card. It is a $149 monthly subscription sitting
- * beside one-time payments, which made the row read as prices to compare when
- * they are not comparable. It keeps its own page; what it loses is equal
- * billing with a decision it is not part of.
+ * This used to be a row of cards to compare. There is nothing to compare: the
+ * free event is a trial rather than a cheaper tier, and setting it beside the
+ * paid plan as an equal column invited exactly the wrong question — *which of
+ * these do I need?* — about a product whose whole pitch is that there is one
+ * price and it covers everything.
  *
- * Neither card carries a badge. With one paid plan there is nothing for it to
- * be better value than, and "Best value" set against a free trial would be an
- * odd claim to make about the thing that costs money.
+ * So the paid plan is the page, the free event is an invitation underneath it,
+ * and Corporate is a line of prose. No badge, no comparison table, no
+ * strikethrough, no "was $129". A single confident price does not need
+ * decoration, and decoration would undercut it.
  */
 export default function PricingCards() {
+  const paid = getTier('plus');
+  const free = getTier('free');
+  if (!paid) return null;
+
   return (
     <div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {PRICING_TIERS.map((tier) => (
-          <PlanCard
-            key={tier.id}
-            name={tier.name}
-            price={tier.price}
-            unit="event"
-            meta={
-              tier.trial
-                ? `${tier.accessLabel} · no card required`
-                : `${tier.accessLabel} · one-time payment`
-            }
-            features={tier.features}
-            href={`/create-event?tier=${tier.id}`}
-            featured={tier.highlight}
-          />
-        ))}
+      <div className="border border-ink bg-ink p-8 text-canvas sm:p-10">
+        <h3 className="font-sans text-xs font-medium uppercase tracking-[0.16em] text-canvas/70">
+          SharePix {paid.name}
+        </h3>
+
+        <p className="mt-3 flex items-baseline gap-2">
+          <span className="font-sans text-[3.5rem] font-bold leading-none tracking-[-0.03em]">
+            ${paid.price}
+          </span>
+          <span className="text-base text-canvas/60">one-time</span>
+        </p>
+        <p className="mt-3 text-sm text-canvas/70">
+          No subscription. No surprise upgrades. Nothing charged per guest or per photo.
+        </p>
+
+        <div className="my-8 h-px bg-canvas/20" />
+
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {INCLUDED.map((feature) => (
+            <li key={feature} className="flex gap-2.5 text-sm leading-relaxed text-canvas/80">
+              <Check />
+              <span>{feature}</span>
+            </li>
+          ))}
+        </ul>
+
+        <Link href="/create-event?tier=plus" className="spx-btn-canvas mt-10 w-full sm:w-auto">
+          Create your event
+        </Link>
+
+        <p className="mt-6 text-xs leading-relaxed text-canvas/55">
+          {/* The asterisk has something behind it. One that did not would be
+              worse than no asterisk at all. */}
+          *{FAIR_USE_NOTICE}
+        </p>
       </div>
+
+      {free ? (
+        <div className="spx-card mt-4 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-sans text-base font-semibold text-charcoal">
+              Try it first, free
+            </p>
+            <p className="spx-body mt-1 text-sm">
+              A real event with your own QR code and guests — up to {free.photoLimit} photos and{' '}
+              {free.videoLimit} video, and the gallery stays up for {free.retentionDays} days.
+              One per account.
+            </p>
+          </div>
+          <Link href="/create-event?tier=free" className="spx-btn-outline shrink-0">
+            Start free
+          </Link>
+        </div>
+      ) : null}
 
       <p className="spx-body mt-6 text-sm">
         Running events for a company?{' '}
