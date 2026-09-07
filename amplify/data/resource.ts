@@ -81,6 +81,29 @@ const schema = a.schema({
       // upload never happened at all.
       guestUploadCount: a.integer(),
       contributorCount: a.integer(),
+      // Bytes actually stored, maintained by sanitize-upload from the real
+      // object size in the S3 event — never from anything the browser claims.
+      //
+      // FLOAT, NOT INTEGER, and this is not a style choice: GraphQL's Int is
+      // 32-bit signed, so it tops out at 2.1 GB. A single event with a few
+      // hundred videos passes that, and the overflow would be silent. Float is
+      // a double, exact for integers to 2^53, which is nine petabytes.
+      //
+      // Split three ways because they behave differently: video is the
+      // expensive half and the half not bounded by resizing, and derived
+      // (previews and thumbs) is the half we create rather than the guest.
+      photoBytes: a.float(),
+      videoBytes: a.float(),
+      derivedBytes: a.float(),
+      // Rolling upload-velocity window. See lib/fairUse.ts — this MEASURES the
+      // rate; it does not throttle a normal event.
+      uploadWindowCount: a.integer(),
+      uploadWindowStartedAt: a.datetime(),
+      // An admin's judgement about this event's usage, which beats anything
+      // computed in both directions: 'NORMAL' clears an event the thresholds
+      // flagged, 'RESTRICTED' stops uploads on one they did not.
+      usageStatus: a.string(),
+      usageNote: a.string(),
       // "City, State" the host sets for the event — a memory label shown on
       // photos and used in downloads. NOT derived from photo GPS, which is
       // still stripped from every upload, and deliberately no finer than a
@@ -488,6 +511,48 @@ const schema = a.schema({
       /** Which admin marked it sent, so the queue has an audit trail. */
       fulfilledBy: a.string(),
       notes: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // One stored object, and how big it is.
+  //
+  // The id is the S3 key, which is what makes byte accounting idempotent: S3
+  // event notifications are at-least-once, so sanitize-upload can be handed the
+  // same object twice. A conditional put on this row is what decides whether
+  // the event's counters move, so a redelivery adds nothing.
+  //
+  // It is also what makes DELETION able to subtract the right number. Without a
+  // recorded size, removing a photo could only guess, and a counter that drifts
+  // downward is worse than no counter — it eventually reads as an empty event
+  // that is costing money.
+  //
+  // Admin-only: it is an internal accounting ledger, not customer data.
+  MediaObject: a
+    .model({
+      /** The event this object belongs to, parsed from the key. */
+      eventId: a.string(),
+      /** 'photo', 'video' or 'derived' (a preview or thumbnail we generated). */
+      kind: a.string(),
+      /** Float for the same reason the event counters are. */
+      bytes: a.float(),
+      recordedAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // A setting an admin can change without a deploy.
+  //
+  // Deliberately a tiny key/value table rather than a typed row per setting:
+  // the alternative is a schema change, a deployment and a code review every
+  // time an email address moves, which is how an address ends up hard-coded in
+  // the first place.
+  //
+  // Admin-only for both read and write. Nothing here is secret, but a setting
+  // a browser could write is a setting anyone could point at their own inbox.
+  AppSetting: a
+    .model({
+      /** The stored value. Interpretation is the caller's job. */
+      value: a.string(),
+      updatedBy: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 

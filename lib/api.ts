@@ -627,6 +627,72 @@ export async function decideRefund(
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
 }
 
+/**
+ * A setting a global admin can change without a deploy.
+ *
+ * Admin-only in both directions. A setting a browser could write is a setting
+ * anyone could point at their own inbox.
+ */
+export const SETTING_KEYS = {
+  monthlyReportRecipient: 'monthly-report-recipient',
+} as const;
+
+export async function readSetting(key: string): Promise<string> {
+  const { data, errors } = await client.models.AppSetting.get(
+    { id: key },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return (data?.value ?? '').trim();
+}
+
+/**
+ * Store a setting, creating the row on first save.
+ *
+ * `update` on a row that does not exist silently succeeds against nothing in
+ * some AppSync configurations, so this creates first and falls back to
+ * updating — the failure to engineer against is an admin pressing Save, seeing
+ * no error, and the value never landing.
+ */
+export async function writeSetting(
+  key: string,
+  value: string,
+  updatedBy: string,
+): Promise<void> {
+  const created = await client.models.AppSetting.create(
+    { id: key, value, updatedBy },
+    { authMode: 'userPool' },
+  );
+  if (!created.errors?.length) return;
+  const updated = await client.models.AppSetting.update(
+    { id: key, value, updatedBy },
+    { authMode: 'userPool' },
+  );
+  if (updated.errors?.length) {
+    throw new Error(updated.errors.map((e) => e.message).join(' · '));
+  }
+}
+
+/**
+ * Set or clear an admin's judgement about an event's usage.
+ *
+ * '' clears it and lets the thresholds speak again. 'NORMAL' means a person
+ * looked and it is fine; 'RESTRICTED' stops uploads. Nothing else is settable
+ * by hand — HIGH_USAGE and REVIEW are what the thresholds compute, and an admin
+ * writing one would be recording an opinion the system would then recompute.
+ */
+export async function setEventUsageStatus(
+  eventId: string,
+  status: '' | 'NORMAL' | 'RESTRICTED',
+  note: string,
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, usageStatus: status || null, usageNote: note || null },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
 export interface FeedbackRow {
   id: string;
   eventId: string;

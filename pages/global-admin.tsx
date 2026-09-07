@@ -21,6 +21,10 @@ import {
   listRefunds,
   listEventFeedback,
   type FeedbackRow,
+  readSetting,
+  writeSetting,
+  setEventUsageStatus,
+  SETTING_KEYS,
   reviewTestimonial,
   closeSupportFollowUp,
   listResearchIncentives,
@@ -42,6 +46,8 @@ import { canTransition } from '@/lib/researchIncentive';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
+import { assessUsage, formatBytes, totalBytes } from '@/lib/fairUse';
+import { OWNER_EMAIL_PLACEHOLDER } from '@/lib/businessInfo';
 import {
   DiscountCode,
   FreeEventClaimRow,
@@ -186,6 +192,9 @@ function GlobalAdminPage() {
   const [refundsError, setRefundsError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [reportTo, setReportTo] = useState('');
+  const [reportSaved, setReportSaved] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -319,6 +328,15 @@ function GlobalAdminPage() {
         setFeedbackError(
           err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
         );
+      }
+
+      try {
+        const stored = await readSetting(SETTING_KEYS.monthlyReportRecipient);
+        setReportTo(stored);
+        setReportSaved(stored);
+        setSettingsError(null);
+      } catch (err) {
+        setSettingsError(err instanceof Error ? err.message : 'Settings could not be loaded.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The global dashboard could not be loaded.');
@@ -594,6 +612,50 @@ function GlobalAdminPage() {
       setFeedbackError(
         err instanceof Error ? err.message : 'That follow-up could not be closed.',
       );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleSaveReportRecipient() {
+    setWorking('report-recipient');
+    setSettingsError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      const value = reportTo.trim();
+      await writeSetting(SETTING_KEYS.monthlyReportRecipient, value, me?.loginId ?? 'admin');
+      setReportSaved(value);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'That could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleUsageStatus(
+    event: QREvent,
+    status: '' | 'NORMAL' | 'RESTRICTED',
+  ) {
+    // Only RESTRICTED needs asking about: it is the one that stops a paying
+    // customer's guests from uploading, which is the expensive mistake here.
+    if (
+      status === 'RESTRICTED' &&
+      !window.confirm(
+        `Stop uploads to “${event.name}”?\n\nGuests will be told uploads are paused. Do this for abuse, not for a busy event.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`usage-${event.id}`);
+    try {
+      await setEventUsageStatus(event.id, status, '');
+      setEvents((current) =>
+        current.map((item) =>
+          item.id === event.id ? { ...item, usageStatus: status || null } : item,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That event could not be updated.');
     } finally {
       setWorking(null);
     }
@@ -1057,6 +1119,193 @@ function GlobalAdminPage() {
                   })}
                 </ul>
               )}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Storage and fair use</h2>
+              <p className="text-sm text-charcoal/70">
+                Events by what they actually store. A flag here means{' '}
+                <strong>look at it</strong>, not <strong>stop it</strong> — a big wedding
+                uploads exactly as freely as a small one. Only <em>Restricted</em> pauses
+                uploads.
+              </p>
+              {(() => {
+                const ranked = events
+                  .map((event) => ({
+                    event,
+                    bytes: totalBytes(event),
+                    assessment: assessUsage({
+                      photoCount: event.photoCount,
+                      photoBytes: event.photoBytes,
+                      videoBytes: event.videoBytes,
+                      derivedBytes: event.derivedBytes,
+                      windowCount: event.uploadWindowCount,
+                      manualStatus: event.usageStatus,
+                    }),
+                  }))
+                  .sort((a, b) => b.bytes - a.bytes);
+                const measured = ranked.filter((row) => row.bytes > 0);
+                const flagged = ranked.filter((row) => row.assessment.status !== 'NORMAL');
+                const shown = (flagged.length > 0 ? flagged : measured).slice(0, 15);
+
+                return (
+                  <>
+                    <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          Stored in total
+                        </dt>
+                        <dd className="font-sans text-2xl font-bold">
+                          {formatBytes(ranked.reduce((sum, row) => sum + row.bytes, 0))}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          Events measured
+                        </dt>
+                        <dd className="font-sans text-2xl font-bold">
+                          {measured.length}
+                          <span className="text-sm font-normal text-charcoal/55">
+                            {' '}
+                            / {events.length}
+                          </span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          Flagged
+                        </dt>
+                        <dd className="font-sans text-2xl font-bold">{flagged.length}</dd>
+                      </div>
+                    </dl>
+
+                    {measured.length < events.length ? (
+                      <p className="mt-3 text-sm text-charcoal/60">
+                        {/* Honest about the gap: byte counting starts at deploy, so
+                            everything uploaded before it reads as zero rather than as
+                            an empty event. */}
+                        Events created before byte counting existed show no storage. That
+                        is missing data, not an empty event — it fills in as new uploads
+                        arrive.
+                      </p>
+                    ) : null}
+
+                    {shown.length === 0 ? (
+                      <p className="mt-4 text-sm text-charcoal/55">Nothing stored yet.</p>
+                    ) : (
+                      <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                        {shown.map(({ event, bytes, assessment }) => (
+                          <li key={event.id} className="py-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-charcoal">
+                                  {formatBytes(bytes)} · {event.name}
+                                </p>
+                                <p className="truncate text-xs text-charcoal/60">
+                                  {event.photoCount ?? 0} photos ·{' '}
+                                  {formatBytes(event.videoBytes)} video
+                                  {assessment.status !== 'NORMAL' ? (
+                                    <span
+                                      className={
+                                        assessment.blocked
+                                          ? ' font-medium text-red-700'
+                                          : ' font-medium text-amber-700'
+                                      }
+                                    >
+                                      {' '}
+                                      · {assessment.status.toLowerCase().replace('_', ' ')}
+                                    </span>
+                                  ) : null}
+                                  {assessment.reasons.length > 0
+                                    ? ` · ${assessment.reasons.join(', ')}`
+                                    : ''}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap gap-2">
+                                {event.usageStatus ? (
+                                  <button
+                                    type="button"
+                                    disabled={working === `usage-${event.id}`}
+                                    onClick={() => void handleUsageStatus(event, '')}
+                                    className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                  >
+                                    Clear override
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={working === `usage-${event.id}`}
+                                      onClick={() => void handleUsageStatus(event, 'NORMAL')}
+                                      className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                    >
+                                      Looks fine
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={working === `usage-${event.id}`}
+                                      onClick={() =>
+                                        void handleUsageStatus(event, 'RESTRICTED')
+                                      }
+                                      className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                    >
+                                      Stop uploads
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>
+              <p className="text-sm text-charcoal/70">
+                Where the monthly analytics report goes. Changing it here takes effect on
+                the next run — no deploy.
+              </p>
+              {settingsError ? (
+                <Notice tone="warn" className="mt-3">
+                  {settingsError}
+                </Notice>
+              ) : null}
+              {!reportSaved ? (
+                <Notice tone="warn" className="mt-3">
+                  No recipient is set, so the monthly report will not send. It still runs
+                  and logs what it would have said.
+                </Notice>
+              ) : null}
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="email"
+                  value={reportTo}
+                  onChange={(e) => setReportTo(e.target.value)}
+                  placeholder={OWNER_EMAIL_PLACEHOLDER}
+                  className="spx-input w-full sm:flex-1"
+                  aria-label="Monthly report recipient"
+                />
+                <button
+                  type="button"
+                  disabled={working === 'report-recipient' || reportTo.trim() === (reportSaved ?? '')}
+                  onClick={() => void handleSaveReportRecipient()}
+                  className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                >
+                  {working === 'report-recipient' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-charcoal/60">
+                {/* Two things stand between a saved address and an email arriving, and
+                    only one of them is on this screen. */}
+                A recipient is not enough on its own: the report also needs a verified
+                sender (<code>ALERT_FROM_ADDRESS</code>), and if SES is still in sandbox
+                mode only verified addresses receive anything at all.
+              </p>
             </div>
 
             <div className="spx-card mt-8 p-5">

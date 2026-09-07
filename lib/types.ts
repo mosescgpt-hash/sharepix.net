@@ -27,6 +27,16 @@ export interface QREvent {
    */
   guestUploadCount?: number | null;
   contributorCount?: number | null;
+  // Bytes actually stored, maintained server-side from real object sizes. See
+  // lib/fairUse.ts. Numbers rather than integers because a large event exceeds
+  // what a 32-bit int holds.
+  photoBytes?: number | null;
+  videoBytes?: number | null;
+  derivedBytes?: number | null;
+  uploadWindowCount?: number | null;
+  uploadWindowStartedAt?: string | null;
+  usageStatus?: string | null;
+  usageNote?: string | null;
   accessExpiresAt?: string | null;
   uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;

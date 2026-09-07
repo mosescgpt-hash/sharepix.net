@@ -478,6 +478,92 @@ No Featured Event invitation, no referral offer, no credit ledger, no repeat-use
 message. Those are the rest of the growth loop and each needs a decision first —
 referral amounts, whether credit exists at all — that has not been made.
 
+## 12. Storage: measured, bounded, and reclaimed on delete
+
+Groundwork for advertising unlimited photo uploads. **The pricing and copy have
+not changed** — nothing here removes the 3,000-photo cap. This is what has to be
+true before removing it is safe.
+
+### The dangerous combination
+
+Unlimited photos on its own is fine. Unlimited photos *while nothing deletes
+bytes and nothing limits velocity* is not: one event could write unboundedly,
+forever, for $79, and no query could tell you it had happened.
+
+Three things were missing and all three are now present.
+
+### Bytes are counted, server-side only
+
+`sanitize-upload` is the only place in SharePix that knows an object's real
+size — uploads go browser → S3 directly, so no application server sees the bytes
+and anything the browser reported would be a claim. A counter the client could
+set to zero is worse than no counter, because it reads as authoritative.
+
+Counting is **idempotent**: S3 delivers at-least-once and a strippable original
+arrives twice by design (once as uploaded, once as the sanitized rewrite). A
+conditional put on a per-key ledger row is what gates the increment, so a
+redelivery adds nothing. That row is also what lets deletion subtract exactly
+what was added rather than guessing.
+
+Counters are **Float, not Integer**. GraphQL's `Int` is 32-bit and tops out at
+2.1 GB, which a single event with a few hundred videos passes — and the overflow
+would be silent.
+
+Photos, video and derived files (previews and thumbs, which *we* generate) are
+counted separately, because folding them together would make an event's storage
+read about a third larger than what anyone actually uploaded.
+
+### A deleted photo is now actually deleted
+
+`delete-event-photo` removed the S3 objects and the row but **never touched R2**,
+which is where reads are served from — and `mediaUrls` signs a key without
+consulting the photo table. So anyone already holding the key, meaning every
+guest who had loaded the gallery, kept a working URL indefinitely. It also never
+deleted the thumbnail at all, in either store.
+
+Both are fixed. This mattered most on the moderation and DMCA paths, where
+deletion *is* the remedy.
+
+### Flagged, not throttled
+
+`lib/fairUse.ts` holds every threshold, all environment-overridable, none copied
+into a handler or a component.
+
+**A threshold crossed makes an event visible, not blocked.** A large wedding
+uploads exactly as freely as a small one; a person is simply told about it. Only
+the abuse thresholds block, and they sit far above any real event — 50,000
+photos, 500 GB, 1,200 uploads a minute. Throttling a paying customer whose event
+went well is a far more expensive mistake than letting an abusive event run
+another hour before someone looks.
+
+An admin's judgement beats the thresholds **in both directions**: `NORMAL`
+clears an event they have looked at, `RESTRICTED` stops one the numbers did not
+catch.
+
+The numbers are hypotheses with stated reasons, not tuning — there is no real
+data yet, and that is the honest state to ship in.
+
+### Not done
+
+Nothing reclaims storage from *expired* events yet. The S3 backstop rule expires
+`events/` after 800 days and that is all. Bounded retention is what would make
+unlimited photos bounded in cost, and it is the open half of this.
+
+## 13. The report recipient is a setting, not a line of code
+
+`seth@sharepix.net` was defaulted into `amplify/backend.ts`. It now lives in the
+`AppSetting` table and a global admin edits it on the dashboard.
+
+An address compiled into application code needs a code change, a review and a
+deploy to move, which is how it ends up wrong and stays wrong — and it puts a
+named person's inbox in the repository.
+
+The consequence is that **the report sends to nobody until an admin sets it**.
+That is the correct trade: a report going nowhere is visible on the settings
+screen, where a report going to the wrong inbox is visible nowhere. The
+`REPORT_TO_ADDRESS` env var survives as a fallback for a deployment that wants
+to pin one.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

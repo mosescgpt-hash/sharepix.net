@@ -1,6 +1,6 @@
 // @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
 // dependency, so it's excluded from the backend type-check.
-import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import {
@@ -22,8 +22,42 @@ const INCENTIVE_TABLE = process.env.INCENTIVE_TABLE_NAME as string;
 const REFUND_TABLE = process.env.REFUND_TABLE_NAME as string;
 const APP_URL = (process.env.APP_URL ?? 'https://www.sharepix.net').replace(/\/+$/, '');
 const FROM_ADDRESS = process.env.ALERT_FROM_ADDRESS ?? '';
-/** Who gets it. Unset means nothing is sent — the report ships off, like every send here. */
-const TO_ADDRESS = process.env.REPORT_TO_ADDRESS ?? '';
+const SETTING_TABLE = process.env.SETTING_TABLE_NAME as string;
+/**
+ * Fallback recipient, for a deployment that wants to pin one.
+ *
+ * Normally empty. The real recipient is a row a global admin edits from the
+ * dashboard — see `recipient()` below. An address compiled into application
+ * code needs a code change, a review and a deploy to move, which is how it ends
+ * up wrong and stays wrong.
+ */
+const TO_FALLBACK = process.env.REPORT_TO_ADDRESS ?? '';
+
+/** The key the dashboard writes. One string, so the lookup is a primary-key get. */
+const RECIPIENT_KEY = 'monthly-report-recipient';
+
+/**
+ * Who gets the report.
+ *
+ * The stored setting wins; the environment is only a fallback. A failed read
+ * falls back rather than throwing: the report existing and going to the pinned
+ * address beats the report not being generated because a table was slow.
+ */
+async function recipient(): Promise<string> {
+  if (!SETTING_TABLE) return TO_FALLBACK;
+  try {
+    const found = await dynamo.send(
+      new GetItemCommand({
+        TableName: SETTING_TABLE,
+        Key: { id: { S: RECIPIENT_KEY } },
+      }),
+    );
+    const stored = (found.Item?.value?.S ?? '').trim();
+    return stored || TO_FALLBACK;
+  } catch {
+    return TO_FALLBACK;
+  }
+}
 
 /** Escape text interpolated into the HTML body. */
 function escapeHtml(value: string): string {
@@ -61,6 +95,7 @@ async function scanAll<T>(
 
 export const handler = async () => {
   const now = new Date();
+  const TO_ADDRESS = await recipient();
   const { current, previous } = reportMonths(now);
 
   const events = await scanAll<ReportEvent>(
@@ -171,7 +206,7 @@ export const handler = async () => {
     return {
       ok: true,
       dryRun: true,
-      summary: `${current.label}: ${figures.eventsCreated} event${figures.eventsCreated === 1 ? '' : 's'}, ${figures.successfulEvents} successful. Nothing was sent — no REPORT_TO_ADDRESS is configured.`,
+      summary: `${current.label}: ${figures.eventsCreated} event${figures.eventsCreated === 1 ? '' : 's'}, ${figures.successfulEvents} successful. Nothing was sent — ${TO_ADDRESS ? 'no verified sender is configured' : 'no recipient is set in the dashboard'}.`,
     };
   }
 
