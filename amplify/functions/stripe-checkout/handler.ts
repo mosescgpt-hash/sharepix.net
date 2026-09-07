@@ -217,7 +217,12 @@ async function buildDiscount(
  * activates an event, which is the one thing the whole file exists to prevent.
  */
 const TIER_PRICING: Record<string, { name: string; amount: number }> = {
-  plus: { name: 'SharePix Event', amount: 7900 },
+  // This name is what the customer reads at the moment of payment and on the
+  // receipt afterwards, so it tracks the display name in lib/pricing.ts. It
+  // used to be "SharePix Event", identical to the retired $39 tier below —
+  // two different purchases at two different prices, indistinguishable on a
+  // card statement.
+  plus: { name: 'SharePix Full Event', amount: 7900 },
   // Retired — priced, not sold.
   event: { name: 'SharePix Event', amount: 3900 },
   starter: { name: 'SharePix Starter event', amount: 1900 },

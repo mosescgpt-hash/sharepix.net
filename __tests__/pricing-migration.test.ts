@@ -46,11 +46,35 @@ describe('what is on sale', () => {
     expect(getTier('free')?.price).toBe(0);
   });
 
-  it('shows the paid plan as Event, since it is the only one', () => {
-    // The id stayed `plus`; the name did not. The retired $39 tier is
-    // disambiguated instead, so two tiers never answer to the same name.
-    expect(getTier('plus')?.name).toBe('Event');
+  it('shows the paid plan as Full Event', () => {
+    // The id stayed `plus`; the name did not. "Event" named the thing the plan
+    // applies to rather than saying anything about it, and said nothing at all
+    // beside "Free event" — where the whole question is what the money buys.
+    expect(getTier('plus')?.name).toBe('Full Event');
     expect(getTier('event')?.name).toBe('Event (original)');
+  });
+
+  it('gives no two tiers the same display name', () => {
+    // A host reading their dashboard, and an admin reading the event list,
+    // both have to be able to tell which plan an event is on.
+    const names = ALL_TIERS.map((tier) => tier.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('names the plan the same way on the receipt as on the pricing page', () => {
+    // TIER_PRICING in stripe-checkout is a hand-copy, and it is what the
+    // customer reads at the moment of payment and on their card statement.
+    // It named BOTH this plan and the retired $39 tier "SharePix Event", so
+    // two purchases at two prices were indistinguishable afterwards.
+    const checkout = read('amplify/functions/stripe-checkout/handler.ts');
+    const block = checkout.slice(
+      checkout.indexOf('const TIER_PRICING'),
+      checkout.indexOf('};', checkout.indexOf('const TIER_PRICING')),
+    );
+    expect(block).toContain(`plus: { name: 'SharePix ${getTier('plus')?.name}'`);
+
+    const stripeNames = [...block.matchAll(/name: '([^']+)'/g)].map((m) => m[1]);
+    expect(new Set(stripeNames).size).toBe(stripeNames.length);
   });
 
   it('keeps Corporate at $149/month', () => {
