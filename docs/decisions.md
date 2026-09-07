@@ -55,11 +55,23 @@ as a lifecycle anchor), not a constant.
 A **$25 Amazon gift card** for completing the post-event survey, issued
 manually. No cash refunds, no SharePix account credit.
 
-**Supersedes** the two other mechanisms that appear across the set: the cash
-partial-refund model and the SharePix-credit model. *Manual Amazon Gift Card
-Research Incentive v1.1* is the operative document — it is the later revision,
-and it is also the only one of the three that does not collide with a refund
-cap or create a redeemable balance we would have to account for.
+**Supersedes** the two other mechanisms proposed as *research incentives*: the
+cash partial-refund model and the SharePix-credit model. *Manual Amazon Gift
+Card Research Incentive v1.1* is the operative document.
+
+**This does not supersede refunds.** Those are a different thing entirely and
+were never in question: **money owed back goes back to the original payment
+method.** A gift card is what someone earns for doing research; a refund is what
+someone is owed when the product did not do its job. Conflating them — as an
+earlier draft of this file did — makes the Guest Upload Promise look decided
+against when it is not, and would eventually have someone offering a gift card
+to a customer asking for their money back.
+
+One consequence of separating them: because the research incentive is **not** a
+refund, it does not consume refundable amount. The brief's stacking example
+(`$49 paid − $25 research refund = $24 maximum`) no longer applies. A Guest
+Upload Promise claim can return the full purchase price even to someone who also
+received a gift card.
 
 Manual issuance is the point, not a limitation to engineer away: at the volumes
 this programme runs at, a person sending a gift card is cheaper and far less
