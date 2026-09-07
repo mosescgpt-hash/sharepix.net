@@ -21,6 +21,7 @@ import {
   markIncentiveFulfilled,
   manageUser,
   restoreEventAccess,
+  runScheduledJob,
   sendTestAlertEmail,
   setDiscountCodeActive,
   setEventUploadWindowEnd,
@@ -166,6 +167,7 @@ function GlobalAdminPage() {
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
+  const [jobResult, setJobResult] = useState<{ text: string; ok: boolean } | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -463,6 +465,34 @@ function GlobalAdminPage() {
     } catch (err) {
       setAlertTest({
         text: err instanceof Error ? err.message : 'The test could not be sent.',
+        ok: false,
+      });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleRunJob(job: 'daily' | 'monthly') {
+    // Confirm only when it can actually send. With sending off the job is a
+    // read-and-log, and asking "are you sure?" about something inert teaches
+    // people to click through the prompt that matters.
+    setWorking(`job-${job}`);
+    setJobResult(null);
+    try {
+      const result = await runScheduledJob(job);
+      setJobResult({ text: result.summary, ok: result.ok });
+      // Rewards may have been created by the survey pass.
+      if (job === 'daily') {
+        try {
+          setIncentives(await listResearchIncentives());
+        } catch {
+          // The job's own result is what was asked for; a stale queue can wait
+          // for the next refresh.
+        }
+      }
+    } catch (err) {
+      setJobResult({
+        text: err instanceof Error ? err.message : 'The job could not be run.',
         ok: false,
       });
     } finally {
@@ -829,6 +859,44 @@ function GlobalAdminPage() {
                   }`}
                 >
                   {userMessage.text}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Scheduled jobs</h2>
+              <p className="text-sm text-charcoal/70">
+                The nightly job runs at 14:00 UTC and the report on the 1st of the month.
+                These run the same functions now, so you can see what they decide without
+                waiting. <strong>If email sending is switched on, the nightly job sends real
+                mail</strong> — it is the real job, not a rehearsal. Reminders it has already
+                sent are never sent twice.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={working === 'job-daily'}
+                  onClick={() => void handleRunJob('daily')}
+                  className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+                >
+                  {working === 'job-daily' ? 'Running…' : 'Run nightly job now'}
+                </button>
+                <button
+                  type="button"
+                  disabled={working === 'job-monthly'}
+                  onClick={() => void handleRunJob('monthly')}
+                  className="border border-charcoal/25 px-4 py-3 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                >
+                  {working === 'job-monthly' ? 'Running…' : 'Build the monthly report now'}
+                </button>
+              </div>
+              {jobResult ? (
+                <p
+                  className={`mt-3 border border-charcoal/10 px-3 py-2 text-sm ${
+                    jobResult.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {jobResult.text}
                 </p>
               ) : null}
             </div>

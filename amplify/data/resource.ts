@@ -18,6 +18,8 @@ import { saveMoment as saveMomentFn } from '../functions/save-moment/resource';
 import { listMoments as listMomentsFn } from '../functions/list-moments/resource';
 import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe-email/resource';
 import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
+import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
+import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/resource';
 
 /**
  * SharePix data models.
@@ -758,6 +760,36 @@ const schema = a.schema({
     recorded: a.boolean().required(),
     message: a.string(),
   }),
+
+  JobRunResult: a.customType({
+    ok: a.boolean().required(),
+    /** True when nothing was actually sent. The first thing an operator reads. */
+    dryRun: a.boolean(),
+    summary: a.string(),
+  }),
+
+  // Run the scheduled jobs now, from the global admin dashboard.
+  //
+  // The SAME functions the schedules invoke, not a test double: a path that ran
+  // different logic would prove nothing about the real one. Without these, the
+  // only way to see whether a nightly job works is to wait until 14:00 UTC and
+  // then read CloudWatch — which means scheduled work ships unobserved, and
+  // the first evidence it is broken is a customer who was never warned their
+  // photos were about to be deleted.
+  //
+  // Admin-only. Running the daily job WILL send real mail if sending is on;
+  // the dashboard says so before it does anything.
+  runDailyTasks: a
+    .mutation()
+    .returns(a.ref('JobRunResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(dailyTasksFn)),
+
+  runMonthlyReport: a
+    .mutation()
+    .returns(a.ref('JobRunResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(monthlyReportFn)),
 
   // Record that someone finished the research survey, from the link they were
   // emailed. Open to signed-out callers because the link is the credential and

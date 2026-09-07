@@ -448,6 +448,29 @@ export async function completeResearchSurvey(
  *
  * Admin-only: this is a list of money we owe and the addresses to send it to.
  */
+/**
+ * Run a scheduled job now, from the admin dashboard.
+ *
+ * The same functions the schedules invoke, not a test double — a path that ran
+ * different logic would prove nothing about the real one. Which means the
+ * daily job WILL send real mail when sending is enabled, and the caller is
+ * responsible for saying so before it does.
+ */
+export async function runScheduledJob(
+  job: 'daily' | 'monthly',
+): Promise<{ ok: boolean; dryRun: boolean; summary: string }> {
+  const call =
+    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runMonthlyReport;
+  // No arguments, so the options object is the only parameter.
+  const { data, errors } = await call({ authMode: 'userPool' });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return {
+    ok: data?.ok ?? false,
+    dryRun: data?.dryRun ?? false,
+    summary: data?.summary ?? 'The job ran but reported nothing.',
+  };
+}
+
 export async function listResearchIncentives(): Promise<ResearchIncentiveRow[]> {
   const rows: ResearchIncentiveRow[] = [];
   let nextToken: string | null | undefined;

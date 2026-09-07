@@ -148,7 +148,11 @@ export const handler = async () => {
       subject,
       eventsCreated: figures.eventsCreated,
     });
-    return { sent: false, month: current.label, ...figures };
+    return {
+      ok: true,
+      dryRun: true,
+      summary: `${current.label}: ${figures.eventsCreated} event${figures.eventsCreated === 1 ? '' : 's'}, ${figures.successfulEvents} successful. Nothing was sent — no REPORT_TO_ADDRESS is configured.`,
+    };
   }
 
   try {
@@ -173,9 +177,17 @@ export const handler = async () => {
       month: current.label,
       error: error instanceof Error ? error.message : String(error),
     });
-    return { sent: false, month: current.label, ...figures };
+    return {
+      ok: false,
+      dryRun: false,
+      summary: `${current.label} was built but could not be emailed. The error is in the function's logs.`,
+    };
   }
 
   console.log('Monthly report sent', { at: now.toISOString(), month: current.label });
-  return { sent: true, month: current.label, ...figures };
+  return {
+    ok: true,
+    dryRun: false,
+    summary: `${current.label} sent to ${TO_ADDRESS}: ${figures.eventsCreated} event${figures.eventsCreated === 1 ? '' : 's'}, ${figures.successfulEvents} successful.`,
+  };
 };
