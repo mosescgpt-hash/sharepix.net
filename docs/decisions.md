@@ -335,6 +335,36 @@ Events created before this count as `direct`, which is not quite true — they
 are *unknown* — but a fifth bucket for "we were not measuring yet" would put a
 permanent asterisk on every chart for a handful of early rows.
 
+## 9. The monthly report — only what is measured
+
+**Decided.** Shipped, no recipient configured.
+
+A second scheduled job, 15:00 UTC on the 1st, summarising the calendar month
+that just ended so every figure in it is final.
+
+**The rule: report what is measured, say what is not, never print a zero for
+something nobody counts.** The brief for this report assumes a central
+analytics system tracking website traffic, a purchase funnel, refunds, unit
+economics, experiments, visitor intent, referrals and support burden. Almost
+none of that exists. A report that renders those sections anyway — *"Visitors:
+0. Refunds: 0. CAC: $0.00"* — is worse than one that omits them: every figure
+on the page becomes suspect, and within two months nobody opens it.
+
+So it carries what has real numbers behind it — events created, paid versus
+free, Successful Events and the rate, guest uploads, contributors, hosts who
+were guests first, surveys completed, gift cards owed right now — and prints a
+standing list of what is absent **and why**. That list shrinking is itself a
+useful signal.
+
+**It refuses to over-claim.** A percentage change from a base of zero is not
+reported at all, and the headline says "still too few for month-over-month
+percentages to mean much" below ten events a month rather than declaring a
+trend from two events to three. The cost of a wrong headline is that the right
+one stops being believed.
+
+`REPORT_TO_ADDRESS` unset means it builds the report, logs it, and sends
+nothing.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric
