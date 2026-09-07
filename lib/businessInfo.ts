@@ -60,3 +60,15 @@ export const DMCA_RENEWAL_DUE = 'September 2, 2029';
  */
 export const SUPPORT_EMAIL = 'support@sharepix.net';
 export const PRIVACY_EMAIL = 'privacy@sharepix.net';
+
+/**
+ * Where internal mail goes — the monthly analytics report, and anything else
+ * SharePix sends to itself rather than to a customer.
+ *
+ * Separate from SUPPORT_EMAIL on purpose: a business summary landing in a
+ * shared support queue is a summary nobody reads, and support mail landing in
+ * an owner's inbox is support nobody answers. The value is duplicated in
+ * amplify/backend.ts because Amplify config cannot import from lib/; a test
+ * pins the two together.
+ */
+export const OWNER_EMAIL = 'seth@sharepix.net';

@@ -349,7 +349,7 @@ permanent asterisk on every chart for a handful of early rows.
 
 ## 9. The monthly report — only what is measured
 
-**Decided.** Shipped, no recipient configured.
+**Decided.** Shipped. Goes to **seth@sharepix.net**.
 
 A second scheduled job, 15:00 UTC on the 1st, summarising the calendar month
 that just ended so every figure in it is final.
@@ -374,8 +374,16 @@ percentages to mean much" below ten events a month rather than declaring a
 trend from two events to three. The cost of a wrong headline is that the right
 one stops being believed.
 
-`REPORT_TO_ADDRESS` unset means it builds the report, logs it, and sends
-nothing.
+The recipient is defaulted in `amplify/backend.ts` (and mirrored as
+`OWNER_EMAIL` in `lib/businessInfo.ts`, with a test pinning the two together)
+rather than left blank. Requiring a console step to switch on a summary nobody
+has seen yet is how it stays switched off forever. `REPORT_TO_ADDRESS`
+overrides it.
+
+It still will not send without `ALERT_FROM_ADDRESS`: there is no verified
+sender without one, and the handler refuses rather than trying. **And if SES is
+still in sandbox mode, only verified addresses receive anything** — worth
+checking before waiting a month for an email that never comes.
 
 ## 10. Guest Upload Promise — refund to the card, decided by a person
 

@@ -10,6 +10,7 @@ import {
   reportMonths,
   type ReportEvent,
 } from '../lib/monthlyReport';
+import { OWNER_EMAIL } from '../lib/businessInfo';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -240,6 +241,19 @@ describe('the scheduled function', () => {
   it('sends nothing until a recipient is configured', () => {
     expect(handler).toContain('if (!TO_ADDRESS || !FROM_ADDRESS)');
     expect(handler).toContain('[dry-run]');
+  });
+
+  it('has a default recipient, and it matches lib/businessInfo.ts', () => {
+    // Amplify config cannot import from lib/, so the address exists twice.
+    // A report quietly going to the wrong inbox is the kind of thing nobody
+    // notices until they wonder why they never get one.
+    expect(backend).toContain(`process.env.REPORT_TO_ADDRESS ?? '${OWNER_EMAIL}'`);
+  });
+
+  it('still refuses to send without a verified sender', () => {
+    // A recipient is not enough. Without ALERT_FROM_ADDRESS there is nothing
+    // to send from, and the handler says so rather than trying.
+    expect(handler).toContain('!FROM_ADDRESS');
   });
 
   it('can only read', () => {

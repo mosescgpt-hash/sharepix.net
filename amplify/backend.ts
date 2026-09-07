@@ -636,8 +636,18 @@ monthlyReportFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 monthlyReportFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
 monthlyReportFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 monthlyReportFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
-// Who receives it. Unset means the report is built, logged and not sent.
-monthlyReportFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
+// Who receives it. Defaulted rather than left blank, because the report has a
+// known recipient and requiring a console step to turn on a summary nobody has
+// seen yet is how it stays never turned on. OWNER_EMAIL in lib/businessInfo.ts
+// is the same value — Amplify config cannot import from lib/, so a test pins
+// the two together. Set REPORT_TO_ADDRESS in the environment to override.
+//
+// It still will not send without ALERT_FROM_ADDRESS: there is no verified
+// sender without one, and the handler refuses rather than trying.
+monthlyReportFn.addEnvironment(
+  'REPORT_TO_ADDRESS',
+  process.env.REPORT_TO_ADDRESS ?? 'seth@sharepix.net',
+);
 monthlyReportFn.addToRolePolicy(
   new PolicyStatement({
     actions: ['ses:SendEmail', 'ses:SendRawEmail'],
