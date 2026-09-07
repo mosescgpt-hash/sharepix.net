@@ -24,6 +24,10 @@ import { QREvent } from '@/lib/types';
 function CreateEventPage() {
   const router = useRouter();
   const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'plus';
+  // Where they came from, carried in the link. A claim only — the create-event
+  // function normalises it against a closed set before anything is stored, so
+  // an edited query string cannot put free text on an event row.
+  const source = typeof router.query.source === 'string' ? router.query.source : '';
 
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
@@ -156,6 +160,7 @@ function CreateEventPage() {
         state: stateRegion,
         tier: tierId,
         discountCode: pilotCodeStatus === 'valid' ? pilotCode : undefined,
+        source,
       });
 
       // Active already: covered by a Corporate subscription, or comped outright.

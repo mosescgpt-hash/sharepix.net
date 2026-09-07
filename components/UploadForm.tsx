@@ -1,4 +1,5 @@
 import { ChangeEvent } from 'react';
+import Link from 'next/link';
 import Notice from '@/components/Notice';
 import { MAX_VIDEO_SIZE_LABEL } from '@/lib/validation';
 import { EventThemeKey } from '@/lib/eventTheme';
@@ -222,6 +223,30 @@ export default function UploadForm({
         <Notice className="mt-3" label="Skipped">
           {duplicateCount} file{duplicateCount === 1 ? '' : 's'} already in this event.
         </Notice>
+      ) : null}
+
+      {/* The guest-to-customer loop. Everyone who lands here has just used
+          SharePix and knows what it does, which makes this the cheapest
+          audience the product has.
+
+          Deliberately quiet, and deliberately below the success notice rather
+          than beside it: the guest came to give someone else their photos, and
+          the moment that works is not a moment to sell into. A link, not a
+          button; small type; no account asked for. If it competes with
+          "your photos were added", it is wrong.
+
+          `source=guest_upload` is stamped on any event they go on to create —
+          see lib/attribution.ts. */}
+      {successCount > 0 && !busy ? (
+        <p className="mt-6 border-t border-charcoal/10 pt-4 text-sm text-charcoal/60">
+          Planning an event of your own?{' '}
+          <Link
+            href="/create-event?source=guest_upload"
+            className="font-medium text-pine underline"
+          >
+            Create your own SharePix
+          </Link>
+        </p>
       ) : null}
     </div>
   );

@@ -172,6 +172,8 @@ export async function createNewEvent(input: {
   state?: string;
   /** An optional code. The server validates it and decides what it's worth. */
   discountCode?: string;
+  /** Where they came from. Normalised server-side; see lib/attribution.ts. */
+  source?: string;
 }): Promise<QREvent> {
   const { data: event, errors } = await client.mutations.createHostedEvent(
     {
@@ -181,6 +183,7 @@ export async function createNewEvent(input: {
       city: input.city || undefined,
       state: input.state || undefined,
       discountCode: input.discountCode?.trim().toUpperCase() || undefined,
+      source: input.source || undefined,
     },
     { authMode: 'userPool' },
   );

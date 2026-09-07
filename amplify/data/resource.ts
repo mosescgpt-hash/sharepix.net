@@ -120,6 +120,13 @@ const schema = a.schema({
       // host; 'allow_all' skips screening entirely and shows everything
       // immediately. The host chooses on the event dashboard.
       moderationMode: a.string(),
+      // How this event's host found SharePix: 'guest_upload' when they had
+      // already used it at somebody else's event, and so on. A closed set,
+      // validated by create-event against lib/attribution.ts — the value
+      // arrives in the request, so an unrecognised one becomes 'direct' rather
+      // than being stored. Missing on events created before this existed, and
+      // read as 'direct'.
+      source: a.string(),
       // Where to email the host when a photo is held for review. Optional — a
       // held photo is always reviewable from the dashboard regardless.
       alertEmail: a.string(),
@@ -889,6 +896,10 @@ const schema = a.schema({
       city: a.string(),
       state: a.string(),
       discountCode: a.string(),
+      // A claim about where they came from, normalised server-side against a
+      // closed set — anything unrecognised becomes 'direct' rather than being
+      // stored. See lib/attribution.ts.
+      source: a.string(),
     })
     .returns(a.ref('CreatedEvent'))
     .authorization((allow) => [allow.authenticated()])

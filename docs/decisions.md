@@ -293,6 +293,48 @@ the check already happening.
 Both are wrong — 60 days and $79. Sending them as written would collect
 opinions about a product nobody used.
 
+## 8. The guest-to-customer loop, and how it is measured
+
+**Decided.** Shipped, live.
+
+Everyone who uploads a photo at somebody else's event has just used SharePix
+and knows what it does — the cheapest audience the product has. After a
+successful upload they see one quiet line offering to create their own event.
+
+**Quiet is the specification, not a preference.** A link rather than a button,
+small type, below the success notice, no account asked for. The guest came to
+give someone else their photos, and the moment that works is not a moment to
+sell into. If it competes with "your photos were added", it is wrong.
+
+**Only Part 15 of the growth-loop brief is built.** That document is 22 parts
+and spans a rating flow, testimonials, featured events, a referral programme
+with a credit ledger, and a retention workflow that is already done (decision
+6). The guest loop is the part that is self-contained, needs no guest email
+address — we have none, and guests have no account — and acquires customers.
+
+### Attribution without analytics
+
+The brief asks for four tracked steps: CTA shown, clicked, signup started,
+purchase completed. Three of those need an analytics provider, which does not
+exist. Rather than pretend otherwise, the **last** step — the one worth money —
+is recorded in our own database as a `source` on the event row.
+
+That survives ad blockers, consent banners and whatever provider is chosen
+later. Impressions and clicks can be layered on when there is something to
+layer them onto; the conversion is the part that would hurt to lose.
+
+**`source` is a closed set, validated server-side.** It arrives as a URL
+parameter, which means it arrives from anyone, and it is then stored, shown in
+the admin dashboard and eventually counted in a report. Free text there is a
+stored-content hole and a data-quality one at the same time. Anything
+unrecognised becomes `direct`, silently — an unrecognised source is a mis-typed
+link, and losing the attribution is the right cost. Refusing to create the
+event would not be.
+
+Events created before this count as `direct`, which is not quite true — they
+are *unknown* — but a fifth bucket for "we were not measuring yet" would put a
+permanent asterisk on every chart for a handful of early rows.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

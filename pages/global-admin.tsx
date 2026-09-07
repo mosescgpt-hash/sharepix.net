@@ -32,6 +32,7 @@ import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { canTransition } from '@/lib/researchIncentive';
+import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { DiscountCode, FreeEventClaimRow, QREvent, ResearchIncentiveRow } from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -297,6 +298,10 @@ function GlobalAdminPage() {
     [events],
   );
   const eventSuccessRate = useMemo(() => successRate(events), [events]);
+  // Where events came from. The only acquisition question answerable today —
+  // impressions and clicks need an analytics provider that does not exist, but
+  // the conversion is recorded on the row. See lib/attribution.ts.
+  const sourceCounts = useMemo(() => countBySource(events), [events]);
 
   const filteredEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -725,6 +730,27 @@ function GlobalAdminPage() {
               </div>
             </div>
 
+            <div className="spx-card mt-3 p-5">
+              <p className="text-sm text-charcoal/60">Where events came from</p>
+              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+                {EVENT_SOURCES.map((source) => (
+                  <p key={source} className="text-sm">
+                    <span className="font-sans font-semibold text-charcoal">
+                      {sourceCounts[source]}
+                    </span>{' '}
+                    <span className="text-charcoal/60">{sourceLabel(source)}</span>
+                  </p>
+                ))}
+              </div>
+              {/* Said plainly, because a number that looks like analytics and
+                  is not would be worse than no number. */}
+              <p className="mt-2 text-xs text-charcoal/55">
+                Recorded on the event row when it is created. Events made before this existed
+                count as direct. Impressions and clicks are not tracked — there is no analytics
+                provider.
+              </p>
+            </div>
+
             <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5">
               <div className="flex flex-col gap-1">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Payments — test mode</h2>
@@ -1061,7 +1087,8 @@ function GlobalAdminPage() {
                             {event.extraPhotoCredits ? ` (+${event.extraPhotoCredits} add-on)` : ''}
                           </p>
                           <p className="mt-1 text-xs text-charcoal/60">
-                            Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
+                            Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'} ·{' '}
+                            {sourceLabel(event.source)}
                           </p>
                           {/* Participation, and it stays on this page only. A
                               host must never be shown "your event was

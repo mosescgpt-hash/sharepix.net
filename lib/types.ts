@@ -55,6 +55,12 @@ export interface QREvent {
   qrLogo?: string | null;
   createdBy?: string | null;
   owner?: string | null;
+  /**
+   * How this host found SharePix, from a closed set validated server-side.
+   * Missing on events created before this existed, and read as 'direct'.
+   * See lib/attribution.ts.
+   */
+  source?: string | null;
   createdAt?: string;
 }
 
