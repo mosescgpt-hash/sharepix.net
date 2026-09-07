@@ -519,10 +519,14 @@ export async function submitEventFeedback(
  * responsible for saying so before it does.
  */
 export async function runScheduledJob(
-  job: 'daily' | 'monthly',
+  job: 'daily' | 'monthly' | 'reclaim',
 ): Promise<{ ok: boolean; dryRun: boolean; summary: string }> {
   const call =
-    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runMonthlyReport;
+    job === 'daily'
+      ? client.mutations.runDailyTasks
+      : job === 'monthly'
+        ? client.mutations.runMonthlyReport
+        : client.mutations.runStorageReclaim;
   // No arguments, so the options object is the only parameter.
   const { data, errors } = await call({ authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

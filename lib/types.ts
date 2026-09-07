@@ -37,6 +37,7 @@ export interface QREvent {
   uploadWindowStartedAt?: string | null;
   usageStatus?: string | null;
   usageNote?: string | null;
+  mediaReclaimedAt?: string | null;
   accessExpiresAt?: string | null;
   uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;

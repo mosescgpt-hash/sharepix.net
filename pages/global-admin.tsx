@@ -661,10 +661,22 @@ function GlobalAdminPage() {
     }
   }
 
-  async function handleRunJob(job: 'daily' | 'monthly') {
+  async function handleRunJob(job: 'daily' | 'monthly' | 'reclaim') {
     // Confirm only when it can actually send. With sending off the job is a
     // read-and-log, and asking "are you sure?" about something inert teaches
     // people to click through the prompt that matters.
+    //
+    // Reclamation is the exception: it is the one job here that destroys data,
+    // and this prompt is worth being unpleasant about. It still cannot delete
+    // anything unless STORAGE_RECLAIM_ENABLED is on — the job says which it did.
+    if (
+      job === 'reclaim' &&
+      !window.confirm(
+        'Run storage reclamation?\n\nIf reclamation is switched on, this PERMANENTLY DELETES the photos and videos of every event whose 90-day archive has closed. There is no undo.\n\nIf it is switched off, it will tell you what it would have deleted and remove nothing.',
+      )
+    ) {
+      return;
+    }
     setWorking(`job-${job}`);
     setJobResult(null);
     try {
@@ -1489,7 +1501,21 @@ function GlobalAdminPage() {
                 >
                   {working === 'job-monthly' ? 'Running…' : 'Build the monthly report now'}
                 </button>
+                <button
+                  type="button"
+                  disabled={working === 'job-reclaim'}
+                  onClick={() => void handleRunJob('reclaim')}
+                  className="border border-red-700/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:border-red-700 disabled:opacity-50"
+                >
+                  {working === 'job-reclaim' ? 'Running…' : 'Reclaim expired storage'}
+                </button>
               </div>
+              <p className="mt-3 text-sm text-charcoal/70">
+                <strong>Reclamation deletes photos permanently</strong> — every event whose
+                12-month gallery and 90-day archive have both closed, plus a week of grace.
+                It is switched off until <code>STORAGE_RECLAIM_ENABLED</code> is set, and
+                until then it reports what it would have removed and removes nothing.
+              </p>
               {jobResult ? (
                 <p
                   className={`mt-3 border border-charcoal/10 px-3 py-2 text-sm ${

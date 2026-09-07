@@ -42,6 +42,7 @@ import { completeSurvey } from './functions/complete-survey/resource';
 import { monthlyReport } from './functions/monthly-report/resource';
 import { claimRefund } from './functions/claim-refund/resource';
 import { submitFeedback } from './functions/submit-feedback/resource';
+import { reclaimStorage } from './functions/reclaim-storage/resource';
 
 const backend = defineBackend({
   auth,
@@ -73,6 +74,7 @@ const backend = defineBackend({
   monthlyReport,
   claimRefund,
   submitFeedback,
+  reclaimStorage,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -707,6 +709,35 @@ claimRefundFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
 // The monthly report counts refunds, so it reads the ledger too.
 refundTable.grantReadData(monthlyReportFn);
 monthlyReportFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
+
+// Deletes the media of events whose archive window has closed — the 12-month
+// gallery, then the 90-day archive, then gone. Everything except this last step
+// already worked; nothing ever removed the bytes, which made "unlimited photos"
+// an unbounded liability on a one-time payment.
+//
+// The one job here that destroys data. STORAGE_RECLAIM_ENABLED must be exactly
+// 'true' or it runs, decides, logs every key it would remove, and deletes
+// nothing. It needs delete on the bucket and on R2, because R2 is what serves
+// reads and a copy left there is a photo that is still reachable.
+const reclaimFn = backend.reclaimStorage.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(reclaimFn);
+photoTable.grantReadWriteData(reclaimFn);
+mediaTable.grantReadWriteData(reclaimFn);
+bucket.grantDelete(reclaimFn);
+reclaimFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+reclaimFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+reclaimFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
+reclaimFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+reclaimFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+reclaimFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+reclaimFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+reclaimFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+// Off unless explicitly set. Deliberately its own switch, not the email one:
+// a single flag over both would eventually be flipped for the wrong reason.
+reclaimFn.addEnvironment(
+  'STORAGE_RECLAIM_ENABLED',
+  process.env.STORAGE_RECLAIM_ENABLED ?? '',
+);
 
 // Records what a host thought of their event, from an emailed link.
 //

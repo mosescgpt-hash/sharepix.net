@@ -20,6 +20,7 @@ import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe
 import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
 import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
 import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
+import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
 import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/resource';
 
@@ -104,6 +105,10 @@ const schema = a.schema({
       // flagged, 'RESTRICTED' stops uploads on one they did not.
       usageStatus: a.string(),
       usageNote: a.string(),
+      // Set when the media has actually been deleted at the end of the archive
+      // window. Its absence is what makes reclamation re-runnable: a run that
+      // fails partway leaves this unset and the next run finishes the job.
+      mediaReclaimedAt: a.datetime(),
       // "City, State" the host sets for the event — a memory label shown on
       // photos and used in downloads. NOT derived from photo GPS, which is
       // still stripped from every upload, and deliberately no finer than a
@@ -987,6 +992,17 @@ const schema = a.schema({
     .returns(a.ref('JobRunResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(monthlyReportFn)),
+
+  // Delete the media of events whose archive window has closed.
+  //
+  // Admin-only, and the ONE job on this dashboard that destroys data. With
+  // STORAGE_RECLAIM_ENABLED off it runs completely and deletes nothing, which
+  // is how it is meant to be observed before it is trusted.
+  runStorageReclaim: a
+    .mutation()
+    .returns(a.ref('JobRunResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(reclaimStorageFn)),
 
   // Record that someone finished the research survey, from the link they were
   // emailed. Open to signed-out callers because the link is the credential and

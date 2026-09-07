@@ -543,11 +543,35 @@ catch.
 The numbers are hypotheses with stated reasons, not tuning — there is no real
 data yet, and that is the honest state to ship in.
 
-### Not done
+### The other half: reclamation
 
-Nothing reclaims storage from *expired* events yet. The S3 backstop rule expires
-`events/` after 800 days and that is all. Bounded retention is what would make
-unlimited photos bounded in cost, and it is the open half of this.
+**Decided and built.** Unlimited photos live for the 12-month gallery, then the
+90-day admin-only archive, then they are deleted. That is what `lib/lifecycle.ts`
+has computed since retention shipped — every boundary except the last already
+worked, and nothing ever removed the bytes.
+
+`reclaim-storage` is a weekly job that does. It is the most destructive code in
+the product and is written that way:
+
+- **An event with no upload window date can never be reclaimed.** Not "treated
+  as old", not "measured from creation" — never. A missing date is missing
+  information, and guessing an anchor for a destructive action is how you delete
+  a wedding that has not happened yet. An unparseable date is the same.
+- **Seven days of grace** past the archive boundary, because an extension bought
+  on the last day has to reach the row before a scheduled job reads it.
+- **Off unless `STORAGE_RECLAIM_ENABLED` is exactly `true`.** Off means it runs
+  completely, logs every event and key it would remove, and deletes nothing —
+  and marks nothing, so switching it on later deletes the backlog rather than
+  skipping it as done. Its own switch, deliberately not the email one.
+- **Twenty-five events per run.** If this job is ever wrong, the difference
+  between being wrong about twenty-five events and about the whole table is the
+  difference between an incident and the end of the product.
+- **Deletes from R2 as well as S3**, because R2 serves the reads.
+- A partial failure leaves the event unmarked so the next run finishes it.
+
+It is a separate function from the daily job on purpose: that one must never
+stop warning hosts their gallery is closing, and a job that deletes photos must
+never be the reason it did.
 
 ## 13. The report recipient is a setting, not a line of code
 
