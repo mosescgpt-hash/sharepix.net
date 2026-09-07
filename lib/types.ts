@@ -42,6 +42,8 @@ export interface QREvent {
   galleryFontSet?: string | null;
   galleryLayout?: string | null;
   galleryAccent?: string | null;
+  reactionsEnabled?: boolean | null;
+  commentsEnabled?: boolean | null;
   accessExpiresAt?: string | null;
   uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;
@@ -113,6 +115,10 @@ export interface QRPhoto {
   moderationStatus?: string | null;
   /** What the screener detected, when flagged. */
   moderationReasons?: string | null;
+  // Soft counts — a like is keyed to a browser, not a person. Missing means
+  // zero, which is correct for every photo uploaded before these existed.
+  likeCount?: number | null;
+  commentCount?: number | null;
   /**
    * Which part of the event this photo belongs to, if any. Optional forever:
    * every photo predating moments has no value here, and one pointing at a

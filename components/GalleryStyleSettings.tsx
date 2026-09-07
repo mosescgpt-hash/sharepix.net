@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Notice from '@/components/Notice';
-import { setEventGalleryTheme } from '@/lib/api';
+import { setEventEngagement, setEventGalleryTheme } from '@/lib/api';
 import {
   DEFAULT_FONT_SET,
   DEFAULT_GALLERY_LAYOUT,
@@ -9,6 +9,7 @@ import {
   accentUse,
   fontSetFor,
 } from '@/lib/galleryTheme';
+import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
 import type { QREvent } from '@/lib/types';
 
 interface Props {
@@ -40,11 +41,16 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
   // uses — so the warning below is the truth rather than a guess.
   const accentPreview = accentUse(accent);
 
-  async function save(field: string, changes: Parameters<typeof setEventGalleryTheme>[1]) {
+  async function save(
+    field: string,
+    changes?: Parameters<typeof setEventGalleryTheme>[1],
+    engagement?: Parameters<typeof setEventEngagement>[1],
+  ) {
     setWorking(field);
     setError(null);
     try {
-      await setEventGalleryTheme(event.id, changes);
+      if (changes) await setEventGalleryTheme(event.id, changes);
+      if (engagement) await setEventEngagement(event.id, engagement);
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That could not be saved.');
@@ -180,6 +186,48 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
             highlights, and words will stay in the readable dark ink.
           </p>
         ) : null}
+      </fieldset>
+
+      <fieldset className="mt-6">
+        <legend className="text-xs uppercase tracking-wide text-charcoal/55">
+          Likes and comments
+        </legend>
+        <p className="mt-1 text-xs text-charcoal/60">
+          {/* Naming the case rather than leaving a host to work it out. A like
+              button under a photograph at a celebration of life is the wrong
+              object in the room, and that is not ours to decide for them. */}
+          On by default. Some events are better without them — a memorial, for
+          instance.
+        </p>
+        <div className="mt-3 space-y-2">
+          <label className="flex items-center gap-3 text-sm text-charcoal">
+            <input
+              type="checkbox"
+              checked={likesEnabled(event)}
+              disabled={working !== null}
+              onChange={(e) =>
+                void save('likes', undefined, { reactionsEnabled: e.target.checked })
+              }
+            />
+            Guests can like photos
+          </label>
+          <label className="flex items-center gap-3 text-sm text-charcoal">
+            <input
+              type="checkbox"
+              checked={commentsEnabled(event)}
+              disabled={working !== null}
+              onChange={(e) =>
+                void save('comments', undefined, { commentsEnabled: e.target.checked })
+              }
+            />
+            Guests can comment on photos
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-charcoal/55">
+          {/* Said plainly rather than implied. */}
+          Comments are not screened automatically. You can hide any of them from your
+          dashboard, and turning comments off hides the ones already there.
+        </p>
       </fieldset>
 
       <p className="mt-6 text-xs text-charcoal/55">

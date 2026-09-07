@@ -95,6 +95,9 @@ export interface SettingsRequest {
   galleryLayout?: string | null;
   /** A hex accent, '' to clear it, or absent to leave it alone. */
   galleryAccent?: string | null;
+  /** Guest likes and comments. See lib/photoEngagement.ts. */
+  reactionsEnabled?: boolean | null;
+  commentsEnabled?: boolean | null;
 }
 
 /** The event as stored, insofar as these rules care. */
@@ -237,7 +240,13 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
     }
   }
 
-  for (const flag of ['videoUploadsEnabled', 'guestDownloadsBlocked', 'uploadsClosed'] as const) {
+  for (const flag of [
+    'videoUploadsEnabled',
+    'guestDownloadsBlocked',
+    'uploadsClosed',
+    'reactionsEnabled',
+    'commentsEnabled',
+  ] as const) {
     const value = request[flag];
     if (value === undefined) continue;
     if (typeof value !== 'boolean') {

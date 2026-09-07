@@ -15,6 +15,7 @@ import {
   kindForKey,
   usableSize,
 } from '../lib/mediaAccounting';
+import { codeOnly } from './sourceGuards';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -268,15 +269,8 @@ describe('what the pricing page claims', () => {
   const cards = read('components/PricingCards.tsx');
   const pricing = read('pages/pricing.tsx');
   const home = read('pages/index.tsx');
-  /**
-   * Source with its prose removed.
-   *
-   * A guard that looks for a forbidden phrase has to read the copy, not the
-   * comment explaining why the phrase is forbidden. This is the fourth guard
-   * in this codebase to fail on its own explanation.
-   */
-  const strip = (source: string) =>
-    source.replace(/\/\*\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  // Absence checks read code, never prose — see __tests__/sourceGuards.ts.
+  const strip = codeOnly;
 
   it('claims unlimited photos, and carries the asterisk', () => {
     expect(cards).toContain('Unlimited photo uploads*');

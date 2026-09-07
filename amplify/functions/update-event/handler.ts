@@ -81,6 +81,8 @@ export const handler: Handler = async (event) => {
       galleryFontSet: event.arguments.galleryFontSet,
       galleryLayout: event.arguments.galleryLayout,
       galleryAccent: event.arguments.galleryAccent,
+      reactionsEnabled: event.arguments.reactionsEnabled,
+      commentsEnabled: event.arguments.commentsEnabled,
     },
     { photoCount: Number(found.Item.photoCount?.N ?? '0') },
   );

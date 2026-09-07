@@ -1118,6 +1118,8 @@ async function updateEventSettings(
     galleryLayout?: string;
     /** '' clears the accent and returns to the SharePix palette. */
     galleryAccent?: string;
+    reactionsEnabled?: boolean;
+    commentsEnabled?: boolean;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -1142,6 +1144,8 @@ async function updateEventSettings(
       galleryFontSet: changes.galleryFontSet,
       galleryLayout: changes.galleryLayout,
       galleryAccent: changes.galleryAccent,
+      reactionsEnabled: changes.reactionsEnabled,
+      commentsEnabled: changes.commentsEnabled,
     },
     { authMode: 'userPool' },
   );
@@ -1227,6 +1231,119 @@ export async function setEventGuestDownloadsBlocked(
     { guestDownloadsBlocked: blocked },
     'The download setting could not be updated.',
   );
+}
+
+export interface PhotoCommentRow {
+  id: string;
+  photoId: string;
+  body: string;
+  author: string;
+  hidden: boolean;
+  createdAt: string | null;
+}
+
+/**
+ * Like a photo, or take the like back. Returns the new state.
+ *
+ * The guest key identifies a browser, not a person — see lib/photoEngagement.ts
+ * for why that is the honest limit rather than a gap to close.
+ */
+export async function togglePhotoLike(
+  photoId: string,
+  guestKey: string,
+): Promise<boolean> {
+  const { data, errors } = await client.mutations.togglePhotoLike(
+    { photoId, guestKey },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return data?.liked ?? false;
+}
+
+/** Leave a comment on a photo. Nothing screens the text; the host moderates. */
+export async function addPhotoComment(input: {
+  photoId: string;
+  guestKey: string;
+  body: string;
+  author?: string;
+}): Promise<void> {
+  const { errors } = await client.mutations.addPhotoComment(
+    {
+      photoId: input.photoId,
+      guestKey: input.guestKey,
+      body: input.body,
+      author: input.author,
+    },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/**
+ * Which photos in this event this browser has liked.
+ *
+ * Read rather than remembered locally so a heart stays filled across devices
+ * the browser key follows, and so a like that failed to save does not show as
+ * saved.
+ */
+export async function listMyPhotoLikes(
+  eventId: string,
+  guestKey: string,
+): Promise<Set<string>> {
+  if (!guestKey) return new Set();
+  const { data, errors } = await client.models.PhotoReaction.list({
+    filter: { eventId: { eq: eventId }, guestKey: { eq: guestKey } },
+    limit: 1000,
+    authMode: await authModeFor(),
+  });
+  if (errors?.length) return new Set();
+  return new Set((data ?? []).map((row) => String(row.photoId ?? '')));
+}
+
+/** Comments on one event's photos, oldest first within each photo. */
+export async function listPhotoComments(eventId: string): Promise<PhotoCommentRow[]> {
+  const { data, errors } = await client.models.PhotoComment.list({
+    filter: { eventId: { eq: eventId } },
+    limit: 1000,
+    authMode: await authModeFor(),
+  });
+  if (errors?.length) return [];
+  return (data ?? [])
+    .map((row) => ({
+      id: String(row.id ?? ''),
+      photoId: String(row.photoId ?? ''),
+      body: String(row.body ?? ''),
+      author: String(row.author ?? ''),
+      hidden: row.hidden === true,
+      createdAt: (row.createdAt as string) ?? null,
+    }))
+    .sort((a, b) => (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+}
+
+/**
+ * Hide or restore a comment. Host and admin only.
+ *
+ * Hidden rather than deleted, so a host who hides something can change their
+ * mind and so the count stays reconcilable.
+ */
+export async function setPhotoCommentHidden(
+  commentId: string,
+  hidden: boolean,
+  hiddenBy: string,
+): Promise<void> {
+  const { errors } = await client.models.PhotoComment.update(
+    { id: commentId, hidden, hiddenBy },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/** Turn guest likes and comments on or off for one event. */
+export async function setEventEngagement(
+  eventId: string,
+  changes: { reactionsEnabled?: boolean; commentsEnabled?: boolean },
+): Promise<void> {
+  await updateEventSettings(eventId, changes, 'That setting could not be updated.');
 }
 
 /**

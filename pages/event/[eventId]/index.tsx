@@ -5,6 +5,7 @@ import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
+import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
 import { fetchEvent, fetchEventMoments, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { eventLifecycle } from '@/lib/lifecycle';
@@ -89,6 +90,10 @@ export default function EventGalleryPage() {
   // never been styled, one with a stale value, and one created before this
   // existed — all three resolve to the SharePix default.
   const theme = resolveGalleryTheme(event);
+  // Both default ON for an event that has never been asked — see
+  // lib/photoEngagement.ts for why they are switches at all.
+  const likesOn = likesEnabled(event);
+  const commentsOn = commentsEnabled(event);
 
   return (
     <Layout title={event ? event.name : 'Event gallery'} width="bleed">
@@ -189,6 +194,8 @@ export default function EventGalleryPage() {
                     eventName={event.name}
                     eventId={event.id}
                     layout={theme.layout}
+                    likesOn={likesOn}
+                    commentsOn={commentsOn}
                   />
                 ) : (
                   // Grouped only when the host actually set moments up. With
@@ -211,6 +218,8 @@ export default function EventGalleryPage() {
                             eventName={event.name}
                             eventId={event.id}
                             layout={theme.layout}
+                            likesOn={likesOn}
+                            commentsOn={commentsOn}
                             emptyMessage={
                               group.moment
                                 ? `Nothing from ${group.moment.name} yet.`

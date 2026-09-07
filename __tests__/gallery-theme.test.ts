@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   ACCENT_TEXT_CONTRAST,
   DEFAULT_FONT_SET,
@@ -18,9 +16,7 @@ import {
   themeStyle,
 } from '../lib/galleryTheme';
 
-const root = join(__dirname, '..');
-const read = (path: string) => readFileSync(join(root, path), 'utf8');
-const bodyOf = (source: string) => source.slice(source.indexOf('*/') + 2).trim();
+import { bodyOf, readSource as read } from './sourceGuards';
 
 describe('the copies have not drifted', () => {
   it('keeps update-event/galleryTheme.ts byte-identical with lib/', () => {

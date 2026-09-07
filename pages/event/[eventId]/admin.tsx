@@ -9,6 +9,8 @@ import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
+import CommentModeration from '@/components/CommentModeration';
+import { commentsEnabled } from '@/lib/photoEngagement';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
 import {
@@ -507,6 +509,15 @@ function AdminDashboardPage() {
             <div className="mt-8">
               <GalleryStyleSettings event={event} onSaved={load} />
             </div>
+
+            {/* Only when the event actually has comments on. A moderation
+                queue for a feature the host switched off is a panel that
+                explains nothing and worries them. */}
+            {commentsEnabled(event) ? (
+              <div className="mt-8">
+                <CommentModeration eventId={event.id} />
+              </div>
+            ) : null}
 
             {showQR ? (
               <div id="event-qr-code" className="mx-auto mt-6 max-w-sm scroll-mt-24">
