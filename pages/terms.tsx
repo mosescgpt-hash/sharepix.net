@@ -129,7 +129,9 @@ export default function TermsPage() {
                 host with full access and downloads throughout. A <strong>free event</strong> keeps
                 its gallery for 30 days rather than 12 months, and events on a retired plan keep
                 the shorter windows they were sold with. After that period, photos move to a
-                private archive for up to 90 days and are then permanently deleted. Download what
+                private archive for up to 90 days and are then permanently deleted. Deletion
+                covers the whole event, not only the pictures — comments, likes, guest book
+                entries and moments go with them. Download what
                 you want to keep before then. Full details are on our{' '}
                 <a href="/pricing">pricing page</a>.
               </li>

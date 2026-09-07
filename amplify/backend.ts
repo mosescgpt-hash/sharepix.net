@@ -745,10 +745,23 @@ const reclaimFn = backend.reclaimStorage.resources.lambda as LambdaFunction;
 eventTable.grantReadWriteData(reclaimFn);
 photoTable.grantReadWriteData(reclaimFn);
 mediaTable.grantReadWriteData(reclaimFn);
+// What guests WROTE, as opposed to what they uploaded. Without these, an
+// event's photos are destroyed at the end of the archive window while every
+// comment, reaction, guest book entry and moment written about them stays in
+// the database indefinitely — free text people typed at a wedding or a
+// memorial, outliving the photographs it was written under.
+reactionTable.grantReadWriteData(reclaimFn);
+commentTable.grantReadWriteData(reclaimFn);
+guestBookTable.grantReadWriteData(reclaimFn);
+momentTable.grantReadWriteData(reclaimFn);
 bucket.grantDelete(reclaimFn);
 reclaimFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 reclaimFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 reclaimFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
+reclaimFn.addEnvironment('REACTION_TABLE_NAME', reactionTable.tableName);
+reclaimFn.addEnvironment('COMMENT_TABLE_NAME', commentTable.tableName);
+reclaimFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
+reclaimFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 reclaimFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 reclaimFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
 reclaimFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');

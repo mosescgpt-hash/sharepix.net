@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ARCHIVE_DAYS as RECLAIM_ARCHIVE_DAYS,
+  COMPANION_TABLES,
   GRACE_DAYS,
   daysUntilReclaim,
   lifespanDays,
@@ -174,6 +175,7 @@ describe('what the operator is told', () => {
     eventsReclaimed: 3,
     photosDeleted: 412,
     objectsDeleted: 1236,
+    recordsDeleted: 87,
     bytesFreed: 5 * 1024 * 1024 * 1024,
     skipped: [],
     dryRun: false,
@@ -182,6 +184,14 @@ describe('what the operator is told', () => {
   it('leads with whether anything was actually deleted', () => {
     expect(reclaimSummary({ ...outcome, dryRun: true })).toMatch(/^Nothing was deleted/);
     expect(reclaimSummary(outcome)).toMatch(/^Deleted 412 photos/);
+  });
+
+  it('names what guests wrote separately from what they uploaded', () => {
+    // "412 photos and 87 guest records" and "499 things" are not the same
+    // sentence, and an operator about to switch this on should read the first.
+    expect(reclaimSummary(outcome)).toContain('87 guest records');
+    expect(reclaimSummary({ ...outcome, dryRun: true })).toContain('87 guest records');
+    expect(reclaimSummary({ ...outcome, recordsDeleted: 1 })).toContain('1 guest record from');
   });
 
   it('counts the skips by reason rather than listing every id', () => {
@@ -262,6 +272,70 @@ describe('the job itself', () => {
     // closing, and a job that deletes photos must never be the reason it did.
     expect(resource).toContain("schedule: 'every week'");
     expect(read('amplify/functions/daily-tasks/handler.ts')).not.toContain('reclaim');
+  });
+
+  it('deletes what guests wrote, not only what they uploaded', () => {
+    // The gap this closes: reclamation destroyed an event's photos at the end
+    // of the archive window and left every comment, reaction, guest book entry
+    // and moment in the database. Free text people wrote at a wedding or a
+    // memorial, outliving the photographs it was written under.
+    for (const table of COMPANION_TABLES) {
+      expect(handler).toContain(`label: '${table}'`);
+    }
+    expect(handler).toContain('async function rowsByEvent');
+    expect(handler).toContain('outcome.recordsDeleted += 1');
+  });
+
+  it('is granted and given a table name for every companion table', () => {
+    // A missing grant fails at runtime on a job that runs weekly and destroys
+    // data; a missing env var is worse, because the handler would skip the
+    // table. Both are checked here rather than discovered in production.
+    for (const name of [
+      'REACTION_TABLE_NAME',
+      'COMMENT_TABLE_NAME',
+      'GUEST_BOOK_TABLE_NAME',
+      'MOMENT_TABLE_NAME',
+    ]) {
+      expect(backend).toContain(`reclaimFn.addEnvironment('${name}'`);
+      expect(handler).toContain(`process.env.${name}`);
+    }
+    for (const table of ['reactionTable', 'commentTable', 'guestBookTable', 'momentTable']) {
+      expect(backend).toContain(`${table}.grantReadWriteData(reclaimFn)`);
+    }
+  });
+
+  it('skips an unconfigured companion table rather than treating it as empty', () => {
+    // Silently reading a missing table name as "no rows" would let one absent
+    // environment variable delete an event's photos and report success while
+    // every comment written under them survived.
+    expect(handler).toContain('Companion table is not configured');
+    expect(handler).toContain('-not-configured');
+  });
+
+  it('deletes what guests wrote before the photo records', () => {
+    // Dying partway through must leave photos whose comments are gone, which
+    // the next run finishes — not comments attached to photos that no longer
+    // exist, which is the thing being fixed.
+    expect(handlerCode.indexOf('outcome.recordsDeleted += 1')).toBeLessThan(
+      handlerCode.indexOf('outcome.photosDeleted += 1'),
+    );
+  });
+
+  it('retries the event when a guest record could not be deleted', () => {
+    // Marking mediaReclaimedAt while rows survive would strand them forever,
+    // because the verdict for a reclaimed event is 'already-reclaimed'.
+    const block = handlerCode.slice(
+      handlerCode.indexOf('for (const record of records)'),
+      handlerCode.indexOf('for (const row of rows)'),
+    );
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).toContain('failed = true');
+  });
+
+  it('does not delete a row it cannot attribute to an event', () => {
+    // A row with no eventId belongs to no event we can prove. Deleting rows we
+    // cannot attribute is not tidying up.
+    expect(handler).toContain('if (!eventId || !id || !eventIds.has(eventId)) continue');
   });
 
   it('is admin-only from the dashboard', () => {

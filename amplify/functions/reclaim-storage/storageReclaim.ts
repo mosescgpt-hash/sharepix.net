@@ -158,12 +158,47 @@ export function storedKeysOf(photo: {
   );
 }
 
+/**
+ * The tables holding rows that belong to an event but are not the Photo record.
+ *
+ * Reclamation originally deleted the photos, their stored objects and their
+ * accounting rows, and stopped there — which left the things GUESTS wrote still
+ * in the database, permanently, after the photographs they were written about
+ * were gone. The comments are the sharp case: free text people typed under a
+ * photo at a wedding or a memorial, outliving the photo by design accident.
+ *
+ * Ordered so the rows attached to a photo go before the rows attached to the
+ * event. Nothing depends on that ordering for correctness — every one of these
+ * is found by `eventId` and deleted independently — but a partial failure part
+ * way through leaves the more surprising leftovers gone first.
+ *
+ * Guest book entries carry no media of their own: an entry references a Photo
+ * in the same event by id, so its photo or video message is already among the
+ * objects deleted above. That is worth knowing before someone "fixes" it by
+ * adding a second delete pass against keys that were never there.
+ */
+export const COMPANION_TABLES = [
+  'PhotoReaction',
+  'PhotoComment',
+  'GuestBookEntry',
+  'Moment',
+] as const;
+
+export type CompanionTable = (typeof COMPANION_TABLES)[number];
+
 /** What one run did, for the operator's summary. */
 export interface ReclaimOutcome {
   eventsConsidered: number;
   eventsReclaimed: number;
   photosDeleted: number;
   objectsDeleted: number;
+  /**
+   * Rows deleted from the companion tables — reactions, comments, guest book
+   * entries and moments. Counted separately from photos because they are what
+   * people WROTE, and an operator reading a reclamation summary should be able
+   * to see that those went too rather than assume it.
+   */
+  recordsDeleted: number;
   bytesFreed: number;
   /** Events that were due but skipped, and why. */
   skipped: Array<{ eventId: string; reason: string }>;
@@ -181,10 +216,14 @@ export interface ReclaimOutcome {
 export function reclaimSummary(outcome: ReclaimOutcome): string {
   const events = `${outcome.eventsReclaimed} event${outcome.eventsReclaimed === 1 ? '' : 's'}`;
   const photos = `${outcome.photosDeleted} photo${outcome.photosDeleted === 1 ? '' : 's'}`;
+  // Named rather than folded into the photo count: "and 412 photos" and "and
+  // 412 things people wrote" are not the same sentence, and an operator about
+  // to switch this on should read the second one.
+  const records = `${outcome.recordsDeleted} guest record${outcome.recordsDeleted === 1 ? '' : 's'}`;
   if (outcome.dryRun) {
     return [
       `Nothing was deleted — storage reclamation is switched off.`,
-      `${events} (${photos}) are past their archive window and would have been removed.`,
+      `${events} (${photos}, ${records}) are past their archive window and would have been removed.`,
       outcome.skipped.length > 0
         ? `${outcome.skipped.length} were skipped: ${summarizeSkips(outcome.skipped)}.`
         : '',
@@ -193,7 +232,7 @@ export function reclaimSummary(outcome: ReclaimOutcome): string {
       .join(' ');
   }
   return [
-    `Deleted ${photos} from ${events}, freeing ${Math.round(outcome.bytesFreed / (1024 * 1024))} MB.`,
+    `Deleted ${photos} and ${records} from ${events}, freeing ${Math.round(outcome.bytesFreed / (1024 * 1024))} MB.`,
     outcome.skipped.length > 0
       ? `${outcome.skipped.length} skipped: ${summarizeSkips(outcome.skipped)}.`
       : '',
