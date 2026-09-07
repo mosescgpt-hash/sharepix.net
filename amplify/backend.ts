@@ -39,6 +39,7 @@ import { moderatePhoto } from './functions/moderate-photo/resource';
 import { dailyTasks } from './functions/daily-tasks/resource';
 import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
 import { completeSurvey } from './functions/complete-survey/resource';
+import { monthlyReport } from './functions/monthly-report/resource';
 
 const backend = defineBackend({
   auth,
@@ -67,6 +68,7 @@ const backend = defineBackend({
   dailyTasks,
   unsubscribeEmail,
   completeSurvey,
+  monthlyReport,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -619,4 +621,23 @@ completeSurveyFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName
 completeSurveyFn.addEnvironment(
   'RESEARCH_FULFILMENT_DAYS',
   process.env.RESEARCH_FULFILMENT_DAYS ?? '',
+);
+
+// The monthly business summary. Read-only on everything: it exists to describe
+// the data, and a job that runs unattended once a month against every row has
+// no reason to be able to change any of it.
+const monthlyReportFn = backend.monthlyReport.resources.lambda as LambdaFunction;
+eventTable.grantReadData(monthlyReportFn);
+incentiveTable.grantReadData(monthlyReportFn);
+monthlyReportFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+monthlyReportFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
+monthlyReportFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+monthlyReportFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+// Who receives it. Unset means the report is built, logged and not sent.
+monthlyReportFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
+monthlyReportFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+    resources: ['*'],
+  }),
 );
