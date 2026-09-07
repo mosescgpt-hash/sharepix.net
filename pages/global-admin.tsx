@@ -19,6 +19,14 @@ import {
   listPaymentsCount,
   decideRefund,
   listRefunds,
+  listEventFeedback,
+  type FeedbackRow,
+  readSetting,
+  writeSetting,
+  setEventUsageStatus,
+  SETTING_KEYS,
+  reviewTestimonial,
+  closeSupportFollowUp,
   listResearchIncentives,
   markIncentiveFulfilled,
   manageUser,
@@ -37,6 +45,9 @@ import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfu
 import { canTransition } from '@/lib/researchIncentive';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
+import { summarize as summarizeRatings } from '@/lib/customerRating';
+import { assessUsage, formatBytes, totalBytes } from '@/lib/fairUse';
+import { OWNER_EMAIL_PLACEHOLDER } from '@/lib/businessInfo';
 import {
   DiscountCode,
   FreeEventClaimRow,
@@ -179,6 +190,11 @@ function GlobalAdminPage() {
   const [jobResult, setJobResult] = useState<{ text: string; ok: boolean } | null>(null);
   const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
   const [refundsError, setRefundsError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [reportTo, setReportTo] = useState('');
+  const [reportSaved, setReportSaved] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -302,6 +318,25 @@ function GlobalAdminPage() {
         setRefundsError(
           err instanceof Error ? err.message : 'The refund ledger could not be loaded.',
         );
+      }
+
+      try {
+        setFeedback(await listEventFeedback());
+        setFeedbackError(null);
+      } catch (err) {
+        setFeedback([]);
+        setFeedbackError(
+          err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
+        );
+      }
+
+      try {
+        const stored = await readSetting(SETTING_KEYS.monthlyReportRecipient);
+        setReportTo(stored);
+        setReportSaved(stored);
+        setSettingsError(null);
+      } catch (err) {
+        setSettingsError(err instanceof Error ? err.message : 'Settings could not be loaded.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The global dashboard could not be loaded.');
@@ -532,10 +567,116 @@ function GlobalAdminPage() {
     }
   }
 
-  async function handleRunJob(job: 'daily' | 'monthly') {
+  async function handleReviewTestimonial(row: FeedbackRow, next: string) {
+    setWorking(`feedback-${row.id}`);
+    setFeedbackError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      await reviewTestimonial(row, next, me?.loginId ?? 'admin');
+      setFeedback((current) =>
+        (current ?? []).map((item) =>
+          item.id === row.id
+            ? { ...item, status: next, reviewedBy: me?.loginId ?? 'admin' }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setFeedbackError(
+        err instanceof Error ? err.message : 'That testimonial could not be updated.',
+      );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleCloseFollowUp(row: FeedbackRow) {
+    // Closing means a person answered them. It does not remove the rating from
+    // the numbers, and nothing here can delete what they wrote.
+    if (
+      !window.confirm(
+        'Mark this as answered?\n\nOnly do this once you have actually replied to them. It stays in the list either way.',
+      )
+    ) {
+      return;
+    }
+    setWorking(`feedback-${row.id}`);
+    setFeedbackError(null);
+    try {
+      await closeSupportFollowUp(row.id);
+      setFeedback((current) =>
+        (current ?? []).map((item) =>
+          item.id === row.id ? { ...item, supportFollowUpNeeded: false } : item,
+        ),
+      );
+    } catch (err) {
+      setFeedbackError(
+        err instanceof Error ? err.message : 'That follow-up could not be closed.',
+      );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleSaveReportRecipient() {
+    setWorking('report-recipient');
+    setSettingsError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      const value = reportTo.trim();
+      await writeSetting(SETTING_KEYS.monthlyReportRecipient, value, me?.loginId ?? 'admin');
+      setReportSaved(value);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'That could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleUsageStatus(
+    event: QREvent,
+    status: '' | 'NORMAL' | 'RESTRICTED',
+  ) {
+    // Only RESTRICTED needs asking about: it is the one that stops a paying
+    // customer's guests from uploading, which is the expensive mistake here.
+    if (
+      status === 'RESTRICTED' &&
+      !window.confirm(
+        `Stop uploads to “${event.name}”?\n\nGuests will be told uploads are paused. Do this for abuse, not for a busy event.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`usage-${event.id}`);
+    try {
+      await setEventUsageStatus(event.id, status, '');
+      setEvents((current) =>
+        current.map((item) =>
+          item.id === event.id ? { ...item, usageStatus: status || null } : item,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That event could not be updated.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleRunJob(job: 'daily' | 'monthly' | 'reclaim') {
     // Confirm only when it can actually send. With sending off the job is a
     // read-and-log, and asking "are you sure?" about something inert teaches
     // people to click through the prompt that matters.
+    //
+    // Reclamation is the exception: it is the one job here that destroys data,
+    // and this prompt is worth being unpleasant about. It still cannot delete
+    // anything unless STORAGE_RECLAIM_ENABLED is on — the job says which it did.
+    if (
+      job === 'reclaim' &&
+      !window.confirm(
+        'Run storage reclamation?\n\nIf reclamation is switched on, this PERMANENTLY DELETES the photos and videos of every event whose 90-day archive has closed. There is no undo.\n\nIf it is switched off, it will tell you what it would have deleted and remove nothing.',
+      )
+    ) {
+      return;
+    }
     setWorking(`job-${job}`);
     setJobResult(null);
     try {
@@ -993,6 +1134,348 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Storage and fair use</h2>
+              <p className="text-sm text-charcoal/70">
+                Events by what they actually store. A flag here means{' '}
+                <strong>look at it</strong>, not <strong>stop it</strong> — a big wedding
+                uploads exactly as freely as a small one. Only <em>Restricted</em> pauses
+                uploads.
+              </p>
+              {(() => {
+                const ranked = events
+                  .map((event) => ({
+                    event,
+                    bytes: totalBytes(event),
+                    assessment: assessUsage({
+                      photoCount: event.photoCount,
+                      photoBytes: event.photoBytes,
+                      videoBytes: event.videoBytes,
+                      derivedBytes: event.derivedBytes,
+                      windowCount: event.uploadWindowCount,
+                      manualStatus: event.usageStatus,
+                    }),
+                  }))
+                  .sort((a, b) => b.bytes - a.bytes);
+                const measured = ranked.filter((row) => row.bytes > 0);
+                const flagged = ranked.filter((row) => row.assessment.status !== 'NORMAL');
+                const shown = (flagged.length > 0 ? flagged : measured).slice(0, 15);
+
+                return (
+                  <>
+                    <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          Stored in total
+                        </dt>
+                        <dd className="font-sans text-2xl font-bold">
+                          {formatBytes(ranked.reduce((sum, row) => sum + row.bytes, 0))}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          Events measured
+                        </dt>
+                        <dd className="font-sans text-2xl font-bold">
+                          {measured.length}
+                          <span className="text-sm font-normal text-charcoal/55">
+                            {' '}
+                            / {events.length}
+                          </span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          Flagged
+                        </dt>
+                        <dd className="font-sans text-2xl font-bold">{flagged.length}</dd>
+                      </div>
+                    </dl>
+
+                    {measured.length < events.length ? (
+                      <p className="mt-3 text-sm text-charcoal/60">
+                        {/* Honest about the gap: byte counting starts at deploy, so
+                            everything uploaded before it reads as zero rather than as
+                            an empty event. */}
+                        Events created before byte counting existed show no storage. That
+                        is missing data, not an empty event — it fills in as new uploads
+                        arrive.
+                      </p>
+                    ) : null}
+
+                    {shown.length === 0 ? (
+                      <p className="mt-4 text-sm text-charcoal/55">Nothing stored yet.</p>
+                    ) : (
+                      <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                        {shown.map(({ event, bytes, assessment }) => (
+                          <li key={event.id} className="py-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-charcoal">
+                                  {formatBytes(bytes)} · {event.name}
+                                </p>
+                                <p className="truncate text-xs text-charcoal/60">
+                                  {event.photoCount ?? 0} photos ·{' '}
+                                  {formatBytes(event.videoBytes)} video
+                                  {assessment.status !== 'NORMAL' ? (
+                                    <span
+                                      className={
+                                        assessment.blocked
+                                          ? ' font-medium text-red-700'
+                                          : ' font-medium text-amber-700'
+                                      }
+                                    >
+                                      {' '}
+                                      · {assessment.status.toLowerCase().replace('_', ' ')}
+                                    </span>
+                                  ) : null}
+                                  {assessment.reasons.length > 0
+                                    ? ` · ${assessment.reasons.join(', ')}`
+                                    : ''}
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 flex-wrap gap-2">
+                                {event.usageStatus ? (
+                                  <button
+                                    type="button"
+                                    disabled={working === `usage-${event.id}`}
+                                    onClick={() => void handleUsageStatus(event, '')}
+                                    className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                  >
+                                    Clear override
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      disabled={working === `usage-${event.id}`}
+                                      onClick={() => void handleUsageStatus(event, 'NORMAL')}
+                                      className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                    >
+                                      Looks fine
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={working === `usage-${event.id}`}
+                                      onClick={() =>
+                                        void handleUsageStatus(event, 'RESTRICTED')
+                                      }
+                                      className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                    >
+                                      Stop uploads
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>
+              <p className="text-sm text-charcoal/70">
+                Where the monthly analytics report goes. Changing it here takes effect on
+                the next run — no deploy.
+              </p>
+              {settingsError ? (
+                <Notice tone="warn" className="mt-3">
+                  {settingsError}
+                </Notice>
+              ) : null}
+              {!reportSaved ? (
+                <Notice tone="warn" className="mt-3">
+                  No recipient is set, so the monthly report will not send. It still runs
+                  and logs what it would have said.
+                </Notice>
+              ) : null}
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="email"
+                  value={reportTo}
+                  onChange={(e) => setReportTo(e.target.value)}
+                  placeholder={OWNER_EMAIL_PLACEHOLDER}
+                  className="spx-input w-full sm:flex-1"
+                  aria-label="Monthly report recipient"
+                />
+                <button
+                  type="button"
+                  disabled={working === 'report-recipient' || reportTo.trim() === (reportSaved ?? '')}
+                  onClick={() => void handleSaveReportRecipient()}
+                  className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                >
+                  {working === 'report-recipient' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-charcoal/60">
+                {/* Two things stand between a saved address and an email arriving, and
+                    only one of them is on this screen. */}
+                A recipient is not enough on its own: the report also needs a verified
+                sender (<code>ALERT_FROM_ADDRESS</code>), and if SES is still in sandbox
+                mode only verified addresses receive anything at all.
+              </p>
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+                Ratings and testimonials
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                What hosts said about their events. A testimonial can only be approved when
+                the host actually gave permission — approving does not create it, and a row
+                without it publishes nothing.
+              </p>
+              {feedbackError ? (
+                <Notice tone="warn" className="mt-3">
+                  {feedbackError}
+                </Notice>
+              ) : null}
+              {feedback === null ? (
+                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+              ) : (
+                (() => {
+                  const stats = summarizeRatings(feedback);
+                  const waiting = feedback.filter((row) => row.supportFollowUpNeeded);
+                  return (
+                    <>
+                      <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Average
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">
+                            {/* Null rather than 0.0: "average 0.0" reads as a
+                                catastrophe where the truth is that nobody has
+                                answered yet. */}
+                            {stats.average === null ? '—' : stats.average}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Responses
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">{stats.responses}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Low scores
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">{stats.lowRatings}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Publishable
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">
+                            {stats.publishable}
+                            <span className="text-sm font-normal text-charcoal/55">
+                              {' '}
+                              / {stats.testimonials}
+                            </span>
+                          </dd>
+                        </div>
+                      </dl>
+
+                      {waiting.length > 0 ? (
+                        <Notice tone="warn" className="mt-4">
+                          {waiting.length} host{waiting.length === 1 ? '' : 's'} rated their
+                          event poorly and {waiting.length === 1 ? 'has' : 'have'} not been
+                          answered. A support issue should get support, not marketing.
+                        </Notice>
+                      ) : null}
+
+                      {feedback.length === 0 ? (
+                        <p className="mt-4 text-sm text-charcoal/55">Nobody has rated yet.</p>
+                      ) : (
+                        <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                          {feedback
+                            .filter((row) => row.rating !== null)
+                            .map((row) => (
+                              <li key={row.id} className="py-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-charcoal">
+                                      {row.rating}/5 · {row.eventName || row.eventId}
+                                    </p>
+                                    <p className="truncate text-xs text-charcoal/60">
+                                      {row.marketingPermission
+                                        ? `may publish · ${row.displayName || 'anonymous'}`
+                                        : 'no permission to publish'}
+                                      {row.status ? ` · ${row.status.toLowerCase()}` : ''}
+                                      {row.reviewedBy ? ` · ${row.reviewedBy}` : ''}
+                                    </p>
+                                    {row.testimonialText ? (
+                                      <p className="mt-1 text-xs italic text-charcoal/70">
+                                        &ldquo;{row.testimonialText}&rdquo;
+                                      </p>
+                                    ) : null}
+                                    {row.privateFeedback ? (
+                                      <p className="mt-1 text-xs text-charcoal/70">
+                                        <span className="font-medium">Private:</span>{' '}
+                                        {row.privateFeedback}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex shrink-0 flex-wrap gap-2">
+                                    {row.supportFollowUpNeeded ? (
+                                      <button
+                                        type="button"
+                                        disabled={working === `feedback-${row.id}`}
+                                        onClick={() => void handleCloseFollowUp(row)}
+                                        className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                      >
+                                        Mark answered
+                                      </button>
+                                    ) : null}
+                                    {row.testimonialText && row.status !== 'APPROVED' ? (
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          working === `feedback-${row.id}` ||
+                                          !row.marketingPermission
+                                        }
+                                        title={
+                                          row.marketingPermission
+                                            ? undefined
+                                            : 'This host did not give permission to publish.'
+                                        }
+                                        onClick={() =>
+                                          void handleReviewTestimonial(row, 'APPROVED')
+                                        }
+                                        className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                                      >
+                                        Approve
+                                      </button>
+                                    ) : null}
+                                    {row.testimonialText && row.status !== 'REJECTED' ? (
+                                      <button
+                                        type="button"
+                                        disabled={working === `feedback-${row.id}`}
+                                        onClick={() =>
+                                          void handleReviewTestimonial(row, 'REJECTED')
+                                        }
+                                        className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                      >
+                                        Reject
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </>
+                  );
+                })()
+              )}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
               <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Scheduled jobs</h2>
               <p className="text-sm text-charcoal/70">
                 The nightly job runs at 14:00 UTC and the report on the 1st of the month.
@@ -1018,7 +1501,21 @@ function GlobalAdminPage() {
                 >
                   {working === 'job-monthly' ? 'Running…' : 'Build the monthly report now'}
                 </button>
+                <button
+                  type="button"
+                  disabled={working === 'job-reclaim'}
+                  onClick={() => void handleRunJob('reclaim')}
+                  className="border border-red-700/40 px-4 py-3 text-sm font-medium text-red-700 transition hover:border-red-700 disabled:opacity-50"
+                >
+                  {working === 'job-reclaim' ? 'Running…' : 'Reclaim expired storage'}
+                </button>
               </div>
+              <p className="mt-3 text-sm text-charcoal/70">
+                <strong>Reclamation deletes photos permanently</strong> — every event whose
+                12-month gallery and 90-day archive have both closed, plus a week of grace.
+                It is switched off until <code>STORAGE_RECLAIM_ENABLED</code> is set, and
+                until then it reports what it would have removed and removes nothing.
+              </p>
               {jobResult ? (
                 <p
                   className={`mt-3 border border-charcoal/10 px-3 py-2 text-sm ${

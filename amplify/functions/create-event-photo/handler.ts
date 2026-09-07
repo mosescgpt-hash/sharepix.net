@@ -19,6 +19,7 @@ import type { Schema } from '../../data/resource';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
 import { contributorKey, contributorRowId } from './successfulEvent';
+import { assessUsage, fairUseConfig, windowExpired } from './fairUse';
 
 const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
@@ -497,6 +498,74 @@ export const handler: Handler = async (event) => {
     update.ConditionExpression = conditions.join(' AND ');
   }
 
+  // ---- Fair use ---------------------------------------------------------
+  //
+  // Checked BEFORE the slot reservation, against the row already read. Two
+  // separate things happen here and it matters that they stay separate:
+  //
+  //   RESTRICTED stops the upload. It is reached by an admin saying so, or by
+  //   crossing an abuse threshold set far above any real event.
+  //
+  //   Everything else does nothing at all to the upload. A big wedding is
+  //   flagged for a person to look at and uploads exactly as freely as a small
+  //   one. Throttling a paying customer whose event went well is a far more
+  //   expensive mistake than letting an abusive event run another hour.
+  //
+  // See lib/fairUse.ts. Nothing here is a hard-coded number.
+  const checkedAt = new Date();
+  const fairUse = fairUseConfig(process.env);
+  const windowCount = toInt(ev.uploadWindowCount?.N) ?? 0;
+  const windowStale = windowExpired(ev.uploadWindowStartedAt?.S ?? null, checkedAt, fairUse);
+  const assessment = assessUsage(
+    {
+      photoCount: toInt(ev.photoCount?.N) ?? 0,
+      photoBytes: Number(ev.photoBytes?.N ?? '0'),
+      videoBytes: Number(ev.videoBytes?.N ?? '0'),
+      derivedBytes: Number(ev.derivedBytes?.N ?? '0'),
+      // A stale window is a rate of zero, not the rate from an hour ago.
+      windowCount: windowStale ? 0 : windowCount,
+      manualStatus: ev.usageStatus?.S ?? null,
+    },
+    fairUse,
+  );
+  if (assessment.blocked) {
+    // Deliberately vague to the guest, who is not the problem and cannot fix
+    // it. The detail is in the logs and the admin dashboard.
+    console.warn('Upload refused by fair use', {
+      at: checkedAt.toISOString(),
+      eventId,
+      reasons: assessment.reasons,
+    });
+    throw new Error('Uploads for this event are paused. Please contact the event host.');
+  }
+
+  // Move the rolling window along in the same request that reserved nothing
+  // yet. Best-effort and deliberately not conditional: this counter exists to
+  // be looked at, and a lost increment under contention understates a burst
+  // rather than refusing a photo.
+  const advanceWindow = () =>
+    dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          ...(windowStale
+            ? {
+                UpdateExpression:
+                  'SET uploadWindowCount = :one, uploadWindowStartedAt = :now',
+                ExpressionAttributeValues: {
+                  ':one': { N: '1' },
+                  ':now': { S: checkedAt.toISOString() },
+                },
+              }
+            : {
+                UpdateExpression: 'ADD uploadWindowCount :one',
+                ExpressionAttributeValues: { ':one': { N: '1' } },
+              }),
+        }),
+      )
+      .catch(() => undefined);
+
   try {
     await dynamo.send(new UpdateItemCommand(update));
   } catch (error) {
@@ -513,6 +582,8 @@ export const handler: Handler = async (event) => {
     }
     throw error;
   }
+
+  void advanceWindow();
 
   const releaseSlot = () =>
     dynamo

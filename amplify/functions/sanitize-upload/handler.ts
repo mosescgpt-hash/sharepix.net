@@ -7,11 +7,85 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import { DynamoDBClient, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { sniffMediaKind, maxBytesForKind } from './safety';
+import { counterForKind, eventIdForKey, kindForKey, usableSize } from './accounting';
 import { isJpeg, isHeic, stripJpegMetadata, stripHeicGps } from './exif';
 import { mirrorConfigured, mirrorDecision, r2KeyFor } from './mirror';
 
 const s3 = new S3Client({});
+const dynamo = new DynamoDBClient({});
+
+const MEDIA_TABLE = process.env.MEDIA_TABLE_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+
+/**
+ * Record one object's size against its event, exactly once.
+ *
+ * The conditional put is the whole mechanism: S3 delivers at-least-once and a
+ * strippable original arrives twice by design, so the counter must move only
+ * when the ledger row is genuinely new. A redelivery fails the condition and
+ * this returns having done nothing.
+ *
+ * Best-effort throughout. Accounting is not worth failing an upload over — the
+ * photo is already safe and serveable, and an undercount is a number an admin
+ * reconciles later rather than a memory somebody lost.
+ */
+async function recordBytes(key: string, size: unknown): Promise<void> {
+  if (!MEDIA_TABLE || !EVENT_TABLE) return;
+  const bytes = usableSize(size);
+  const kind = kindForKey(key);
+  const eventId = eventIdForKey(key);
+  if (bytes === null || !kind || !eventId) return;
+
+  const now = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: MEDIA_TABLE,
+        Item: {
+          id: { S: key },
+          __typename: { S: 'MediaObject' },
+          eventId: { S: eventId },
+          kind: { S: kind },
+          bytes: { N: String(bytes) },
+          recordedAt: { S: now },
+          createdAt: { S: now },
+          updatedAt: { S: now },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (error) {
+    // Already counted. The overwhelmingly common case on a sanitized rewrite,
+    // and not worth a log line each time.
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
+    console.error('Could not record a media object', {
+      at: now,
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: `ADD ${counterForKind(kind)} :bytes`,
+        ExpressionAttributeValues: { ':bytes': { N: String(bytes) } },
+      }),
+    );
+  } catch (error) {
+    console.error('Could not add stored bytes to the event', {
+      at: now,
+      key,
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 /**
  * Cloudflare R2, where reads are served from. R2 speaks the S3 API, so the same
@@ -121,7 +195,12 @@ async function processRecord(record) {
   // serves, so they are exactly what we want in R2.
   if (!ORIGINAL_KEY.test(key)) {
     const derived = mirrorDecision({ key });
-    if (derived.mirror) await mirrorToR2(bucket, key);
+    if (derived.mirror) {
+      await mirrorToR2(bucket, key);
+      // Counted on the same condition as the copy: what lands in R2 is what
+      // the event costs.
+      await recordBytes(key, record?.s3?.object?.size);
+    }
     return;
   }
 
@@ -169,7 +248,14 @@ async function processRecord(record) {
     strippable,
     sanitized: headerObj.Metadata?.sanitized === 'true',
   });
-  if (decision.mirror) await mirrorToR2(bucket, key);
+  if (decision.mirror) {
+    await mirrorToR2(bucket, key);
+    // `size` here is the measured size of THIS pass. For a strippable original
+    // that is the sanitized rewrite, which is the copy actually stored — so the
+    // number recorded is the one that costs money rather than the one the guest
+    // sent.
+    await recordBytes(key, size);
+  }
 }
 
 /**

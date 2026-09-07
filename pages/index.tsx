@@ -55,6 +55,25 @@ function Hero() {
             private gallery — no app to install, no account to make, and nobody to chase
             afterwards.
           </p>
+          {/* The reassurance line, under the promise rather than instead of it.
+              The emotional message above is why somebody wants SharePix; this
+              is what makes saying yes easy. Price last, deliberately — leading
+              with it would make the price the brand. */}
+          <ul className="mt-6 flex max-w-md flex-wrap gap-x-4 gap-y-1.5 text-sm text-charcoal/70">
+            {[
+              'No app',
+              'No guest accounts',
+              'Unlimited guests',
+              'Unlimited photos*',
+              'Private by default',
+              '$79 one-time',
+            ].map((claim) => (
+              <li key={claim} className="flex items-center gap-1.5">
+                <span aria-hidden className="h-1 w-1 shrink-0 bg-pine" />
+                {claim}
+              </li>
+            ))}
+          </ul>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/create-event" className="spx-btn-ink">
               Create your event
@@ -70,7 +89,13 @@ function Hero() {
           </div>
           {/* The stat row is illustrative on a marketing page. Labelled as such
               rather than dressed up as platform metrics we are not measuring. */}
-          <p className="mt-4 text-[0.7rem] text-charcoal/45">Figures from a typical wedding.</p>
+          <p className="mt-4 text-[0.7rem] text-charcoal/45">
+            Figures from a typical wedding. *Unlimited photos are for normal event use —{' '}
+            <Link href="/pricing" className="underline">
+              see fair use
+            </Link>
+            .
+          </p>
         </div>
 
         <Artwork slot="home-hero" className="spx-arch aspect-[4/5] w-full" priority />

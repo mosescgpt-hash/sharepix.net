@@ -62,13 +62,18 @@ export const SUPPORT_EMAIL = 'support@sharepix.net';
 export const PRIVACY_EMAIL = 'privacy@sharepix.net';
 
 /**
- * Where internal mail goes — the monthly analytics report, and anything else
- * SharePix sends to itself rather than to a customer.
+ * A SUGGESTION for where internal mail goes, and nothing more.
  *
- * Separate from SUPPORT_EMAIL on purpose: a business summary landing in a
+ * This used to be the monthly report's actual recipient, defaulted into
+ * amplify/backend.ts. It is not any more: the recipient lives in the AppSetting
+ * table and a global admin changes it from the dashboard without a deploy.
+ *
+ * What remains here is the placeholder the settings field shows when nothing
+ * has been set. It is never sent to — an unsaved suggestion is not a
+ * configuration — and the report goes nowhere until an admin saves one.
+ *
+ * Kept separate from SUPPORT_EMAIL on purpose: a business summary landing in a
  * shared support queue is a summary nobody reads, and support mail landing in
- * an owner's inbox is support nobody answers. The value is duplicated in
- * amplify/backend.ts because Amplify config cannot import from lib/; a test
- * pins the two together.
+ * an owner's inbox is support nobody answers.
  */
-export const OWNER_EMAIL = 'seth@sharepix.net';
+export const OWNER_EMAIL_PLACEHOLDER = 'seth@sharepix.net';

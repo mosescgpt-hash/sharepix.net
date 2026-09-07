@@ -92,7 +92,9 @@ survey at all. See *What has to exist first* below.
 | Plan | Price | Photos | Videos | Gallery |
 | --- | --- | --- | --- | --- |
 | Free | $0, one per account | 50 | 1 | 30 days |
-| Event | $79 one-time | 3,000 | 30 | 12 months |
+| Event | $79 one-time | **Unlimited\*** | 30 | 12 months |
+
+\*Unlimited as of decision 14 below, which also records what makes it honest.
 
 The paid plan includes everything: customizable QR code, event branding,
 approve-before-showing moderation, the guest book and the live slideshow.
@@ -423,6 +425,229 @@ than telling them to write to us.
 Refunds have accordingly moved off the monthly report's *not measured* list.
 Chargebacks have not: no dispute data comes back from Stripe, and lumping the
 two together would claim coverage we do not have.
+
+## 11. Ratings and testimonials — and where the line is on reviews
+
+**Every host who paid gets asked to rate their event, 1–5, a couple of days
+after the upload window closes.** Not only the ones whose events succeeded: the
+survey pass is limited to Successful Events because ten minutes of research from
+a host with an empty gallery is both useless and unkind, but a one-tap rating is
+not, and asking only the hosts it worked for would measure the failure rate
+entirely from events where nothing failed.
+
+**A 4 or 5 leads to a testimonial ask. A 1, 2 or 3 leads to support.** The
+low branch opens a follow-up an admin has to close, and the dashboard says
+plainly how many are still open. Nothing in the flow discourages a complaint,
+delays it, or asks anyone to reconsider before sending it.
+
+### The distinction the brief blurs
+
+The growth-loop document asks for a "public review / testimonial request" sent
+only to hosts who rated positively. Half of that is fine and half is not:
+
+- A **testimonial** is advertising copy on sharepix.net. Asking happy customers
+  for it is normal — nobody has ever believed a company's own page carries a
+  representative sample of opinion, and nobody expects an unhappy customer to
+  write an advert.
+- A **public review** — Google, an app store, a directory — is an entry in a
+  record that belongs to everyone. Soliciting those from satisfied customers
+  only is *review gating*: the score becomes a filter on who is invited to
+  speak, and the resulting public record is skewed by design. Every platform
+  that hosts such reviews prohibits it, and the FTC's consumer-review rule
+  treats manipulating the visible balance of reviews as deceptive.
+
+So the first is built and the second is not. There is no field, status or link
+anywhere in the flow for a third-party review, and a test scans the source to
+keep it that way. **If SharePix ever wants Google reviews, the ask has to go to
+every host regardless of score** — that is a different feature, not a setting.
+
+### Permission is its own act
+
+Writing a testimonial and letting SharePix publish it are two decisions. The
+checkbox is never pre-ticked, only a literal `true` grants anything, and the
+wording agreed to is stored with the grant so an old permission keeps meaning
+what it said. The name is **anonymous unless the host types one** — a name
+published because a default said so is not a name anyone agreed to publish.
+
+Permission is checked at the moment of publishing rather than at the moment an
+admin approved, so a withdrawal after approval takes effect. An admin cannot
+approve a testimonial whose host did not consent: approving does not create
+permission and the queue refuses rather than leaving a row that looks ready.
+
+### Not built
+
+No Featured Event invitation, no referral offer, no credit ledger, no repeat-use
+message. Those are the rest of the growth loop and each needs a decision first —
+referral amounts, whether credit exists at all — that has not been made.
+
+## 12. Storage: measured, bounded, and reclaimed on delete
+
+Groundwork for advertising unlimited photo uploads. **The pricing and copy have
+not changed** — nothing here removes the 3,000-photo cap. This is what has to be
+true before removing it is safe.
+
+### The dangerous combination
+
+Unlimited photos on its own is fine. Unlimited photos *while nothing deletes
+bytes and nothing limits velocity* is not: one event could write unboundedly,
+forever, for $79, and no query could tell you it had happened.
+
+Three things were missing and all three are now present.
+
+### Bytes are counted, server-side only
+
+`sanitize-upload` is the only place in SharePix that knows an object's real
+size — uploads go browser → S3 directly, so no application server sees the bytes
+and anything the browser reported would be a claim. A counter the client could
+set to zero is worse than no counter, because it reads as authoritative.
+
+Counting is **idempotent**: S3 delivers at-least-once and a strippable original
+arrives twice by design (once as uploaded, once as the sanitized rewrite). A
+conditional put on a per-key ledger row is what gates the increment, so a
+redelivery adds nothing. That row is also what lets deletion subtract exactly
+what was added rather than guessing.
+
+Counters are **Float, not Integer**. GraphQL's `Int` is 32-bit and tops out at
+2.1 GB, which a single event with a few hundred videos passes — and the overflow
+would be silent.
+
+Photos, video and derived files (previews and thumbs, which *we* generate) are
+counted separately, because folding them together would make an event's storage
+read about a third larger than what anyone actually uploaded.
+
+### A deleted photo is now actually deleted
+
+`delete-event-photo` removed the S3 objects and the row but **never touched R2**,
+which is where reads are served from — and `mediaUrls` signs a key without
+consulting the photo table. So anyone already holding the key, meaning every
+guest who had loaded the gallery, kept a working URL indefinitely. It also never
+deleted the thumbnail at all, in either store.
+
+Both are fixed. This mattered most on the moderation and DMCA paths, where
+deletion *is* the remedy.
+
+### Flagged, not throttled
+
+`lib/fairUse.ts` holds every threshold, all environment-overridable, none copied
+into a handler or a component.
+
+**A threshold crossed makes an event visible, not blocked.** A large wedding
+uploads exactly as freely as a small one; a person is simply told about it. Only
+the abuse thresholds block, and they sit far above any real event — 50,000
+photos, 500 GB, 1,200 uploads a minute. Throttling a paying customer whose event
+went well is a far more expensive mistake than letting an abusive event run
+another hour before someone looks.
+
+An admin's judgement beats the thresholds **in both directions**: `NORMAL`
+clears an event they have looked at, `RESTRICTED` stops one the numbers did not
+catch.
+
+The numbers are hypotheses with stated reasons, not tuning — there is no real
+data yet, and that is the honest state to ship in.
+
+### The other half: reclamation
+
+**Decided and built.** Unlimited photos live for the 12-month gallery, then the
+90-day admin-only archive, then they are deleted. That is what `lib/lifecycle.ts`
+has computed since retention shipped — every boundary except the last already
+worked, and nothing ever removed the bytes.
+
+`reclaim-storage` is a weekly job that does. It is the most destructive code in
+the product and is written that way:
+
+- **An event with no upload window date can never be reclaimed.** Not "treated
+  as old", not "measured from creation" — never. A missing date is missing
+  information, and guessing an anchor for a destructive action is how you delete
+  a wedding that has not happened yet. An unparseable date is the same.
+- **Seven days of grace** past the archive boundary, because an extension bought
+  on the last day has to reach the row before a scheduled job reads it.
+- **Off unless `STORAGE_RECLAIM_ENABLED` is exactly `true`.** Off means it runs
+  completely, logs every event and key it would remove, and deletes nothing —
+  and marks nothing, so switching it on later deletes the backlog rather than
+  skipping it as done. Its own switch, deliberately not the email one.
+- **Twenty-five events per run.** If this job is ever wrong, the difference
+  between being wrong about twenty-five events and about the whole table is the
+  difference between an incident and the end of the product.
+- **Deletes from R2 as well as S3**, because R2 serves the reads.
+- A partial failure leaves the event unmarked so the next run finishes it.
+
+It is a separate function from the daily job on purpose: that one must never
+stop warning hosts their gallery is closing, and a job that deletes photos must
+never be the reason it did.
+
+## 13. The report recipient is a setting, not a line of code
+
+`seth@sharepix.net` was defaulted into `amplify/backend.ts`. It now lives in the
+`AppSetting` table and a global admin edits it on the dashboard.
+
+An address compiled into application code needs a code change, a review and a
+deploy to move, which is how it ends up wrong and stays wrong — and it puts a
+named person's inbox in the repository.
+
+The consequence is that **the report sends to nobody until an admin sets it**.
+That is the correct trade: a report going nowhere is visible on the settings
+screen, where a report going to the wrong inbox is visible nowhere. The
+`REPORT_TO_ADDRESS` env var survives as a fallback for a deployment that wants
+to pin one.
+
+## 14. Unlimited photos, and what pays for the promise
+
+**Decided.** Shipped. `photoLimit` on the paid plan is now `null`.
+
+The old comment beside `photoLimit: 3000` argued that unlimited on a one-time
+payment is an unbounded storage and egress bill. **That argument was right.** It
+is not overruled here — it is answered:
+
+| The objection | What answers it |
+| --- | --- |
+| Storage grows without bound | Media is deleted at 12 months + 90-day archive (decision 12) |
+| Nobody can see an abusive event | Bytes are measured per event, thresholds flag it (decision 12) |
+| One event could write forever | Velocity is measured; abuse ceilings block |
+
+Unlimited is defensible only while all three hold. `__tests__/pricing-migration.test.ts`
+pins them, so removing reclamation or the thresholds fails the test that guards
+the claim rather than quietly making it a lie.
+
+What made 3,000 wrong as a *customer promise* is separate from whether it was
+wrong as a *limit*: nobody can predict how many photos an event that has not
+happened yet will produce, so the number could only ever reassure or alarm by
+accident.
+
+**Video is not unlimited and is not advertised as such.** A still is resized
+before it is served; a clip streams at full size on every play, so video is the
+one upload a photo cap never bounded. The brief is explicit that no
+customer-facing video allowance should be set before real usage and cost data
+exist, and there is none. When there is, the honest unit is gigabytes, not a
+count — video sizes vary by an order of magnitude.
+
+### Three things the pricing brief asked for that do not exist
+
+Left off the page rather than written into it, because a feature list is a set
+of promises:
+
+- **Password/PIN protection.** Galleries are *unlisted*, not password-protected.
+  The FAQ says so in those words rather than saying "private" and letting the
+  reader assume something stronger.
+- **Co-host capability.** Not built.
+- **Missions / photo challenges.** Not built. Moments are event sections, which
+  is a different thing and is described as what it is.
+
+A test asserts the first two stay absent from the copy. The third could not be a
+substring guard: the FAQ legitimately contains "not password-protected", and a
+substring cannot tell a denial from a claim — so the honest statement is
+asserted positively instead.
+
+### The page
+
+One plan, presented as one plan: no comparison row, no badge, no strikethrough,
+no "was $129". The free event is an invitation underneath rather than an equal
+column, because setting a trial beside the paid plan invites the wrong question
+— *which of these do I need?* — about a product whose pitch is that there is one
+price covering everything.
+
+**This is not reversible for events already created under it.** `photoLimit` is
+stamped at creation, so unlimited can stop being sold at any time but cannot be
+retracted from anyone who bought it.
 
 ## What has to exist first
 

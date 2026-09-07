@@ -52,7 +52,12 @@ describe('what the operator is told', () => {
     // The one thing an operator must not have to guess is whether they just
     // mailed real customers.
     expect(daily).toContain('Nothing was sent — EMAIL_SENDING_ENABLED is off.');
-    expect(monthly).toContain('Nothing was sent — no REPORT_TO_ADDRESS is configured.');
+    // The reason is now one of two, because the recipient moved out of the
+    // environment and into a setting an admin edits — so "nothing was sent"
+    // has to distinguish "nobody has set an address" from "there is no
+    // verified sender", which are fixed in different places.
+    expect(monthly).toContain('Nothing was sent —');
+    expect(monthly).toContain('no recipient is set in the dashboard');
   });
 
   it('reports a send failure as a failure rather than a success', () => {

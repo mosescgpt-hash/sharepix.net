@@ -658,7 +658,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'There is one plan: $79 for a single event, paid once. It covers up to 3,000 photos and 30 videos, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos and up to 30 videos, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',

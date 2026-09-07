@@ -10,7 +10,6 @@ import {
   reportMonths,
   type ReportEvent,
 } from '../lib/monthlyReport';
-import { OWNER_EMAIL } from '../lib/businessInfo';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -243,11 +242,21 @@ describe('the scheduled function', () => {
     expect(handler).toContain('[dry-run]');
   });
 
-  it('has a default recipient, and it matches lib/businessInfo.ts', () => {
-    // Amplify config cannot import from lib/, so the address exists twice.
-    // A report quietly going to the wrong inbox is the kind of thing nobody
-    // notices until they wonder why they never get one.
-    expect(backend).toContain(`process.env.REPORT_TO_ADDRESS ?? '${OWNER_EMAIL}'`);
+  it('has no email address compiled into it', () => {
+    // The recipient used to be defaulted here as a literal. An address in
+    // application code needs a code change, a review and a deploy to move,
+    // which is how it ends up wrong and stays wrong — and it puts a named
+    // person's inbox in the repository. It is a row an admin edits now.
+    expect(backend).not.toMatch(/REPORT_TO_ADDRESS['\s,]+\?\?\s*'[^']*@/);
+    expect(backend).toContain('settingTable.grantReadData(monthlyReportFn)');
+  });
+
+  it('prefers the stored setting over the environment', () => {
+    expect(handler).toContain("const RECIPIENT_KEY = 'monthly-report-recipient'");
+    expect(handler).toContain('const TO_ADDRESS = await recipient()');
+    // The env var survives as a fallback only, so a deployment can still pin
+    // one without an admin having to click.
+    expect(handler).toContain('return stored || TO_FALLBACK');
   });
 
   it('still refuses to send without a verified sender', () => {

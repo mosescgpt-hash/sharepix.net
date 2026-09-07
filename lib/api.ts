@@ -445,6 +445,66 @@ export async function completeResearchSurvey(
   }
 }
 
+export interface FeedbackSubmission {
+  link: string;
+  rating?: number;
+  privateFeedback?: string;
+  testimonialText?: string;
+  marketingPermission?: boolean;
+  displayMode?: string;
+  displayName?: string;
+}
+
+export interface FeedbackOutcome {
+  recorded: boolean;
+  message: string;
+  /** 'testimonial' | 'support' | 'done' — what the page asks for next. */
+  branch: string;
+  eventName: string;
+}
+
+/**
+ * Record what a host thought of their event.
+ *
+ * Called twice in the normal flow: once with a score, then once more with a
+ * testimonial or a note about what went wrong. Everything that decides what may
+ * be written — whether the score is already set, whether permission was
+ * explicitly granted — is re-derived server-side from the stored row.
+ */
+export async function submitEventFeedback(
+  submission: FeedbackSubmission,
+): Promise<FeedbackOutcome> {
+  const refused: FeedbackOutcome = {
+    recorded: false,
+    message: 'That link is not valid. It may have expired.',
+    branch: 'done',
+    eventName: '',
+  };
+  try {
+    const { data, errors } = await client.mutations.submitEventFeedback(
+      {
+        link: submission.link,
+        rating: submission.rating,
+        privateFeedback: submission.privateFeedback,
+        testimonialText: submission.testimonialText,
+        marketingPermission: submission.marketingPermission,
+        displayMode: submission.displayMode,
+        displayName: submission.displayName,
+      },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length || !data?.recorded) return refused;
+    return {
+      recorded: true,
+      message: data.message ?? '',
+      branch: data.branch ?? 'done',
+      eventName: data.eventName ?? '',
+    };
+  } catch {
+    return refused;
+  }
+}
+
 /**
  * Everything owed, newest first. The manual fulfilment queue.
  *
@@ -459,10 +519,14 @@ export async function completeResearchSurvey(
  * responsible for saying so before it does.
  */
 export async function runScheduledJob(
-  job: 'daily' | 'monthly',
+  job: 'daily' | 'monthly' | 'reclaim',
 ): Promise<{ ok: boolean; dryRun: boolean; summary: string }> {
   const call =
-    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runMonthlyReport;
+    job === 'daily'
+      ? client.mutations.runDailyTasks
+      : job === 'monthly'
+        ? client.mutations.runMonthlyReport
+        : client.mutations.runStorageReclaim;
   // No arguments, so the options object is the only parameter.
   const { data, errors } = await call({ authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -562,6 +626,177 @@ export async function decideRefund(
       ...(next === 'RECORDED' ? { recordedAt: now } : {}),
       ...(adminNote ? { adminNote } : {}),
     },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/**
+ * A setting a global admin can change without a deploy.
+ *
+ * Admin-only in both directions. A setting a browser could write is a setting
+ * anyone could point at their own inbox.
+ */
+export const SETTING_KEYS = {
+  monthlyReportRecipient: 'monthly-report-recipient',
+} as const;
+
+export async function readSetting(key: string): Promise<string> {
+  const { data, errors } = await client.models.AppSetting.get(
+    { id: key },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return (data?.value ?? '').trim();
+}
+
+/**
+ * Store a setting, creating the row on first save.
+ *
+ * `update` on a row that does not exist silently succeeds against nothing in
+ * some AppSync configurations, so this creates first and falls back to
+ * updating — the failure to engineer against is an admin pressing Save, seeing
+ * no error, and the value never landing.
+ */
+export async function writeSetting(
+  key: string,
+  value: string,
+  updatedBy: string,
+): Promise<void> {
+  const created = await client.models.AppSetting.create(
+    { id: key, value, updatedBy },
+    { authMode: 'userPool' },
+  );
+  if (!created.errors?.length) return;
+  const updated = await client.models.AppSetting.update(
+    { id: key, value, updatedBy },
+    { authMode: 'userPool' },
+  );
+  if (updated.errors?.length) {
+    throw new Error(updated.errors.map((e) => e.message).join(' · '));
+  }
+}
+
+/**
+ * Set or clear an admin's judgement about an event's usage.
+ *
+ * '' clears it and lets the thresholds speak again. 'NORMAL' means a person
+ * looked and it is fine; 'RESTRICTED' stops uploads. Nothing else is settable
+ * by hand — HIGH_USAGE and REVIEW are what the thresholds compute, and an admin
+ * writing one would be recording an opinion the system would then recompute.
+ */
+export async function setEventUsageStatus(
+  eventId: string,
+  status: '' | 'NORMAL' | 'RESTRICTED',
+  note: string,
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, usageStatus: status || null, usageNote: note || null },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+export interface FeedbackRow {
+  id: string;
+  eventId: string;
+  eventName: string;
+  rating: number | null;
+  privateFeedback: string | null;
+  testimonialText: string | null;
+  displayText: string | null;
+  marketingPermission: boolean;
+  consentVersion: string | null;
+  displayMode: string | null;
+  displayName: string | null;
+  status: string;
+  supportFollowUpNeeded: boolean;
+  adminNote: string | null;
+  reviewedBy: string | null;
+  ratingSubmittedAt: string | null;
+  testimonialSubmittedAt: string | null;
+  requestedAt: string | null;
+}
+
+function readFeedback(row: Record<string, unknown>): FeedbackRow {
+  return {
+    id: String(row.id ?? ''),
+    eventId: String(row.eventId ?? ''),
+    eventName: (row.eventName as string) ?? '',
+    rating: typeof row.rating === 'number' ? row.rating : null,
+    privateFeedback: (row.privateFeedback as string) ?? null,
+    testimonialText: (row.testimonialText as string) ?? null,
+    displayText: (row.displayText as string) ?? null,
+    marketingPermission: row.marketingPermission === true,
+    consentVersion: (row.consentVersion as string) ?? null,
+    displayMode: (row.displayMode as string) ?? null,
+    displayName: (row.displayName as string) ?? null,
+    status: (row.status as string) ?? '',
+    supportFollowUpNeeded: row.supportFollowUpNeeded === true,
+    adminNote: (row.adminNote as string) ?? null,
+    reviewedBy: (row.reviewedBy as string) ?? null,
+    ratingSubmittedAt: (row.ratingSubmittedAt as string) ?? null,
+    testimonialSubmittedAt: (row.testimonialSubmittedAt as string) ?? null,
+    requestedAt: (row.requestedAt as string) ?? null,
+  };
+}
+
+/** Every rating and testimonial, newest first. Admin-only. */
+export async function listEventFeedback(): Promise<FeedbackRow[]> {
+  const rows: FeedbackRow[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await client.models.EventFeedback.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    for (const row of data ?? []) rows.push(readFeedback(row as Record<string, unknown>));
+    nextToken = next;
+  } while (nextToken);
+  return rows.sort((a, b) =>
+    (b.ratingSubmittedAt ?? b.requestedAt ?? '').localeCompare(
+      a.ratingSubmittedAt ?? a.requestedAt ?? '',
+    ),
+  );
+}
+
+/**
+ * Decide a testimonial.
+ *
+ * Approving does not grant permission and cannot manufacture it: the
+ * marketingPermission flag comes from the host and is only ever written by the
+ * submit function. mayPublish() checks that flag at the moment of publishing,
+ * so an approval on a row without permission publishes nothing — which is why
+ * this refuses to record one rather than leaving a row that looks ready.
+ */
+export async function reviewTestimonial(
+  row: FeedbackRow,
+  next: string,
+  reviewedBy: string,
+  adminNote?: string,
+): Promise<void> {
+  if ((next === 'APPROVED' || next === 'PUBLISHED') && !row.marketingPermission) {
+    throw new Error('That host did not give permission to publish their words.');
+  }
+  const { errors } = await client.models.EventFeedback.update(
+    {
+      id: row.id,
+      status: next,
+      reviewedBy,
+      reviewedAt: new Date().toISOString(),
+      ...(adminNote ? { adminNote } : {}),
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/** Close a low-rating follow-up, once a person has actually answered it. */
+export async function closeSupportFollowUp(id: string): Promise<void> {
+  const { errors } = await client.models.EventFeedback.update(
+    { id, supportFollowUpNeeded: false },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

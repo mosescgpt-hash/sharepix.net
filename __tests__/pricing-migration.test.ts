@@ -13,6 +13,12 @@ import {
   UPLOAD_WINDOW_DAYS,
 } from '../lib/pricing';
 import { guestBookAvailable } from '../lib/guestBook';
+import { FAIR_USE_DEFAULTS, FAIR_USE_NOTICE, assessUsage } from '../lib/fairUse';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const root = join(__dirname, '..');
+const read = (path: string) => readFileSync(join(root, path), 'utf8');
 
 /**
  * The guarantee this file exists to defend:
@@ -173,17 +179,54 @@ describe('one retention policy across everything sold', () => {
   });
 });
 
-describe('the unlimited claim is not carried forward', () => {
-  it('caps Plus at a real number', () => {
-    expect(getTier('plus')?.photoLimit).toBe(3000);
+describe('the unlimited claim, and what makes it honest', () => {
+  // This block used to assert the OPPOSITE: that no per-event plan claimed
+  // unlimited photos, because unlimited on a one-time payment was an unbounded
+  // storage bill. That reasoning was right, and it has been answered rather
+  // than abandoned — storage is now measured per event, media is deleted at the
+  // end of the archive window instead of kept forever, and fair-use thresholds
+  // make an abnormal event visible. The tests below pin the answers, not the
+  // claim: unlimited is only defensible while all three hold.
+
+  it('sells unlimited photos on the paid plan', () => {
+    expect(getTier('plus')?.photoLimit).toBeNull();
+    expect(getTier('plus')?.features.some((f) => /unlimited photos/i.test(f))).toBe(true);
   });
 
-  it('makes no unlimited photo claim on any per-event plan', () => {
-    for (const tier of PRICING_TIERS) {
-      expect(tier.photoLimit).not.toBeNull();
-      const claims = tier.features.filter((f) => /unlimited/i.test(f));
-      expect(claims).toEqual([]);
-    }
+  it('still caps video, which is not bounded by resizing', () => {
+    // A still is resized before it is ever served; a clip streams at full size
+    // on every play. Video is the one upload whose cost a photo cap never
+    // bounded, and no customer-facing video allowance should be set before real
+    // usage and cost data exist.
+    expect(getTier('plus')?.videoLimit).toBe(30);
+    expect(getTier('plus')?.features.some((f) => /unlimited video/i.test(f))).toBe(false);
+  });
+
+  it('keeps the free trial capped, or it is not a trial', () => {
+    expect(getTier('free')?.photoLimit).toBe(50);
+    expect(getTier('free')?.features.some((f) => /unlimited photos/i.test(f))).toBe(false);
+  });
+
+  it('has something that actually deletes the storage unlimited implies', () => {
+    // Without this, "unlimited for 12 months" means unlimited access and
+    // forever of storage, and the promise is funded by nothing.
+    expect(existsSync(join(root, 'amplify/functions/reclaim-storage/handler.ts'))).toBe(true);
+    expect(read('lib/storageReclaim.ts')).toContain('export function reclaimVerdict');
+  });
+
+  it('has thresholds that flag abuse without capping a real event', () => {
+    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThanOrEqual(50_000);
+    // A REVIEW is not a block. The moment crossing a threshold starts refusing
+    // a paying customer's guests, "unlimited" has quietly become a number
+    // again — which is the exact thing this reprice was meant to stop.
+    expect(
+      assessUsage({ photoCount: FAIR_USE_DEFAULTS.photoReviewThreshold + 1 }).blocked,
+    ).toBe(false);
+  });
+
+  it('tells the customer what fair use means, in the plan copy', () => {
+    // An asterisk with nothing behind it is worse than no asterisk.
+    expect(FAIR_USE_NOTICE).toMatch(/normal event use/i);
   });
 
   // Corporate is deliberately excluded from the rule above and still advertises

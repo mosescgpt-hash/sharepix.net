@@ -19,6 +19,8 @@ import { listMoments as listMomentsFn } from '../functions/list-moments/resource
 import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe-email/resource';
 import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
 import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
+import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
+import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
 import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/resource';
 
@@ -80,6 +82,33 @@ const schema = a.schema({
       // upload never happened at all.
       guestUploadCount: a.integer(),
       contributorCount: a.integer(),
+      // Bytes actually stored, maintained by sanitize-upload from the real
+      // object size in the S3 event — never from anything the browser claims.
+      //
+      // FLOAT, NOT INTEGER, and this is not a style choice: GraphQL's Int is
+      // 32-bit signed, so it tops out at 2.1 GB. A single event with a few
+      // hundred videos passes that, and the overflow would be silent. Float is
+      // a double, exact for integers to 2^53, which is nine petabytes.
+      //
+      // Split three ways because they behave differently: video is the
+      // expensive half and the half not bounded by resizing, and derived
+      // (previews and thumbs) is the half we create rather than the guest.
+      photoBytes: a.float(),
+      videoBytes: a.float(),
+      derivedBytes: a.float(),
+      // Rolling upload-velocity window. See lib/fairUse.ts — this MEASURES the
+      // rate; it does not throttle a normal event.
+      uploadWindowCount: a.integer(),
+      uploadWindowStartedAt: a.datetime(),
+      // An admin's judgement about this event's usage, which beats anything
+      // computed in both directions: 'NORMAL' clears an event the thresholds
+      // flagged, 'RESTRICTED' stops uploads on one they did not.
+      usageStatus: a.string(),
+      usageNote: a.string(),
+      // Set when the media has actually been deleted at the end of the archive
+      // window. Its absence is what makes reclamation re-runnable: a run that
+      // fails partway leaves this unset and the next run finishes the job.
+      mediaReclaimedAt: a.datetime(),
       // "City, State" the host sets for the event — a memory label shown on
       // photos and used in downloads. NOT derived from photo GPS, which is
       // still stripped from every upload, and deliberately no finer than a
@@ -490,6 +519,101 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // One stored object, and how big it is.
+  //
+  // The id is the S3 key, which is what makes byte accounting idempotent: S3
+  // event notifications are at-least-once, so sanitize-upload can be handed the
+  // same object twice. A conditional put on this row is what decides whether
+  // the event's counters move, so a redelivery adds nothing.
+  //
+  // It is also what makes DELETION able to subtract the right number. Without a
+  // recorded size, removing a photo could only guess, and a counter that drifts
+  // downward is worse than no counter — it eventually reads as an empty event
+  // that is costing money.
+  //
+  // Admin-only: it is an internal accounting ledger, not customer data.
+  MediaObject: a
+    .model({
+      /** The event this object belongs to, parsed from the key. */
+      eventId: a.string(),
+      /** 'photo', 'video' or 'derived' (a preview or thumbnail we generated). */
+      kind: a.string(),
+      /** Float for the same reason the event counters are. */
+      bytes: a.float(),
+      recordedAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // A setting an admin can change without a deploy.
+  //
+  // Deliberately a tiny key/value table rather than a typed row per setting:
+  // the alternative is a schema change, a deployment and a code review every
+  // time an email address moves, which is how an address ends up hard-coded in
+  // the first place.
+  //
+  // Admin-only for both read and write. Nothing here is secret, but a setting
+  // a browser could write is a setting anyone could point at their own inbox.
+  AppSetting: a
+    .model({
+      /** The stored value. Interpretation is the caller's job. */
+      value: a.string(),
+      updatedBy: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // What a host thought of their event, and what SharePix may do with it. See
+  // lib/customerRating.ts.
+  //
+  // The id is the event id, so one event holds one opinion. A reloaded page, a
+  // forwarded link or a second click cannot produce a second rating, and the
+  // row is created by the daily job WITH its token before anybody rates —
+  // rating fills the row in rather than creating it.
+  //
+  // Hosts read their own and write none. A row a browser could write is a row
+  // where anyone could post a five-star testimonial in a stranger's name, and
+  // the marketing permission on it is the thing that decides whether words get
+  // published under someone's event.
+  EventFeedback: a
+    .model({
+      eventId: a.string(),
+      /** Amplify owner string of the host, for their own read access. */
+      customer: a.string(),
+      /** Denormalised so the admin queue reads one table. */
+      eventName: a.string(),
+      /** 1-5, or absent. Never 0: that is a score somebody would average. */
+      rating: a.integer(),
+      ratingSubmittedAt: a.datetime(),
+      /** What went wrong, or what they liked. Never published. */
+      privateFeedback: a.string(),
+      /** Their words, as they wrote them. Kept even if edited for display. */
+      testimonialText: a.string(),
+      testimonialSubmittedAt: a.datetime(),
+      /** Explicit, never defaulted true. The gate on publishing anything. */
+      marketingPermission: a.boolean(),
+      permissionGrantedAt: a.datetime(),
+      /** Which wording they agreed to, so an old grant means what it said. */
+      consentVersion: a.string(),
+      /** How they want to be credited: one of DISPLAY_MODES. */
+      displayMode: a.string(),
+      displayName: a.string(),
+      /** One of TESTIMONIAL_STATUSES. Admin-only transitions. */
+      status: a.string(),
+      /** Admin's display edit. The original above is never overwritten. */
+      displayText: a.string(),
+      reviewedBy: a.string(),
+      reviewedAt: a.datetime(),
+      adminNote: a.string(),
+      /** True while a low score has not been answered by a person. */
+      supportFollowUpNeeded: a.boolean(),
+      /** Random, minted with the request. Proves the holder was sent it. */
+      ratingToken: a.string(),
+      requestedAt: a.datetime(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('customer').to(['get', 'list']),
+      allow.group('ADMINS'),
+    ]),
+
   // Recorded by the Stripe webhook when a checkout completes. Admins read these
   // to confirm payments landed; the webhook writes them directly (via the table
   // grant in backend.ts), so no model-level create/update is granted here.
@@ -806,6 +930,15 @@ const schema = a.schema({
     message: a.string(),
   }),
 
+  FeedbackResult: a.customType({
+    recorded: a.boolean().required(),
+    message: a.string(),
+    /** What the page should show next: 'testimonial', 'support' or 'done'. */
+    branch: a.string(),
+    /** The event's name, so the page can say which event it is asking about. */
+    eventName: a.string(),
+  }),
+
   RefundClaimResult: a.customType({
     filed: a.boolean().required(),
     message: a.string(),
@@ -860,6 +993,17 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(monthlyReportFn)),
 
+  // Delete the media of events whose archive window has closed.
+  //
+  // Admin-only, and the ONE job on this dashboard that destroys data. With
+  // STORAGE_RECLAIM_ENABLED off it runs completely and deletes nothing, which
+  // is how it is meant to be observed before it is trusted.
+  runStorageReclaim: a
+    .mutation()
+    .returns(a.ref('JobRunResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(reclaimStorageFn)),
+
   // Record that someone finished the research survey, from the link they were
   // emailed. Open to signed-out callers because the link is the credential and
   // the person clicking it should not need an account to be paid.
@@ -873,6 +1017,30 @@ const schema = a.schema({
     .returns(a.ref('SurveyCompletionResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(completeSurveyFn)),
+
+  // Record what a host thought of their event, from the link they were
+  // emailed. Open to signed-out callers because the link is the credential and
+  // nobody should have to sign in to say the product was bad.
+  //
+  // Called twice in the normal flow: once with a score, then once more with a
+  // testimonial or a note about what went wrong. The score can only be set
+  // once — a link that could re-rate is a link a forwarder could use to
+  // overwrite somebody's opinion. Marketing permission is a separate explicit
+  // argument and defaults to nothing. See lib/customerRating.ts.
+  submitEventFeedback: a
+    .mutation()
+    .arguments({
+      link: a.string().required(),
+      rating: a.integer(),
+      privateFeedback: a.string(),
+      testimonialText: a.string(),
+      marketingPermission: a.boolean(),
+      displayMode: a.string(),
+      displayName: a.string(),
+    })
+    .returns(a.ref('FeedbackResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(submitFeedbackFn)),
 
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a

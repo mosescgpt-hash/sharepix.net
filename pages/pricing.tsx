@@ -12,11 +12,23 @@ const faqs = [
   },
   {
     q: 'What happens after the upload window?',
-    a: 'The gallery stays up for 12 months. Guests keep viewing it at reduced resolution, and as the host you keep full access and downloads for the whole 12 months. After that the photos are archived and later deleted, so download anything you want to keep before then.',
+    a: 'The gallery stays up for 12 months. Guests keep viewing it at reduced resolution, and as the host you keep full access and downloads for the whole 12 months. After that the photos are archived for 90 days and then permanently deleted, so download anything you want to keep before then. We email you before the gallery closes.',
   },
   {
     q: 'Can I moderate photos?',
     a: 'You can delete any photo on either plan. The paid plan adds approve-before-showing moderation, so nothing appears in the gallery until you have seen it.',
+  },
+  {
+    q: 'Is "unlimited photos" really unlimited?',
+    a: 'Yes, for a normal event — there is no number to count against and no cap to hit mid-reception. Unlimited covers normal event use: SharePix may step in on automated uploads, bulk archival or backup use, or activity that is abusive or extraordinarily large. If you are running a wedding, a conference or a school fundraiser, none of that applies to you.',
+  },
+  {
+    q: 'What about video?',
+    a: 'Up to 30 videos, each up to 250 MB. Video is not unlimited and we would rather say so than bury it: a video streams at full size every time somebody watches it, so it costs differently from a photo. If 30 is not enough for your event, get in touch.',
+  },
+  {
+    q: 'Is my gallery private?',
+    a: 'It is unlisted, which means it is reachable only through your event link or QR code and is never indexed by search engines. It is not password-protected, and we would rather be precise about that than call it private and let you assume something stronger. Share the link with the people you want in it.',
   },
   {
     q: 'What is the free event?',
@@ -29,20 +41,23 @@ export default function PricingPage() {
     <Layout title="Pricing" width="bleed">
       <section className="spx-section-canvas">
         <div className="mx-auto w-full max-w-6xl">
-          <p className="spx-eyebrow">Pricing</p>
+          <p className="spx-eyebrow">Simple pricing</p>
           <h1 className="mt-3">
-            <span className="spx-display block">One event. One payment.</span>
-            <span className="spx-display-serif block">No surprises.</span>
+            <span className="spx-display block">One event. One price.</span>
+            <span className="spx-display-serif block">Every memory.</span>
           </h1>
           <p className="spx-body mt-5 max-w-lg">
-            One plan, priced per event rather than per guest or per photo. Everyone you invite
-            uploads for free, nothing renews, and nothing is charged until you publish. Try it
-            first with a free event.
+            Priced per event rather than per guest or per photo. Everyone you invite uploads
+            for free, nothing renews, and there is no bigger plan to be upsold to later.
           </p>
 
-          <div className="mt-12">
+          <div className="mt-12 max-w-3xl">
             <PricingCards />
           </div>
+
+          <p className="mt-8 text-sm text-charcoal/60">
+            Unlimited guests · Unlimited photos · Full-resolution memories · Private by default
+          </p>
         </div>
       </section>
 

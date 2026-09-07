@@ -41,6 +41,8 @@ import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
 import { completeSurvey } from './functions/complete-survey/resource';
 import { monthlyReport } from './functions/monthly-report/resource';
 import { claimRefund } from './functions/claim-refund/resource';
+import { submitFeedback } from './functions/submit-feedback/resource';
+import { reclaimStorage } from './functions/reclaim-storage/resource';
 
 const backend = defineBackend({
   auth,
@@ -71,6 +73,8 @@ const backend = defineBackend({
   completeSurvey,
   monthlyReport,
   claimRefund,
+  submitFeedback,
+  reclaimStorage,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -89,6 +93,9 @@ const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
 const incentiveTable = backend.data.resources.tables.ResearchIncentive;
 const refundTable = backend.data.resources.tables.Refund;
+const feedbackTable = backend.data.resources.tables.EventFeedback;
+const mediaTable = backend.data.resources.tables.MediaObject;
+const settingTable = backend.data.resources.tables.AppSetting;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -139,6 +146,14 @@ sanitizeFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT
 sanitizeFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 sanitizeFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
 sanitizeFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+// Byte accounting. This is the only place in SharePix that knows an object's
+// real size — uploads go browser to S3 directly, so no application server sees
+// the bytes and anything the browser reported would be a claim. The ledger row
+// is what makes the count idempotent under S3's at-least-once delivery.
+mediaTable.grantReadWriteData(sanitizeFn);
+eventTable.grantReadWriteData(sanitizeFn);
+sanitizeFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
+sanitizeFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // Signs R2 URLs for the gallery and downloads. Reads the event row to decide
 // what a caller may have, and holds the same R2 credentials as the mirror —
@@ -160,6 +175,17 @@ bucket.grantDelete(deleteFn);
 deleteFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 deleteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 deleteFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+// Deletion has to reach R2, not just S3. R2 is where reads are served from, and
+// mediaUrls signs a key without consulting the photo table — so before this,
+// anyone who already held a deleted photo's key kept a working URL forever.
+deleteFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+deleteFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+deleteFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+deleteFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+// And give back the bytes it was counted for, read from the ledger so the
+// number subtracted is exactly the number that was added.
+mediaTable.grantReadWriteData(deleteFn);
+deleteFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
 
 // Create function: stamp ownership from the event and enforce the photo limit
 // atomically. Needs to read the event, bump its counter, and write the photo.
@@ -616,6 +642,14 @@ dailyTasksFn.addEnvironment(
   process.env.RESEARCH_SURVEY_DELAY_DAYS ?? '7',
 );
 
+// The rating request. The daily job creates the row WITH its token before
+// anybody rates, and the submit function only ever fills that row in — a row
+// that appeared because someone guessed an id would be a row with no proof
+// anyone was sent it.
+feedbackTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
+dailyTasksFn.addEnvironment('RATING_DELAY_DAYS', process.env.RATING_DELAY_DAYS ?? '2');
+
 const completeSurveyFn = backend.completeSurvey.resources.lambda as LambdaFunction;
 incentiveTable.grantReadWriteData(completeSurveyFn);
 completeSurveyFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
@@ -636,18 +670,20 @@ monthlyReportFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 monthlyReportFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
 monthlyReportFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 monthlyReportFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
-// Who receives it. Defaulted rather than left blank, because the report has a
-// known recipient and requiring a console step to turn on a summary nobody has
-// seen yet is how it stays never turned on. OWNER_EMAIL in lib/businessInfo.ts
-// is the same value — Amplify config cannot import from lib/, so a test pins
-// the two together. Set REPORT_TO_ADDRESS in the environment to override.
+// Who receives it. NOT a literal address any more: it is a row in AppSetting
+// that a global admin edits from the dashboard, and this env var is only a
+// fallback for a deployment that wants to pin one.
 //
-// It still will not send without ALERT_FROM_ADDRESS: there is no verified
-// sender without one, and the handler refuses rather than trying.
-monthlyReportFn.addEnvironment(
-  'REPORT_TO_ADDRESS',
-  process.env.REPORT_TO_ADDRESS ?? 'seth@sharepix.net',
-);
+// An address compiled into application code is an address that needs a code
+// change, a review and a deploy to move — which is how it ends up wrong and
+// stays wrong. It also puts a named person's inbox into the repository.
+//
+// The consequence is that the report sends to nobody until an admin sets it.
+// That is the correct trade: a report going nowhere is visible on the settings
+// screen, where a report going to the wrong inbox is not visible anywhere.
+monthlyReportFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
+settingTable.grantReadData(monthlyReportFn);
+monthlyReportFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
 monthlyReportFn.addToRolePolicy(
   new PolicyStatement({
     actions: ['ses:SendEmail', 'ses:SendRawEmail'],
@@ -673,3 +709,41 @@ claimRefundFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
 // The monthly report counts refunds, so it reads the ledger too.
 refundTable.grantReadData(monthlyReportFn);
 monthlyReportFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
+
+// Deletes the media of events whose archive window has closed — the 12-month
+// gallery, then the 90-day archive, then gone. Everything except this last step
+// already worked; nothing ever removed the bytes, which made "unlimited photos"
+// an unbounded liability on a one-time payment.
+//
+// The one job here that destroys data. STORAGE_RECLAIM_ENABLED must be exactly
+// 'true' or it runs, decides, logs every key it would remove, and deletes
+// nothing. It needs delete on the bucket and on R2, because R2 is what serves
+// reads and a copy left there is a photo that is still reachable.
+const reclaimFn = backend.reclaimStorage.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(reclaimFn);
+photoTable.grantReadWriteData(reclaimFn);
+mediaTable.grantReadWriteData(reclaimFn);
+bucket.grantDelete(reclaimFn);
+reclaimFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+reclaimFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+reclaimFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
+reclaimFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+reclaimFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+reclaimFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+reclaimFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+reclaimFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+// Off unless explicitly set. Deliberately its own switch, not the email one:
+// a single flag over both would eventually be flipped for the wrong reason.
+reclaimFn.addEnvironment(
+  'STORAGE_RECLAIM_ENABLED',
+  process.env.STORAGE_RECLAIM_ENABLED ?? '',
+);
+
+// Records what a host thought of their event, from an emailed link.
+//
+// It reads and writes exactly one table and touches nothing else. In
+// particular it cannot read Payment or Event: a rating needs no facts about
+// money, and a function that could not name the price cannot leak it.
+const submitFeedbackFn = backend.submitFeedback.resources.lambda as LambdaFunction;
+feedbackTable.grantReadWriteData(submitFeedbackFn);
+submitFeedbackFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
