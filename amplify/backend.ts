@@ -41,6 +41,7 @@ import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
 import { completeSurvey } from './functions/complete-survey/resource';
 import { monthlyReport } from './functions/monthly-report/resource';
 import { claimRefund } from './functions/claim-refund/resource';
+import { submitFeedback } from './functions/submit-feedback/resource';
 
 const backend = defineBackend({
   auth,
@@ -71,6 +72,7 @@ const backend = defineBackend({
   completeSurvey,
   monthlyReport,
   claimRefund,
+  submitFeedback,
 });
 
 const eventTable = backend.data.resources.tables.Event;
@@ -89,6 +91,7 @@ const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
 const incentiveTable = backend.data.resources.tables.ResearchIncentive;
 const refundTable = backend.data.resources.tables.Refund;
+const feedbackTable = backend.data.resources.tables.EventFeedback;
 const bucket = backend.storage.resources.bucket;
 
 // Point-in-time recovery on every data table: continuous backups that let us
@@ -616,6 +619,14 @@ dailyTasksFn.addEnvironment(
   process.env.RESEARCH_SURVEY_DELAY_DAYS ?? '7',
 );
 
+// The rating request. The daily job creates the row WITH its token before
+// anybody rates, and the submit function only ever fills that row in — a row
+// that appeared because someone guessed an id would be a row with no proof
+// anyone was sent it.
+feedbackTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
+dailyTasksFn.addEnvironment('RATING_DELAY_DAYS', process.env.RATING_DELAY_DAYS ?? '2');
+
 const completeSurveyFn = backend.completeSurvey.resources.lambda as LambdaFunction;
 incentiveTable.grantReadWriteData(completeSurveyFn);
 completeSurveyFn.addEnvironment('INCENTIVE_TABLE_NAME', incentiveTable.tableName);
@@ -673,3 +684,12 @@ claimRefundFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
 // The monthly report counts refunds, so it reads the ledger too.
 refundTable.grantReadData(monthlyReportFn);
 monthlyReportFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
+
+// Records what a host thought of their event, from an emailed link.
+//
+// It reads and writes exactly one table and touches nothing else. In
+// particular it cannot read Payment or Event: a rating needs no facts about
+// money, and a function that could not name the price cannot leak it.
+const submitFeedbackFn = backend.submitFeedback.resources.lambda as LambdaFunction;
+feedbackTable.grantReadWriteData(submitFeedbackFn);
+submitFeedbackFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);

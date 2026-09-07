@@ -424,6 +424,60 @@ Refunds have accordingly moved off the monthly report's *not measured* list.
 Chargebacks have not: no dispute data comes back from Stripe, and lumping the
 two together would claim coverage we do not have.
 
+## 11. Ratings and testimonials — and where the line is on reviews
+
+**Every host who paid gets asked to rate their event, 1–5, a couple of days
+after the upload window closes.** Not only the ones whose events succeeded: the
+survey pass is limited to Successful Events because ten minutes of research from
+a host with an empty gallery is both useless and unkind, but a one-tap rating is
+not, and asking only the hosts it worked for would measure the failure rate
+entirely from events where nothing failed.
+
+**A 4 or 5 leads to a testimonial ask. A 1, 2 or 3 leads to support.** The
+low branch opens a follow-up an admin has to close, and the dashboard says
+plainly how many are still open. Nothing in the flow discourages a complaint,
+delays it, or asks anyone to reconsider before sending it.
+
+### The distinction the brief blurs
+
+The growth-loop document asks for a "public review / testimonial request" sent
+only to hosts who rated positively. Half of that is fine and half is not:
+
+- A **testimonial** is advertising copy on sharepix.net. Asking happy customers
+  for it is normal — nobody has ever believed a company's own page carries a
+  representative sample of opinion, and nobody expects an unhappy customer to
+  write an advert.
+- A **public review** — Google, an app store, a directory — is an entry in a
+  record that belongs to everyone. Soliciting those from satisfied customers
+  only is *review gating*: the score becomes a filter on who is invited to
+  speak, and the resulting public record is skewed by design. Every platform
+  that hosts such reviews prohibits it, and the FTC's consumer-review rule
+  treats manipulating the visible balance of reviews as deceptive.
+
+So the first is built and the second is not. There is no field, status or link
+anywhere in the flow for a third-party review, and a test scans the source to
+keep it that way. **If SharePix ever wants Google reviews, the ask has to go to
+every host regardless of score** — that is a different feature, not a setting.
+
+### Permission is its own act
+
+Writing a testimonial and letting SharePix publish it are two decisions. The
+checkbox is never pre-ticked, only a literal `true` grants anything, and the
+wording agreed to is stored with the grant so an old permission keeps meaning
+what it said. The name is **anonymous unless the host types one** — a name
+published because a default said so is not a name anyone agreed to publish.
+
+Permission is checked at the moment of publishing rather than at the moment an
+admin approved, so a withdrawal after approval takes effect. An admin cannot
+approve a testimonial whose host did not consent: approving does not create
+permission and the queue refuses rather than leaving a row that looks ready.
+
+### Not built
+
+No Featured Event invitation, no referral offer, no credit ledger, no repeat-use
+message. Those are the rest of the growth loop and each needs a decision first —
+referral amounts, whether credit exists at all — that has not been made.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

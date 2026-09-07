@@ -20,6 +20,7 @@ import {
   incentiveId,
 } from './researchIncentive';
 import { encodeSurveyLink } from './surveyLink';
+import { encodeRatingLink } from './ratingLink';
 
 const dynamo = new DynamoDBClient({});
 const ses = new SESv2Client({});
@@ -28,6 +29,7 @@ const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const NOTIFICATION_TABLE = process.env.NOTIFICATION_TABLE_NAME as string;
 const PREFERENCE_TABLE = process.env.PREFERENCE_TABLE_NAME as string;
 const INCENTIVE_TABLE = process.env.INCENTIVE_TABLE_NAME as string;
+const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE_NAME as string;
 /**
  * Where the survey itself lives.
  *
@@ -41,6 +43,15 @@ const SURVEY_URL = process.env.RESEARCH_SURVEY_URL ?? '';
 const SURVEY_ID = process.env.RESEARCH_SURVEY_ID ?? 'post-event-v1';
 /** Days after the upload window closes before the invitation goes out. */
 const SURVEY_DELAY_DAYS = Number(process.env.RESEARCH_SURVEY_DELAY_DAYS ?? '7');
+/**
+ * Days after the upload window closes before the rating request goes out.
+ *
+ * Configurable because it is a guess. The brief suggests day +4 measured from
+ * the event; this codebase has no reliable event end time, so it is measured
+ * from the close of the upload window, which is a date the system actually
+ * sets. Asking earlier risks asking while guests are still uploading.
+ */
+const RATING_DELAY_DAYS = Number(process.env.RATING_DELAY_DAYS ?? '2');
 const APP_URL = (process.env.APP_URL ?? 'https://www.sharepix.net').replace(/\/+$/, '');
 const FROM_ADDRESS = process.env.ALERT_FROM_ADDRESS ?? '';
 const REPLY_TO = process.env.ALERT_REPLY_TO ?? '';
@@ -316,6 +327,50 @@ async function openResearchInvite(
   return encodeSurveyLink({ eventId: event.id, surveyId: SURVEY_ID, token });
 }
 
+/**
+ * Open a rating request, or null if this event already has one.
+ *
+ * The row is created here, with its token, BEFORE anybody rates — the submit
+ * function only ever fills a row in, never creates one. That is what makes the
+ * token unforgeable: a row that appeared because somebody guessed an id would
+ * be a row with no proof anyone was ever sent it.
+ *
+ * The conditional put is also the idempotency: one request per event, however
+ * many times this job runs.
+ */
+async function openRatingRequest(event: EventRow, nowISO: string): Promise<string | null> {
+  if (!FEEDBACK_TABLE) return null;
+  const token = randomBytes(24).toString('hex');
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: FEEDBACK_TABLE,
+        Item: {
+          id: { S: event.id },
+          __typename: { S: 'EventFeedback' },
+          eventId: { S: event.id },
+          customer: { S: event.owner },
+          eventName: { S: event.name },
+          ratingToken: { S: token },
+          requestedAt: { S: nowISO },
+          createdAt: { S: nowISO },
+          updatedAt: { S: nowISO },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (error) {
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return null;
+    console.error('Could not open a rating request', {
+      at: nowISO,
+      eventId: event.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+  return encodeRatingLink({ eventId: event.id, token });
+}
+
 async function send(to: string, subject: string, html: string, text: string): Promise<boolean> {
   if (!FROM_ADDRESS) return false;
   try {
@@ -525,6 +580,73 @@ export const handler = async () => {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Rating requests.
+  // ---------------------------------------------------------------------
+  //
+  // A third pass, for the same reason the second one is separate: these are
+  // different events being asked a different question, and one of them being
+  // switched off must not affect the other.
+  //
+  // Deliberately NOT limited to successful events, unlike the survey. Asking
+  // only the hosts whose events worked how the product went would leave the
+  // one number that matters — how often it does not work — measured entirely
+  // from events where it did. The survey is research and asking a host with an
+  // empty gallery for ten minutes of it is unkind; this is one tap.
+  let ratingsRequested = 0;
+  for await (const event of allEvents()) {
+    if (ratingsRequested >= MAX_SENDS_PER_RUN) break;
+    if (!event.id || !event.paid) continue;
+
+    // Once the event is over and the dust has settled, so they are rating a
+    // finished event rather than one still running.
+    const windowEnd = event.uploadWindowEndsAt ? Date.parse(event.uploadWindowEndsAt) : NaN;
+    if (!Number.isFinite(windowEnd)) continue;
+    if (now.getTime() < windowEnd + RATING_DELAY_DAYS * 24 * 60 * 60 * 1000) continue;
+
+    // Optional mail: we are asking for something, so an opt-out is absolute.
+    const preference = await preferencesFor(event.alertEmail, nowISO);
+    if (!mayReceive(event.alertEmail, 'growth-nudge', preference)) continue;
+
+    if (!SENDING_ENABLED) {
+      console.log('[dry-run] would ask for a rating', { at: nowISO, eventId: event.id });
+      skipped += 1;
+      continue;
+    }
+
+    const link = await openRatingRequest(event, nowISO);
+    // Null means already asked, which is the common case on every run after
+    // the first.
+    if (!link) continue;
+
+    const url = `${APP_URL}/rating/${link}`;
+    const subject = `How did ${event.name} go?`;
+    const text = [
+      `Your SharePix event ${event.name} is wrapped up.`,
+      '',
+      'One tap tells us how it went. It takes a few seconds, and it is the main way we find out whether SharePix is doing its job.',
+      '',
+      url,
+      '',
+      'SharePix LLC',
+    ].join('\n');
+    const html = [
+      '<!doctype html><html><body style="margin:0;background:#faf9f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;color:#1f2421">',
+      '<div style="max-width:520px;margin:0 auto;padding:32px 24px">',
+      '<p style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#0b7a52;margin:0 0 12px">SharePix</p>',
+      `<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px">How did ${event.name} go?</h1>`,
+      '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">One tap. It takes a few seconds, and it is the main way we find out whether SharePix is doing its job.</p>',
+      `<p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#12211c;color:#faf9f6;padding:14px 24px;text-decoration:none;font-weight:600">Rate your event</a></p>`,
+      '<p style="font-size:13px;line-height:1.6;color:#1f2421;opacity:.6;margin:24px 0 0">SharePix LLC</p>',
+      '</div></body></html>',
+    ].join('');
+
+    if (await send(event.alertEmail, subject, html, text)) {
+      await markSent(event.alertEmail, nowISO);
+      ratingsRequested += 1;
+    }
+  }
+
   const summary = {
     at: nowISO,
     considered,
@@ -532,6 +654,7 @@ export const handler = async () => {
     lapsed,
     skipped,
     invited,
+    ratingsRequested,
     dryRun: !SENDING_ENABLED,
   };
   console.log('Daily tasks complete', summary);
@@ -546,7 +669,7 @@ export const handler = async () => {
     summary: [
       `${considered} active event${considered === 1 ? '' : 's'} checked.`,
       SENDING_ENABLED
-        ? `${sent} expiry reminder${sent === 1 ? '' : 's'} sent, ${invited} survey invitation${invited === 1 ? '' : 's'} sent.`
+        ? `${sent} expiry reminder${sent === 1 ? '' : 's'} sent, ${invited} survey invitation${invited === 1 ? '' : 's'} sent, ${ratingsRequested} rating request${ratingsRequested === 1 ? '' : 's'} sent.`
         : `Nothing was sent — EMAIL_SENDING_ENABLED is off. ${skipped} message${skipped === 1 ? '' : 's'} would have gone out.`,
       lapsed > 0
         ? `${lapsed} reminder milestone${lapsed === 1 ? '' : 's'} had already passed and were recorded rather than sent late.`

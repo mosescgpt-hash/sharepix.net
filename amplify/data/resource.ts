@@ -19,6 +19,7 @@ import { listMoments as listMomentsFn } from '../functions/list-moments/resource
 import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe-email/resource';
 import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
 import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
+import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
 import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/resource';
 
@@ -490,6 +491,59 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // What a host thought of their event, and what SharePix may do with it. See
+  // lib/customerRating.ts.
+  //
+  // The id is the event id, so one event holds one opinion. A reloaded page, a
+  // forwarded link or a second click cannot produce a second rating, and the
+  // row is created by the daily job WITH its token before anybody rates —
+  // rating fills the row in rather than creating it.
+  //
+  // Hosts read their own and write none. A row a browser could write is a row
+  // where anyone could post a five-star testimonial in a stranger's name, and
+  // the marketing permission on it is the thing that decides whether words get
+  // published under someone's event.
+  EventFeedback: a
+    .model({
+      eventId: a.string(),
+      /** Amplify owner string of the host, for their own read access. */
+      customer: a.string(),
+      /** Denormalised so the admin queue reads one table. */
+      eventName: a.string(),
+      /** 1-5, or absent. Never 0: that is a score somebody would average. */
+      rating: a.integer(),
+      ratingSubmittedAt: a.datetime(),
+      /** What went wrong, or what they liked. Never published. */
+      privateFeedback: a.string(),
+      /** Their words, as they wrote them. Kept even if edited for display. */
+      testimonialText: a.string(),
+      testimonialSubmittedAt: a.datetime(),
+      /** Explicit, never defaulted true. The gate on publishing anything. */
+      marketingPermission: a.boolean(),
+      permissionGrantedAt: a.datetime(),
+      /** Which wording they agreed to, so an old grant means what it said. */
+      consentVersion: a.string(),
+      /** How they want to be credited: one of DISPLAY_MODES. */
+      displayMode: a.string(),
+      displayName: a.string(),
+      /** One of TESTIMONIAL_STATUSES. Admin-only transitions. */
+      status: a.string(),
+      /** Admin's display edit. The original above is never overwritten. */
+      displayText: a.string(),
+      reviewedBy: a.string(),
+      reviewedAt: a.datetime(),
+      adminNote: a.string(),
+      /** True while a low score has not been answered by a person. */
+      supportFollowUpNeeded: a.boolean(),
+      /** Random, minted with the request. Proves the holder was sent it. */
+      ratingToken: a.string(),
+      requestedAt: a.datetime(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('customer').to(['get', 'list']),
+      allow.group('ADMINS'),
+    ]),
+
   // Recorded by the Stripe webhook when a checkout completes. Admins read these
   // to confirm payments landed; the webhook writes them directly (via the table
   // grant in backend.ts), so no model-level create/update is granted here.
@@ -806,6 +860,15 @@ const schema = a.schema({
     message: a.string(),
   }),
 
+  FeedbackResult: a.customType({
+    recorded: a.boolean().required(),
+    message: a.string(),
+    /** What the page should show next: 'testimonial', 'support' or 'done'. */
+    branch: a.string(),
+    /** The event's name, so the page can say which event it is asking about. */
+    eventName: a.string(),
+  }),
+
   RefundClaimResult: a.customType({
     filed: a.boolean().required(),
     message: a.string(),
@@ -873,6 +936,30 @@ const schema = a.schema({
     .returns(a.ref('SurveyCompletionResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(completeSurveyFn)),
+
+  // Record what a host thought of their event, from the link they were
+  // emailed. Open to signed-out callers because the link is the credential and
+  // nobody should have to sign in to say the product was bad.
+  //
+  // Called twice in the normal flow: once with a score, then once more with a
+  // testimonial or a note about what went wrong. The score can only be set
+  // once — a link that could re-rate is a link a forwarder could use to
+  // overwrite somebody's opinion. Marketing permission is a separate explicit
+  // argument and defaults to nothing. See lib/customerRating.ts.
+  submitEventFeedback: a
+    .mutation()
+    .arguments({
+      link: a.string().required(),
+      rating: a.integer(),
+      privateFeedback: a.string(),
+      testimonialText: a.string(),
+      marketingPermission: a.boolean(),
+      displayMode: a.string(),
+      displayName: a.string(),
+    })
+    .returns(a.ref('FeedbackResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(submitFeedbackFn)),
 
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a

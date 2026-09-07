@@ -19,6 +19,10 @@ import {
   listPaymentsCount,
   decideRefund,
   listRefunds,
+  listEventFeedback,
+  type FeedbackRow,
+  reviewTestimonial,
+  closeSupportFollowUp,
   listResearchIncentives,
   markIncentiveFulfilled,
   manageUser,
@@ -37,6 +41,7 @@ import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfu
 import { canTransition } from '@/lib/researchIncentive';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
+import { summarize as summarizeRatings } from '@/lib/customerRating';
 import {
   DiscountCode,
   FreeEventClaimRow,
@@ -179,6 +184,8 @@ function GlobalAdminPage() {
   const [jobResult, setJobResult] = useState<{ text: string; ok: boolean } | null>(null);
   const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
   const [refundsError, setRefundsError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -301,6 +308,16 @@ function GlobalAdminPage() {
         setRefunds([]);
         setRefundsError(
           err instanceof Error ? err.message : 'The refund ledger could not be loaded.',
+        );
+      }
+
+      try {
+        setFeedback(await listEventFeedback());
+        setFeedbackError(null);
+      } catch (err) {
+        setFeedback([]);
+        setFeedbackError(
+          err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
         );
       }
     } catch (err) {
@@ -526,6 +543,56 @@ function GlobalAdminPage() {
     } catch (err) {
       setRefundsError(
         err instanceof Error ? err.message : 'That refund could not be updated.',
+      );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleReviewTestimonial(row: FeedbackRow, next: string) {
+    setWorking(`feedback-${row.id}`);
+    setFeedbackError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      await reviewTestimonial(row, next, me?.loginId ?? 'admin');
+      setFeedback((current) =>
+        (current ?? []).map((item) =>
+          item.id === row.id
+            ? { ...item, status: next, reviewedBy: me?.loginId ?? 'admin' }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setFeedbackError(
+        err instanceof Error ? err.message : 'That testimonial could not be updated.',
+      );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleCloseFollowUp(row: FeedbackRow) {
+    // Closing means a person answered them. It does not remove the rating from
+    // the numbers, and nothing here can delete what they wrote.
+    if (
+      !window.confirm(
+        'Mark this as answered?\n\nOnly do this once you have actually replied to them. It stays in the list either way.',
+      )
+    ) {
+      return;
+    }
+    setWorking(`feedback-${row.id}`);
+    setFeedbackError(null);
+    try {
+      await closeSupportFollowUp(row.id);
+      setFeedback((current) =>
+        (current ?? []).map((item) =>
+          item.id === row.id ? { ...item, supportFollowUpNeeded: false } : item,
+        ),
+      );
+    } catch (err) {
+      setFeedbackError(
+        err instanceof Error ? err.message : 'That follow-up could not be closed.',
       );
     } finally {
       setWorking(null);
@@ -989,6 +1056,161 @@ function GlobalAdminPage() {
                     );
                   })}
                 </ul>
+              )}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+                Ratings and testimonials
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                What hosts said about their events. A testimonial can only be approved when
+                the host actually gave permission — approving does not create it, and a row
+                without it publishes nothing.
+              </p>
+              {feedbackError ? (
+                <Notice tone="warn" className="mt-3">
+                  {feedbackError}
+                </Notice>
+              ) : null}
+              {feedback === null ? (
+                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+              ) : (
+                (() => {
+                  const stats = summarizeRatings(feedback);
+                  const waiting = feedback.filter((row) => row.supportFollowUpNeeded);
+                  return (
+                    <>
+                      <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Average
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">
+                            {/* Null rather than 0.0: "average 0.0" reads as a
+                                catastrophe where the truth is that nobody has
+                                answered yet. */}
+                            {stats.average === null ? '—' : stats.average}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Responses
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">{stats.responses}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Low scores
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">{stats.lowRatings}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            Publishable
+                          </dt>
+                          <dd className="font-sans text-2xl font-bold">
+                            {stats.publishable}
+                            <span className="text-sm font-normal text-charcoal/55">
+                              {' '}
+                              / {stats.testimonials}
+                            </span>
+                          </dd>
+                        </div>
+                      </dl>
+
+                      {waiting.length > 0 ? (
+                        <Notice tone="warn" className="mt-4">
+                          {waiting.length} host{waiting.length === 1 ? '' : 's'} rated their
+                          event poorly and {waiting.length === 1 ? 'has' : 'have'} not been
+                          answered. A support issue should get support, not marketing.
+                        </Notice>
+                      ) : null}
+
+                      {feedback.length === 0 ? (
+                        <p className="mt-4 text-sm text-charcoal/55">Nobody has rated yet.</p>
+                      ) : (
+                        <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                          {feedback
+                            .filter((row) => row.rating !== null)
+                            .map((row) => (
+                              <li key={row.id} className="py-3">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-charcoal">
+                                      {row.rating}/5 · {row.eventName || row.eventId}
+                                    </p>
+                                    <p className="truncate text-xs text-charcoal/60">
+                                      {row.marketingPermission
+                                        ? `may publish · ${row.displayName || 'anonymous'}`
+                                        : 'no permission to publish'}
+                                      {row.status ? ` · ${row.status.toLowerCase()}` : ''}
+                                      {row.reviewedBy ? ` · ${row.reviewedBy}` : ''}
+                                    </p>
+                                    {row.testimonialText ? (
+                                      <p className="mt-1 text-xs italic text-charcoal/70">
+                                        &ldquo;{row.testimonialText}&rdquo;
+                                      </p>
+                                    ) : null}
+                                    {row.privateFeedback ? (
+                                      <p className="mt-1 text-xs text-charcoal/70">
+                                        <span className="font-medium">Private:</span>{' '}
+                                        {row.privateFeedback}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex shrink-0 flex-wrap gap-2">
+                                    {row.supportFollowUpNeeded ? (
+                                      <button
+                                        type="button"
+                                        disabled={working === `feedback-${row.id}`}
+                                        onClick={() => void handleCloseFollowUp(row)}
+                                        className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                      >
+                                        Mark answered
+                                      </button>
+                                    ) : null}
+                                    {row.testimonialText && row.status !== 'APPROVED' ? (
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          working === `feedback-${row.id}` ||
+                                          !row.marketingPermission
+                                        }
+                                        title={
+                                          row.marketingPermission
+                                            ? undefined
+                                            : 'This host did not give permission to publish.'
+                                        }
+                                        onClick={() =>
+                                          void handleReviewTestimonial(row, 'APPROVED')
+                                        }
+                                        className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                                      >
+                                        Approve
+                                      </button>
+                                    ) : null}
+                                    {row.testimonialText && row.status !== 'REJECTED' ? (
+                                      <button
+                                        type="button"
+                                        disabled={working === `feedback-${row.id}`}
+                                        onClick={() =>
+                                          void handleReviewTestimonial(row, 'REJECTED')
+                                        }
+                                        className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                      >
+                                        Reject
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </>
+                  );
+                })()
               )}
             </div>
 
