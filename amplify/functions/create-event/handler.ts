@@ -23,6 +23,7 @@ import {
   planFor,
   type DiscountRow,
 } from './newEvent';
+import { normalizeSource } from './attribution';
 
 const dynamo = new DynamoDBClient({});
 
@@ -276,6 +277,10 @@ export const handler: Handler = async (event) => {
     uploadWindowEndsAt: { S: row.uploadWindowEndsAt },
     paid: { BOOL: row.paid },
     createdBy: { S: row.createdBy },
+    // Normalised against a closed set, never stored as sent. The value arrives
+    // in the request, so an unrecognised one is quietly `direct` rather than
+    // becoming free text in the admin dashboard and every later report.
+    source: { S: normalizeSource(event.arguments.source) },
     createdAt: { S: nowISO },
     updatedAt: { S: nowISO },
   };
