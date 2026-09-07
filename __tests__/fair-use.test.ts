@@ -331,3 +331,41 @@ describe('what the pricing page claims', () => {
     expect(pricing).toContain('archived for 90 days and then permanently deleted');
   });
 });
+
+describe('the fair-use policy exists as a policy', () => {
+  const terms = read('pages/terms.tsx');
+  const cards = read('components/PricingCards.tsx');
+
+  it('has a section in the terms, not only a sentence on the pricing page', () => {
+    // The pricing page cites "SharePix's fair-use policy". For a while there
+    // was no such policy — the asterisk pointed at its own footnote. That is
+    // the thing the footnote itself warns against.
+    expect(terms).toContain('id="fair-use"');
+    expect(terms).toContain('Fair use of unlimited uploads');
+    expect(terms).toContain('FAIR_USE_NOTICE');
+  });
+
+  it('links the asterisk to it', () => {
+    expect(cards).toContain('/terms#fair-use');
+  });
+
+  it('promises not to punish an event for being popular', () => {
+    // The whole point of removing the cap. A fair-use section that reads as a
+    // threat undoes the thing it is attached to.
+    expect(terms).toMatch(/will not restrict an event\s+simply because it was popular/);
+  });
+
+  it('names the right legal entity in the liability clause', () => {
+    // It said CALVIN SOLUTIONS LLC — an entity that is not the one operating
+    // the service, in the single most consequential sentence in the document.
+    expect(terms).not.toContain('CALVIN SOLUTIONS');
+    expect(terms).toContain('{LEGAL_ENTITY.toUpperCase()}');
+  });
+
+  it('numbers its sections once each', () => {
+    // Inserting a section renumbers everything after it, and a document with
+    // two section 8s is a document somebody cites wrongly.
+    const numbers = [...terms.matchAll(/<h2[^>]*>(\d+)\./g)].map((m) => Number(m[1]));
+    expect(numbers).toEqual([...Array(numbers.length)].map((_, i) => i + 1));
+  });
+});
