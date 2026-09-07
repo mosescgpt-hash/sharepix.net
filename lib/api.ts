@@ -13,6 +13,7 @@ import {
   DownloadShare,
   EventMoment,
   FreeEventClaimRow,
+  ResearchIncentiveRow,
   GuestBookEntry,
   HostGuestBookEntry,
   QREvent,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/validation';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import { guestLabelFor } from '@/lib/guestLabel';
+import { canTransition, type IncentiveStatus } from '@/lib/researchIncentive';
 import type { MediaSource } from '@/lib/mediaSource';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
@@ -410,6 +412,91 @@ export async function unsubscribeFromEmails(
       message: 'That unsubscribe link is not valid. It may have expired.',
     };
   }
+}
+
+/**
+ * Record that someone finished the research survey.
+ *
+ * Never throws for a bad link, and shows the same message for a malformed one,
+ * a wrong token and an unknown event — anything else lets a stranger discover
+ * which event ids are real by feeding it guesses.
+ */
+export async function completeResearchSurvey(
+  link: string,
+): Promise<{ recorded: boolean; message: string }> {
+  const refused = {
+    recorded: false,
+    message: 'That survey link is not valid. It may have expired.',
+  };
+  try {
+    const { data, errors } = await client.mutations.completeResearchSurvey(
+      { link },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length || !data?.recorded) return refused;
+    return { recorded: true, message: data.message ?? '' };
+  } catch {
+    return refused;
+  }
+}
+
+/**
+ * Everything owed, newest first. The manual fulfilment queue.
+ *
+ * Admin-only: this is a list of money we owe and the addresses to send it to.
+ */
+export async function listResearchIncentives(): Promise<ResearchIncentiveRow[]> {
+  const rows: ResearchIncentiveRow[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await client.models.ResearchIncentive.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    for (const row of data ?? []) {
+      rows.push({
+        id: row.id,
+        eventId: row.eventId ?? '',
+        participantEmail: row.participantEmail ?? '',
+        amountUsd: row.amountUsd ?? 0,
+        status: (row.status ?? 'PENDING') as ResearchIncentiveRow['status'],
+        completedAt: row.completedAt ?? null,
+        fulfilledAt: row.fulfilledAt ?? null,
+        fulfilledBy: row.fulfilledBy ?? null,
+      });
+    }
+    nextToken = next;
+  } while (nextToken);
+  return rows.sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
+}
+
+/**
+ * Mark a gift card as sent, by hand.
+ *
+ * The only route into FULFILLED, and it is an admin pressing a button after
+ * they have actually bought and sent the card. Nothing scheduled and nothing
+ * customer-facing can reach this state — see lib/researchIncentive.ts.
+ */
+export async function markIncentiveFulfilled(
+  id: string,
+  currentStatus: IncentiveStatus,
+  fulfilledBy: string,
+): Promise<void> {
+  if (!canTransition(currentStatus, 'FULFILLED')) {
+    throw new Error(`A ${currentStatus} reward cannot be marked fulfilled.`);
+  }
+  const { errors } = await client.models.ResearchIncentive.update(
+    {
+      id,
+      status: 'FULFILLED',
+      fulfilledAt: new Date().toISOString(),
+      fulfilledBy,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
 }
 
 export async function listFreeEventClaims(): Promise<FreeEventClaimRow[]> {

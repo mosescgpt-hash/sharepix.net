@@ -138,6 +138,30 @@ export interface FreeEventClaimRow {
   claimedAt: string | null;
 }
 
+/**
+ * One gift-card obligation in the manual fulfilment queue.
+ *
+ * Admin-only reading material: it names an amount we owe and the address to
+ * send it to. `status` is one of INCENTIVE_STATUSES in lib/researchIncentive.ts.
+ */
+export interface ResearchIncentiveRow {
+  id: string;
+  eventId: string;
+  participantEmail: string;
+  amountUsd: number;
+  status:
+    | 'PENDING'
+    | 'ELIGIBLE'
+    | 'AWAITING_MANUAL_FULFILLMENT'
+    | 'FULFILLED'
+    | 'FAILED'
+    | 'CANCELED'
+    | 'DISQUALIFIED';
+  completedAt: string | null;
+  fulfilledAt: string | null;
+  fulfilledBy: string | null;
+}
+
 export interface DiscountCode {
   code: string;
   assignedTo?: string | null;
