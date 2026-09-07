@@ -349,7 +349,13 @@ async function send(to: string, subject: string, html: string, text: string): Pr
 }
 
 /**
- * One nightly pass: warn hosts whose galleries are closing.
+ * One pass: warn hosts whose galleries are closing, then invite finished
+ * successful events to the research survey.
+ *
+ * Runs on a schedule AND on demand from the global admin dashboard, which is
+ * the same code either way — a "test" path that ran different logic would
+ * prove nothing about the real one. The scheduled invocation ignores the
+ * return value; the admin one renders it.
  *
  * Every failure is per-event. One malformed row, one bounced address or one
  * SES throttle must not stop the other ninety-nine hosts being told their
@@ -529,5 +535,25 @@ export const handler = async () => {
     dryRun: !SENDING_ENABLED,
   };
   console.log('Daily tasks complete', summary);
-  return summary;
+
+  // Shaped for the admin dashboard, which is the only caller that reads it.
+  // The wording says plainly whether anything left the building, because the
+  // one thing an operator must not have to guess is whether they just mailed
+  // real customers.
+  return {
+    ok: true,
+    dryRun: !SENDING_ENABLED,
+    summary: [
+      `${considered} active event${considered === 1 ? '' : 's'} checked.`,
+      SENDING_ENABLED
+        ? `${sent} expiry reminder${sent === 1 ? '' : 's'} sent, ${invited} survey invitation${invited === 1 ? '' : 's'} sent.`
+        : `Nothing was sent — EMAIL_SENDING_ENABLED is off. ${skipped} message${skipped === 1 ? '' : 's'} would have gone out.`,
+      lapsed > 0
+        ? `${lapsed} reminder milestone${lapsed === 1 ? '' : 's'} had already passed and were recorded rather than sent late.`
+        : '',
+      SURVEY_URL ? '' : 'No survey URL configured, so no invitations were considered.',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  };
 };
