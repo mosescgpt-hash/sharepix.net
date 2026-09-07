@@ -8,6 +8,7 @@ import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
+import GalleryStyleSettings from '@/components/GalleryStyleSettings';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
 import {
@@ -498,6 +499,13 @@ function AdminDashboardPage() {
                   Refresh
                 </button>
               </div>
+            </div>
+
+            {/* The host's gallery style, next to the QR branding — both are
+                "make this look like my event", and separating them would make
+                a host look in two places for one idea. */}
+            <div className="mt-8">
+              <GalleryStyleSettings event={event} onSaved={load} />
             </div>
 
             {showQR ? (

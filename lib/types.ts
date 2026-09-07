@@ -38,6 +38,10 @@ export interface QREvent {
   usageStatus?: string | null;
   usageNote?: string | null;
   mediaReclaimedAt?: string | null;
+  // Host-chosen gallery presentation. See lib/galleryTheme.ts.
+  galleryFontSet?: string | null;
+  galleryLayout?: string | null;
+  galleryAccent?: string | null;
   accessExpiresAt?: string | null;
   uploadWindowEndsAt?: string | null;
   uploadsClosed?: boolean | null;

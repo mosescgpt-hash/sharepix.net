@@ -1114,6 +1114,10 @@ async function updateEventSettings(
     qrColor?: string;
     /** '' clears the logo. Omit to leave the whole style alone. */
     qrLogo?: string;
+    galleryFontSet?: string;
+    galleryLayout?: string;
+    /** '' clears the accent and returns to the SharePix palette. */
+    galleryAccent?: string;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -1135,6 +1139,9 @@ async function updateEventSettings(
       qrDotStyle: changes.qrDotStyle,
       qrColor: changes.qrColor,
       qrLogo: changes.qrLogo,
+      galleryFontSet: changes.galleryFontSet,
+      galleryLayout: changes.galleryLayout,
+      galleryAccent: changes.galleryAccent,
     },
     { authMode: 'userPool' },
   );
@@ -1220,6 +1227,24 @@ export async function setEventGuestDownloadsBlocked(
     { guestDownloadsBlocked: blocked },
     'The download setting could not be updated.',
   );
+}
+
+/**
+ * How the gallery looks: fonts, layout and an accent colour.
+ *
+ * Each field is independent — changing the layout says nothing about the fonts,
+ * so an omitted field is left alone rather than reset. Pass '' as the accent to
+ * clear it and go back to the SharePix palette.
+ *
+ * Every value is re-validated server-side against the lists in
+ * lib/galleryTheme.ts. This function cannot store a font or layout that is not
+ * one of the offered choices, whatever it is handed.
+ */
+export async function setEventGalleryTheme(
+  eventId: string,
+  theme: { galleryFontSet?: string; galleryLayout?: string; galleryAccent?: string },
+): Promise<void> {
+  await updateEventSettings(eventId, theme, 'The gallery style could not be saved.');
 }
 
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */

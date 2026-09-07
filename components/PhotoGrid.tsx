@@ -24,6 +24,25 @@ interface PhotoGridProps {
   eventId?: string;
   /** Whether print ordering is offered (defaults to the same gate as downloads). */
   canOrderPrints?: boolean;
+  /**
+   * The host's chosen layout — 'grid', 'mosaic' or 'feed'. See
+   * lib/galleryTheme.ts. Anything unrecognised falls back to the grid, so an
+   * event with a stale or absent value renders exactly as it always did.
+   */
+  layout?: string;
+}
+
+/**
+ * The container class for a layout.
+ *
+ * Mosaic uses CSS columns rather than a grid: a grid has to be told each row's
+ * height, and the point of mosaic is that it is not told. Feed is a single
+ * column with a wider gap so one photo reads as one moment.
+ */
+function layoutClassFor(layout: string | undefined): string {
+  if (layout === 'mosaic') return 'columns-2 gap-3 sm:columns-3 md:columns-4 [&>*]:mb-3';
+  if (layout === 'feed') return 'mx-auto flex max-w-xl flex-col gap-6';
+  return 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4';
 }
 
 const SORT_STORAGE_KEY = 'sharepix-gallery-sort';
@@ -43,6 +62,7 @@ export default function PhotoGrid({
   downloadMessage,
   canViewOriginal = false,
   eventId,
+  layout,
   canOrderPrints,
 }: PhotoGridProps) {
   const [sort, setSort] = useState<GallerySort>('time-newest');
@@ -277,7 +297,11 @@ export default function PhotoGrid({
         </Notice>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      {/* The host's layout. Mosaic keeps each photo's own shape by letting the
+          columns flow, which is what makes it read as a scrapboard rather than
+          a contact sheet; feed is one large photo at a time, for a small chosen
+          set. Both fall back to the grid for any value we do not know. */}
+      <div className={layoutClassFor(layout)}>
         {sortedPhotos.map((photo, i) => (
           <PhotoCard
             key={photo.id}

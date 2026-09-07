@@ -109,6 +109,13 @@ const schema = a.schema({
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
       mediaReclaimedAt: a.datetime(),
+      // How the host wants their gallery to look. See lib/galleryTheme.ts —
+      // a curated set of keys plus one free-form accent colour, all validated
+      // server-side before they are stored, because every one of them reaches
+      // a guest's browser.
+      galleryFontSet: a.string(),
+      galleryLayout: a.string(),
+      galleryAccent: a.string(),
       // "City, State" the host sets for the event — a memory label shown on
       // photos and used in downloads. NOT derived from photo GPS, which is
       // still stripped from every upload, and deliberately no finer than a
@@ -1199,6 +1206,9 @@ const schema = a.schema({
       qrDotStyle: a.string(),
       qrColor: a.string(),
       qrLogo: a.string(),
+      galleryFontSet: a.string(),
+      galleryLayout: a.string(),
+      galleryAccent: a.string(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])

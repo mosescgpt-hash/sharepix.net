@@ -78,6 +78,9 @@ export const handler: Handler = async (event) => {
       qrDotStyle: event.arguments.qrDotStyle,
       qrColor: event.arguments.qrColor,
       qrLogo: event.arguments.qrLogo,
+      galleryFontSet: event.arguments.galleryFontSet,
+      galleryLayout: event.arguments.galleryLayout,
+      galleryAccent: event.arguments.galleryAccent,
     },
     { photoCount: Number(found.Item.photoCount?.N ?? '0') },
   );

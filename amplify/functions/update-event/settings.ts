@@ -19,6 +19,7 @@
  */
 
 import { validateQrBranding } from './qrBranding';
+import { isFontSetKey, isGalleryLayout, normalizeAccent } from './galleryTheme';
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
@@ -89,6 +90,11 @@ export interface SettingsRequest {
   qrColor?: string | null;
   /** A data URL, '' to clear the logo, or absent to leave the style alone. */
   qrLogo?: string | null;
+  /** How the gallery looks. See lib/galleryTheme.ts. */
+  galleryFontSet?: string | null;
+  galleryLayout?: string | null;
+  /** A hex accent, '' to clear it, or absent to leave it alone. */
+  galleryAccent?: string | null;
 }
 
 /** The event as stored, insofar as these rules care. */
@@ -188,6 +194,47 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
     set.qrColor = branding.branding.qrColor;
     if (branding.branding.qrLogo) set.qrLogo = branding.branding.qrLogo;
     else remove.push('qrLogo');
+  }
+
+  // Gallery theme. Each field is independent, unlike QR branding — a host
+  // changing the layout has not said anything about their fonts, so an absent
+  // field is left alone rather than reset to a default.
+  //
+  // Every one of these reaches a guest's browser, so a value not in the list is
+  // refused rather than stored and ignored. Storing an unknown key would put a
+  // value we never validated one render away from being trusted by whatever
+  // reads it next.
+  if (request.galleryFontSet !== undefined) {
+    if (!isFontSetKey(request.galleryFontSet)) {
+      return { ok: false, reason: 'Choose one of the available font styles.' };
+    }
+    set.galleryFontSet = request.galleryFontSet as string;
+  }
+
+  if (request.galleryLayout !== undefined) {
+    if (!isGalleryLayout(request.galleryLayout)) {
+      return { ok: false, reason: 'Choose one of the available layouts.' };
+    }
+    set.galleryLayout = request.galleryLayout as string;
+  }
+
+  if (request.galleryAccent !== undefined) {
+    const raw = (request.galleryAccent ?? '').trim();
+    if (raw === '') {
+      // Clearing it returns the gallery to the SharePix palette, which is a
+      // real choice rather than an error.
+      remove.push('galleryAccent');
+    } else {
+      const accent = normalizeAccent(raw);
+      if (!accent) {
+        return { ok: false, reason: 'Enter a colour as a hex value, like #7B2D3B.' };
+      }
+      // Deliberately NOT refused for low contrast. A host's actual wedding
+      // colour might be a pale blush, and telling them their colour is wrong
+      // helps nobody — the theme uses it for fills and rules and keeps the
+      // readable ink for words. See accentUse in lib/galleryTheme.ts.
+      set.galleryAccent = accent;
+    }
   }
 
   for (const flag of ['videoUploadsEnabled', 'guestDownloadsBlocked', 'uploadsClosed'] as const) {
