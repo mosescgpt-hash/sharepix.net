@@ -22,10 +22,12 @@ import {
   setEventUploadsClosed,
   setEventGuestDownloadsBlocked,
   setEventVideoUploads,
+  claimGuestUploadPromise,
   startAddOnCheckout,
   type EventAddOnKey,
   updateEventDetails,
 } from '@/lib/api';
+import { promiseEligibility, ATTESTATION_QUESTION } from '@/lib/guestUploadPromise';
 import {
   CORPORATE_PLAN,
   GUEST_BOOK_ADDON_PRICE,
@@ -80,6 +82,11 @@ function AdminDashboardPage() {
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension or slideshow add-on.
   const [discountCode, setDiscountCode] = useState('');
+  // Guest Upload Promise claim.
+  const [attested, setAttested] = useState(false);
+  const [claimNote, setClaimNote] = useState('');
+  const [claiming, setClaiming] = useState(false);
+  const [claimResult, setClaimResult] = useState<{ text: string; ok: boolean } | null>(null);
 
   // Download-QR share selection, built by toggling photos in the gallery below.
   const [shareSelected, setShareSelected] = useState<Set<string>>(new Set());
@@ -215,6 +222,29 @@ function AdminDashboardPage() {
     .reduce((sum, addon) => sum + addon.price, 0);
 
   const lifecycle = eventLifecycle(event);
+
+  // The Guest Upload Promise: a paid event that nobody uploaded to gets its
+  // money back. Shown only when it applies, because offering a refund to a host
+  // whose event worked is a strange thing to put on their dashboard. Every
+  // check here is re-derived server-side when the claim is filed.
+  const promise = promiseEligibility(event);
+
+  async function handleClaimPromise() {
+    if (!event) return;
+    setClaiming(true);
+    setClaimResult(null);
+    try {
+      const result = await claimGuestUploadPromise(event.id, attested, claimNote);
+      setClaimResult({ text: result.message, ok: result.filed });
+    } catch (err) {
+      setClaimResult({
+        text: err instanceof Error ? err.message : 'That claim could not be filed.',
+        ok: false,
+      });
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   async function handleSaveDetails() {
     if (!event) return;
@@ -757,6 +787,55 @@ function AdminDashboardPage() {
                   </div>
                 ) : null}
               </div>
+
+              {/* The Guest Upload Promise. Shown only when it actually applies:
+                  offering a refund to a host whose event worked is a strange
+                  thing to put on their dashboard, and offering one to a host
+                  whose window has not opened yet is worse. Every check is
+                  re-derived server-side when the claim is filed. */}
+              {promise.eligible ? (
+                <div className="mt-5 border-t border-ink/10 pt-5">
+                  <p className="text-sm font-medium">No guests uploaded anything</p>
+                  <p className="mt-1 text-xs text-charcoal/60">
+                    That is not what you paid for. If you put your QR code or link out at the
+                    event and nobody used it, we will refund what you paid, back to the card
+                    you paid with.
+                  </p>
+                  {claimResult ? (
+                    <Notice tone={claimResult.ok ? 'success' : 'warn'} className="mt-3">
+                      {claimResult.text}
+                    </Notice>
+                  ) : (
+                    <>
+                      <label className="mt-3 flex items-start gap-2 text-xs text-charcoal/75">
+                        <input
+                          type="checkbox"
+                          checked={attested}
+                          onChange={(e) => setAttested(e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>{ATTESTATION_QUESTION}</span>
+                      </label>
+                      <textarea
+                        value={claimNote}
+                        onChange={(e) => setClaimNote(e.target.value)}
+                        rows={2}
+                        maxLength={500}
+                        placeholder="Anything you want to tell us about what happened (optional)"
+                        className="spx-input mt-2 w-full text-sm"
+                      />
+                      <button
+                        type="button"
+                        disabled={!attested || claiming}
+                        onClick={() => void handleClaimPromise()}
+                        className="mt-2 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                      >
+                        {claiming ? 'Sending…' : 'Ask for a refund'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : null}
 
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Add-ons</p>

@@ -33,7 +33,7 @@ import { isSuccessfulEvent } from './successfulEvent';
 /** What this report cannot tell you, and why. Printed in every email. */
 export const NOT_MEASURED: readonly string[] = [
   'Website visitors, pricing views and checkout starts — no analytics provider',
-  'Refunds and chargebacks — not recorded anywhere yet',
+  'Chargebacks — no dispute data comes back from Stripe yet',
   'Acquisition cost per channel — no ad spend is tracked',
   'Experiments and visitor intent — not built',
   'Referrals and credit — not built',
@@ -53,6 +53,14 @@ export interface ReportIncentive {
   status?: string | null;
   amountUsd?: number | null;
   completedAt?: string | null;
+}
+
+/** A ledger row, for the refunds line. See lib/refunds.ts. */
+export interface ReportRefund {
+  status?: string | null;
+  amountCents?: number | null;
+  reason?: string | null;
+  createdAt?: string | null;
 }
 
 /** Inclusive start, exclusive end — the half-open range everything else uses. */
@@ -110,12 +118,17 @@ export interface MonthFigures {
   bySource: Record<EventSource, number>;
   surveysCompleted: number;
   rewardsOwedUsd: number;
+  /** Committed back to customers for events created in this month, in cents. */
+  refundedCents: number;
+  /** Claims still waiting on a decision, right now. */
+  refundsAwaitingDecision: number;
 }
 
 export function figuresFor(
   events: readonly ReportEvent[],
   incentives: readonly ReportIncentive[],
   range: MonthRange,
+  refunds: readonly ReportRefund[] = [],
 ): MonthFigures {
   const inMonth = events.filter((event) => inRange(event.createdAt, range));
   const successful = inMonth.filter((event) => isSuccessfulEvent(event));
@@ -140,6 +153,19 @@ export function figuresFor(
     rewardsOwedUsd: incentives
       .filter((i) => i.status === 'AWAITING_MANUAL_FULFILLMENT')
       .reduce((sum, i) => sum + (i.amountUsd ?? 0), 0),
+    // Refunds are dated by when they were claimed, so a claim filed in
+    // September counts against September even if it is paid in October. The
+    // alternative dates money to the day an admin happened to press a button.
+    refundedCents: refunds
+      .filter(
+        (r) =>
+          inRange(r.createdAt, range) &&
+          (r.status === 'APPROVED' || r.status === 'RECORDED'),
+      )
+      .reduce((sum, r) => sum + Math.max(0, r.amountCents ?? 0), 0),
+    // Outstanding now, not within the month — the point of putting it in a
+    // monthly email is that somebody notices a claim nobody has answered.
+    refundsAwaitingDecision: refunds.filter((r) => r.status === 'REQUESTED').length,
   };
 }
 
@@ -195,6 +221,12 @@ export function reportLines(current: MonthFigures, previous: MonthFigures): Repo
       String(current.surveysCompleted),
       current.surveysCompleted,
       previous.surveysCompleted,
+    ),
+    line(
+      'Refunded',
+      `$${(current.refundedCents / 100).toFixed(2)}`,
+      current.refundedCents,
+      previous.refundedCents,
     ),
   ];
 }

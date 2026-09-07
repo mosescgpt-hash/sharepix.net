@@ -10,6 +10,7 @@ import {
   reportMonths,
   type ReportEvent,
 } from '../lib/monthlyReport';
+import { OWNER_EMAIL } from '../lib/businessInfo';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -185,18 +186,42 @@ describe('what the report refuses to pretend it knows', () => {
     // other figure on the page suspect, and within two months nobody opens it.
     expect(NOT_MEASURED.length).toBeGreaterThan(0);
     const joined = NOT_MEASURED.join(' ').toLowerCase();
-    for (const absent of ['visitor', 'refund', 'experiment', 'referral', 'support']) {
+    for (const absent of ['visitor', 'chargeback', 'experiment', 'referral', 'support']) {
       expect(joined).toContain(absent);
     }
+  });
+
+  it('has stopped claiming refunds are unmeasured, now that they are', () => {
+    // The list shrinking is the signal. Refunds moved onto the ledger, so they
+    // moved off this list — but chargebacks did not, because no dispute data
+    // comes back from Stripe, and lumping them together would quietly claim
+    // coverage we do not have.
+    const joined = NOT_MEASURED.join(' ').toLowerCase();
+    expect(joined).not.toMatch(/\brefunds and\b/);
+    expect(joined).toContain('chargeback');
   });
 
   it('has no line for anything unmeasured', () => {
     const { current, previous } = reportMonths(NOW);
     const lines = reportLines(figuresFor([], [], current), figuresFor([], [], previous));
     const labels = lines.map((l) => l.label.toLowerCase()).join(' ');
-    for (const absent of ['visitor', 'refund', 'cac', 'experiment', 'referral']) {
+    for (const absent of ['visitor', 'chargeback', 'cac', 'experiment', 'referral']) {
       expect(labels).not.toContain(absent);
     }
+  });
+
+  it('does have a refunds line, because the ledger measures them', () => {
+    const { current, previous } = reportMonths(NOW);
+    const refunds = [
+      { status: 'RECORDED', amountCents: 7900, createdAt: SEPT(4) },
+      { status: 'REQUESTED', amountCents: 7900, createdAt: SEPT(9) },
+    ];
+    const figures = figuresFor([], [], current, refunds);
+    // Only committed money counts; a claim nobody has answered is not a refund.
+    expect(figures.refundedCents).toBe(7900);
+    expect(figures.refundsAwaitingDecision).toBe(1);
+    const lines = reportLines(figures, figuresFor([], [], previous, refunds));
+    expect(lines.find((l) => l.label === 'Refunded')?.value).toBe('$79.00');
   });
 
   it('says why each one is absent', () => {
@@ -216,6 +241,19 @@ describe('the scheduled function', () => {
   it('sends nothing until a recipient is configured', () => {
     expect(handler).toContain('if (!TO_ADDRESS || !FROM_ADDRESS)');
     expect(handler).toContain('[dry-run]');
+  });
+
+  it('has a default recipient, and it matches lib/businessInfo.ts', () => {
+    // Amplify config cannot import from lib/, so the address exists twice.
+    // A report quietly going to the wrong inbox is the kind of thing nobody
+    // notices until they wonder why they never get one.
+    expect(backend).toContain(`process.env.REPORT_TO_ADDRESS ?? '${OWNER_EMAIL}'`);
+  });
+
+  it('still refuses to send without a verified sender', () => {
+    // A recipient is not enough. Without ALERT_FROM_ADDRESS there is nothing
+    // to send from, and the handler says so rather than trying.
+    expect(handler).toContain('!FROM_ADDRESS');
   });
 
   it('can only read', () => {

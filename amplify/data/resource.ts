@@ -18,6 +18,7 @@ import { saveMoment as saveMomentFn } from '../functions/save-moment/resource';
 import { listMoments as listMomentsFn } from '../functions/list-moments/resource';
 import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe-email/resource';
 import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
+import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
 import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/resource';
 
@@ -411,6 +412,50 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // Money returned to a customer, and the ledger that stops us returning more
+  // than they gave us. See lib/refunds.ts.
+  //
+  // NOTHING IN THIS CODEBASE ISSUES A REFUND. A person refunds the card in
+  // Stripe and records it here; `RECORDED` means "a human did this and told
+  // us", never "we did this". That is why there is no create or update for
+  // anyone below — the claim function writes the row, and admins move it
+  // through the queue.
+  //
+  // Hosts can READ their own rows, because someone who has asked for their
+  // money back is entitled to see what happened to the request. They can write
+  // nothing: a host who could create a row could name their own amount.
+  //
+  // The id is `<eventId>#<reason>`, so one event cannot accumulate two Guest
+  // Upload Promise claims. Different reasons stack, and the cap in
+  // lib/refunds.ts is what keeps the total inside what was paid.
+  Refund: a
+    .model({
+      eventId: a.string(),
+      /** Amplify owner string of the host, for their own read access. */
+      customer: a.string(),
+      /** One of REFUND_REASONS. */
+      reason: a.string(),
+      /** One of REFUND_STATUSES. */
+      status: a.string(),
+      /** Cents, like everything Stripe touches. */
+      amountCents: a.integer(),
+      /** What the host confirmed when claiming, if this came from a claim. */
+      attestation: a.string(),
+      /** Free text from the host: what they think went wrong. */
+      hostNote: a.string(),
+      /** Which admin decided, and when. */
+      decidedBy: a.string(),
+      decidedAt: a.datetime(),
+      /** When a person confirmed they had actually issued it in Stripe. */
+      recordedAt: a.datetime(),
+      adminNote: a.string(),
+      promiseVersion: a.string(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('customer').to(['get', 'list']),
+      allow.group('ADMINS'),
+    ]),
+
   // One gift-card obligation, owed to someone who completed the research
   // survey. See lib/researchIncentive.ts.
   //
@@ -760,6 +805,30 @@ const schema = a.schema({
     recorded: a.boolean().required(),
     message: a.string(),
   }),
+
+  RefundClaimResult: a.customType({
+    filed: a.boolean().required(),
+    message: a.string(),
+  }),
+
+  // File a Guest Upload Promise claim for an event you own.
+  //
+  // Every part of eligibility is re-derived server-side from the event's own
+  // row — whether it was paid for, whether any guest uploaded, and whether the
+  // claim window is open. The browser decides which button to show and nothing
+  // else. The amount is never sent by the caller: it is computed from the
+  // Payment rows for that event, capped by what has already been refunded.
+  claimGuestUploadPromise: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      /** The host confirming they made the code available. See lib/guestUploadPromise.ts. */
+      attested: a.boolean().required(),
+      note: a.string(),
+    })
+    .returns(a.ref('RefundClaimResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(claimRefundFn)),
 
   JobRunResult: a.customType({
     ok: a.boolean().required(),

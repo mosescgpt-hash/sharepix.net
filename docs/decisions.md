@@ -349,7 +349,7 @@ permanent asterisk on every chart for a handful of early rows.
 
 ## 9. The monthly report — only what is measured
 
-**Decided.** Shipped, no recipient configured.
+**Decided.** Shipped. Goes to **seth@sharepix.net**.
 
 A second scheduled job, 15:00 UTC on the 1st, summarising the calendar month
 that just ended so every figure in it is final.
@@ -374,8 +374,55 @@ percentages to mean much" below ten events a month rather than declaring a
 trend from two events to three. The cost of a wrong headline is that the right
 one stops being believed.
 
-`REPORT_TO_ADDRESS` unset means it builds the report, logs it, and sends
-nothing.
+The recipient is defaulted in `amplify/backend.ts` (and mirrored as
+`OWNER_EMAIL` in `lib/businessInfo.ts`, with a test pinning the two together)
+rather than left blank. Requiring a console step to switch on a summary nobody
+has seen yet is how it stays switched off forever. `REPORT_TO_ADDRESS`
+overrides it.
+
+It still will not send without `ALERT_FROM_ADDRESS`: there is no verified
+sender without one, and the handler refuses rather than trying. **And if SES is
+still in sandbox mode, only verified addresses receive anything** — worth
+checking before waiting a month for an email that never comes.
+
+## 10. Guest Upload Promise — refund to the card, decided by a person
+
+**Decided.** Shipped.
+
+If a paid event got **no guest uploads at all**, the host gets their money back,
+to the card they paid with. Claims open 7 days after the event and close at 21.
+
+**Nothing in this codebase issues a refund.** A host files a claim, it lands in
+an admin queue, a person refunds the card in Stripe, and then marks it recorded
+here. `RECORDED` means "a human did this and told us", never "we did this".
+There is deliberately no status meaning *paid out*, and the claim function has
+no Stripe client. Tests assert both.
+
+**A single ledger with a hard cap.** Every refund reason
+(`GUEST_UPLOAD_PROMISE`, `SERVICE_FAILURE`, `GOODWILL`, `CANCELLATION`) writes
+to one table, and the total that can go back is capped at what actually came in
+— summed from the Payment rows, never from the tier price, because a repricing
+must not change what an old event can get back. `APPROVED` counts against the
+cap as well as `RECORDED`: money we have decided to return is committed, and
+counting only what has been paid out would let a second claim be approved
+against the same money.
+
+**The unverifiable part, handled by asking.** SharePix cannot know whether a
+printed QR sign was ever put out — an event with no uploads because the host
+forgot the signs looks identical to one where guests ignored them. So the host
+attests that they made the code available. It is a claim, not proof, and it is
+worth having anyway: most people will not tick a box that says something untrue,
+and the ones who would are cheaper to refund than to police. What it does not
+justify is device fingerprinting to catch them.
+
+**An event with no date cannot claim** — it is told to get in touch instead.
+Timing a window off the wrong day would open and close it before some events
+even happen, and telling a host "too late" about an event next week is worse
+than telling them to write to us.
+
+Refunds have accordingly moved off the monthly report's *not measured* list.
+Chargebacks have not: no dispute data comes back from Stripe, and lumping the
+two together would claim coverage we do not have.
 
 ## What has to exist first
 

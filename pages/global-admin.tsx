@@ -17,6 +17,8 @@ import {
   listDiscountCodes,
   listFreeEventClaims,
   listPaymentsCount,
+  decideRefund,
+  listRefunds,
   listResearchIncentives,
   markIncentiveFulfilled,
   manageUser,
@@ -34,7 +36,14 @@ import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { canTransition } from '@/lib/researchIncentive';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
-import { DiscountCode, FreeEventClaimRow, QREvent, ResearchIncentiveRow } from '@/lib/types';
+import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
+import {
+  DiscountCode,
+  FreeEventClaimRow,
+  QREvent,
+  RefundRow,
+  ResearchIncentiveRow,
+} from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -168,6 +177,8 @@ function GlobalAdminPage() {
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
   const [jobResult, setJobResult] = useState<{ text: string; ok: boolean } | null>(null);
+  const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
+  const [refundsError, setRefundsError] = useState<string | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -280,6 +291,16 @@ function GlobalAdminPage() {
         setIncentives([]);
         setIncentivesError(
           err instanceof Error ? err.message : 'The reward queue could not be loaded.',
+        );
+      }
+
+      try {
+        setRefunds(await listRefunds());
+        setRefundsError(null);
+      } catch (err) {
+        setRefunds([]);
+        setRefundsError(
+          err instanceof Error ? err.message : 'The refund ledger could not be loaded.',
         );
       }
     } catch (err) {
@@ -467,6 +488,45 @@ function GlobalAdminPage() {
         text: err instanceof Error ? err.message : 'The test could not be sent.',
         ok: false,
       });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleDecideRefund(row: RefundRow, next: RefundRow['status']) {
+    // Only RECORDED needs a confirmation, and it needs a firm one: it is the
+    // claim that a person actually put money back on a card. Nothing here
+    // refunds anything, so pressing it without having done so leaves a
+    // customer owed money that the ledger says was returned.
+    if (
+      next === 'RECORDED' &&
+      !window.confirm(
+        `Record ${formatCents(row.amountCents)} as refunded?\n\nOnly do this after you have actually issued the refund in Stripe. Nothing here moves money — this just records that you did.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`refund-${row.id}`);
+    setRefundsError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      await decideRefund(row, next, me?.loginId ?? 'admin');
+      setRefunds((current) =>
+        (current ?? []).map((item) =>
+          item.id === row.id
+            ? {
+                ...item,
+                status: next,
+                decidedBy: me?.loginId ?? 'admin',
+                recordedAt: next === 'RECORDED' ? new Date().toISOString() : item.recordedAt,
+              }
+            : item,
+        ),
+      );
+    } catch (err) {
+      setRefundsError(
+        err instanceof Error ? err.message : 'That refund could not be updated.',
+      );
     } finally {
       setWorking(null);
     }
@@ -861,6 +921,75 @@ function GlobalAdminPage() {
                   {userMessage.text}
                 </p>
               ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
+              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Refunds</h2>
+              <p className="text-sm text-charcoal/70">
+                Guest Upload Promise claims and any other money going back.{' '}
+                <strong>Nothing here issues a refund.</strong> Approve a claim, refund the card
+                in Stripe, then record it — the ledger is what stops stacked refunds from ever
+                exceeding what a customer paid.
+              </p>
+              {refundsError ? (
+                <Notice tone="warn" className="mt-3">
+                  {refundsError}
+                </Notice>
+              ) : null}
+              {refunds === null ? (
+                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+              ) : refunds.length === 0 ? (
+                <p className="mt-4 text-sm text-charcoal/55">Nothing has been claimed.</p>
+              ) : (
+                <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                  {refunds.map((row) => {
+                    const event = events.find((e) => e.id === row.eventId);
+                    return (
+                      <li key={row.id} className="py-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-charcoal">
+                              {formatCents(row.amountCents)} ·{' '}
+                              {event ? event.name : row.eventId}
+                            </p>
+                            <p className="truncate text-xs text-charcoal/60">
+                              {row.reason.toLowerCase().replace(/_/g, ' ')} ·{' '}
+                              <span
+                                className={
+                                  row.status === 'REQUESTED' ? 'font-medium text-pine' : ''
+                                }
+                              >
+                                {row.status.toLowerCase()}
+                              </span>
+                              {row.decidedBy ? ` · ${row.decidedBy}` : ''}
+                            </p>
+                            {row.hostNote ? (
+                              <p className="mt-1 text-xs italic text-charcoal/70">
+                                &ldquo;{row.hostNote}&rdquo;
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            {(['APPROVED', 'RECORDED', 'DECLINED'] as RefundRow['status'][])
+                              .filter((next) => canTransitionRefund(row.status, next))
+                              .map((next) => (
+                                <button
+                                  key={next}
+                                  type="button"
+                                  disabled={working === `refund-${row.id}`}
+                                  onClick={() => void handleDecideRefund(row, next)}
+                                  className="border border-charcoal/25 px-3 py-2 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                                >
+                                  {next === 'RECORDED' ? 'Mark refunded' : next.toLowerCase()}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
 
             <div className="spx-card mt-8 p-5">

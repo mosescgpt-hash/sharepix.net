@@ -11,6 +11,7 @@ import {
   reportMonths,
   type ReportEvent,
   type ReportIncentive,
+  type ReportRefund,
 } from './monthlyReport';
 
 const dynamo = new DynamoDBClient({});
@@ -18,6 +19,7 @@ const ses = new SESv2Client({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const INCENTIVE_TABLE = process.env.INCENTIVE_TABLE_NAME as string;
+const REFUND_TABLE = process.env.REFUND_TABLE_NAME as string;
 const APP_URL = (process.env.APP_URL ?? 'https://www.sharepix.net').replace(/\/+$/, '');
 const FROM_ADDRESS = process.env.ALERT_FROM_ADDRESS ?? '';
 /** Who gets it. Unset means nothing is sent — the report ships off, like every send here. */
@@ -87,8 +89,20 @@ export const handler = async () => {
     }),
   );
 
-  const figures = figuresFor(events, incentives, current);
-  const before = figuresFor(events, incentives, previous);
+  const refunds = await scanAll<ReportRefund>(
+    REFUND_TABLE,
+    '#status, amountCents, reason, createdAt',
+    { '#status': 'status' },
+    (item) => ({
+      status: item.status?.S ?? null,
+      amountCents: Number(item.amountCents?.N ?? '0'),
+      reason: item.reason?.S ?? null,
+      createdAt: item.createdAt?.S ?? null,
+    }),
+  );
+
+  const figures = figuresFor(events, incentives, current, refunds);
+  const before = figuresFor(events, incentives, previous, refunds);
   const lines = reportLines(figures, before);
   const lead = headline(figures, before);
 
@@ -103,6 +117,9 @@ export const handler = async () => {
     figures.rewardsOwedUsd > 0
       ? `Gift cards owed right now: $${figures.rewardsOwedUsd}. These are sent by hand.`
       : 'No gift cards owed.',
+    figures.refundsAwaitingDecision > 0
+      ? `${figures.refundsAwaitingDecision} refund claim${figures.refundsAwaitingDecision === 1 ? '' : 's'} waiting on a decision.`
+      : '',
     '',
     'Not in this report, because nothing measures it yet:',
     ...NOT_MEASURED.map((item) => `  - ${item}`),
@@ -129,6 +146,9 @@ export const handler = async () => {
     '</table>',
     figures.rewardsOwedUsd > 0
       ? `<p style="font-size:15px;line-height:1.6;margin:24px 0 0"><strong>$${figures.rewardsOwedUsd} of gift cards owed right now.</strong> These are sent by hand — nothing sends them for you.</p>`
+      : '',
+    figures.refundsAwaitingDecision > 0
+      ? `<p style="font-size:15px;line-height:1.6;margin:12px 0 0"><strong>${figures.refundsAwaitingDecision} refund claim${figures.refundsAwaitingDecision === 1 ? '' : 's'} waiting on a decision.</strong> Somebody asked for their money back and has not been answered.</p>`
       : '',
     '<h2 style="font-size:14px;margin:32px 0 8px">Not in this report</h2>',
     '<p style="font-size:13px;line-height:1.6;color:#1f2421;opacity:.6;margin:0 0 8px">Nothing measures these yet, so they are absent rather than zero:</p>',
