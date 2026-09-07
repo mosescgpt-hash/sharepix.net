@@ -20,6 +20,7 @@ import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderatio
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
 import { contributorKey, contributorRowId } from './successfulEvent';
 import { assessUsage, fairUseConfig, windowExpired } from './fairUse';
+import { entitledPhotoLimit, entitledVideoLimit } from './planLimits';
 
 const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
@@ -439,9 +440,19 @@ export const handler: Handler = async (event) => {
   const isGuestUpload = !isHostUpload;
 
   const isVideo = VIDEO_KEY.test(s3Key);
-  const photoLimit = toInt(ev.photoLimit?.N);
+  // The limits stamped on the row are a FLOOR, not a ceiling: an event gets the
+  // more generous of what it was sold and what its plan includes today. Without
+  // this, every event created before the $79 plan went unlimited stays capped
+  // at the 3,000 it was stamped with, while the pricing page promises no cap.
+  // entitledPhotoLimit can only ever raise a limit — see lib/planLimits.ts.
+  const planRow = {
+    tier: ev.tier?.S,
+    photoLimit: toInt(ev.photoLimit?.N),
+    videoLimit: toInt(ev.videoLimit?.N),
+  };
+  const photoLimit = entitledPhotoLimit(planRow);
   const extraCredits = toInt(ev.extraPhotoCredits?.N) ?? 0;
-  const videoLimit = toInt(ev.videoLimit?.N);
+  const videoLimit = entitledVideoLimit(planRow);
   const extraVideoCredits = toInt(ev.extraVideoCredits?.N) ?? 0;
 
   // Reserve a slot atomically. `photoLimit === null` means unlimited (Premium),

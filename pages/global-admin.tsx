@@ -40,6 +40,7 @@ import {
 } from '@/lib/api';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
+import { entitledPhotoLimit, limitsAreStale } from '@/lib/planLimits';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { canTransition } from '@/lib/researchIncentive';
@@ -779,7 +780,7 @@ function GlobalAdminPage() {
 
   async function handleAddCredits(event: QREvent) {
     const input = window.prompt(
-      `Add how many extra photos to “${event.name}”?\n\nPlan limit: ${event.photoLimit ?? 'unlimited'} · Current add-on: ${event.extraPhotoCredits ?? 0}\n\nUse a negative number to remove add-on capacity.`,
+      `Add how many extra photos to “${event.name}”?\n\nPlan limit: ${entitledPhotoLimit(event) ?? 'unlimited'} · Current add-on: ${event.extraPhotoCredits ?? 0}\n\nUse a negative number to remove add-on capacity.`,
       '100',
     );
     if (input === null) return;
@@ -1775,10 +1776,16 @@ function GlobalAdminPage() {
                           </h3>
                           <p className="mt-1 text-sm text-charcoal/60">
                             {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
-                            {event.photoLimit == null
+                            {entitledPhotoLimit(event) == null
                               ? ' photos (unlimited)'
-                              : ` / ${event.photoLimit + (event.extraPhotoCredits ?? 0)} photos`}
+                              : ` / ${entitledPhotoLimit(event)! + (event.extraPhotoCredits ?? 0)} photos`}
                             {event.extraPhotoCredits ? ` (+${event.extraPhotoCredits} add-on)` : ''}
+                            {/* The row still carries the smaller number it was
+                                stamped with. Uploads already go by the
+                                entitlement, so this is stale rather than
+                                broken — but an operator reading a capacity list
+                                should be told which it is. */}
+                            {limitsAreStale(event) ? ' · row limits stale' : ''}
                           </p>
                           <p className="mt-1 text-xs text-charcoal/60">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'} ·{' '}
@@ -1849,7 +1856,7 @@ function GlobalAdminPage() {
                           <Link href={`/event/${event.id}/admin`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
                             Manage
                           </Link>
-                          {event.photoLimit != null ? (
+                          {entitledPhotoLimit(event) != null ? (
                             <button
                               type="button"
                               disabled={working === `credits-${event.id}`}

@@ -3,6 +3,8 @@
  * an event stamps its tier at creation precisely so a later pricing change
  * cannot retroactively alter what someone already paid for.
  */
+import { entitledVideoLimit } from './planLimits';
+
 export type TierId = 'free' | 'plus' | 'event' | 'starter' | 'standard' | 'premium';
 
 export interface PricingTier {
@@ -417,12 +419,17 @@ export function liveSlideshowAvailable(event: {
  * reservation in create-event-photo, which this only mirrors.
  */
 export function videosRemaining(event: {
+  tier?: string | null;
   videoLimit?: number | null;
   extraVideoCredits?: number | null;
   videoCount?: number | null;
 }): number | null {
-  if (event.videoLimit == null) return null; // pre-limit event, or unlimited
-  const limit = event.videoLimit + (event.extraVideoCredits ?? 0);
+  // The stamped limit is a floor, not a ceiling — the same rule the upload
+  // handler enforces. Reading the row directly here would show a guest a
+  // smaller allowance than the server would actually accept.
+  const videoLimit = entitledVideoLimit(event);
+  if (videoLimit == null) return null; // pre-limit event, or unlimited
+  const limit = videoLimit + (event.extraVideoCredits ?? 0);
   return Math.max(0, limit - (event.videoCount ?? 0));
 }
 
