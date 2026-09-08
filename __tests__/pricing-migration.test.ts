@@ -13,7 +13,12 @@ import {
   UPLOAD_WINDOW_DAYS,
 } from '../lib/pricing';
 import { guestBookAvailable } from '../lib/guestBook';
-import { FAIR_USE_DEFAULTS, FAIR_USE_NOTICE, assessUsage } from '../lib/fairUse';
+import {
+  BREAK_EVEN_STORAGE_GB,
+  FAIR_USE_DEFAULTS,
+  FAIR_USE_NOTICE,
+  assessUsage,
+} from '../lib/fairUse';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -239,7 +244,14 @@ describe('the unlimited claim, and what makes it honest', () => {
   });
 
   it('has thresholds that flag abuse without capping a real event', () => {
-    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThanOrEqual(50_000);
+    // Above any real event, and below the point the event stops paying for
+    // itself. This used to assert only the first half against a hardcoded
+    // 50,000, which is how the threshold ended up at 2.6x break-even.
+    // __tests__/fair-use.test.ts owns the full set of invariants.
+    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(10_000);
+    expect(FAIR_USE_DEFAULTS.storageAbuseBytes / 1024 ** 3).toBeLessThan(
+      BREAK_EVEN_STORAGE_GB,
+    );
     // A REVIEW is not a block. The moment crossing a threshold starts refusing
     // a paying customer's guests, "unlimited" has quietly become a number
     // again — which is the exact thing this reprice was meant to stop.

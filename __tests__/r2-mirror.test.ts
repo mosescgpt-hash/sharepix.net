@@ -3,6 +3,8 @@ import {
   mirrorDecision,
   r2KeyFor,
 } from '../amplify/functions/sanitize-upload/mirror';
+import { UPLOAD_WINDOW_DAYS } from '../lib/pricing';
+import { codeOnly, readSource } from './sourceGuards';
 
 const ORIGINAL = 'events/evt-1/photos/abc123.jpg';
 const PREVIEW = 'events/evt-1/previews/abc123-preview.jpg';
@@ -107,5 +109,52 @@ describe('mirrorConfigured', () => {
 
   it('is off with no configuration at all, so the feature is inert by default', () => {
     expect(mirrorConfigured({})).toBe(false);
+  });
+});
+
+describe('the S3 copy is a repair window, not a second archive', () => {
+  const backend = readSource('amplify/backend.ts');
+  const printFulfill = readSource('amplify/functions/print-fulfill/handler.ts');
+  const mediaUrl = readSource('amplify/functions/media-url/handler.ts');
+
+  it('expires the S3 copy in months rather than years', () => {
+    // Every object used to exist twice for 800 days — roughly 280 days past
+    // the point the event had been deleted everywhere a customer could see.
+    // That duplicate was 37% of the storage cost of an event and more than the
+    // copy actually being served.
+    expect(backend).toContain("process.env.S3_COPY_RETENTION_DAYS ?? ''");
+    expect(backend).toMatch(/\|\|\s*90;/);
+    expect(backend).toContain('expiration: Duration.days(S3_COPY_DAYS)');
+  });
+
+  it('keeps the S3 copy past the longest upload window', () => {
+    // An object must never be expired while its event is still accepting
+    // uploads, or a host watching their own gallery sees photos vanish.
+    const days = Number(/\|\|\s*(\d+);/.exec(backend)?.[1]);
+    expect(days).toBeGreaterThan(UPLOAD_WINDOW_DAYS);
+  });
+
+  it('serves prints from R2, which is what made the short window safe', () => {
+    // This was the last thing reading originals from S3, and the only reason
+    // the copy had to survive for the whole life of an event.
+    expect(printFulfill).toContain('async function signPrintAsset');
+    expect(printFulfill).toContain("Bucket: process.env.R2_BUCKET");
+    expect(backend).toContain("printFulfillFn.addEnvironment('R2_BUCKET'");
+  });
+
+  it('keeps S3 as the fallback for prints, but not for the gallery', () => {
+    // A print is a purchase that has already been paid for, so failing it over
+    // one bad credential is worse than reading the copy that is still there.
+    // A gallery read has no such fallback and never did.
+    //
+    // The absence check reads CODE, not prose — see __tests__/sourceGuards.ts.
+    // media-url's comment necessarily quotes the old, wrong "falling back to
+    // S3" wording in order to explain why it is gone, and a naive guard matches
+    // that sentence. This is the sixth time that has happened in this codebase.
+    expect(printFulfill).toContain('falling back to S3');
+    expect(codeOnly(mediaUrl)).not.toContain('falling back to S3');
+    expect(mediaUrl).toContain('this key will not resolve');
+    // The real assertion behind it: media-url signs against R2 and nothing else.
+    expect(codeOnly(mediaUrl)).not.toContain('Bucket: BUCKET');
   });
 });

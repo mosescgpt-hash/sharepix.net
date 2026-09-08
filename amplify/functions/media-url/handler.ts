@@ -98,7 +98,11 @@ export const handler: Handler = async (event) => {
         );
         return { key, url };
       } catch (error) {
-        console.error('Could not sign an R2 URL (falling back to S3)', {
+        // No fallback. This said "falling back to S3" and then returned null,
+        // which was never true — gallery reads have been R2-only since the
+        // mirror shipped. Saying otherwise in a log is how somebody concludes
+        // the S3 copy is still load-bearing for reads. It is not.
+        console.error('Could not sign an R2 URL; this key will not resolve', {
           at: new Date().toISOString(),
           key,
           error: error instanceof Error ? error.message : String(error),

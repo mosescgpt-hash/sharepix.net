@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  ABUSE_MARGIN,
+  BREAK_EVEN_STORAGE_GB,
   FAIR_USE_DEFAULTS,
   FAIR_USE_NOTICE,
+  UNIT_ECONOMICS,
   assessUsage,
   fairUseConfig,
   formatBytes,
@@ -82,14 +85,72 @@ describe('what a threshold does', () => {
     ).toBe(true);
   });
 
-  it('puts the abuse thresholds far above any plausible event', () => {
+  /**
+   * The largest event we are willing to call plausible.
+   *
+   * The doc comment reasons a 300-guest wedding to about 2,000 photos. This is
+   * five times that, so an abuse threshold above it cannot be reached by any
+   * real celebration.
+   */
+  const LARGEST_PLAUSIBLE_EVENT_PHOTOS = 10_000;
+
+  it('puts the abuse thresholds above any plausible event', () => {
     // If these ever drift down to where a real wedding reaches them, the
     // product has quietly stopped meaning "unlimited".
-    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThanOrEqual(50_000);
+    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(
+      LARGEST_PLAUSIBLE_EVENT_PHOTOS,
+    );
     expect(FAIR_USE_DEFAULTS.storageAbuseBytes).toBeGreaterThanOrEqual(100 * GB);
     expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(
       FAIR_USE_DEFAULTS.photoReviewThreshold * 5,
     );
+  });
+
+  it('puts them BELOW the point where the event stops paying for itself', () => {
+    // The half that was missing, and it cost real money. The old threshold sat
+    // at 2.6x break-even purely because 50,000 sounded like a lot, so an event
+    // could lose upward of a hundred dollars before anything stopped it.
+    //
+    // This assertion is the one that matters, because it is the only one that
+    // fails when the price changes and nobody revisits these numbers.
+    const abuseGb = FAIR_USE_DEFAULTS.storageAbuseBytes / GB;
+    expect(abuseGb).toBeLessThan(BREAK_EVEN_STORAGE_GB);
+    expect(ABUSE_MARGIN).toBeLessThan(1);
+  });
+
+  it('still turns a profit at the moment it blocks', () => {
+    // Stated as money rather than as a ratio, because a ratio is easy to
+    // satisfy and easy to misread.
+    const abuseGb = FAIR_USE_DEFAULTS.storageAbuseBytes / GB;
+    const cost = abuseGb * UNIT_ECONOMICS.costPerGbUsd + UNIT_ECONOMICS.fixedCostUsd;
+    expect(UNIT_ECONOMICS.netRevenueUsd - cost).toBeGreaterThan(0);
+  });
+
+  it('leaves a usable window between "plausible" and "unprofitable"', () => {
+    // If these two ever cross, no threshold can be both safe for customers and
+    // safe for the business, and the answer is a pricing change rather than a
+    // threshold change. Better to fail here than to pick a side quietly.
+    const plausibleGb = (LARGEST_PLAUSIBLE_EVENT_PHOTOS * 4.05) / 1024;
+    expect(plausibleGb).toBeLessThan(BREAK_EVEN_STORAGE_GB);
+  });
+
+  it('keeps the photo count consistent with the byte threshold', () => {
+    // They are two views of the same limit. If the count could be reached
+    // while the byte threshold still had room, the tighter one would be doing
+    // all the work and the other would be decoration.
+    const impliedGb = (FAIR_USE_DEFAULTS.photoAbuseThreshold * 4.05) / 1024;
+    const abuseGb = FAIR_USE_DEFAULTS.storageAbuseBytes / GB;
+    expect(Math.abs(impliedGb - abuseGb) / abuseGb).toBeLessThan(0.05);
+  });
+
+  it('sets video thresholds a real event can actually reach', () => {
+    // Both were dead config: the plan allows 30 videos at 250 MB, so an event
+    // cannot exceed 7.5 GB of video, and the thresholds were 20 GB and 200 GB.
+    const maxVideoGb = (30 * 250) / 1024;
+    expect(FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB).toBeLessThan(maxVideoGb);
+    // Abuse stays above the plan ceiling, because reaching it means an admin
+    // granted extra credits — which is a decision, not abuse.
+    expect(FAIR_USE_DEFAULTS.videoStorageAbuseBytes / GB).toBeGreaterThan(maxVideoGb);
   });
 
   it('counts video against its own ceiling as well as the total', () => {

@@ -34,6 +34,60 @@
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
+/**
+ * Where the abuse thresholds come from.
+ *
+ * They used to be round numbers with a sentence of intuition each. That was the
+ * honest state to ship in when nothing was measured, but it turned out to put
+ * the photo abuse threshold at 2.6x the point where a $79 event stops paying
+ * for itself — an event could lose more than a hundred dollars before anything
+ * stopped it.
+ *
+ * These are the inputs, so the thresholds below can be derived rather than
+ * guessed. Figures come from docs/unit-economics.xlsx; the workbook is the
+ * place to change an assumption and see the effect, this is the place the code
+ * reads it from.
+ *
+ * `NET_REVENUE_USD` is $79 less Stripe fees and the expected Guest Upload
+ * Promise refund. `COST_PER_GB_USD` is what one stored gigabyte costs over the
+ * life of an event: R2 for ~17 months, the S3 copy for the 90-day repair
+ * window, and the one-off egress charge for copying it to R2. `FIXED_COST_USD`
+ * is compute, email and the expected research gift card.
+ *
+ * Duplicated into the Lambda copies of this file rather than imported, like
+ * every other shared module here. A test pins them.
+ */
+export const UNIT_ECONOMICS = {
+  netRevenueUsd: 74.04,
+  // Rounded UP from the workbook's 0.4152, deliberately. A cost per gigabyte
+  // that is too high produces a break-even that is too low and a threshold that
+  // is too tight, which errs toward looking at an event sooner. Rounding the
+  // other way errs toward paying for it.
+  costPerGbUsd: 0.42,
+  fixedCostUsd: 2.14,
+} as const;
+
+/**
+ * Stored gigabytes at which one $79 event breaks even.
+ *
+ * The threshold that actually protects margin, because it does not depend on
+ * guessing how large a photo is. `photoAbuseThreshold` is a proxy for this one
+ * and inherits the error in the average-photo-size estimate, which is why the
+ * byte threshold is set tighter relative to break-even than the count is.
+ */
+export const BREAK_EVEN_STORAGE_GB =
+  (UNIT_ECONOMICS.netRevenueUsd - UNIT_ECONOMICS.fixedCostUsd) / UNIT_ECONOMICS.costPerGbUsd;
+
+/**
+ * How close to break-even an abuse threshold is allowed to sit.
+ *
+ * Not 1.0. A threshold exactly at break-even blocks an event the moment it
+ * stops being profitable, and the whole posture of this file is that throttling
+ * a real event is more expensive than absorbing an unusual one. 0.85 leaves the
+ * loss bounded at nothing while keeping the block far above any real event.
+ */
+export const ABUSE_MARGIN = 0.85;
+
 export interface FairUseConfig {
   /** Photos in one event before a person should look. No effect on uploads. */
   photoReviewThreshold: number;
@@ -65,20 +119,41 @@ export interface FairUseConfig {
 export const FAIR_USE_DEFAULTS: FairUseConfig = {
   // A 300-guest wedding where a third of the room contributes and each person
   // adds twenty photos lands near 2,000. Five thousand is comfortably past
-  // that and still obviously an event rather than an archive.
+  // that and still obviously an event rather than an archive. Unchanged: this
+  // one only flags, and it sits well below break-even, which is where a review
+  // threshold should sit.
   photoReviewThreshold: 5_000,
-  // Fifty thousand photos is not an event. It is a migration.
-  photoAbuseThreshold: 50_000,
+  // Was 50,000, on the reasoning that "fifty thousand photos is not an event,
+  // it is a migration". True, but it was also 2.6x the point where the event
+  // stops paying for itself, so the migration got to run at our expense for a
+  // long way first.
+  //
+  // Derived from BREAK_EVEN_STORAGE_GB at an assumed 4.05 MB per photo — the
+  // original plus its preview and thumbnail. That average is an ESTIMATE, so
+  // this number inherits its error; storageAbuseBytes below does not, and is
+  // the one that actually protects margin.
+  photoAbuseThreshold: Math.round(
+    (BREAK_EVEN_STORAGE_GB * ABUSE_MARGIN * 1024) / 4.05 / 100,
+  ) * 100,
   // At the 25 MB per-photo ceiling, 5,000 photos is 125 GB — but real phone
-  // photos average nearer 3 MB, so a large event lands around 15 GB. Fifty is
-  // well clear of a real event and well short of a bill worth worrying about.
+  // photos average nearer 4 MB, so a large event lands around 20 GB. Fifty is
+  // well clear of a real event and still well below break-even.
   storageReviewBytes: 50 * GB,
-  storageAbuseBytes: 500 * GB,
+  // Was 500 GB, which cost about $210 on a $79 event. This is the threshold
+  // that does not depend on any estimate of photo size: whatever the files
+  // are, this many stored bytes is what the money runs out at.
+  storageAbuseBytes: Math.round(BREAK_EVEN_STORAGE_GB * ABUSE_MARGIN) * GB,
   // Video is the expensive half and the half whose cost is not bounded by
   // resizing, so it gets its own ceiling rather than being folded into total
   // storage where a thousand photos could mask it.
-  videoStorageReviewBytes: 20 * GB,
-  videoStorageAbuseBytes: 200 * GB,
+  //
+  // Both were unreachable and therefore dead config: the paid plan allows 30
+  // videos at 250 MB each, so an event cannot exceed 7.5 GB of video however
+  // hard it tries, and the old thresholds were 20 GB and 200 GB. These are set
+  // against the real ceiling instead, with room for an admin who has granted
+  // extra video credits.
+  videoStorageReviewBytes: 6 * GB,
+  videoStorageAbuseBytes: 30 * GB,
   // A busy reception with fifty people uploading at once produces bursts. A
   // hundred and twenty a minute sustained does not come from thumbs.
   velocityReviewPerMinute: 120,
