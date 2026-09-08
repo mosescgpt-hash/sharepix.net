@@ -35,6 +35,7 @@ import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
 import { isEventThemeKey } from '@/lib/eventTheme';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
+import { LIST_PAGE_LIMIT, listAllPages } from '@/lib/listPages';
 
 const client = generateClient<Schema>();
 type DataAuthMode = 'userPool' | 'identityPool';
@@ -221,46 +222,47 @@ export async function validateDiscountCode(
 }
 
 export async function listAllEvents(): Promise<QREvent[]> {
-  const { data, errors } = await client.models.Event.list({
-    limit: 1000,
-    authMode: 'userPool',
-  });
-  if (errors?.length) throw new Error('Events could not be loaded.');
-  return (data ?? []) as QREvent[];
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.Event.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
+    'Events could not be loaded.',
+  );
+  return rows as QREvent[];
 }
 
-/** Return only events owned by the currently signed-in host. */
+/**
+ * Return only events owned by the currently signed-in host.
+ *
+ * The owner filter is applied here as well as by AppSync because a global admin
+ * has full model access: for them the query returns every event, and this page
+ * is meant to show their own.
+ */
 export async function listMyEvents(): Promise<QREvent[]> {
   const user = await getCurrentUserInfo();
   if (!user) throw new Error('Sign in to see your events.');
 
-  const { data, errors } = await client.models.Event.list({
-    limit: 1000,
-    authMode: 'userPool',
-  });
-  if (errors?.length) throw new Error('Your events could not be loaded.');
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.Event.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
+    'Your events could not be loaded.',
+  );
 
-  return ((data ?? []) as QREvent[])
+  return (rows as QREvent[])
     .filter((event) => event.owner?.includes(user.userId))
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }
 
-export async function listAllPhotos(): Promise<QRPhoto[]> {
-  const { data, errors } = await client.models.Photo.list({
-    limit: 1000,
-    authMode: 'userPool',
-  });
-  if (errors?.length) throw new Error('Photos could not be loaded.');
-  return (data ?? []) as QRPhoto[];
-}
-
 export async function listDiscountCodes(): Promise<DiscountCode[]> {
-  const { data, errors } = await client.models.DiscountCode.list({
-    limit: 1000,
-    authMode: 'userPool',
-  });
-  if (errors?.length) throw new Error('Discount codes could not be loaded.');
-  return (data ?? []) as DiscountCode[];
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.DiscountCode.list({
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'Discount codes could not be loaded.',
+  );
+  return rows as DiscountCode[];
 }
 
 export async function createDiscountCode(input: {
@@ -573,14 +575,27 @@ function readRefund(row: Record<string, unknown>): RefundRow {
   };
 }
 
-/** This host's own refund rows, so they can see what happened to a claim. */
+/**
+ * This host's own refund rows, so they can see what happened to a claim.
+ *
+ * Paged: owner auth is a filter applied after DynamoDB's page limit, so asking
+ * for 200 rows meant "examine 200 rows of the whole ledger" — and a host whose
+ * refunds sat past them was shown nothing at all. An empty refund list is a
+ * statement about money, so it has to be true.
+ */
 export async function listMyRefunds(): Promise<RefundRow[]> {
-  const { data, errors } = await client.models.Refund.list({
-    limit: 200,
-    authMode: 'userPool',
-  });
-  if (errors?.length) return [];
-  return (data ?? []).map((row) => readRefund(row as Record<string, unknown>));
+  try {
+    const rows = await listAllPages(
+      (nextToken) =>
+        client.models.Refund.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
+      'Refunds could not be loaded.',
+    );
+    return rows.map((row) => readRefund(row as Record<string, unknown>));
+  } catch {
+    // Unchanged from before: this view degrades to empty rather than breaking
+    // the page around it.
+    return [];
+  }
 }
 
 /** The whole ledger, newest first. Admin-only: it names amounts owed back. */
@@ -962,13 +977,27 @@ export async function startCorporateSubscription(discountCode?: string): Promise
   return data.url;
 }
 
-/** The current host's corporate subscription row, or null if they have none. */
+/**
+ * The current host's corporate subscription row, or null if they have none.
+ *
+ * Paged, and for the sharpest version of the reason: this passed no limit at
+ * all, so it took Amplify's default page and read `[0]` from it. Owner auth
+ * filters after that page is read, so once the table held more rows than one
+ * page a paying corporate subscriber was told they had no subscription. An
+ * index on the owner would make this a lookup instead of a scan that stops at
+ * the first hit; until then, paging is what makes the answer true.
+ */
 export async function getMyCorporateSubscription(): Promise<CorporateSubscription | null> {
-  const { data, errors } = await client.models.CorporateSubscription.list({
-    authMode: 'userPool',
-  });
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
-  return (data?.[0] as CorporateSubscription) ?? null;
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.CorporateSubscription.list({
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'The subscription could not be loaded.',
+  );
+  return (rows[0] as CorporateSubscription) ?? null;
 }
 
 /** Whether a corporate subscription counts as active right now. */
@@ -1348,24 +1377,50 @@ export async function listMyPhotoLikes(
   guestKey: string,
 ): Promise<Set<string>> {
   if (!guestKey) return new Set();
-  const { data, errors } = await client.models.PhotoReaction.list({
-    filter: { eventId: { eq: eventId }, guestKey: { eq: guestKey } },
-    limit: 1000,
-    authMode: await authModeFor(),
-  });
-  if (errors?.length) return new Set();
-  return new Set((data ?? []).map((row) => String(row.photoId ?? '')));
+  // `filter` runs after the page limit, so 1000 meant "examine 1000 rows of the
+  // whole reactions table" — not "return 1000 of this guest's likes". As that
+  // table grows across every event, a guest's own hearts would have started
+  // coming back unfilled.
+  const authMode = await authModeFor();
+  try {
+    const rows = await listAllPages(
+      (nextToken) =>
+        client.models.PhotoReaction.list({
+          filter: { eventId: { eq: eventId }, guestKey: { eq: guestKey } },
+          limit: LIST_PAGE_LIMIT,
+          nextToken,
+          authMode,
+        }),
+      'Likes could not be loaded.',
+    );
+    return new Set(rows.map((row) => String(row.photoId ?? '')));
+  } catch {
+    return new Set();
+  }
 }
 
 /** Comments on one event's photos, oldest first within each photo. */
 export async function listPhotoComments(eventId: string): Promise<PhotoCommentRow[]> {
-  const { data, errors } = await client.models.PhotoComment.list({
-    filter: { eventId: { eq: eventId } },
-    limit: 1000,
-    authMode: await authModeFor(),
-  });
-  if (errors?.length) return [];
-  return (data ?? [])
+  // Paged for the same reason as the likes above: the filter is applied after
+  // the page limit, so comments on an event would have gone missing from the
+  // gallery as the shared table grew, a few at a time and without a word.
+  const authMode = await authModeFor();
+  let data: Array<Record<string, unknown>>;
+  try {
+    data = await listAllPages(
+      (nextToken) =>
+        client.models.PhotoComment.list({
+          filter: { eventId: { eq: eventId } },
+          limit: LIST_PAGE_LIMIT,
+          nextToken,
+          authMode,
+        }),
+      'Comments could not be loaded.',
+    );
+  } catch {
+    return [];
+  }
+  return data
     .map((row) => ({
       id: String(row.id ?? ''),
       photoId: String(row.photoId ?? ''),
@@ -1433,13 +1488,22 @@ export async function setEventUploadsClosed(eventId: string, closed: boolean): P
  * host (owner) and for global admins.
  */
 export async function deleteEventWithPhotos(eventId: string): Promise<void> {
-  const { data: photos, errors: photoListErrors } = await client.models.Photo.listPhotoByEventId(
-    { eventId },
-    { limit: 1000, authMode: 'userPool' },
+  // Every photo, not the first page of them. This asked for 1000 and then
+  // deleted the event row, so an event past that lost its remaining photo
+  // records to nothing: the rows stayed, their S3 and R2 objects stayed, and
+  // the event they belonged to was gone — so no reclaim job could ever find
+  // them and the storage was billable forever. Photos are unlimited on the paid
+  // plan, which puts that within reach of one busy wedding.
+  const photos = await listAllPages(
+    (nextToken) =>
+      client.models.Photo.listPhotoByEventId(
+        { eventId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'Event photos could not be loaded.',
   );
-  if (photoListErrors?.length) throw new Error('Event photos could not be loaded.');
 
-  for (const photo of photos ?? []) {
+  for (const photo of photos) {
     // The function removes both the S3 objects and the record after an
     // ownership/admin check — clients can no longer delete S3 objects directly.
     const { data, errors } = await client.mutations.deleteEventPhoto(
@@ -1803,13 +1867,21 @@ export async function fetchGuestBook(eventId: string): Promise<GuestBookEntry[]>
  * auth scopes to events they own.
  */
 export async function fetchGuestBookForHost(eventId: string): Promise<HostGuestBookEntry[]> {
-  const { data, errors } = await client.models.GuestBookEntry.list({
-    filter: { eventId: { eq: eventId } },
-    authMode: 'userPool',
-    limit: 1000,
-  });
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
-  return (data ?? [])
+  // The guest book is a paid add-on, and this is the host's only view of every
+  // entry on it \u2014 including the ones held for review. The filter is applied
+  // after the page limit, so entries would have gone quietly missing from that
+  // view as the shared table grew.
+  const data = await listAllPages(
+    (nextToken) =>
+      client.models.GuestBookEntry.list({
+        filter: { eventId: { eq: eventId } },
+        authMode: 'userPool',
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+      }),
+    'The guest book could not be loaded.',
+  );
+  return data
     .map((entry) => ({
       id: entry.id,
       eventId: entry.eventId,
@@ -1866,12 +1938,25 @@ export async function setGuestBookEntryHidden(
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
 }
 
+/**
+ * Every photo on an event, for the host's own moderation view.
+ *
+ * Paged, not capped. This asked for 500 and kept whatever came back, so a host
+ * with more than 500 photos could not see — or moderate — the rest of their own
+ * event, and nothing on the page said so. Photos are unlimited on the paid
+ * plan, so 500 is a number an ordinary wedding passes.
+ */
 async function listEventPhotosViaModel(eventId: string): Promise<QRPhoto[]> {
-  const { data } = await client.models.Photo.listPhotoByEventId(
-    { eventId },
-    { limit: 500, authMode: await authModeFor() },
+  const authMode = await authModeFor();
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.Photo.listPhotoByEventId(
+        { eventId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode },
+      ),
+    'Photos could not be loaded.',
   );
-  return (data ?? []) as QRPhoto[];
+  return rows as QRPhoto[];
 }
 
 /** Fetch photos for an event and resolve signed URLs for display. */
@@ -2025,14 +2110,20 @@ export async function createDownloadShare(
     throw new Error('Only the signed-in event host can create a download-sharing QR code.');
   }
 
-  const { data: eventPhotos, errors: photoErrors } = await client.models.Photo.listPhotoByEventId(
-    { eventId: event.id },
-    { limit: 1000, authMode: 'userPool' },
+  // The allow-list has to cover the whole event: a photo missing from it is
+  // treated as not approved, so capping this at one page silently refused to
+  // share anything past it.
+  const eventPhotos = await listAllPages(
+    (nextToken) =>
+      client.models.Photo.listPhotoByEventId(
+        { eventId: event.id },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'The event photos could not be checked.',
   );
-  if (photoErrors?.length) throw new Error('The event photos could not be checked.');
 
   const allowedIds = new Set(
-    (eventPhotos ?? []).filter((photo) => photo.approved !== false).map((photo) => photo.id),
+    eventPhotos.filter((photo) => photo.approved !== false).map((photo) => photo.id),
   );
   const photoIds = [...new Set(requestedPhotoIds)].filter((id) => allowedIds.has(id));
   if (photoIds.length === 0) throw new Error('Select at least one approved photo or video.');

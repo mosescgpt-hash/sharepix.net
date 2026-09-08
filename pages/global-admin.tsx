@@ -13,7 +13,6 @@ import {
   deleteEventAsGlobalAdmin,
   getCurrentUserInfo,
   listAllEvents,
-  listAllPhotos,
   listDiscountCodes,
   listFreeEventClaims,
   listPaymentsCount,
@@ -202,7 +201,6 @@ function GlobalAdminPage() {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [events, setEvents] = useState<QREvent[]>([]);
   const [codes, setCodes] = useState<DiscountCode[]>([]);
-  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [paymentsCount, setPaymentsCount] = useState<number | null>(null);
   // null while loading. Kept separate from `error` so a missing or empty claim
   // table never blanks out the whole dashboard.
@@ -299,21 +297,12 @@ function GlobalAdminPage() {
       setAuthorized(admin);
       if (!admin) return;
 
-      const [eventItems, codeItems, photos] = await Promise.all([
-        listAllEvents(),
-        listDiscountCodes(),
-        listAllPhotos(),
-      ]);
-      const counts = photos.reduce<Record<string, number>>((result, photo) => {
-        result[photo.eventId] = (result[photo.eventId] ?? 0) + 1;
-        return result;
-      }, {});
+      const [eventItems, codeItems] = await Promise.all([listAllEvents(), listDiscountCodes()]);
 
       setEvents(
         eventItems.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
       );
       setCodes(codeItems.sort((a, b) => b.expiresAt.localeCompare(a.expiresAt)));
-      setPhotoCounts(counts);
 
       // Payments count is best-effort: don't let a missing/empty Payment table
       // (e.g. before the webhook has ever fired) blank out the whole dashboard.
@@ -421,7 +410,11 @@ function GlobalAdminPage() {
     [events],
   );
 
-  const totalPhotos = Object.values(photoCounts).reduce((sum, count) => sum + count, 0);
+  // Summed from the counter on each event row. This used to sum a client-side
+  // tally built by downloading every Photo row in the system, which stopped at
+  // the first page — so the total silently under-reported once the table passed
+  // a thousand photos, which one busy event is enough to do.
+  const totalPhotos = events.reduce((sum, event) => sum + (event.photoCount ?? 0), 0);
   const activeCodes = codes.filter(
     (item) =>
       item.active &&
@@ -1863,7 +1856,7 @@ function GlobalAdminPage() {
                             ) : null}
                           </h3>
                           <p className="mt-1 text-sm text-charcoal/60">
-                            {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
+                            {event.createdBy ?? 'Unknown host'} · {event.tier} · {event.photoCount ?? 0}
                             {entitledPhotoLimit(event) == null
                               ? ' photos (unlimited)'
                               : ` / ${entitledPhotoLimit(event)! + (event.extraPhotoCredits ?? 0)} photos`}
