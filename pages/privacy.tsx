@@ -114,6 +114,13 @@ export default function PrivacyPage() {
               browser storage (for example, to keep you signed in and remember your uploader
               nickname). We do not use advertising or cross-site tracking cookies.
             </p>
+            <p>
+              We use <strong>Cloudflare Web Analytics</strong> to count page views and see
+              which pages people visit. It sets no cookies, stores no identifier in your
+              browser, and does not follow you to other sites, so there is no
+              &ldquo;accept cookies&rdquo; banner to dismiss and nothing to opt out of. It
+              tells us how many people looked at a page — not who they were.
+            </p>
           </div>
 
           <div>

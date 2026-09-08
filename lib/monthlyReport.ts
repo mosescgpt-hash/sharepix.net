@@ -32,7 +32,11 @@ import { isSuccessfulEvent } from './successfulEvent';
 
 /** What this report cannot tell you, and why. Printed in every email. */
 export const NOT_MEASURED: readonly string[] = [
-  'Website visitors, pricing views and checkout starts — no analytics provider',
+  // Cloudflare Web Analytics now counts page views, so visitors and pricing
+  // views are measured — but it is a page-view counter, not an event tracker,
+  // so nothing joins a pricing view to a checkout. The line shrank rather than
+  // disappearing, which is the honest shape of what changed.
+  'Checkout starts, and the pricing-to-purchase funnel — Cloudflare Web Analytics counts page views, not events',
   'Chargebacks — no dispute data comes back from Stripe yet',
   'Acquisition cost per channel — no ad spend is tracked',
   'Experiments and visitor intent — not built',

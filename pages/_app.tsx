@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import Head from 'next/head';
+import Script from 'next/script';
 import type { AppProps } from 'next/app';
 import { Amplify } from 'aws-amplify';
 import '@aws-amplify/ui-react/styles.css';
@@ -23,6 +24,12 @@ try {
   // Not generated yet — run `npx ampx sandbox` first.
 }
 
+/**
+ * Read once at module scope. NEXT_PUBLIC_* is inlined at build time, so this is
+ * a constant rather than something that can change between renders.
+ */
+const cfAnalyticsToken = (process.env.NEXT_PUBLIC_CF_ANALYTICS_TOKEN ?? '').trim();
+
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
@@ -42,6 +49,30 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </Head>
+      {/* Cloudflare Web Analytics.
+       *
+       * Chosen over Plausible and the rest for one reason that matters at this
+       * stage: it is free, and the question right now is "is anyone visiting
+       * at all", not "what does the checkout funnel look like". When there is a
+       * funnel worth measuring, this comes out and a paid tool goes in.
+       *
+       * Cookieless and with no cross-site identifiers, so it needs no consent
+       * banner and does not make the privacy policy's "no advertising or
+       * cross-site tracking cookies" untrue. The policy names it anyway.
+       *
+       * Inert until NEXT_PUBLIC_CF_ANALYTICS_TOKEN is set in Amplify Hosting.
+       * A missing token renders nothing rather than a script tag with an empty
+       * beacon, which would 404 on every page load in every environment that
+       * has not configured it — including local development.
+       */}
+      {cfAnalyticsToken ? (
+        <Script
+          id="cf-analytics"
+          strategy="afterInteractive"
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={JSON.stringify({ token: cfAnalyticsToken })}
+        />
+      ) : null}
       {!configured ? (
         <div className="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
           AWS is not configured yet. Run <code>npx ampx sandbox</code> to generate{' '}
