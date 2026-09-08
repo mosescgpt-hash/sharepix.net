@@ -150,6 +150,15 @@ export const handler = async (event: {
             customerEmail: {
               S: session.customer_details?.email ?? session.customer_email ?? '',
             },
+            // Country and region only, never the street address. This is what
+            // decides whether we have crossed a tax threshold (lib/taxNexus.ts),
+            // and nothing more granular is needed for that.
+            billingCountry: {
+              S: (session.customer_details?.address?.country ?? '').toUpperCase(),
+            },
+            billingRegion: {
+              S: (session.customer_details?.address?.state ?? '').toUpperCase(),
+            },
             status: { S: session.payment_status ?? 'paid' },
             createdAt: { S: now },
             updatedAt: { S: now },

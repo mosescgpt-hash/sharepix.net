@@ -20,6 +20,7 @@ import {
   decideRefund,
   listRefunds,
   listEventFeedback,
+  listPaymentJurisdictions,
   type FeedbackRow,
   readSetting,
   writeSetting,
@@ -41,6 +42,13 @@ import {
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { entitledPhotoLimit, limitsAreStale } from '@/lib/planLimits';
+import {
+  HOME_JURISDICTION_NOTE,
+  NEXUS_DISCLAIMER,
+  type NexusAssessment,
+  assessNexus,
+  nexusMessages,
+} from '@/lib/taxNexus';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { canTransition } from '@/lib/researchIncentive';
@@ -221,6 +229,7 @@ function GlobalAdminPage() {
   const [reportTo, setReportTo] = useState('');
   const [reportSaved, setReportSaved] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [nexus, setNexus] = useState<NexusAssessment | null>(null);
 
   const [code, setCode] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -354,6 +363,15 @@ function GlobalAdminPage() {
         setFeedbackError(
           err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
         );
+      }
+
+      try {
+        // Sales reduced to country/region/amount, for the tax tripwire. Never
+        // fatal: a tax prompt failing to load must not take the dashboard with
+        // it, and an empty assessment renders as nothing rather than as "fine".
+        setNexus(assessNexus(await listPaymentJurisdictions()));
+      } catch {
+        setNexus(null);
       }
 
       try {
@@ -1323,6 +1341,29 @@ function GlobalAdminPage() {
                 );
               })()}
             </div>
+
+            {/* Only rendered when there is something to say. A panel reading
+                "no tax issues" would be read as advice, and it is not — see
+                NEXUS_DISCLAIMER. */}
+            {nexus?.actionNeeded ? (
+              <div className="spx-card mt-8 border-l-4 border-l-amber-500 p-5">
+                {/* No id, and no entry in ADMIN_SECTIONS: this panel only
+                    exists when there is something to say, and an index link
+                    that sometimes points at nothing is the failure the nav
+                    test exists to catch. */}
+                <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+                  Sales tax — worth a look
+                </h2>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-charcoal/75">
+                  {nexusMessages(nexus).map((message) => (
+                    <li key={message}>{message}</li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs text-charcoal/55">
+                  {NEXUS_DISCLAIMER} {HOME_JURISDICTION_NOTE}
+                </p>
+              </div>
+            ) : null}
 
             <div className="spx-card mt-8 p-5">
               <h2 id="report-recipient" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>

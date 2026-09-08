@@ -913,6 +913,38 @@ export async function listPaymentsCount(): Promise<number> {
 }
 
 /**
+ * Every payment reduced to what a tax threshold depends on.
+ *
+ * Country, region and amount only — the same three fields lib/taxNexus.ts
+ * needs, and nothing else. Reading the whole Payment row into a browser to
+ * count sales by state would drag customer emails along for no reason.
+ */
+export async function listPaymentJurisdictions(): Promise<
+  Array<{ country: string | null; region: string | null; amountCents: number | null }>
+> {
+  const rows: Array<{ country: string | null; region: string | null; amountCents: number | null }> = [];
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await client.models.Payment.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+      selectionSet: ['billingCountry', 'billingRegion', 'amountTotal'],
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    for (const row of data ?? []) {
+      rows.push({
+        country: row.billingCountry ?? null,
+        region: row.billingRegion ?? null,
+        amountCents: row.amountTotal ?? null,
+      });
+    }
+    nextToken = next;
+  } while (nextToken);
+  return rows;
+}
+
+/**
  * Starts the Corporate ($149/month) subscription checkout and returns the
  * hosted Stripe URL. The webhook attaches the subscription to this account.
  */

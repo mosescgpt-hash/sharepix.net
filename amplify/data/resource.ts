@@ -703,6 +703,12 @@ const schema = a.schema({
       tier: a.string(),
       eventId: a.string(),
       customerEmail: a.string(),
+      // Where the buyer was, for the tax tripwire in lib/taxNexus.ts. Only
+      // available because automatic_tax makes Stripe collect an address —
+      // before that there was nothing to record. Country and region only: a
+      // street address would be personal data we have no use for.
+      billingCountry: a.string(),
+      billingRegion: a.string(),
       status: a.string(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
