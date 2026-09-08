@@ -64,6 +64,45 @@ export const handler: Handler = async (event) => {
   const caller = event.identity as { sub?: string; groups?: string[] | null } | undefined;
   if (!mayEdit(caller, found.Item.owner?.S ?? '')) return notYours;
 
+  // A host asking for more room. Dispatched here rather than in its own
+  // function so it inherits the ownership check above unchanged — the one
+  // thing this mutation must get right is that you cannot file a request
+  // against somebody else's event.
+  //
+  // It records the request and NOTHING else. No limit moves, no counter
+  // changes, nobody is emailed. Capacity is granted by a person from the admin
+  // dashboard, the same posture as a refund: the code writes down what was
+  // asked for, and a human decides.
+  const field = (event as { info?: { fieldName?: string } }).info?.fieldName ?? '';
+  if (field === 'requestEventCapacity') {
+    const nowISO = new Date().toISOString();
+    if (found.Item.capacityGrantedAt?.S) {
+      return { success: true, message: 'You already have extra room on this event.' };
+    }
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'SET capacityRequestedAt = :now, updatedAt = :now',
+          // Only the first request is recorded. A host tapping twice must not
+          // reset the clock an admin is triaging by, and there is nothing to
+          // gain from a second identical row.
+          ConditionExpression: 'attribute_not_exists(capacityRequestedAt)',
+          ExpressionAttributeValues: { ':now': { S: nowISO } },
+        }),
+      );
+    } catch {
+      // The conditional failed, which means a request is already on file.
+      // That is the same outcome the host wanted, so it is not an error.
+      return { success: true, message: 'Your request is already with us.' };
+    }
+    return {
+      success: true,
+      message: 'Thanks — we have your request and will be in touch by email.',
+    };
+  }
+
   const result = buildPatch(
     {
       name: event.arguments.name,

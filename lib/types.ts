@@ -38,6 +38,9 @@ export interface QREvent {
   usageStatus?: string | null;
   usageNote?: string | null;
   mediaReclaimedAt?: string | null;
+  /** The host asked for more room, and whether an admin has granted it. */
+  capacityRequestedAt?: string | null;
+  capacityGrantedAt?: string | null;
   // Host-chosen gallery presentation. See lib/galleryTheme.ts.
   galleryFontSet?: string | null;
   galleryLayout?: string | null;

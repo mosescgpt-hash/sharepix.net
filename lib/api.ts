@@ -1098,6 +1098,31 @@ export async function addEventPhotoCredits(
  * can be cleared. The rules (the name/date lock once photos exist, the
  * moderation modes, the email format) are enforced there, not here.
  */
+/**
+ * Ask for more room on an event that is getting large.
+ *
+ * Returns the message to show the host rather than throwing on refusal: every
+ * outcome here is something they should read, including "we already have your
+ * request", which is a success from their point of view even though the write
+ * did nothing.
+ */
+export async function requestEventCapacity(
+  eventId: string,
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    const { data, errors } = await client.mutations.requestEventCapacity({ eventId });
+    if (errors?.length || !data?.success) {
+      return {
+        ok: false,
+        message: data?.message ?? 'That request could not be sent. Please email us instead.',
+      };
+    }
+    return { ok: true, message: data.message ?? 'Thanks — we have your request.' };
+  } catch {
+    return { ok: false, message: 'That request could not be sent. Please email us instead.' };
+  }
+}
+
 async function updateEventSettings(
   eventId: string,
   changes: {

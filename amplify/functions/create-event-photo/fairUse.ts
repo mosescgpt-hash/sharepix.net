@@ -105,6 +105,43 @@ export const ABUSE_MARGIN = 0.85;
 export const CONCENTRATION_PHOTOS = 5_000;
 
 /**
+ * Photos at which the host is offered a button to ask for more room.
+ *
+ * A hundred short of CONCENTRATION_PHOTOS, deliberately. The point of asking
+ * early is that the conversation happens BEFORE anything is flagged rather than
+ * after — a host who finds the button at the same moment their event is
+ * flagged experiences it as a reaction to being in trouble, which is not what
+ * it is.
+ *
+ * It is not a warning and must not be worded as one. Nothing stops at 4,900,
+ * nothing stops at 5,000, and the hard block is nearly eight times further out.
+ */
+export const CAPACITY_ASK_PHOTOS = 4_900;
+
+/** Where a host's request for more room has got to. */
+export type CapacityRequestState = 'hidden' | 'available' | 'pending' | 'granted';
+
+/**
+ * Whether to show the host the "ask for more room" button, and in what state.
+ *
+ * Hidden below the threshold: offering more capacity to an event with forty
+ * photos invites a question nobody was asking and implies a limit they have
+ * not met. 'granted' outranks 'pending' so an admin's decision is what the
+ * host sees, whichever order the two fields were written in.
+ */
+export function capacityRequestState(facts: {
+  photoCount?: number | null;
+  capacityRequestedAt?: string | null;
+  capacityGrantedAt?: string | null;
+} | null | undefined): CapacityRequestState {
+  if (!facts) return 'hidden';
+  if (facts.capacityGrantedAt) return 'granted';
+  if (facts.capacityRequestedAt) return 'pending';
+  const photos = Math.max(0, facts.photoCount ?? 0);
+  return photos >= CAPACITY_ASK_PHOTOS ? 'available' : 'hidden';
+}
+
+/**
  * Photos per contributor above which an event stops looking like a party.
  *
  * A 300-guest wedding where a third of the room uploads produces perhaps twenty
