@@ -179,10 +179,36 @@ sanitizeFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_K
 // real size — uploads go browser to S3 directly, so no application server sees
 // the bytes and anything the browser reported would be a claim. The ledger row
 // is what makes the count idempotent under S3's at-least-once delivery.
-mediaTable.grantReadWriteData(sanitizeFn);
-eventTable.grantReadWriteData(sanitizeFn);
-sanitizeFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
-sanitizeFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+// BYTE ACCOUNTING IS DISABLED HERE, AND THIS IS WHY.
+//
+// These four lines shipped in #121 and broke every production deploy for four
+// merges. sanitize-upload is the S3 onUpload trigger, so it lives in the
+// STORAGE stack; granting it data-stack tables made storage depend on data,
+// while data has always depended on storage for the bucket. CloudFormation
+// refuses a cycle between nested stacks, and synthesis does not detect one —
+// so CI stayed green while nothing reached production.
+//
+// `resourceGroupName: 'data'` is the documented workaround and does NOT work
+// here: it only reverses the cycle, because the storage stack then needs the
+// trigger's ARN. Verified with scripts/check-stack-cycles.mjs rather than
+// assumed.
+//
+// The handler already guards on these env vars being absent
+// (`if (!MEDIA_TABLE || !EVENT_TABLE) return;`), so removing them makes the
+// accounting a clean no-op rather than an error. What that costs: photoBytes,
+// videoBytes and derivedBytes stay at zero, so fair use falls back to photo
+// COUNT thresholds, which create-event-photo still maintains. The byte
+// thresholds simply never fire. Nothing else in #121-#124 depends on this.
+//
+// The real fix is to decouple the two stacks rather than to squeeze the
+// dependency into a different shape: sanitize-upload publishes to a queue in
+// the storage stack, and a data-stack consumer does the accounting. That is
+// data -> storage, the direction that is already allowed. It is a new queue
+// and a new function, so it is a deliberate change rather than something to
+// slip into a hotfix.
+//
+// scripts/check-stack-cycles.mjs now fails the build on any cycle, so this
+// class of failure cannot reach production silently again.
 
 // Signs R2 URLs for the gallery and downloads. Reads the event row to decide
 // what a caller may have, and holds the same R2 credentials as the mirror —
