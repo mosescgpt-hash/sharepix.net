@@ -3,6 +3,8 @@
  * an event stamps its tier at creation precisely so a later pricing change
  * cannot retroactively alter what someone already paid for.
  */
+import { entitledVideoLimit } from './planLimits';
+
 export type TierId = 'free' | 'plus' | 'event' | 'starter' | 'standard' | 'premium';
 
 export interface PricingTier {
@@ -142,10 +144,19 @@ const SELLABLE_TIERS: PricingTier[] = [
   },
   {
     id: 'plus',
-    // Displayed as "Event" because it is the only plan; the id stays `plus`
-    // for the reason above. The retired $39 tier below is the one that was
-    // called Event, so its display name is disambiguated rather than its id.
-    name: 'Event',
+    // "Full Event", not "Event". The plan was called Event, which named the
+    // thing it applies to rather than saying anything about it — the same word
+    // whether it cost $39 or $79, and no help at all beside "Free event",
+    // where the whole question is what the money buys. "Full" is the one word
+    // that changes between the two names and it is exactly the difference.
+    //
+    // It also disambiguates the receipt. TIER_PRICING in stripe-checkout named
+    // both this plan and the retired $39 tier "SharePix Event", so two events
+    // bought at two prices appeared identically on a card statement.
+    //
+    // The id stays `plus` for the reason above. Only the display name moves,
+    // so nothing an event already carries is affected.
+    name: 'Full Event',
     price: 79,
     // Unlimited, and meant.
     //
@@ -210,6 +221,12 @@ const RETIRED_TIERS: PricingTier[] = [
     // The $39 tier from the two-plan lineup, retired at exactly what it was
     // sold for. Its window is 60 days because that change was global and
     // applied to every event; everything else here is what a buyer was shown.
+    //
+    // Still "(original)" even though the sellable plan is now "Full Event" and
+    // no longer collides with it. A host who bought this saw "Event (original)"
+    // on their dashboard the last time they looked, and renaming a plan
+    // somebody already paid for to make a comment tidier is not a trade worth
+    // making.
     id: 'event',
     name: 'Event (original)',
     price: 39,
@@ -417,12 +434,17 @@ export function liveSlideshowAvailable(event: {
  * reservation in create-event-photo, which this only mirrors.
  */
 export function videosRemaining(event: {
+  tier?: string | null;
   videoLimit?: number | null;
   extraVideoCredits?: number | null;
   videoCount?: number | null;
 }): number | null {
-  if (event.videoLimit == null) return null; // pre-limit event, or unlimited
-  const limit = event.videoLimit + (event.extraVideoCredits ?? 0);
+  // The stamped limit is a floor, not a ceiling — the same rule the upload
+  // handler enforces. Reading the row directly here would show a guest a
+  // smaller allowance than the server would actually accept.
+  const videoLimit = entitledVideoLimit(event);
+  if (videoLimit == null) return null; // pre-limit event, or unlimited
+  const limit = videoLimit + (event.extraVideoCredits ?? 0);
   return Math.max(0, limit - (event.videoCount ?? 0));
 }
 

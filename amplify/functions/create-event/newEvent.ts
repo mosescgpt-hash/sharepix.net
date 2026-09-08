@@ -51,8 +51,10 @@ export interface TierPlan {
  * so the next reprice cannot leave this file behind quietly.
  */
 export const TIER_PLANS: Record<string, TierPlan> = {
-  // On sale. `plus` is the single paid plan, displayed as "Event"; see the
-  // note in lib/pricing.ts for why it kept that id instead of taking `event`.
+  // On sale. `plus` is the single paid plan, displayed as "Full Event"; see
+  // the note in lib/pricing.ts for why it kept that id instead of taking
+  // `event`. Nothing here reads the display name — this map is ids and
+  // numbers, which is why renaming the plan does not touch it.
   free: { priceCents: 0, photoLimit: 50, videoLimit: 1, accessDays: 60 + 30 },
   // photoLimit null means unlimited, and is the number actually stamped on the
   // row. Bounded by retention and fair use rather than by a count — see

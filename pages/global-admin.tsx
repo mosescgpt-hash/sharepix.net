@@ -40,6 +40,7 @@ import {
 } from '@/lib/api';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
+import { entitledPhotoLimit, limitsAreStale } from '@/lib/planLimits';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { canTransition } from '@/lib/researchIncentive';
@@ -57,6 +58,31 @@ import {
 } from '@/lib/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The section index at the top of the page.
+ *
+ * Order matches the page, so the index reads as a map of what is below rather
+ * than a menu with its own opinion. Every `id` here must exist as an `id` on a
+ * heading — `__tests__/global-admin-nav.test.ts` fails if one does not, because
+ * a jump link to a missing anchor is worse than no link: it silently does
+ * nothing and the operator concludes the control is not there.
+ */
+const ADMIN_SECTIONS: Array<{ id: string; label: string }> = [
+  { id: 'payments', label: 'Payments' },
+  { id: 'users', label: 'Users' },
+  { id: 'refunds', label: 'Refunds' },
+  { id: 'storage', label: 'Storage and fair use' },
+  { id: 'report-recipient', label: 'Report recipient' },
+  { id: 'testimonials', label: 'Ratings' },
+  { id: 'jobs', label: 'Scheduled jobs' },
+  { id: 'rewards', label: 'Research rewards' },
+  { id: 'free-claims', label: 'Free event claims' },
+  { id: 'print-check', label: 'Print check' },
+  { id: 'alert-check', label: 'Alert email check' },
+  { id: 'events', label: 'Events' },
+  { id: 'discounts', label: 'Discount codes' },
+];
 
 /** Upload-window end date that lands an event in a chosen lifecycle phase (testing). */
 function simulateWindowEnd(event: QREvent, phase: string): string | null {
@@ -779,7 +805,7 @@ function GlobalAdminPage() {
 
   async function handleAddCredits(event: QREvent) {
     const input = window.prompt(
-      `Add how many extra photos to “${event.name}”?\n\nPlan limit: ${event.photoLimit ?? 'unlimited'} · Current add-on: ${event.extraPhotoCredits ?? 0}\n\nUse a negative number to remove add-on capacity.`,
+      `Add how many extra photos to “${event.name}”?\n\nPlan limit: ${entitledPhotoLimit(event) ?? 'unlimited'} · Current add-on: ${event.extraPhotoCredits ?? 0}\n\nUse a negative number to remove add-on capacity.`,
       '100',
     );
     if (input === null) return;
@@ -926,6 +952,28 @@ function GlobalAdminPage() {
               </button>
             </div>
 
+            {/* This page is fifteen stacked sections deep and the two an
+                operator actually needs on a given day — the report recipient
+                and the job runners — sit in the middle of it, above a list of
+                every event ever created. A control nobody can find is not a
+                shipped control. Plain anchors rather than tabs: everything
+                stays on one page, Ctrl-F still works, and there is no state to
+                get wrong. */}
+            <nav aria-label="Sections" className="mt-6 border border-charcoal/15 p-3">
+              <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                {ADMIN_SECTIONS.map((section) => (
+                  <li key={section.id}>
+                    <a
+                      href={`#${section.id}`}
+                      className="text-charcoal/70 underline-offset-4 transition hover:text-charcoal hover:underline"
+                    >
+                      {section.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
             {error ? (
               <Notice tone="error" className="mt-6">
                 {error}
@@ -984,7 +1032,7 @@ function GlobalAdminPage() {
 
             <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5">
               <div className="flex flex-col gap-1">
-                <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Payments — test mode</h2>
+                <h2 id="payments" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Payments — test mode</h2>
                 <p className="text-sm text-charcoal/70">
                   Run a real Stripe checkout with the test card <span className="font-mono">4242 4242 4242 4242</span>{' '}
                   (any future date / any CVC). No real money moves. Events stay free during the pilot — this only
@@ -1013,7 +1061,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">User management</h2>
+              <h2 id="users" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">User management</h2>
               <p className="text-sm text-charcoal/70">
                 Reset a host&apos;s password (they get an email to set a new one — this also lets
                 them back in if they&apos;re locked out), or enable/disable an account.
@@ -1065,7 +1113,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Refunds</h2>
+              <h2 id="refunds" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refunds</h2>
               <p className="text-sm text-charcoal/70">
                 Guest Upload Promise claims and any other money going back.{' '}
                 <strong>Nothing here issues a refund.</strong> Approve a claim, refund the card
@@ -1134,7 +1182,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Storage and fair use</h2>
+              <h2 id="storage" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Storage and fair use</h2>
               <p className="text-sm text-charcoal/70">
                 Events by what they actually store. A flag here means{' '}
                 <strong>look at it</strong>, not <strong>stop it</strong> — a big wedding
@@ -1277,7 +1325,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>
+              <h2 id="report-recipient" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>
               <p className="text-sm text-charcoal/70">
                 Where the monthly analytics report goes. Changing it here takes effect on
                 the next run — no deploy.
@@ -1321,7 +1369,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+              <h2 id="testimonials" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Ratings and testimonials
               </h2>
               <p className="text-sm text-charcoal/70">
@@ -1476,7 +1524,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Scheduled jobs</h2>
+              <h2 id="jobs" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Scheduled jobs</h2>
               <p className="text-sm text-charcoal/70">
                 The nightly job runs at 14:00 UTC and the report on the 1st of the month.
                 These run the same functions now, so you can see what they decide without
@@ -1528,7 +1576,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
+              <h2 id="rewards" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Research rewards
               </h2>
               <p className="text-sm text-charcoal/70">
@@ -1592,7 +1640,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
+              <h2 id="free-claims" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
               <p className="text-sm text-charcoal/70">
                 One free event per account, and taking it is permanent — the claim is not
                 released when the event is deleted or expires, because releasing it on deletion
@@ -1652,7 +1700,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Print provider check</h2>
+              <h2 id="print-check" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Print provider check</h2>
               <p className="text-sm text-charcoal/70">
                 Asks Prodigi to price one of each print we sell. This only requests a{' '}
                 <strong>quote</strong> — nothing is printed, nothing is ordered and nothing is
@@ -1679,7 +1727,7 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
-              <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Alert email check</h2>
+              <h2 id="alert-check" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Alert email check</h2>
               <p className="text-sm text-charcoal/70">
                 Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
                 embedded preview, same buttons a host would see. Nothing is flagged and no
@@ -1709,7 +1757,7 @@ function GlobalAdminPage() {
               <section>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="font-sans text-2xl font-bold tracking-[-0.02em]">Events</h2>
+                    <h2 id="events" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Events</h2>
                     <p className="text-sm text-charcoal/60">
                       Open a host dashboard, archive an event, or restore one that was
                       archived.
@@ -1775,10 +1823,16 @@ function GlobalAdminPage() {
                           </h3>
                           <p className="mt-1 text-sm text-charcoal/60">
                             {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
-                            {event.photoLimit == null
+                            {entitledPhotoLimit(event) == null
                               ? ' photos (unlimited)'
-                              : ` / ${event.photoLimit + (event.extraPhotoCredits ?? 0)} photos`}
+                              : ` / ${entitledPhotoLimit(event)! + (event.extraPhotoCredits ?? 0)} photos`}
                             {event.extraPhotoCredits ? ` (+${event.extraPhotoCredits} add-on)` : ''}
+                            {/* The row still carries the smaller number it was
+                                stamped with. Uploads already go by the
+                                entitlement, so this is stale rather than
+                                broken — but an operator reading a capacity list
+                                should be told which it is. */}
+                            {limitsAreStale(event) ? ' · row limits stale' : ''}
                           </p>
                           <p className="mt-1 text-xs text-charcoal/60">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'} ·{' '}
@@ -1849,7 +1903,7 @@ function GlobalAdminPage() {
                           <Link href={`/event/${event.id}/admin`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
                             Manage
                           </Link>
-                          {event.photoLimit != null ? (
+                          {entitledPhotoLimit(event) != null ? (
                             <button
                               type="button"
                               disabled={working === `credits-${event.id}`}
@@ -1929,7 +1983,7 @@ function GlobalAdminPage() {
               </section>
 
               <section>
-                <h2 className="font-sans text-2xl font-bold tracking-[-0.02em]">Discount codes</h2>
+                <h2 id="discounts" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Discount codes</h2>
                 <p className="text-sm text-charcoal/60">
                   Take a percentage off anything paid on the site. Default usage is one redemption.
                 </p>

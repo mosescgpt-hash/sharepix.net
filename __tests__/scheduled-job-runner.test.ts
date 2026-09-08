@@ -65,15 +65,27 @@ describe('what the operator is told', () => {
     expect(monthly).toContain('could not be emailed');
   });
 
+  /**
+   * The jobs section, located by its anchor id rather than by its heading text.
+   *
+   * Slicing on the words "Scheduled jobs" broke the moment the page grew a
+   * section index that also contains those words: the slice started at the nav
+   * link and ended before the section it was meant to read, so both assertions
+   * failed on a page where nothing they check had changed. The id is on exactly
+   * one element and the nav test asserts it exists.
+   */
+  const jobsSection = () => admin.slice(admin.indexOf('id="jobs"'), admin.indexOf('id="rewards"'));
+
   it('warns before running that the nightly job sends real mail', () => {
     // It is the real job, not a rehearsal, and the button has to say so.
-    const section = admin.slice(admin.indexOf('Scheduled jobs'), admin.indexOf('Research rewards'));
+    const section = jobsSection();
+    expect(section.length).toBeGreaterThan(0);
     expect(section).toMatch(/sends real\s*\n?\s*mail/i);
     expect(section).toMatch(/never sent twice/i);
   });
 
   it('mentions when each job would have run on its own', () => {
-    const section = admin.slice(admin.indexOf('Scheduled jobs'), admin.indexOf('Research rewards'));
+    const section = jobsSection();
     expect(section).toContain('14:00 UTC');
     expect(section).toMatch(/1st of the month/i);
   });

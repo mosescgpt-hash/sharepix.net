@@ -25,6 +25,21 @@ const MEDIA_TABLE = process.env.MEDIA_TABLE_NAME as string;
 const BUCKET = process.env.BUCKET_NAME as string;
 
 /**
+ * The tables holding what people wrote, as opposed to what they uploaded.
+ *
+ * A table whose name is not configured is SKIPPED, never guessed at. The
+ * alternative — deriving a table name — would either delete from the wrong
+ * table or from none while reporting success, and both are worse than a run
+ * that says it could not do part of its job.
+ */
+const COMPANION_TABLES: Array<{ label: string; name: string }> = [
+  { label: 'PhotoReaction', name: process.env.REACTION_TABLE_NAME ?? '' },
+  { label: 'PhotoComment', name: process.env.COMMENT_TABLE_NAME ?? '' },
+  { label: 'GuestBookEntry', name: process.env.GUEST_BOOK_TABLE_NAME ?? '' },
+  { label: 'Moment', name: process.env.MOMENT_TABLE_NAME ?? '' },
+];
+
+/**
  * The switch. Nothing is deleted unless this is exactly 'true'.
  *
  * The same posture as EMAIL_SENDING_ENABLED, for a stronger reason: that one
@@ -161,6 +176,62 @@ async function photosByEvent(): Promise<Map<string, PhotoRow[]>> {
   return byEvent;
 }
 
+/**
+ * Row ids in one companion table, grouped by the event they belong to.
+ *
+ * One scan per table, filtered to the events actually being reclaimed. Same
+ * reasoning as photosByEvent: no function here queries a secondary index, the
+ * generated index name cannot be confirmed without a deploy, and this runs
+ * weekly against tables bounded by the retention it enforces. A FilterExpression
+ * does the narrowing server-side so the pages coming back are small even when
+ * the table is not.
+ */
+async function rowsByEvent(
+  tableName: string,
+  eventIds: Set<string>,
+): Promise<Map<string, string[]>> {
+  const byEvent = new Map<string, string[]>();
+  if (!tableName || eventIds.size === 0) return byEvent;
+
+  // `eventId IN (:e0, :e1, ...)`. The list is bounded by MAX_EVENTS_PER_RUN,
+  // which is far below the 100 operands DynamoDB allows, so this cannot grow
+  // into an expression the service rejects.
+  const ids = [...eventIds];
+  const idValues: Record<string, AttributeValue> = {};
+  ids.forEach((id, i) => {
+    idValues[`:e${i}`] = { S: id };
+  });
+  const filter = `eventId IN (${ids.map((_, i) => `:e${i}`).join(', ')})`;
+
+  let startKey: Record<string, AttributeValue> | undefined;
+  do {
+    const page = await dynamo.send(
+      new ScanCommand({
+        TableName: tableName,
+        ExclusiveStartKey: startKey,
+        ProjectionExpression: '#id, eventId',
+        FilterExpression: filter,
+        ExpressionAttributeValues: idValues,
+        // `id` is a reserved word; eventId is not, but aliasing one and not the
+        // other is the sort of asymmetry that reads as a mistake later.
+        ExpressionAttributeNames: { '#id': 'id' },
+      }),
+    );
+    for (const item of page.Items ?? []) {
+      const eventId = item.eventId?.S ?? '';
+      const id = item.id?.S ?? '';
+      // A row with no event id belongs to no event we can prove, so it is left
+      // alone. Deleting rows we cannot attribute is not tidying up.
+      if (!eventId || !id || !eventIds.has(eventId)) continue;
+      const rows = byEvent.get(eventId) ?? [];
+      rows.push(id);
+      byEvent.set(eventId, rows);
+    }
+    startKey = page.LastEvaluatedKey;
+  } while (startKey);
+  return byEvent;
+}
+
 /** Delete one stored object from both stores. Best-effort in both. */
 async function deleteObject(key: string): Promise<void> {
   const store = r2();
@@ -184,6 +255,7 @@ export const handler = async () => {
     eventsReclaimed: 0,
     photosDeleted: 0,
     objectsDeleted: 0,
+    recordsDeleted: 0,
     bytesFreed: 0,
     skipped: [],
     dryRun: !RECLAIM_ENABLED,
@@ -219,9 +291,38 @@ export const handler = async () => {
   const batch = due.slice(0, MAX_EVENTS_PER_RUN);
   const photos = batch.length > 0 ? await photosByEvent() : new Map<string, PhotoRow[]>();
 
+  // What guests wrote: reactions, comments, guest book entries and moments.
+  // Gathered once for the whole batch, before anything is deleted, for the same
+  // reason the verdicts are: a failure partway through leaves a coherent state.
+  //
+  // A table whose name is not configured is reported and skipped. It must never
+  // be silently treated as empty — that would let a deployment missing one
+  // environment variable delete an event's photos and report success while
+  // every comment written under them survived.
+  const eventIds = new Set(batch.map((event) => event.id));
+  const companions: Array<{ label: string; name: string; rows: Map<string, string[]> }> = [];
+  for (const table of COMPANION_TABLES) {
+    if (!table.name) {
+      console.error('Companion table is not configured; its rows will NOT be reclaimed', {
+        at: nowISO,
+        table: table.label,
+      });
+      outcome.skipped.push({ eventId: '-', reason: `${table.label}-not-configured` });
+      continue;
+    }
+    companions.push({
+      label: table.label,
+      name: table.name,
+      rows: batch.length > 0 ? await rowsByEvent(table.name, eventIds) : new Map(),
+    });
+  }
+
   for (const event of batch) {
     const rows = photos.get(event.id) ?? [];
     const keys = rows.flatMap((row) => storedKeysOf(row));
+    const records = companions.flatMap((table) =>
+      (table.rows.get(event.id) ?? []).map((id) => ({ table: table.name, label: table.label, id })),
+    );
 
     if (!RECLAIM_ENABLED) {
       // Dry run: say exactly what would go, and change nothing. Note that
@@ -233,10 +334,18 @@ export const handler = async () => {
         tier: event.tier,
         photos: rows.length,
         objects: keys.length,
+        records: records.length,
+        // Broken out by table, because "412 records" tells an operator nothing
+        // about whether the comments are actually being reached.
+        recordsByTable: companions.map((table) => ({
+          table: table.label,
+          rows: (table.rows.get(event.id) ?? []).length,
+        })),
       });
       outcome.eventsReclaimed += 1;
       outcome.photosDeleted += rows.length;
       outcome.objectsDeleted += keys.length;
+      outcome.recordsDeleted += records.length;
       continue;
     }
 
@@ -250,6 +359,33 @@ export const handler = async () => {
         await dynamo
           .send(new DeleteItemCommand({ TableName: MEDIA_TABLE, Key: { id: { S: key } } }))
           .catch(() => undefined);
+      }
+    }
+
+    // What guests wrote goes before the photo records do.
+    //
+    // If this run dies partway through, the surviving state is photos whose
+    // comments are gone — recoverable, and the next run finishes it. The other
+    // order leaves comments attached to photos that no longer exist, which is
+    // the exact thing being fixed.
+    //
+    // A failure here sets `failed`, so mediaReclaimedAt stays unset and the
+    // event is retried rather than marked done with rows still in the table.
+    for (const record of records) {
+      try {
+        await dynamo.send(
+          new DeleteItemCommand({ TableName: record.table, Key: { id: { S: record.id } } }),
+        );
+        outcome.recordsDeleted += 1;
+      } catch (error) {
+        failed = true;
+        console.error('Could not delete a guest record during reclamation', {
+          at: nowISO,
+          eventId: event.id,
+          table: record.label,
+          recordId: record.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
