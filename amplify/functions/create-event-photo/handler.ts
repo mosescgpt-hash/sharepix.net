@@ -20,7 +20,7 @@ import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderatio
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
 import { contributorKey, contributorRowId } from './successfulEvent';
 import { assessUsage, fairUseConfig, windowExpired } from './fairUse';
-import { entitledPhotoLimit, entitledVideoLimit } from './planLimits';
+import { entitledPhotoLimit, entitledVideoBytes, entitledVideoLimit } from './planLimits';
 
 const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
@@ -80,6 +80,19 @@ type Handler = Schema['createEventPhoto']['functionHandler'];
 function toInt(value?: string): number | null {
   if (value === undefined) return null;
   const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Byte counters, which are stored as Float rather than Int.
+ *
+ * parseInt would silently truncate at the decimal point, and more importantly
+ * these routinely exceed what a 32-bit int holds — an event past 2.1 GB is
+ * ordinary, which is why the model field is a.float() in the first place.
+ */
+function toFloat(value?: string): number | null {
+  if (value === undefined) return null;
+  const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -465,6 +478,32 @@ export const handler: Handler = async (event) => {
   const effectiveVideoLimit =
     !isVideo || videoLimit === null ? null : videoLimit + extraVideoCredits;
 
+  // The video BUDGET, which is what the paid plan is actually sold in now.
+  //
+  // Checked rather than reserved, and that is a real difference. The count
+  // above moves atomically in the same update as photoCount, so it cannot be
+  // raced. Bytes cannot: a file's real size is not known until it has landed
+  // and sanitize-upload has measured it, so all this can ask is whether the
+  // event is ALREADY over budget. A burst of concurrent uploads therefore
+  // crosses the line by up to one file each, bounded by the 250 MB per-file
+  // ceiling — which is why the fair-use video thresholds sit above the sold
+  // figure rather than on it.
+  //
+  // The alternative is reserving the size the client claims, and the client is
+  // not trusted with anything else here; a declared size is a claim like any
+  // other, and one that pays to understate.
+  if (isVideo) {
+    const budget = entitledVideoBytes(planRow);
+    if (budget !== null) {
+      const usedBytes = toFloat(ev.videoBytes?.N) ?? 0;
+      if (usedBytes >= budget) {
+        throw new Error(
+          `This event has used its ${Math.round(budget / (1024 * 1024 * 1024))} GB of video. Photos are still welcome.`,
+        );
+      }
+    }
+  }
+
   // A limit of zero can't be expressed as a condition: `attribute_not_exists`
   // is true on an event that has never had a video, which would let the first
   // one through. Reject it up front instead.
@@ -535,6 +574,10 @@ export const handler: Handler = async (event) => {
       derivedBytes: Number(ev.derivedBytes?.N ?? '0'),
       // A stale window is a rate of zero, not the rate from an hour ago.
       windowCount: windowStale ? 0 : windowCount,
+      // Feeds the concentration rule. Zero here is the host-only case — a host
+      // uploading their photographer's gallery — which is flagged and never
+      // blocked on that signal alone. See isConcentrated in fairUse.
+      contributorCount: toInt(ev.contributorCount?.N) ?? 0,
       manualStatus: ev.usageStatus?.S ?? null,
     },
     fairUse,

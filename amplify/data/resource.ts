@@ -54,6 +54,10 @@ const schema = a.schema({
       // deliberate — events created before this existed are not retroactively
       // blocked.
       videoLimit: a.integer(),
+      // Video is sold as a byte budget on the paid plan rather than a count of
+      // clips. Float, not integer: 10 GB is well past what a 32-bit int holds,
+      // the same reason the byte counters are floats.
+      videoBytesLimit: a.float(),
       // Extra videos bought on top of the plan. Effective limit is
       // videoLimit + extraVideoCredits.
       extraVideoCredits: a.integer(),

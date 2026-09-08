@@ -2,6 +2,7 @@ import {
   CURRENT_PHOTO_LIMITS,
   CURRENT_VIDEO_LIMITS,
   entitledPhotoLimit,
+  entitledVideoBytes,
   entitledVideoLimit,
   limitsAreStale,
 } from '../lib/planLimits';
@@ -43,15 +44,33 @@ describe('the event the user actually reported', () => {
     expect(entitledPhotoLimit(stampedEvent)).toBeNull();
   });
 
-  it('leaves its video allowance exactly where it was', () => {
-    // Photos went unlimited. Videos did not, and nothing here may quietly make
-    // them so — video is the one upload whose cost is not bounded by resizing.
-    expect(entitledVideoLimit(stampedEvent)).toBe(30);
+  it('moves its video allowance from a count to a budget, never to nothing', () => {
+    // Photos went unlimited. Video did NOT, and nothing here may quietly make
+    // it so — video is the one upload whose cost is not bounded by resizing.
+    //
+    // What changed is the unit. The count is dropped (null = no count applies)
+    // and a 10 GB budget takes over, which is more than the 30-file count
+    // allowed at the 250 MB ceiling. The pair is the assertion: dropping the
+    // count without the budget arriving would be exactly the silent
+    // "unlimited video" this test exists to prevent.
+    expect(entitledVideoLimit(stampedEvent)).toBeNull();
+    expect(entitledVideoBytes(stampedEvent)).toBe(10 * 1024 ** 3);
+    expect(entitledVideoBytes(stampedEvent)!).toBeGreaterThan(30 * 250 * 1024 * 1024);
+  });
+
+  it('bounds video on every tier by a count or a budget', () => {
+    // The invariant behind the test above, stated for every plan at once.
+    for (const tier of ALL_TIERS) {
+      const row = { tier: tier.id, videoLimit: tier.videoLimit, videoBytesLimit: tier.videoBytesLimit };
+      const count = entitledVideoLimit(row);
+      const bytes = entitledVideoBytes(row);
+      expect(count !== null || bytes !== null).toBe(true);
+    }
   });
 
   it('is reported as stale so an operator can see why the row disagrees', () => {
     expect(limitsAreStale(stampedEvent)).toBe(true);
-    expect(limitsAreStale({ tier: 'plus', photoLimit: null, videoLimit: 30 })).toBe(false);
+    expect(limitsAreStale({ tier: 'plus', photoLimit: null, videoLimit: null })).toBe(false);
   });
 });
 
@@ -116,9 +135,11 @@ describe('what a guest is shown matches what the server will accept', () => {
   it('counts videos against the entitlement, not the stamped row', () => {
     // Showing a smaller allowance than the server would accept turns an upload
     // that would have worked into one the guest never attempts.
-    expect(
-      videosRemaining({ tier: 'plus', videoLimit: 30, videoCount: 10 }),
-    ).toBe(20);
+    // The paid plan has no video COUNT any more, so there is no number of
+    // videos remaining to show — the 10 GB budget is the limit and it is
+    // enforced on bytes. Null here means "not bounded by a count", which is
+    // what the guest should be told.
+    expect(videosRemaining({ tier: 'plus', videoLimit: 30, videoCount: 10 })).toBeNull();
     // A row stamped lower than the plan is now: the guest sees the real room.
     expect(
       videosRemaining({ tier: 'standard', videoLimit: 2, videoCount: 0 }),
@@ -129,9 +150,10 @@ describe('what a guest is shown matches what the server will accept', () => {
     expect(videosRemaining({ tier: 'plus' })).toBeNull();
   });
 
-  it('still honours add-on credits on top', () => {
+  it('still honours add-on credits on a plan that is bounded by a count', () => {
+    // A retired tier, since those are the ones a count still governs.
     expect(
-      videosRemaining({ tier: 'plus', videoLimit: 30, extraVideoCredits: 5, videoCount: 30 }),
+      videosRemaining({ tier: 'standard', videoLimit: 10, extraVideoCredits: 5, videoCount: 10 }),
     ).toBe(5);
   });
 });

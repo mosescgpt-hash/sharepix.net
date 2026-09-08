@@ -1,4 +1,10 @@
-import { ARCHIVE_DAYS, GALLERY_MONTHS, UPLOAD_WINDOW_DAYS, getTier } from '../lib/pricing';
+import {
+  ARCHIVE_DAYS,
+  GALLERY_MONTHS,
+  UPLOAD_WINDOW_DAYS,
+  VIDEO_GB_INCLUDED,
+  getTier,
+} from '../lib/pricing';
 import { INCENTIVE_AMOUNT_USD } from '../lib/researchIncentive';
 import { readSource } from './sourceGuards';
 
@@ -45,7 +51,9 @@ describe('the survey states the product we actually sell', () => {
     const paid = getTier('plus');
     expect(paid!.photoLimit).toBeNull();
     expect(doc).toContain('**unlimited photos**');
-    expect(doc).toContain(`**${paid!.videoLimit} videos**`);
+    expect(doc).toContain(`**${VIDEO_GB_INCLUDED} GB of video**`);
+    // Bounded by a budget rather than a count, but bounded either way.
+    expect(paid!.videoBytesLimit).toBeGreaterThan(0);
   });
 
   it('describes the free tier that now exists', () => {

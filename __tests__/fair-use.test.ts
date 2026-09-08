@@ -1,8 +1,11 @@
+import { VIDEO_GB_INCLUDED } from '../lib/pricing';
+import { MAX_VIDEO_SIZE_BYTES } from '../lib/validation';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ABUSE_MARGIN,
   BREAK_EVEN_STORAGE_GB,
+  isConcentrated,
   FAIR_USE_DEFAULTS,
   FAIR_USE_NOTICE,
   UNIT_ECONOMICS,
@@ -54,12 +57,76 @@ describe('what a threshold does', () => {
     // A 300-guest wedding legitimately producing thousands of photos must
     // upload exactly as freely as a small one. Throttling a paying customer
     // whose event went well is the expensive mistake here.
+    // contributorCount is set, because a real 300-guest wedding has one. An
+    // event this size with NO contributors is the host-only case, which is
+    // flagged harder — see the concentration tests below.
     const assessment = assessUsage({
       photoCount: FAIR_USE_DEFAULTS.photoReviewThreshold + 1,
       photoBytes: 3 * GB,
+      contributorCount: 90,
     });
     expect(assessment.blocked).toBe(false);
     expect(assessment.status).toBe('HIGH_USAGE');
+  });
+
+  describe('concentration: many photos, few people', () => {
+    const atScale = FAIR_USE_DEFAULTS.photoReviewThreshold + 1;
+
+    it('flags a host-only bulk upload without blocking it', () => {
+      // The case the obvious rule gets wrong. A host uploading their wedding
+      // photographer's gallery has zero guest contributors and looks exactly
+      // like somebody using the plan as a backup drive. Refusing it would
+      // refuse one of the more valuable things a host can do here.
+      const assessment = assessUsage({ photoCount: atScale, contributorCount: 0 });
+      expect(isConcentrated({ photoCount: atScale, contributorCount: 0 })).toBe(true);
+      expect(assessment.blocked).toBe(false);
+    });
+
+    it('blocks only when concentration arrives at machine rate', () => {
+      // Two weak signals agreeing. A photographer drags a folder in over
+      // minutes; a script sustains rates no room of people produces.
+      const assessment = assessUsage({
+        photoCount: atScale,
+        contributorCount: 1,
+        windowCount: FAIR_USE_DEFAULTS.velocityReviewPerMinute,
+      });
+      expect(assessment.blocked).toBe(true);
+      expect(assessment.status).toBe('RESTRICTED');
+    });
+
+    it('does not block a busy reception, which is fast but not concentrated', () => {
+      // The same velocity, spread across a room full of guests.
+      const assessment = assessUsage({
+        photoCount: atScale,
+        contributorCount: 120,
+        windowCount: FAIR_USE_DEFAULTS.velocityReviewPerMinute,
+      });
+      expect(assessment.blocked).toBe(false);
+    });
+
+    it('ignores concentration below the threshold entirely', () => {
+      // A small event where one person took all the photos is just a small
+      // event. This only asks the question once an event is unusually large.
+      expect(isConcentrated({ photoCount: 300, contributorCount: 1 })).toBe(false);
+      expect(
+        assessUsage({
+          photoCount: 300,
+          contributorCount: 1,
+          windowCount: FAIR_USE_DEFAULTS.velocityReviewPerMinute,
+        }).blocked,
+      ).toBe(false);
+    });
+
+    it('lets an admin clear a concentrated event', () => {
+      // A person who looked and judged it fine must be able to say so.
+      const facts = {
+        photoCount: atScale,
+        contributorCount: 1,
+        windowCount: FAIR_USE_DEFAULTS.velocityAbusePerMinute,
+        manualStatus: 'NORMAL',
+      };
+      expect(assessUsage(facts).blocked).toBe(false);
+    });
   });
 
   it('escalates to REVIEW only when more than one threshold is crossed', () => {
@@ -143,14 +210,29 @@ describe('what a threshold does', () => {
     expect(Math.abs(impliedGb - abuseGb) / abuseGb).toBeLessThan(0.05);
   });
 
-  it('sets video thresholds a real event can actually reach', () => {
-    // Both were dead config: the plan allows 30 videos at 250 MB, so an event
-    // cannot exceed 7.5 GB of video, and the thresholds were 20 GB and 200 GB.
-    const maxVideoGb = (30 * 250) / 1024;
-    expect(FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB).toBeLessThan(maxVideoGb);
-    // Abuse stays above the plan ceiling, because reaching it means an admin
-    // granted extra credits — which is a decision, not abuse.
-    expect(FAIR_USE_DEFAULTS.videoStorageAbuseBytes / GB).toBeGreaterThan(maxVideoGb);
+  it('never flags an event for using the video it paid for', () => {
+    // The invariant inverted when video started being SOLD in gigabytes.
+    //
+    // Before, the plan's real ceiling was 30 files x 250 MB = 7.5 GB and the
+    // thresholds sat at 20 GB and 200 GB — dead config, unreachable by any
+    // event. The fix looked like "bring them below the ceiling". That would
+    // now be wrong in the opposite and worse direction: the plan sells 10 GB,
+    // so a threshold under it flags a host for using their allowance.
+    //
+    // Both thresholds must sit ABOVE the sold budget. The gap between them and
+    // it is what absorbs the overshoot from bytes being measured after the
+    // fact rather than reserved — see videoBytesLimit in lib/pricing.ts.
+    const soldGb = VIDEO_GB_INCLUDED;
+    expect(FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB).toBeGreaterThan(soldGb);
+    expect(FAIR_USE_DEFAULTS.videoStorageAbuseBytes / GB).toBeGreaterThan(
+      FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB,
+    );
+    // And the overshoot they absorb is bounded by the per-file ceiling, so the
+    // gap only has to be a handful of files wide, not a multiple.
+    const overshootGb = (MAX_VIDEO_SIZE_BYTES / GB) * 8;
+    expect(FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB - soldGb).toBeGreaterThan(
+      overshootGb,
+    );
   });
 
   it('counts video against its own ceiling as well as the total', () => {

@@ -137,7 +137,7 @@ export default function TermsPage() {
               </li>
               <li>
                 The paid event includes <strong>unlimited photo uploads</strong> and unlimited
-                guests. Video is not unlimited: each event includes a set number of videos, shown
+                guests. Video is not unlimited: each event includes a fixed amount of video, shown
                 on the <a href="/pricing">pricing page</a>, because a video is served at full size
                 every time it is played and so costs differently from a photo.
               </li>

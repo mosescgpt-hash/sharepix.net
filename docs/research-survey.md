@@ -34,8 +34,8 @@ Stated plainly so the form's preamble can be copied from here, and so the test
 has something concrete to check.
 
 - The paid plan is **Full Event**, **$79**, one-time. No subscription.
-- It includes **unlimited photos** under fair use, and **30 videos** (up to
-  250 MB each). Video is capped because it is served at full size on every play.
+- It includes **unlimited photos** under fair use, and **10 GB of video** (up to
+  250 MB per file). Video is capped because it is served at full size on every play.
 - **60-day upload window**, extendable in 30-day blocks for half the plan price.
 - After the window closes the gallery stays up **12 months** — guests at reduced
   resolution, the host at full access with downloads.

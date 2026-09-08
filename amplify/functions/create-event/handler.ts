@@ -290,6 +290,12 @@ export const handler: Handler = async (event) => {
   // so the attribute is left off rather than written as null.
   if (row.photoLimit !== null) item.photoLimit = { N: String(row.photoLimit) };
   if (row.videoLimit !== null) item.videoLimit = { N: String(row.videoLimit) };
+  // Stamped like every other limit, so a later change to the budget cannot
+  // retroactively shrink what this event was sold. entitledVideoBytes raises it
+  // if the plan later becomes more generous.
+  if (row.videoBytesLimit !== null) {
+    item.videoBytesLimit = { N: String(row.videoBytesLimit) };
+  }
 
   // Claim before writing, so two simultaneous requests cannot both produce a
   // free event; release if the write then fails, so a failed creation does not
@@ -316,6 +322,7 @@ export const handler: Handler = async (event) => {
     location: row.location,
     photoLimit: row.photoLimit,
     videoLimit: row.videoLimit,
+    videoBytesLimit: row.videoBytesLimit,
     accessExpiresAt: row.accessExpiresAt,
     uploadWindowEndsAt: row.uploadWindowEndsAt,
     paid: row.paid,

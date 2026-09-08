@@ -21,6 +21,24 @@ export interface PricingTier {
    * per-file ceiling is what bounds the bytes behind it.
    */
   videoLimit: number | null; // null = unlimited
+  /**
+   * Gigabytes of video the plan includes, or null to be bound by the count.
+   *
+   * The paid plan is now sold in gigabytes rather than as a count of clips,
+   * because a count is only meaningful if every clip is the same size and they
+   * are not: thirty 20-second clips is 0.6 GB and thirty four-minute ones is
+   * 7.5 GB. The same "30 videos" bought a host twelve times more or less
+   * depending on how they happened to film.
+   *
+   * ENFORCEMENT IS APPROXIMATE, BY NECESSITY. A photo or video's real size is
+   * only known once the object has landed and sanitize-upload has measured it,
+   * so the check is "is this event already over its budget?" rather than an
+   * atomic reservation like the count. A burst of concurrent uploads can
+   * therefore cross the line by up to one file each, bounded by the 250 MB
+   * per-file ceiling. The fair-use video thresholds sit above the sold figure
+   * to absorb exactly that.
+   */
+  videoBytesLimit: number | null;
   accessDays: number;
   accessLabel: string;
   // Lifecycle (all measured from when the upload window closes):
@@ -84,6 +102,20 @@ export const EXTENSION_DAYS = 30;
  * months, so the promise is met early rather than missed by a rounding
  * argument about when an event "started".
  */
+/**
+ * Gigabytes of video the paid plan includes, and the number we advertise.
+ *
+ * Sold in gigabytes rather than as a count of clips because a count is only
+ * fair if every clip is the same size. Thirty 20-second clips is 0.6 GB;
+ * thirty four-minute ones is 7.5 GB. "30 videos" bought a host twelve times
+ * more or less depending on how they happened to film, and the shorter-clip
+ * host was the one being short-changed.
+ *
+ * Ten rather than the 7.5 the old count topped out at, so nobody moving from
+ * the count to the budget ends up with less than they were sold.
+ */
+export const VIDEO_GB_INCLUDED = 10;
+
 export const GALLERY_MONTHS = 12;
 const GALLERY_DAYS = 365;
 // After the host-retention period ends, photos sit in a hidden, admin-only
@@ -126,6 +158,9 @@ const SELLABLE_TIERS: PricingTier[] = [
     // plan does it — and video is the one upload whose cost is not bounded by
     // resizing, so this is the number that has to stay small.
     videoLimit: 1,
+    // One video's worth. The count binds first on this plan; the budget is
+    // here so every tier answers the same question.
+    videoBytesLimit: 250 * 1024 * 1024,
     // The same 60-day upload window as the paid plan, then a 30-day gallery
     // rather than twelve months. The window is what makes the product work at
     // an event; the twelve months is a large part of what people pay for.
@@ -181,7 +216,11 @@ const SELLABLE_TIERS: PricingTier[] = [
     // video allowance should not be set before real usage and cost data exist.
     // There is none yet. When there is, the honest unit is gigabytes rather
     // than a count, because video sizes vary by an order of magnitude.
-    videoLimit: 30,
+    // No count. The budget below is the limit, and a count on top of it would
+    // bind first for anyone filming short clips — which is the unfairness the
+    // switch to gigabytes exists to remove.
+    videoLimit: null,
+    videoBytesLimit: VIDEO_GB_INCLUDED * 1024 * 1024 * 1024,
     accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
     accessLabel: '60-day upload window',
     retentionDays: GALLERY_DAYS,
@@ -192,7 +231,7 @@ const SELLABLE_TIERS: PricingTier[] = [
     // "Best value" against a free trial would be an odd thing to claim.
     highlight: true,
     features: [
-      'Unlimited photos, and up to 30 videos',
+      `Unlimited photos, and up to ${VIDEO_GB_INCLUDED} GB of video`,
       'Unlimited guests — no app, no accounts',
       '60-day upload window (extend +30 days anytime)',
       'Gallery stays up for 12 months after uploads close',
@@ -232,6 +271,7 @@ const RETIRED_TIERS: PricingTier[] = [
     price: 39,
     photoLimit: 1000,
     videoLimit: 10,
+    videoBytesLimit: null,
     accessDays: UPLOAD_WINDOW_DAYS + GALLERY_DAYS,
     accessLabel: '60-day upload window',
     retentionDays: GALLERY_DAYS,
@@ -254,6 +294,7 @@ const RETIRED_TIERS: PricingTier[] = [
     price: 19,
     photoLimit: 100,
     videoLimit: 2,
+    videoBytesLimit: null,
     accessDays: 14,
     accessLabel: '30-day upload window',
     retentionDays: 21,
@@ -275,6 +316,7 @@ const RETIRED_TIERS: PricingTier[] = [
     price: 39,
     photoLimit: 1000,
     videoLimit: 10,
+    videoBytesLimit: null,
     accessDays: 90,
     accessLabel: '30-day upload window',
     retentionDays: 90,
@@ -298,6 +340,7 @@ const RETIRED_TIERS: PricingTier[] = [
     price: 79,
     photoLimit: null,
     videoLimit: 30,
+    videoBytesLimit: null,
     accessDays: 365,
     accessLabel: '30-day upload window',
     retentionDays: 365,
@@ -334,11 +377,13 @@ export const CORPORATE_PLAN = {
   retentionDays: 365,
   guestLowResDays: 30,
   // Photos are unlimited on corporate events, videos are not — see PricingTier.
-  videoLimit: 30,
+  // Sold as a budget like the paid per-event plan, for the same reason.
+  videoLimit: null,
+  videoBytesLimit: VIDEO_GB_INCLUDED * 1024 * 1024 * 1024,
   accessLabel: 'Multiple events under one account',
   features: [
     'Multiple active events',
-    'Unlimited photos and 30 videos per event',
+    `Unlimited photos and ${VIDEO_GB_INCLUDED} GB of video per event`,
     'Central event and storage dashboard',
     'Custom company branding',
     'Guest book — signed notes, photos, and video messages',

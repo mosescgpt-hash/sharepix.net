@@ -34,6 +34,12 @@ export interface TierPlan {
   photoLimit: number | null;
   /** null = unlimited. Videos are capped separately; see lib/pricing.ts. */
   videoLimit: number | null;
+  /**
+   * Bytes of video the plan includes, or null when the count is the limit.
+   * The paid plan is sold as 10 GB rather than 30 clips — see VIDEO_GB_INCLUDED
+   * in lib/pricing.ts for why a count was the wrong unit.
+   */
+  videoBytesLimit: number | null;
   /** How long the gallery stays reachable, from creation. */
   accessDays: number;
 }
@@ -55,17 +61,18 @@ export const TIER_PLANS: Record<string, TierPlan> = {
   // the note in lib/pricing.ts for why it kept that id instead of taking
   // `event`. Nothing here reads the display name — this map is ids and
   // numbers, which is why renaming the plan does not touch it.
-  free: { priceCents: 0, photoLimit: 50, videoLimit: 1, accessDays: 60 + 30 },
+  free: { priceCents: 0, photoLimit: 50, videoLimit: 1, videoBytesLimit: 250 * 1024 * 1024, accessDays: 60 + 30 },
   // photoLimit null means unlimited, and is the number actually stamped on the
   // row. Bounded by retention and fair use rather than by a count — see
   // lib/pricing.ts for the reasoning and lib/fairUse.ts for the safeguards.
-  plus: { priceCents: 7900, photoLimit: null, videoLimit: 30, accessDays: 60 + 365 },
+  // videoLimit null: the paid plan is sold as a 10 GB budget, not a count.
+  plus: { priceCents: 7900, photoLimit: null, videoLimit: null, videoBytesLimit: 10 * 1024 * 1024 * 1024, accessDays: 60 + 365 },
   // Retired, but still creatable so an event that already carries one can be
   // paid for. Their access windows are the ones those plans were sold with.
-  event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 60 + 365 },
-  starter: { priceCents: 1900, photoLimit: 100, videoLimit: 2, accessDays: 14 },
-  standard: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, accessDays: 90 },
-  premium: { priceCents: 7900, photoLimit: null, videoLimit: 30, accessDays: 365 },
+  event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, videoBytesLimit: null, accessDays: 60 + 365 },
+  starter: { priceCents: 1900, photoLimit: 100, videoLimit: 2, videoBytesLimit: null, accessDays: 14 },
+  standard: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, videoBytesLimit: null, accessDays: 90 },
+  premium: { priceCents: 7900, photoLimit: null, videoLimit: 30, videoBytesLimit: null, accessDays: 365 },
 };
 
 /**
@@ -95,7 +102,8 @@ export function isTrialTier(tier: string): boolean {
 export const CORPORATE_EVENT_PLAN: TierPlan = {
   priceCents: 0,
   photoLimit: null,
-  videoLimit: 30,
+  videoLimit: null,
+  videoBytesLimit: 10 * 1024 * 1024 * 1024,
   accessDays: 60 + 365,
 };
 
@@ -407,6 +415,7 @@ export interface NewEventRow {
   tier: string;
   photoLimit: number | null;
   videoLimit: number | null;
+  videoBytesLimit: number | null;
   accessExpiresAt: string;
   uploadWindowEndsAt: string;
   paid: boolean;
@@ -452,6 +461,7 @@ export function newEventRow({
     tier: id,
     photoLimit: plan.photoLimit,
     videoLimit: plan.videoLimit,
+    videoBytesLimit: plan.videoBytesLimit,
     accessExpiresAt: new Date(now.getTime() + plan.accessDays * DAY_MS).toISOString(),
     uploadWindowEndsAt: new Date(now.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS).toISOString(),
     paid: active,

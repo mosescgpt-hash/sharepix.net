@@ -11,6 +11,7 @@ import {
   canPurchaseFor,
   isTrialTier,
   UPLOAD_WINDOW_DAYS,
+  VIDEO_GB_INCLUDED,
 } from '../lib/pricing';
 import { guestBookAvailable } from '../lib/guestBook';
 import {
@@ -227,7 +228,10 @@ describe('the unlimited claim, and what makes it honest', () => {
     // on every play. Video is the one upload whose cost a photo cap never
     // bounded, and no customer-facing video allowance should be set before real
     // usage and cost data exist.
-    expect(getTier('plus')?.videoLimit).toBe(30);
+    // Video moved from a count of 30 to a 10 GB budget. Still bounded, still
+    // not advertised as unlimited — the unit changed, the promise did not.
+    expect(getTier('plus')?.videoLimit).toBeNull();
+    expect(getTier('plus')?.videoBytesLimit).toBe(VIDEO_GB_INCLUDED * 1024 ** 3);
     expect(getTier('plus')?.features.some((f) => /unlimited video/i.test(f))).toBe(false);
   });
 

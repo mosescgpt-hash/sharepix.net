@@ -88,6 +88,64 @@ export const BREAK_EVEN_STORAGE_GB =
  */
 export const ABUSE_MARGIN = 0.85;
 
+/**
+ * Photos at which we start asking whether this is really an event.
+ *
+ * Not a cap. An event past this keeps accepting uploads exactly as before —
+ * what changes is that it is flagged, the host is told they are unusually
+ * large and invited to ask for more room, and the concentration rule below
+ * gets a vote. The hard block stays at `photoAbuseThreshold`, which is where
+ * the money actually runs out.
+ *
+ * Deliberately the same number as `photoReviewThreshold`: two different numbers
+ * for "this is unusual" and "ask them about it" would drift apart, and there is
+ * no case where you would want to flag an event to an admin and not tell the
+ * host.
+ */
+export const CONCENTRATION_PHOTOS = 5_000;
+
+/**
+ * Photos per contributor above which an event stops looking like a party.
+ *
+ * A 300-guest wedding where a third of the room uploads produces perhaps twenty
+ * photos each. Four hundred each is not a celebration; it is one device.
+ */
+export const MAX_PHOTOS_PER_CONTRIBUTOR = 400;
+
+/**
+ * ## Why concentration alone does not block
+ *
+ * The obvious rule is "5,000 photos and they all came from one account, so it
+ * is not an event". It is the wrong rule, and the reason is worth writing down
+ * because it will be proposed again.
+ *
+ * A host uploading their wedding photographer's gallery has `contributorCount`
+ * of zero — host uploads are not guest uploads — and produces exactly the same
+ * shape as somebody using a $79 plan as a backup drive. Blocking on
+ * concentration alone refuses one of the more valuable things a host can do
+ * with the product, on the same evidence that catches abuse.
+ *
+ * What separates them is HOW the files arrive. A photographer drags a folder
+ * into a browser over minutes or hours. A script sustains machine rates. So
+ * concentration is a flag on its own, and only becomes a block when it arrives
+ * alongside a velocity that no person produces.
+ *
+ * Two weak signals agreeing is the strong one. Either alone is a false positive
+ * waiting to refuse a paying customer mid-event.
+ */
+export function isConcentrated(facts: {
+  photoCount?: number | null;
+  contributorCount?: number | null;
+}): boolean {
+  const photos = Math.max(0, facts.photoCount ?? 0);
+  if (photos < CONCENTRATION_PHOTOS) return false;
+  const contributors = Math.max(0, facts.contributorCount ?? 0);
+  // Zero contributors at this scale is the host-only case: flagged, never
+  // blocked on this signal alone. Division would be by zero anyway.
+  if (contributors === 0) return true;
+  return photos / contributors > MAX_PHOTOS_PER_CONTRIBUTOR;
+}
+
 export interface FairUseConfig {
   /** Photos in one event before a person should look. No effect on uploads. */
   photoReviewThreshold: number;
@@ -147,13 +205,17 @@ export const FAIR_USE_DEFAULTS: FairUseConfig = {
   // resizing, so it gets its own ceiling rather than being folded into total
   // storage where a thousand photos could mask it.
   //
-  // Both were unreachable and therefore dead config: the paid plan allows 30
-  // videos at 250 MB each, so an event cannot exceed 7.5 GB of video however
-  // hard it tries, and the old thresholds were 20 GB and 200 GB. These are set
-  // against the real ceiling instead, with room for an admin who has granted
-  // extra video credits.
-  videoStorageReviewBytes: 6 * GB,
-  videoStorageAbuseBytes: 30 * GB,
+  // Video is now SOLD as 10 GB rather than as a count of 30, so these sit
+  // above the thing the customer was promised rather than below it. The old
+  // 20 GB / 200 GB pair was dead config against a 7.5 GB plan ceiling; 6 GB
+  // would have been worse, flagging events for using what they paid for.
+  //
+  // The gap between the 10 GB sold and the 12 GB flagged absorbs the overshoot
+  // described on videoBytesLimit in lib/pricing.ts: bytes are only known once
+  // an object has landed, so a burst of concurrent uploads can cross the line
+  // by up to one file each.
+  videoStorageReviewBytes: 12 * GB,
+  videoStorageAbuseBytes: 20 * GB,
   // A busy reception with fifty people uploading at once produces bursts. A
   // hundred and twenty a minute sustained does not come from thumbs.
   velocityReviewPerMinute: 120,
@@ -207,6 +269,12 @@ export interface UsageFacts {
   derivedBytes?: number | null;
   /** Uploads counted in the current rolling window. */
   windowCount?: number | null;
+  /**
+   * Distinct guests who uploaded. Feeds the concentration rule — see
+   * isConcentrated for why it is a flag on its own and a block only alongside
+   * machine-rate velocity.
+   */
+  contributorCount?: number | null;
   /** Set by an admin. Wins over anything computed. */
   manualStatus?: string | null;
 }
@@ -276,8 +344,28 @@ export function assessUsage(
     reasons.push(`${perMinute} uploads a minute`);
     blocked = true;
   }
+  // Concentration AND machine-rate velocity, together.
+  //
+  // This is the auto-decline. Neither half blocks alone and that is the whole
+  // design: concentration on its own is a host uploading their photographer's
+  // gallery, and review-level velocity on its own is a busy reception. Arriving
+  // together, at this volume, they are not either of those things.
+  const concentrated = isConcentrated(facts);
+  if (concentrated && perMinute >= config.velocityReviewPerMinute) {
+    reasons.push(
+      `${photos.toLocaleString()} photos from ${Math.max(0, facts.contributorCount ?? 0)} contributors at ${perMinute} a minute`,
+    );
+    blocked = true;
+  }
   if (blocked) return { status: 'RESTRICTED', reasons, blocked: true };
 
+  // Flagged, not blocked. The host is told they are unusually large and can
+  // ask for more room; an admin can clear it with manualStatus NORMAL.
+  if (concentrated) {
+    reasons.push(
+      `${photos.toLocaleString()} photos from ${Math.max(0, facts.contributorCount ?? 0)} contributors`,
+    );
+  }
   if (photos >= config.photoReviewThreshold) reasons.push(`${photos.toLocaleString()} photos`);
   if (stored >= config.storageReviewBytes) reasons.push(`${formatBytes(stored)} stored`);
   if (video >= config.videoStorageReviewBytes) reasons.push(`${formatBytes(video)} of video`);
