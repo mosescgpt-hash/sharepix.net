@@ -100,12 +100,25 @@ describe('plans', () => {
     }
   });
 
-  it('never leaves a video limit unlimited by omission', () => {
+  it('never leaves video unbounded by omission', () => {
     // Videos are the one upload whose cost isn't bounded by resizing, so an
     // accidental null here would be expensive on every plan.
+    //
+    // The check is "bounded by SOMETHING" rather than "has a count": the paid
+    // plan is sold as a 10 GB budget now and carries no count at all, which is
+    // deliberate — a count on top would bind first for anyone filming short
+    // clips. A plan with neither is still the failure this guards against.
     for (const plan of [...Object.values(TIER_PLANS), CORPORATE_EVENT_PLAN]) {
-      expect(plan.videoLimit).not.toBeNull();
+      const bounded =
+        (typeof plan.videoLimit === 'number' && plan.videoLimit > 0) ||
+        (typeof plan.videoBytesLimit === 'number' && plan.videoBytesLimit > 0);
+      expect(bounded).toBe(true);
     }
+  });
+
+  it('stamps the video budget onto the row so a later change cannot shrink it', () => {
+    const plan = planFor('plus');
+    expect(plan?.videoBytesLimit).toBe(10 * 1024 * 1024 * 1024);
   });
 });
 

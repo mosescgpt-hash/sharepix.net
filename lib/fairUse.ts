@@ -34,6 +34,155 @@
 const MB = 1024 * 1024;
 const GB = 1024 * MB;
 
+/**
+ * Where the abuse thresholds come from.
+ *
+ * They used to be round numbers with a sentence of intuition each. That was the
+ * honest state to ship in when nothing was measured, but it turned out to put
+ * the photo abuse threshold at 2.6x the point where a $79 event stops paying
+ * for itself — an event could lose more than a hundred dollars before anything
+ * stopped it.
+ *
+ * These are the inputs, so the thresholds below can be derived rather than
+ * guessed. Figures come from docs/unit-economics.xlsx; the workbook is the
+ * place to change an assumption and see the effect, this is the place the code
+ * reads it from.
+ *
+ * `NET_REVENUE_USD` is $79 less Stripe fees and the expected Guest Upload
+ * Promise refund. `COST_PER_GB_USD` is what one stored gigabyte costs over the
+ * life of an event: R2 for ~17 months, the S3 copy for the 90-day repair
+ * window, and the one-off egress charge for copying it to R2. `FIXED_COST_USD`
+ * is compute, email and the expected research gift card.
+ *
+ * Duplicated into the Lambda copies of this file rather than imported, like
+ * every other shared module here. A test pins them.
+ */
+export const UNIT_ECONOMICS = {
+  netRevenueUsd: 74.04,
+  // Rounded UP from the workbook's 0.4152, deliberately. A cost per gigabyte
+  // that is too high produces a break-even that is too low and a threshold that
+  // is too tight, which errs toward looking at an event sooner. Rounding the
+  // other way errs toward paying for it.
+  costPerGbUsd: 0.42,
+  fixedCostUsd: 2.14,
+} as const;
+
+/**
+ * Stored gigabytes at which one $79 event breaks even.
+ *
+ * The threshold that actually protects margin, because it does not depend on
+ * guessing how large a photo is. `photoAbuseThreshold` is a proxy for this one
+ * and inherits the error in the average-photo-size estimate, which is why the
+ * byte threshold is set tighter relative to break-even than the count is.
+ */
+export const BREAK_EVEN_STORAGE_GB =
+  (UNIT_ECONOMICS.netRevenueUsd - UNIT_ECONOMICS.fixedCostUsd) / UNIT_ECONOMICS.costPerGbUsd;
+
+/**
+ * How close to break-even an abuse threshold is allowed to sit.
+ *
+ * Not 1.0. A threshold exactly at break-even blocks an event the moment it
+ * stops being profitable, and the whole posture of this file is that throttling
+ * a real event is more expensive than absorbing an unusual one. 0.85 leaves the
+ * loss bounded at nothing while keeping the block far above any real event.
+ */
+export const ABUSE_MARGIN = 0.85;
+
+/**
+ * Photos at which we start asking whether this is really an event.
+ *
+ * Not a cap. An event past this keeps accepting uploads exactly as before —
+ * what changes is that it is flagged, the host is told they are unusually
+ * large and invited to ask for more room, and the concentration rule below
+ * gets a vote. The hard block stays at `photoAbuseThreshold`, which is where
+ * the money actually runs out.
+ *
+ * Deliberately the same number as `photoReviewThreshold`: two different numbers
+ * for "this is unusual" and "ask them about it" would drift apart, and there is
+ * no case where you would want to flag an event to an admin and not tell the
+ * host.
+ */
+export const CONCENTRATION_PHOTOS = 5_000;
+
+/**
+ * Photos at which the host is offered a button to ask for more room.
+ *
+ * A hundred short of CONCENTRATION_PHOTOS, deliberately. The point of asking
+ * early is that the conversation happens BEFORE anything is flagged rather than
+ * after — a host who finds the button at the same moment their event is
+ * flagged experiences it as a reaction to being in trouble, which is not what
+ * it is.
+ *
+ * It is not a warning and must not be worded as one. Nothing stops at 4,900,
+ * nothing stops at 5,000, and the hard block is nearly eight times further out.
+ */
+export const CAPACITY_ASK_PHOTOS = 4_900;
+
+/** Where a host's request for more room has got to. */
+export type CapacityRequestState = 'hidden' | 'available' | 'pending' | 'granted';
+
+/**
+ * Whether to show the host the "ask for more room" button, and in what state.
+ *
+ * Hidden below the threshold: offering more capacity to an event with forty
+ * photos invites a question nobody was asking and implies a limit they have
+ * not met. 'granted' outranks 'pending' so an admin's decision is what the
+ * host sees, whichever order the two fields were written in.
+ */
+export function capacityRequestState(facts: {
+  photoCount?: number | null;
+  capacityRequestedAt?: string | null;
+  capacityGrantedAt?: string | null;
+} | null | undefined): CapacityRequestState {
+  if (!facts) return 'hidden';
+  if (facts.capacityGrantedAt) return 'granted';
+  if (facts.capacityRequestedAt) return 'pending';
+  const photos = Math.max(0, facts.photoCount ?? 0);
+  return photos >= CAPACITY_ASK_PHOTOS ? 'available' : 'hidden';
+}
+
+/**
+ * Photos per contributor above which an event stops looking like a party.
+ *
+ * A 300-guest wedding where a third of the room uploads produces perhaps twenty
+ * photos each. Four hundred each is not a celebration; it is one device.
+ */
+export const MAX_PHOTOS_PER_CONTRIBUTOR = 400;
+
+/**
+ * ## Why concentration alone does not block
+ *
+ * The obvious rule is "5,000 photos and they all came from one account, so it
+ * is not an event". It is the wrong rule, and the reason is worth writing down
+ * because it will be proposed again.
+ *
+ * A host uploading their wedding photographer's gallery has `contributorCount`
+ * of zero — host uploads are not guest uploads — and produces exactly the same
+ * shape as somebody using a $79 plan as a backup drive. Blocking on
+ * concentration alone refuses one of the more valuable things a host can do
+ * with the product, on the same evidence that catches abuse.
+ *
+ * What separates them is HOW the files arrive. A photographer drags a folder
+ * into a browser over minutes or hours. A script sustains machine rates. So
+ * concentration is a flag on its own, and only becomes a block when it arrives
+ * alongside a velocity that no person produces.
+ *
+ * Two weak signals agreeing is the strong one. Either alone is a false positive
+ * waiting to refuse a paying customer mid-event.
+ */
+export function isConcentrated(facts: {
+  photoCount?: number | null;
+  contributorCount?: number | null;
+}): boolean {
+  const photos = Math.max(0, facts.photoCount ?? 0);
+  if (photos < CONCENTRATION_PHOTOS) return false;
+  const contributors = Math.max(0, facts.contributorCount ?? 0);
+  // Zero contributors at this scale is the host-only case: flagged, never
+  // blocked on this signal alone. Division would be by zero anyway.
+  if (contributors === 0) return true;
+  return photos / contributors > MAX_PHOTOS_PER_CONTRIBUTOR;
+}
+
 export interface FairUseConfig {
   /** Photos in one event before a person should look. No effect on uploads. */
   photoReviewThreshold: number;
@@ -65,20 +214,45 @@ export interface FairUseConfig {
 export const FAIR_USE_DEFAULTS: FairUseConfig = {
   // A 300-guest wedding where a third of the room contributes and each person
   // adds twenty photos lands near 2,000. Five thousand is comfortably past
-  // that and still obviously an event rather than an archive.
+  // that and still obviously an event rather than an archive. Unchanged: this
+  // one only flags, and it sits well below break-even, which is where a review
+  // threshold should sit.
   photoReviewThreshold: 5_000,
-  // Fifty thousand photos is not an event. It is a migration.
-  photoAbuseThreshold: 50_000,
+  // Was 50,000, on the reasoning that "fifty thousand photos is not an event,
+  // it is a migration". True, but it was also 2.6x the point where the event
+  // stops paying for itself, so the migration got to run at our expense for a
+  // long way first.
+  //
+  // Derived from BREAK_EVEN_STORAGE_GB at an assumed 4.05 MB per photo — the
+  // original plus its preview and thumbnail. That average is an ESTIMATE, so
+  // this number inherits its error; storageAbuseBytes below does not, and is
+  // the one that actually protects margin.
+  photoAbuseThreshold: Math.round(
+    (BREAK_EVEN_STORAGE_GB * ABUSE_MARGIN * 1024) / 4.05 / 100,
+  ) * 100,
   // At the 25 MB per-photo ceiling, 5,000 photos is 125 GB — but real phone
-  // photos average nearer 3 MB, so a large event lands around 15 GB. Fifty is
-  // well clear of a real event and well short of a bill worth worrying about.
+  // photos average nearer 4 MB, so a large event lands around 20 GB. Fifty is
+  // well clear of a real event and still well below break-even.
   storageReviewBytes: 50 * GB,
-  storageAbuseBytes: 500 * GB,
+  // Was 500 GB, which cost about $210 on a $79 event. This is the threshold
+  // that does not depend on any estimate of photo size: whatever the files
+  // are, this many stored bytes is what the money runs out at.
+  storageAbuseBytes: Math.round(BREAK_EVEN_STORAGE_GB * ABUSE_MARGIN) * GB,
   // Video is the expensive half and the half whose cost is not bounded by
   // resizing, so it gets its own ceiling rather than being folded into total
   // storage where a thousand photos could mask it.
-  videoStorageReviewBytes: 20 * GB,
-  videoStorageAbuseBytes: 200 * GB,
+  //
+  // Video is now SOLD as 10 GB rather than as a count of 30, so these sit
+  // above the thing the customer was promised rather than below it. The old
+  // 20 GB / 200 GB pair was dead config against a 7.5 GB plan ceiling; 6 GB
+  // would have been worse, flagging events for using what they paid for.
+  //
+  // The gap between the 10 GB sold and the 12 GB flagged absorbs the overshoot
+  // described on videoBytesLimit in lib/pricing.ts: bytes are only known once
+  // an object has landed, so a burst of concurrent uploads can cross the line
+  // by up to one file each.
+  videoStorageReviewBytes: 12 * GB,
+  videoStorageAbuseBytes: 20 * GB,
   // A busy reception with fifty people uploading at once produces bursts. A
   // hundred and twenty a minute sustained does not come from thumbs.
   velocityReviewPerMinute: 120,
@@ -132,6 +306,12 @@ export interface UsageFacts {
   derivedBytes?: number | null;
   /** Uploads counted in the current rolling window. */
   windowCount?: number | null;
+  /**
+   * Distinct guests who uploaded. Feeds the concentration rule — see
+   * isConcentrated for why it is a flag on its own and a block only alongside
+   * machine-rate velocity.
+   */
+  contributorCount?: number | null;
   /** Set by an admin. Wins over anything computed. */
   manualStatus?: string | null;
 }
@@ -201,8 +381,28 @@ export function assessUsage(
     reasons.push(`${perMinute} uploads a minute`);
     blocked = true;
   }
+  // Concentration AND machine-rate velocity, together.
+  //
+  // This is the auto-decline. Neither half blocks alone and that is the whole
+  // design: concentration on its own is a host uploading their photographer's
+  // gallery, and review-level velocity on its own is a busy reception. Arriving
+  // together, at this volume, they are not either of those things.
+  const concentrated = isConcentrated(facts);
+  if (concentrated && perMinute >= config.velocityReviewPerMinute) {
+    reasons.push(
+      `${photos.toLocaleString()} photos from ${Math.max(0, facts.contributorCount ?? 0)} contributors at ${perMinute} a minute`,
+    );
+    blocked = true;
+  }
   if (blocked) return { status: 'RESTRICTED', reasons, blocked: true };
 
+  // Flagged, not blocked. The host is told they are unusually large and can
+  // ask for more room; an admin can clear it with manualStatus NORMAL.
+  if (concentrated) {
+    reasons.push(
+      `${photos.toLocaleString()} photos from ${Math.max(0, facts.contributorCount ?? 0)} contributors`,
+    );
+  }
   if (photos >= config.photoReviewThreshold) reasons.push(`${photos.toLocaleString()} photos`);
   if (stored >= config.storageReviewBytes) reasons.push(`${formatBytes(stored)} stored`);
   if (video >= config.videoStorageReviewBytes) reasons.push(`${formatBytes(video)} of video`);

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CORPORATE_PLAN, getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, VIDEO_GB_INCLUDED, getTier } from '@/lib/pricing';
 import { FAIR_USE_NOTICE } from '@/lib/fairUse';
 
 /**
@@ -40,7 +40,7 @@ function Check() {
 const INCLUDED: string[] = [
   'Unlimited guests — no app, no accounts, no passwords to share',
   'Unlimited photo uploads*',
-  'Up to 30 videos',
+  `${VIDEO_GB_INCLUDED} GB of video`,
   'Full-resolution originals, kept and downloadable',
   'A private, unlisted gallery only your link and QR code reach',
   '60-day upload window, extendable any time',
@@ -89,6 +89,7 @@ export default function PricingCards() {
         </p>
         <p className="mt-3 text-sm text-canvas/70">
           No subscription. No surprise upgrades. Nothing charged per guest or per photo.
+          Sales tax is added at checkout where it applies.
         </p>
 
         <div className="my-8 h-px bg-canvas/20" />
@@ -111,7 +112,7 @@ export default function PricingCards() {
               real section in the terms. One that did not would be worse than no
               asterisk at all. */}
           *{FAIR_USE_NOTICE}{' '}
-          <Link href="/terms#fair-use" className="underline">
+          <Link href="/fair-use" className="underline">
             Read the fair-use section
           </Link>
           .

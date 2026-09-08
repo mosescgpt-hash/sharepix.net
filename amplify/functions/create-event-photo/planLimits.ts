@@ -33,12 +33,15 @@ export const CURRENT_PHOTO_LIMITS: Record<string, number | null> = {
  */
 export const CURRENT_VIDEO_LIMITS: Record<string, number | null> = {
   free: 1,
-  plus: 30,
+  // null, and not an oversight: the paid plan carries no video COUNT at all
+  // now. It is bounded by CURRENT_VIDEO_BYTES instead, and a count on top
+  // would bind first for anyone filming short clips.
+  plus: null,
   event: 10,
   starter: 2,
   standard: 10,
   premium: 30,
-  corporate: 30,
+  corporate: null,
 };
 
 /** The parts of an event row that decide what it may hold. */
@@ -46,7 +49,26 @@ export interface PlanRow {
   tier?: string | null;
   photoLimit?: number | null;
   videoLimit?: number | null;
+  videoBytesLimit?: number | null;
 }
+
+/**
+ * Video budgets in bytes, as the plans stand today. `null` means this tier is
+ * bound by its video COUNT rather than by a budget — every retired plan, which
+ * was sold that way and keeps what it was sold.
+ *
+ * The paid plan moved from 30 videos to 10 GB, which is more than the 7.5 GB
+ * the count topped out at, so nobody crossing over ends up with less.
+ */
+export const CURRENT_VIDEO_BYTES: Record<string, number | null> = {
+  free: 250 * 1024 * 1024,
+  plus: 10 * 1024 * 1024 * 1024,
+  event: null,
+  starter: null,
+  standard: null,
+  premium: null,
+  corporate: 10 * 1024 * 1024 * 1024,
+};
 
 /** A stored limit, or null when it is absent or unreadable (= unlimited). */
 function storedLimit(value: number | null | undefined): number | null {
@@ -81,6 +103,25 @@ export function entitledPhotoLimit(row: PlanRow | null | undefined): number | nu
 export function entitledVideoLimit(row: PlanRow | null | undefined): number | null {
   if (!row) return null;
   return entitled(row.videoLimit, CURRENT_VIDEO_LIMITS[(row.tier ?? '').toLowerCase()]);
+}
+
+/**
+ * Video bytes this event may hold today. `null` means no budget applies and
+ * the count is the limit.
+ *
+ * Same floor rule as the others: an event on a tier that has since gained a
+ * budget gets it, and one that never had a count cannot be given one here.
+ */
+export function entitledVideoBytes(row: PlanRow | null | undefined): number | null {
+  if (!row) return null;
+  const current = CURRENT_VIDEO_BYTES[(row.tier ?? '').toLowerCase()];
+  const stored = typeof row.videoBytesLimit === 'number' && Number.isFinite(row.videoBytesLimit) && row.videoBytesLimit > 0
+    ? row.videoBytesLimit
+    : null;
+  if (current === undefined) return stored; // unknown tier: change nothing
+  if (current === null) return stored;
+  if (stored === null) return current;
+  return Math.max(stored, current);
 }
 
 /**

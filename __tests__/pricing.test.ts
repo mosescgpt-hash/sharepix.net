@@ -1,3 +1,4 @@
+import { MAX_VIDEO_SIZE_BYTES } from '../lib/validation';
 import {
   applyPercentOff,
   computeAccessExpiresAt,
@@ -131,21 +132,39 @@ describe('pricing tiers stay in sync with the checkout function', () => {
 });
 
 describe('video allowances', () => {
-  it('gives every tier a real number, never unlimited', () => {
-    // A video is the one upload whose cost is not bounded by resizing, so
-    // `null` (unlimited) on a paid tier would be an open-ended bill.
-    for (const tier of PRICING_TIERS) {
-      expect(typeof tier.videoLimit).toBe('number');
-      expect(tier.videoLimit).toBeGreaterThan(0);
-    }
-    expect(typeof CORPORATE_PLAN.videoLimit).toBe('number');
+  it('bounds every tier by a count or a budget, and never by neither', () => {
+    // A video is the one upload whose cost is not bounded by resizing, so an
+    // unbounded tier is an open-ended bill. This used to demand a numeric
+    // COUNT on every plan, which was the right invariant while a count was the
+    // only limit there was. The paid plan is now sold as a byte budget, so the
+    // property to hold is that SOMETHING bounds it — a plan with neither is
+    // the failure, and a plan with either is fine.
+    const bounded = (t: { videoLimit: number | null; videoBytesLimit: number | null }) =>
+      (typeof t.videoLimit === 'number' && t.videoLimit > 0) ||
+      (typeof t.videoBytesLimit === 'number' && t.videoBytesLimit > 0);
+    for (const tier of PRICING_TIERS) expect(bounded(tier)).toBe(true);
+    expect(bounded(CORPORATE_PLAN)).toBe(true);
   });
 
-  it('never gives a cheaper plan more videos than a dearer one', () => {
+  it('never gives a cheaper plan more video than a dearer one', () => {
+    // Compared in bytes, since that is the unit the paid plan is sold in now.
+    // A count and a budget are not comparable directly, so each tier is
+    // reduced to the most video it could possibly hold.
+    const capacityBytes = (t: { videoLimit: number | null; videoBytesLimit: number | null }) => {
+      if (typeof t.videoBytesLimit === 'number') return t.videoBytesLimit;
+      return (t.videoLimit ?? 0) * MAX_VIDEO_SIZE_BYTES;
+    };
     const byPrice = [...PRICING_TIERS].sort((a, b) => a.price - b.price);
     for (let i = 1; i < byPrice.length; i += 1) {
-      expect(byPrice[i].videoLimit!).toBeGreaterThanOrEqual(byPrice[i - 1].videoLimit!);
+      expect(capacityBytes(byPrice[i])).toBeGreaterThanOrEqual(capacityBytes(byPrice[i - 1]));
     }
+  });
+
+  it('gives the paid plan at least what the old count of 30 allowed', () => {
+    // Nobody moving from "30 videos" to "10 GB" may end up with less: 30 files
+    // at the 250 MB ceiling is 7.5 GB, and the budget is above it.
+    const paid = getTier('plus');
+    expect(paid!.videoBytesLimit).toBeGreaterThan(30 * MAX_VIDEO_SIZE_BYTES);
   });
 
   it('stamps corporate events explicitly instead of leaving them unlimited', () => {

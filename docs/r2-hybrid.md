@@ -22,6 +22,17 @@ Premium margin goes from $53 to about $77.
 > Re-check them before making decisions that depend on the exact figures. The
 > object sizes come from the codebase and are reliable.
 
+> **The table above is stale for the plans on sale today.** Every row assumes a
+> photo cap, and the paid plan no longer has one — "Premium $79, 7.8 GB" was
+> 3,000 photos multiplied out. The architectural argument below is unaffected
+> and still holds; only the per-plan figures are out of date.
+>
+> `docs/unit-economics.xlsx` is the current model. It replaces the fixed
+> per-plan row with a break-even grid, because with no cap the cost of an event
+> is a distribution rather than a number, and it accounts for two things this
+> table does not: the ~17-month retention the media is actually held for, and
+> the duplicate S3 copy that is never expired early.
+
 ## The shape: AWS writes, Cloudflare reads
 
 Moving everything to Cloudflare was considered and rejected. A full migration

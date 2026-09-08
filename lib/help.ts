@@ -114,7 +114,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Videos can be up to 250 MB each, in MP4, MOV, WEBM, M4V or 3GP. For scale, 250 MB is about a minute of 4K video, or four minutes at 1080p.',
+        text: 'Videos can be up to 250 MB each, in MP4, MOV, WEBM, M4V or 3GP, and the paid plan includes 10 GB of video in total. For scale, 250 MB is about a minute of 4K video, or four minutes at 1080p, and 10 GB is roughly three hours at 1080p.',
       },
       {
         kind: 'text',
@@ -658,7 +658,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos and up to 30 videos, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',
@@ -685,7 +685,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Videos are counted separately from photos, and each can be up to 250 MB. Your dashboard shows how many have been used.',
+        text: 'Videos are budgeted separately from photos: the paid plan includes 10 GB of video, and each file can be up to 250 MB. Your dashboard shows how much has been used.',
       },
       {
         kind: 'text',
@@ -833,7 +833,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Corporate is a monthly subscription covering multiple active events under one account, each with unlimited photos, 30 videos, company branding and a central dashboard.',
+        text: 'Corporate is a monthly subscription covering multiple active events under one account, each with unlimited photos, 10 GB of video, company branding and a central dashboard.',
       },
       {
         kind: 'text',

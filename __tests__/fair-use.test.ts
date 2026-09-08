@@ -1,8 +1,17 @@
+import { VIDEO_GB_INCLUDED } from '../lib/pricing';
+import { MAX_VIDEO_SIZE_BYTES } from '../lib/validation';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  ABUSE_MARGIN,
+  BREAK_EVEN_STORAGE_GB,
+  CAPACITY_ASK_PHOTOS,
+  CONCENTRATION_PHOTOS,
+  capacityRequestState,
+  isConcentrated,
   FAIR_USE_DEFAULTS,
   FAIR_USE_NOTICE,
+  UNIT_ECONOMICS,
   assessUsage,
   fairUseConfig,
   formatBytes,
@@ -51,12 +60,76 @@ describe('what a threshold does', () => {
     // A 300-guest wedding legitimately producing thousands of photos must
     // upload exactly as freely as a small one. Throttling a paying customer
     // whose event went well is the expensive mistake here.
+    // contributorCount is set, because a real 300-guest wedding has one. An
+    // event this size with NO contributors is the host-only case, which is
+    // flagged harder — see the concentration tests below.
     const assessment = assessUsage({
       photoCount: FAIR_USE_DEFAULTS.photoReviewThreshold + 1,
       photoBytes: 3 * GB,
+      contributorCount: 90,
     });
     expect(assessment.blocked).toBe(false);
     expect(assessment.status).toBe('HIGH_USAGE');
+  });
+
+  describe('concentration: many photos, few people', () => {
+    const atScale = FAIR_USE_DEFAULTS.photoReviewThreshold + 1;
+
+    it('flags a host-only bulk upload without blocking it', () => {
+      // The case the obvious rule gets wrong. A host uploading their wedding
+      // photographer's gallery has zero guest contributors and looks exactly
+      // like somebody using the plan as a backup drive. Refusing it would
+      // refuse one of the more valuable things a host can do here.
+      const assessment = assessUsage({ photoCount: atScale, contributorCount: 0 });
+      expect(isConcentrated({ photoCount: atScale, contributorCount: 0 })).toBe(true);
+      expect(assessment.blocked).toBe(false);
+    });
+
+    it('blocks only when concentration arrives at machine rate', () => {
+      // Two weak signals agreeing. A photographer drags a folder in over
+      // minutes; a script sustains rates no room of people produces.
+      const assessment = assessUsage({
+        photoCount: atScale,
+        contributorCount: 1,
+        windowCount: FAIR_USE_DEFAULTS.velocityReviewPerMinute,
+      });
+      expect(assessment.blocked).toBe(true);
+      expect(assessment.status).toBe('RESTRICTED');
+    });
+
+    it('does not block a busy reception, which is fast but not concentrated', () => {
+      // The same velocity, spread across a room full of guests.
+      const assessment = assessUsage({
+        photoCount: atScale,
+        contributorCount: 120,
+        windowCount: FAIR_USE_DEFAULTS.velocityReviewPerMinute,
+      });
+      expect(assessment.blocked).toBe(false);
+    });
+
+    it('ignores concentration below the threshold entirely', () => {
+      // A small event where one person took all the photos is just a small
+      // event. This only asks the question once an event is unusually large.
+      expect(isConcentrated({ photoCount: 300, contributorCount: 1 })).toBe(false);
+      expect(
+        assessUsage({
+          photoCount: 300,
+          contributorCount: 1,
+          windowCount: FAIR_USE_DEFAULTS.velocityReviewPerMinute,
+        }).blocked,
+      ).toBe(false);
+    });
+
+    it('lets an admin clear a concentrated event', () => {
+      // A person who looked and judged it fine must be able to say so.
+      const facts = {
+        photoCount: atScale,
+        contributorCount: 1,
+        windowCount: FAIR_USE_DEFAULTS.velocityAbusePerMinute,
+        manualStatus: 'NORMAL',
+      };
+      expect(assessUsage(facts).blocked).toBe(false);
+    });
   });
 
   it('escalates to REVIEW only when more than one threshold is crossed', () => {
@@ -82,13 +155,86 @@ describe('what a threshold does', () => {
     ).toBe(true);
   });
 
-  it('puts the abuse thresholds far above any plausible event', () => {
+  /**
+   * The largest event we are willing to call plausible.
+   *
+   * The doc comment reasons a 300-guest wedding to about 2,000 photos. This is
+   * five times that, so an abuse threshold above it cannot be reached by any
+   * real celebration.
+   */
+  const LARGEST_PLAUSIBLE_EVENT_PHOTOS = 10_000;
+
+  it('puts the abuse thresholds above any plausible event', () => {
     // If these ever drift down to where a real wedding reaches them, the
     // product has quietly stopped meaning "unlimited".
-    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThanOrEqual(50_000);
+    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(
+      LARGEST_PLAUSIBLE_EVENT_PHOTOS,
+    );
     expect(FAIR_USE_DEFAULTS.storageAbuseBytes).toBeGreaterThanOrEqual(100 * GB);
     expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(
       FAIR_USE_DEFAULTS.photoReviewThreshold * 5,
+    );
+  });
+
+  it('puts them BELOW the point where the event stops paying for itself', () => {
+    // The half that was missing, and it cost real money. The old threshold sat
+    // at 2.6x break-even purely because 50,000 sounded like a lot, so an event
+    // could lose upward of a hundred dollars before anything stopped it.
+    //
+    // This assertion is the one that matters, because it is the only one that
+    // fails when the price changes and nobody revisits these numbers.
+    const abuseGb = FAIR_USE_DEFAULTS.storageAbuseBytes / GB;
+    expect(abuseGb).toBeLessThan(BREAK_EVEN_STORAGE_GB);
+    expect(ABUSE_MARGIN).toBeLessThan(1);
+  });
+
+  it('still turns a profit at the moment it blocks', () => {
+    // Stated as money rather than as a ratio, because a ratio is easy to
+    // satisfy and easy to misread.
+    const abuseGb = FAIR_USE_DEFAULTS.storageAbuseBytes / GB;
+    const cost = abuseGb * UNIT_ECONOMICS.costPerGbUsd + UNIT_ECONOMICS.fixedCostUsd;
+    expect(UNIT_ECONOMICS.netRevenueUsd - cost).toBeGreaterThan(0);
+  });
+
+  it('leaves a usable window between "plausible" and "unprofitable"', () => {
+    // If these two ever cross, no threshold can be both safe for customers and
+    // safe for the business, and the answer is a pricing change rather than a
+    // threshold change. Better to fail here than to pick a side quietly.
+    const plausibleGb = (LARGEST_PLAUSIBLE_EVENT_PHOTOS * 4.05) / 1024;
+    expect(plausibleGb).toBeLessThan(BREAK_EVEN_STORAGE_GB);
+  });
+
+  it('keeps the photo count consistent with the byte threshold', () => {
+    // They are two views of the same limit. If the count could be reached
+    // while the byte threshold still had room, the tighter one would be doing
+    // all the work and the other would be decoration.
+    const impliedGb = (FAIR_USE_DEFAULTS.photoAbuseThreshold * 4.05) / 1024;
+    const abuseGb = FAIR_USE_DEFAULTS.storageAbuseBytes / GB;
+    expect(Math.abs(impliedGb - abuseGb) / abuseGb).toBeLessThan(0.05);
+  });
+
+  it('never flags an event for using the video it paid for', () => {
+    // The invariant inverted when video started being SOLD in gigabytes.
+    //
+    // Before, the plan's real ceiling was 30 files x 250 MB = 7.5 GB and the
+    // thresholds sat at 20 GB and 200 GB — dead config, unreachable by any
+    // event. The fix looked like "bring them below the ceiling". That would
+    // now be wrong in the opposite and worse direction: the plan sells 10 GB,
+    // so a threshold under it flags a host for using their allowance.
+    //
+    // Both thresholds must sit ABOVE the sold budget. The gap between them and
+    // it is what absorbs the overshoot from bytes being measured after the
+    // fact rather than reserved — see videoBytesLimit in lib/pricing.ts.
+    const soldGb = VIDEO_GB_INCLUDED;
+    expect(FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB).toBeGreaterThan(soldGb);
+    expect(FAIR_USE_DEFAULTS.videoStorageAbuseBytes / GB).toBeGreaterThan(
+      FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB,
+    );
+    // And the overshoot they absorb is bounded by the per-file ceiling, so the
+    // gap only has to be a handful of files wide, not a multiple.
+    const overshootGb = (MAX_VIDEO_SIZE_BYTES / GB) * 8;
+    expect(FAIR_USE_DEFAULTS.videoStorageReviewBytes / GB - soldGb).toBeGreaterThan(
+      overshootGb,
     );
   });
 
@@ -98,6 +244,133 @@ describe('what a threshold does', () => {
     const assessment = assessUsage({ videoBytes: FAIR_USE_DEFAULTS.videoStorageAbuseBytes });
     expect(assessment.blocked).toBe(true);
     expect(assessment.reasons.join(' ')).toMatch(/video/);
+  });
+});
+
+describe('asking for more room', () => {
+  const readSrc = (path: string) => readFileSync(join(root, path), 'utf8');
+
+  it('shows nothing at all on an ordinary event', () => {
+    // Offering more capacity to an event with forty photos invites a question
+    // nobody was asking and implies a limit they have not met.
+    expect(capacityRequestState({ photoCount: 40 })).toBe('hidden');
+    expect(capacityRequestState({ photoCount: CAPACITY_ASK_PHOTOS - 1 })).toBe('hidden');
+    expect(capacityRequestState(null)).toBe('hidden');
+    expect(capacityRequestState({})).toBe('hidden');
+  });
+
+  it('appears at 4,900, before anything is flagged', () => {
+    expect(CAPACITY_ASK_PHOTOS).toBe(4_900);
+    expect(capacityRequestState({ photoCount: CAPACITY_ASK_PHOTOS })).toBe('available');
+  });
+
+  it('gets in ahead of the flag rather than arriving with it', () => {
+    // The whole point of asking early. A host who finds the button at the same
+    // moment their event is flagged reads it as a reaction to being in
+    // trouble, which is not what it is.
+    expect(CAPACITY_ASK_PHOTOS).toBeLessThan(CONCENTRATION_PHOTOS);
+    expect(CAPACITY_ASK_PHOTOS).toBeLessThan(FAIR_USE_DEFAULTS.photoReviewThreshold);
+  });
+
+  it('is nowhere near the point anything actually stops', () => {
+    // If these ever converge, the button becomes a warning and the copy on the
+    // card ("nothing is going to stop") stops being true.
+    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(CAPACITY_ASK_PHOTOS * 5);
+  });
+
+  it('remembers a request, and an admin decision beats it', () => {
+    const asked = { photoCount: 9_000, capacityRequestedAt: '2026-09-01T00:00:00Z' };
+    expect(capacityRequestState(asked)).toBe('pending');
+    // 'granted' wins whichever order the two fields were written in.
+    expect(
+      capacityRequestState({ ...asked, capacityGrantedAt: '2026-09-02T00:00:00Z' }),
+    ).toBe('granted');
+    // And a grant stands even if the count later drops below the threshold.
+    expect(
+      capacityRequestState({ photoCount: 10, capacityGrantedAt: '2026-09-02T00:00:00Z' }),
+    ).toBe('granted');
+  });
+
+  it('records the request and grants nothing', () => {
+    // The same posture as a refund: the code writes down what was asked for,
+    // and a person decides. A mutation that raised a limit by itself would be
+    // a self-service way to move our own cost ceiling.
+    const handler = readSrc('amplify/functions/update-event/handler.ts');
+    const branch = handler.slice(handler.indexOf("field === 'requestEventCapacity'"));
+    const body = branch.slice(0, branch.indexOf('const result = buildPatch'));
+    expect(body).toContain('SET capacityRequestedAt = :now');
+    expect(body).not.toContain('photoLimit');
+    expect(body).not.toContain('capacityGrantedAt = :now');
+  });
+
+  it('files the request against the caller\'s own event only', () => {
+    // Dispatched after the ownership check rather than in its own function, so
+    // it cannot drift away from it.
+    const handler = readSrc('amplify/functions/update-event/handler.ts');
+    expect(handler.indexOf('if (!mayEdit(caller')).toBeLessThan(
+      handler.indexOf("field === 'requestEventCapacity'"),
+    );
+  });
+
+  it('does not reset the clock when a host taps twice', () => {
+    // An admin triaging by request date must not have the queue reordered by
+    // an impatient second tap.
+    const handler = readSrc('amplify/functions/update-event/handler.ts');
+    expect(handler).toContain("ConditionExpression: 'attribute_not_exists(capacityRequestedAt)'");
+  });
+
+  it('is worded as an offer rather than a warning', () => {
+    // Nothing stops at this number, and a card that implies otherwise would be
+    // the product quietly walking back "unlimited".
+    const page = readSrc('pages/event/[eventId]/admin.tsx');
+    expect(page).toContain('Ask for more room');
+    expect(page).toMatch(/nothing is going to stop/i);
+  });
+});
+
+describe('the fair use page', () => {
+  const readSrc = (path: string) => readFileSync(join(root, path), 'utf8');
+  const page = readSrc('pages/fair-use.tsx');
+
+  it('reads every threshold from the code rather than typing it', () => {
+    // The survey drifted because its numbers lived somewhere nothing could
+    // check. This page reads FAIR_USE_DEFAULTS, which is the same object the
+    // upload handler enforces, so it cannot say one thing while the server
+    // does another.
+    expect(page).toContain('FAIR_USE_DEFAULTS.photoReviewThreshold');
+    expect(page).toContain('FAIR_USE_DEFAULTS.photoAbuseThreshold');
+    expect(page).toContain('FAIR_USE_DEFAULTS.storageReviewBytes');
+    expect(page).toContain('FAIR_USE_DEFAULTS.storageAbuseBytes');
+    expect(page).toContain('CAPACITY_ASK_PHOTOS');
+    expect(page).toContain('VIDEO_GB_INCLUDED');
+  });
+
+  it('publishes no threshold as a literal number', () => {
+    // A hardcoded "5,000" here would survive every threshold change silently.
+    for (const literal of ['5,000', '36,800', '4,900', '146 GB', '50 GB']) {
+      expect(page).not.toContain(literal);
+    }
+  });
+
+  it('does not publish the velocity threshold', () => {
+    // The one number a real host can neither reach nor need. Printing it tells
+    // somebody writing a script exactly what rate to stay under.
+    expect(page).not.toContain('velocityReview');
+    expect(page).not.toContain('velocityAbuse');
+    expect(page).not.toMatch(/uploads a minute/i);
+  });
+
+  it('says the two things that make the promise honest', () => {
+    expect(page).toMatch(/never restrict your event for being popular/i);
+    expect(page).toMatch(/never\s*\n?\s*stop your guests uploading without talking to you first/i);
+  });
+
+  it('is what the asterisk actually points at', () => {
+    // An asterisk pointing at a terms anchor is a caveat you reach only if you
+    // already suspect something.
+    expect(readSrc('components/PricingCards.tsx')).toContain('href="/fair-use"');
+    expect(readSrc('pages/index.tsx')).toContain('href="/fair-use"');
+    expect(readSrc('pages/terms.tsx')).toContain('/fair-use');
   });
 });
 
@@ -339,8 +612,17 @@ describe('the fair-use policy exists as a policy', () => {
     expect(terms).toContain('FAIR_USE_NOTICE');
   });
 
-  it('links the asterisk to it', () => {
-    expect(cards).toContain('/terms#fair-use');
+  it('links the asterisk to the policy page, not to a terms anchor', () => {
+    // It used to point at /terms#fair-use. A reader following an asterisk on a
+    // price is checking whether the promise is real, and landing mid-way down a
+    // legal document is the least reassuring possible answer to that. The terms
+    // section stays and still carries the clause; the asterisk goes to the page
+    // written to be read.
+    expect(cards).toContain('/fair-use');
+    expect(cards).not.toContain('/terms#fair-use');
+    // The anchor still has to exist, because the policy page links back to it.
+    expect(terms).toContain('id="fair-use"');
+    expect(read('pages/fair-use.tsx')).toContain('/terms#fair-use');
   });
 
   it('promises not to punish an event for being popular', () => {

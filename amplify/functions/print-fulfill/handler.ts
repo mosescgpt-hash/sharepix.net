@@ -9,6 +9,58 @@ const s3 = new S3Client({});
 const PRINT_ORDER_TABLE = process.env.PRINT_ORDER_TABLE_NAME as string;
 const BUCKET = process.env.BUCKET_NAME as string;
 
+/**
+ * R2, which is where the originals are actually served from.
+ *
+ * This was the last thing in the codebase reading originals from S3, and it was
+ * the reason the S3 copy had to be kept for the whole life of an event. Gallery
+ * reads already come from R2 (see media-url); prints did not, so an object had
+ * to exist in both places for a year in case somebody ordered a print.
+ *
+ * S3 stays as the fallback rather than being dropped: a print order is a real
+ * purchase that has already been paid for, and failing it because one R2
+ * credential is wrong is worse than the cost of reading from the copy that is
+ * still there during the S3 retention window.
+ */
+let r2Client: S3Client | null = null;
+function r2(): S3Client | null {
+  const endpoint = process.env.R2_ACCOUNT_ENDPOINT;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!endpoint || !process.env.R2_BUCKET || !accessKeyId || !secretAccessKey) return null;
+  if (!r2Client) {
+    r2Client = new S3Client({
+      region: 'auto',
+      endpoint,
+      credentials: { accessKeyId, secretAccessKey },
+    });
+  }
+  return r2Client;
+}
+
+/** A signed URL Prodigi can pull the original from: R2 first, S3 if it cannot. */
+async function signPrintAsset(key: string, ttlSeconds: number): Promise<string> {
+  const client = r2();
+  if (client) {
+    try {
+      return await getSignedUrl(
+        client,
+        new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }),
+        { expiresIn: ttlSeconds },
+      );
+    } catch (error) {
+      console.error('Could not sign an R2 print asset URL; falling back to S3', {
+        at: new Date().toISOString(),
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: key }), {
+    expiresIn: ttlSeconds,
+  });
+}
+
 // Prodigi fetches the print asset shortly after the order is placed, so a
 // couple of days of validity on the signed URL is ample.
 const PRINT_ASSET_URL_TTL_SECONDS = 48 * 60 * 60;
@@ -65,11 +117,7 @@ async function fulfillPrintOrder(session) {
   // Build fresh signed URLs Prodigi can pull the originals from.
   const prodigiItems = await Promise.all(
     items.map(async (item) => {
-      const url = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: BUCKET, Key: item.s3Key }),
-        { expiresIn: PRINT_ASSET_URL_TTL_SECONDS },
-      );
+      const url = await signPrintAsset(item.s3Key, PRINT_ASSET_URL_TTL_SECONDS);
       return {
         merchantReference: item.photoId || undefined,
         sku: item.sku,

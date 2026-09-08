@@ -1,5 +1,6 @@
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
+import { VIDEO_GB_INCLUDED } from '@/lib/pricing';
 
 const faqs = [
   {
@@ -24,7 +25,7 @@ const faqs = [
   },
   {
     q: 'What about video?',
-    a: 'Up to 30 videos, each up to 250 MB. Video is not unlimited and we would rather say so than bury it: a video streams at full size every time somebody watches it, so it costs differently from a photo. If 30 is not enough for your event, get in touch.',
+    a: `${VIDEO_GB_INCLUDED} GB in total, with each file up to 250 MB — roughly three hours at 1080p. Video is not unlimited and we would rather say so than bury it: a video streams at full size every time somebody watches it, so it costs differently from a photo. It is a budget rather than a number of clips because thirty short clips and thirty long ones are not the same thing, and counting them charged the short-clip host for space they never used. If ${VIDEO_GB_INCLUDED} GB is not enough for your event, get in touch.`,
   },
   {
     q: 'Is my gallery private?',

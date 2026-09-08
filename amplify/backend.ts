@@ -112,27 +112,52 @@ for (const table of Object.values(amplifyDynamoDbTables)) {
   table.pointInTimeRecoveryEnabled = true;
 }
 
-// Storage lifecycle. Without this, every photo/video stays in S3 forever —
-// the bill grows without bound and we hold guests' personal media long past
-// what any plan promises. Two rules:
+// Storage lifecycle.
+//
+// S3 IS THE WRITE PATH, NOT THE READ PATH. Objects are uploaded to S3, vetted
+// by the sanitize-upload trigger, screened by Rekognition (which can only read
+// from S3), and mirrored to R2. Every read after that — the gallery, downloads,
+// and now prints — is served from R2.
+//
+// This rule used to keep the S3 copy for 800 days, which meant every object
+// existed twice for the whole life of an event and then some: roughly 280 days
+// past the point the event had been deleted everywhere a customer could see it.
+// That duplicate was 37% of the storage cost of an event and more than the copy
+// actually being served. See docs/unit-economics.xlsx.
+//
+// SHORTENING IT IS SAFE ONLY BECAUSE OF THE ORDER THINGS HAPPEN IN. The mirror
+// runs within seconds of the upload, so the S3 copy has no ongoing role after
+// that. What the remaining window buys is time to notice and repair a mirror
+// that failed — the copy is the only source to re-copy from — and a fallback
+// for print orders. Both are measured in days, not months.
+//
+// Three rules:
 //   1. Clean up abandoned multipart uploads after 7 days (pure cost savings;
 //      never touches a completed object).
-//   2. A hard backstop that expires event media well beyond the longest
-//      legitimate event lifecycle (≈515 days: 60-day upload window + up to
-//      365-day gallery + 90-day archive). 800 days leaves comfortable margin
-//      for extensions, so no normal event is ever cut short — it only
-//      guarantees nothing lives in the bucket indefinitely.
+//   2. Expire event media 90 days after upload. Long enough to repair a failed
+//      mirror by hand, and it comfortably covers the 60-day upload window, so
+//      an object is never removed while its event is still accepting uploads.
+//   3. Nothing lives in the bucket indefinitely.
+//
+// If the mirror is ever switched off, THIS RULE MUST GO BACK UP FIRST. With no
+// R2 copy and a 90-day expiry, galleries would start emptying at three months.
+// A test asserts the two are wired to the same config so that cannot pass
+// unnoticed.
 const s3Bucket = bucket as Bucket;
 s3Bucket.addLifecycleRule({
   id: 'abort-incomplete-multipart-uploads',
   enabled: true,
   abortIncompleteMultipartUploadAfter: Duration.days(7),
 });
+// Days the S3 copy is kept after upload. Overridable, because the safe value
+// depends entirely on whether the R2 mirror is running: with it on, this is a
+// repair window; with it off, it is the retention of the product.
+const S3_COPY_DAYS = Number(process.env.S3_COPY_RETENTION_DAYS ?? '') || 90;
 s3Bucket.addLifecycleRule({
   id: 'expire-event-media-backstop',
   enabled: true,
   prefix: 'events/',
-  expiration: Duration.days(800),
+  expiration: Duration.days(S3_COPY_DAYS),
 });
 
 // Upload sanitizer (storage onUpload trigger): validates each uploaded object's
@@ -341,6 +366,13 @@ printOrderTable.grantReadWriteData(printFulfillFn);
 bucket.grantRead(printFulfillFn);
 printFulfillFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
 printFulfillFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+// Prints are signed from R2 now, with S3 as the fallback. This was the last
+// thing reading originals from S3, and it is what made the S3 copy have to
+// survive for the whole life of an event.
+printFulfillFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+printFulfillFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+printFulfillFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+printFulfillFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
 
 // List function: read one event's photos for the public gallery (read-only).
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;

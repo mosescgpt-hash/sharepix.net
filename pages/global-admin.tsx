@@ -1833,6 +1833,12 @@ function GlobalAdminPage() {
                                 broken — but an operator reading a capacity list
                                 should be told which it is. */}
                             {limitsAreStale(event) ? ' · row limits stale' : ''}
+                            {/* A host asked for more room. Shown in the list
+                                rather than only in a queue, because the
+                                decision needs the event beside it. */}
+                            {event.capacityRequestedAt && !event.capacityGrantedAt
+                              ? ' · asked for more room'
+                              : ''}
                           </p>
                           <p className="mt-1 text-xs text-charcoal/60">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'} ·{' '}

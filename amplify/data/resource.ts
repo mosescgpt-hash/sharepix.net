@@ -54,6 +54,10 @@ const schema = a.schema({
       // deliberate — events created before this existed are not retroactively
       // blocked.
       videoLimit: a.integer(),
+      // Video is sold as a byte budget on the paid plan rather than a count of
+      // clips. Float, not integer: 10 GB is well past what a 32-bit int holds,
+      // the same reason the byte counters are floats.
+      videoBytesLimit: a.float(),
       // Extra videos bought on top of the plan. Effective limit is
       // videoLimit + extraVideoCredits.
       extraVideoCredits: a.integer(),
@@ -110,6 +114,12 @@ const schema = a.schema({
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
       mediaReclaimedAt: a.datetime(),
+      // The host asked for more room, and whether an admin has said yes.
+      // Set only by requestEventCapacity (host) and the admin dashboard —
+      // never by the client directly, which is why neither is on the
+      // updateEventSettings allow-list.
+      capacityRequestedAt: a.datetime(),
+      capacityGrantedAt: a.datetime(),
       // How the host wants their gallery to look. See lib/galleryTheme.ts —
       // a curated set of keys plus one free-form accent colour, all validated
       // server-side before they are stored, because every one of them reaches
@@ -1309,6 +1319,16 @@ const schema = a.schema({
       reactionsEnabled: a.boolean(),
       commentsEnabled: a.boolean(),
     })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(updateEventFn)),
+
+  // A host asking for more room on an event that is getting large. Records the
+  // request and nothing else: capacity is granted by a person, from the admin
+  // dashboard, exactly like a refund. Nothing here raises a limit.
+  requestEventCapacity: a
+    .mutation()
+    .arguments({ eventId: a.id().required() })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(updateEventFn)),

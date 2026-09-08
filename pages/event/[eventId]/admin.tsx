@@ -26,6 +26,7 @@ import {
   setEventGuestDownloadsBlocked,
   setEventVideoUploads,
   claimGuestUploadPromise,
+  requestEventCapacity,
   startAddOnCheckout,
   type EventAddOnKey,
   updateEventDetails,
@@ -46,6 +47,7 @@ import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
+import { capacityRequestState } from '@/lib/fairUse';
 
 function AdminDashboardPage() {
   const router = useRouter();
@@ -176,6 +178,20 @@ function AdminDashboardPage() {
   // Name/date can be edited only until the first photo lands. Prefer the
   // server-maintained counter, falling back to what we loaded.
   const photoCount = event?.photoCount ?? photos.length;
+  const capacityState = capacityRequestState({ ...event, photoCount });
+  const [capacityWorking, setCapacityWorking] = useState(false);
+  const [capacityMessage, setCapacityMessage] = useState('');
+
+  async function handleRequestCapacity() {
+    setCapacityWorking(true);
+    const result = await requestEventCapacity(eventId ?? '');
+    setCapacityMessage(result.message);
+    setCapacityWorking(false);
+    // Reload so a successful request flips the card to its pending state from
+    // the row rather than from local state, which would not survive a refresh.
+    if (result.ok) void load();
+  }
+
   const detailsLocked = photoCount > 0;
   // What this event can still buy. Extensions only apply to the fixed-length
   // plans (a corporate event has no plan price to halve), and each add-on drops
@@ -543,6 +559,55 @@ function AdminDashboardPage() {
                 <p className="spx-stat-label">Hidden from gallery</p>
               </div>
             </div>
+
+            {/* Only from CAPACITY_ASK_PHOTOS. Below it there is nothing to
+                ask for and offering implies a limit the host has not met. */}
+            {capacityState !== 'hidden' ? (
+              <div className="spx-card mt-8 p-5">
+                <h2 className="font-sans text-lg font-bold tracking-[-0.02em]">
+                  {capacityState === 'granted' ? 'Extra room added' : 'A big event'}
+                </h2>
+                {capacityState === 'granted' ? (
+                  <p className="mt-2 text-sm text-charcoal/70">
+                    We have added extra room to this event. Carry on — nothing is going to
+                    stop.
+                  </p>
+                ) : capacityState === 'pending' ? (
+                  <p className="mt-2 text-sm text-charcoal/70">
+                    We have your request and will be in touch by email. Uploads are not
+                    paused and nothing is waiting on our reply.
+                  </p>
+                ) : (
+                  <>
+                    {/* Worded as an offer, not a warning. Nothing stops at this
+                        number and the honest thing is to say so first. */}
+                    <p className="mt-2 text-sm text-charcoal/70">
+                      Your guests have added{' '}
+                      <strong className="font-semibold text-charcoal">
+                        {photoCount.toLocaleString()}
+                      </strong>{' '}
+                      photos, which puts this among the larger events on SharePix. Nothing
+                      is capped and nothing is going to stop — but if you are expecting a
+                      lot more, tell us and we will make sure there is room.
+                    </p>
+                    {capacityMessage ? (
+                      <Notice tone="success" className="mt-3">
+                        {capacityMessage}
+                      </Notice>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={capacityWorking}
+                        onClick={() => void handleRequestCapacity()}
+                        className="spx-btn-outline mt-4 disabled:opacity-50"
+                      >
+                        {capacityWorking ? 'Sending…' : 'Ask for more room'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            ) : null}
 
             <HostGuide
               event={event}
