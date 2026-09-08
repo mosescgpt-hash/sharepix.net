@@ -153,6 +153,10 @@ export default function TermsPage() {
             <h2 id="fair-use">7. Fair use of unlimited uploads</h2>
             <p>{FAIR_USE_NOTICE}</p>
             <p>
+              The actual thresholds, what happens at each one, and what we will never do
+              are published in full on our <a href="/fair-use">fair use page</a>.
+            </p>
+            <p>
               In practice this means SharePix is for collecting the photos and videos from{' '}
               <strong>an event</strong>. It is not a backup service, a file-transfer service, or
               general cloud storage, and it is not intended for automated or scripted uploading.

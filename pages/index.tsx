@@ -91,7 +91,7 @@ function Hero() {
               rather than dressed up as platform metrics we are not measuring. */}
           <p className="mt-4 text-[0.7rem] text-charcoal/45">
             Figures from a typical wedding. *Unlimited photos are for normal event use —{' '}
-            <Link href="/pricing" className="underline">
+            <Link href="/fair-use" className="underline">
               see fair use
             </Link>
             .

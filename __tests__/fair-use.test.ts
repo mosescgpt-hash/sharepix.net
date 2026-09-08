@@ -328,6 +328,52 @@ describe('asking for more room', () => {
   });
 });
 
+describe('the fair use page', () => {
+  const readSrc = (path: string) => readFileSync(join(root, path), 'utf8');
+  const page = readSrc('pages/fair-use.tsx');
+
+  it('reads every threshold from the code rather than typing it', () => {
+    // The survey drifted because its numbers lived somewhere nothing could
+    // check. This page reads FAIR_USE_DEFAULTS, which is the same object the
+    // upload handler enforces, so it cannot say one thing while the server
+    // does another.
+    expect(page).toContain('FAIR_USE_DEFAULTS.photoReviewThreshold');
+    expect(page).toContain('FAIR_USE_DEFAULTS.photoAbuseThreshold');
+    expect(page).toContain('FAIR_USE_DEFAULTS.storageReviewBytes');
+    expect(page).toContain('FAIR_USE_DEFAULTS.storageAbuseBytes');
+    expect(page).toContain('CAPACITY_ASK_PHOTOS');
+    expect(page).toContain('VIDEO_GB_INCLUDED');
+  });
+
+  it('publishes no threshold as a literal number', () => {
+    // A hardcoded "5,000" here would survive every threshold change silently.
+    for (const literal of ['5,000', '36,800', '4,900', '146 GB', '50 GB']) {
+      expect(page).not.toContain(literal);
+    }
+  });
+
+  it('does not publish the velocity threshold', () => {
+    // The one number a real host can neither reach nor need. Printing it tells
+    // somebody writing a script exactly what rate to stay under.
+    expect(page).not.toContain('velocityReview');
+    expect(page).not.toContain('velocityAbuse');
+    expect(page).not.toMatch(/uploads a minute/i);
+  });
+
+  it('says the two things that make the promise honest', () => {
+    expect(page).toMatch(/never restrict your event for being popular/i);
+    expect(page).toMatch(/never\s*\n?\s*stop your guests uploading without talking to you first/i);
+  });
+
+  it('is what the asterisk actually points at', () => {
+    // An asterisk pointing at a terms anchor is a caveat you reach only if you
+    // already suspect something.
+    expect(readSrc('components/PricingCards.tsx')).toContain('href="/fair-use"');
+    expect(readSrc('pages/index.tsx')).toContain('href="/fair-use"');
+    expect(readSrc('pages/terms.tsx')).toContain('/fair-use');
+  });
+});
+
 describe("an admin's judgement", () => {
   it('clears an event the thresholds flagged', () => {
     const flagged = {
@@ -566,8 +612,17 @@ describe('the fair-use policy exists as a policy', () => {
     expect(terms).toContain('FAIR_USE_NOTICE');
   });
 
-  it('links the asterisk to it', () => {
-    expect(cards).toContain('/terms#fair-use');
+  it('links the asterisk to the policy page, not to a terms anchor', () => {
+    // It used to point at /terms#fair-use. A reader following an asterisk on a
+    // price is checking whether the promise is real, and landing mid-way down a
+    // legal document is the least reassuring possible answer to that. The terms
+    // section stays and still carries the clause; the asterisk goes to the page
+    // written to be read.
+    expect(cards).toContain('/fair-use');
+    expect(cards).not.toContain('/terms#fair-use');
+    // The anchor still has to exist, because the policy page links back to it.
+    expect(terms).toContain('id="fair-use"');
+    expect(read('pages/fair-use.tsx')).toContain('/terms#fair-use');
   });
 
   it('promises not to punish an event for being popular', () => {

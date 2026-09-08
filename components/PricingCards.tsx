@@ -89,6 +89,7 @@ export default function PricingCards() {
         </p>
         <p className="mt-3 text-sm text-canvas/70">
           No subscription. No surprise upgrades. Nothing charged per guest or per photo.
+          Sales tax is added at checkout where it applies.
         </p>
 
         <div className="my-8 h-px bg-canvas/20" />
@@ -111,7 +112,7 @@ export default function PricingCards() {
               real section in the terms. One that did not would be worse than no
               asterisk at all. */}
           *{FAIR_USE_NOTICE}{' '}
-          <Link href="/terms#fair-use" className="underline">
+          <Link href="/fair-use" className="underline">
             Read the fair-use section
           </Link>
           .

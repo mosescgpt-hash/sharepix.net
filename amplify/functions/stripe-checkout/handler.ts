@@ -216,6 +216,42 @@ async function buildDiscount(
  * `free: { amount: 0 }` entry here to be tidy would create a $0 checkout that
  * activates an event, which is the one thing the whole file exists to prevent.
  */
+/**
+ * Sales tax and VAT, calculated by Stripe at checkout.
+ *
+ * ## What this does, and the part it does NOT do
+ *
+ * `automatic_tax` makes Stripe work out what tax is owed on each sale, from the
+ * customer's location and the tax registrations configured in the Stripe
+ * dashboard. Without it — which is how this shipped — Stripe charges the list
+ * price and calculates nothing, however the dashboard is configured. The
+ * dashboard setting alone does nothing; the API call is what turns it on.
+ *
+ * It calculates and collects. It does NOT file or remit. Deciding where a
+ * registration is required, filing the returns and paying the money over is
+ * still a person's job, through Stripe's filing partners or by hand. Nothing in
+ * this file makes that happen and nothing should imply it does.
+ *
+ * Until a tax registration exists in the dashboard for a given jurisdiction,
+ * Stripe calculates zero for it. So this is safe to switch on before any
+ * registration exists: it changes nothing today and starts working the moment
+ * one is added, rather than needing a code change at the point somebody
+ * notices the liability.
+ *
+ * ## Exclusive, not inclusive
+ *
+ * `exclusive` means tax is added on top of the price rather than carved out of
+ * it. $79 stays $79 of revenue and the customer pays $79 plus whatever their
+ * jurisdiction charges. `inclusive` would hold the customer's total at $79 and
+ * take the tax out of margin — roughly $5 to $8 in a typical US state, which is
+ * a real cut of a $70 gross margin, decided by where the buyer happens to live.
+ *
+ * The customer-facing consequence is that the price shown is not the total
+ * charged, so the pricing page has to say "plus tax where applicable". It does.
+ */
+const TAX_BEHAVIOR = 'exclusive' as const;
+const AUTOMATIC_TAX = { enabled: true } as const;
+
 const TIER_PRICING: Record<string, { name: string; amount: number }> = {
   // This name is what the customer reads at the moment of payment and on the
   // receipt afterwards, so it tracks the display name in lib/pricing.ts. It
@@ -278,12 +314,19 @@ export const handler: Handler = async (event) => {
       const disc = await buildDiscount(stripe, event.arguments.discountCode, ['corporate'], 14900);
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
+        automatic_tax: AUTOMATIC_TAX,
+        // Required alongside automatic_tax on a subscription: Stripe has to be
+        // allowed to save the address it worked the tax out from, or renewals
+        // have nothing to calculate against.
+        customer_update: { address: 'auto' },
         customer_email: email || undefined,
         line_items: [
           {
             quantity: 1,
             price_data: {
               currency: 'usd',
+              // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+              tax_behavior: TAX_BEHAVIOR,
               unit_amount: 14900,
               recurring: { interval: 'month' },
               product_data: { name: 'SharePix Corporate (monthly)' },
@@ -319,11 +362,14 @@ export const handler: Handler = async (event) => {
       const disc = await buildDiscount(stripe, event.arguments.discountCode, ['extend'], amount);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
+        automatic_tax: AUTOMATIC_TAX,
         line_items: [
           {
             quantity: 1,
             price_data: {
               currency: 'usd',
+              // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+              tax_behavior: TAX_BEHAVIOR,
               unit_amount: amount,
               product_data: { name: 'SharePix upload-window extension (+30 days)' },
             },
@@ -354,11 +400,14 @@ export const handler: Handler = async (event) => {
       const disc = await buildDiscount(stripe, event.arguments.discountCode, ['live_slideshow'], LIVE_SLIDESHOW_ADDON_CENTS);
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
+        automatic_tax: AUTOMATIC_TAX,
         line_items: [
           {
             quantity: 1,
             price_data: {
               currency: 'usd',
+              // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+              tax_behavior: TAX_BEHAVIOR,
               unit_amount: LIVE_SLIDESHOW_ADDON_CENTS,
               product_data: { name: 'SharePix live slideshow (one event)' },
             },
@@ -407,6 +456,8 @@ export const handler: Handler = async (event) => {
       quantity: number;
       price_data: {
         currency: string;
+        /** Tax added on top rather than carved out. See TAX_BEHAVIOR. */
+        tax_behavior: typeof TAX_BEHAVIOR;
         unit_amount: number;
         product_data: { name: string };
       };
@@ -422,6 +473,8 @@ export const handler: Handler = async (event) => {
           quantity: 1,
           price_data: {
             currency: 'usd',
+            // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+            tax_behavior: TAX_BEHAVIOR,
             unit_amount: amount,
             product_data: { name: 'SharePix upload-window extension (+30 days)' },
           },
@@ -436,6 +489,8 @@ export const handler: Handler = async (event) => {
           quantity: 1,
           price_data: {
             currency: 'usd',
+            // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+            tax_behavior: TAX_BEHAVIOR,
             unit_amount: LIVE_SLIDESHOW_ADDON_CENTS,
             product_data: { name: 'SharePix live slideshow (one event)' },
           },
@@ -453,6 +508,8 @@ export const handler: Handler = async (event) => {
           quantity: 1,
           price_data: {
             currency: 'usd',
+            // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+            tax_behavior: TAX_BEHAVIOR,
             unit_amount: GUEST_BOOK_ADDON_CENTS,
             product_data: { name: 'SharePix guest book (one event)' },
           },
@@ -498,6 +555,7 @@ export const handler: Handler = async (event) => {
 
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
+        automatic_tax: AUTOMATIC_TAX,
         line_items: lineItems,
         success_url: `${appBaseUrl}/event/${addonEventId}/admin?addon=done`,
         cancel_url: `${appBaseUrl}/event/${addonEventId}/admin?addon=cancelled`,
@@ -557,11 +615,14 @@ export const handler: Handler = async (event) => {
     const disc = await buildDiscount(stripe, event.arguments.discountCode, [`event:${tier}`], pricing.amount);
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      automatic_tax: AUTOMATIC_TAX,
       line_items: [
         {
           quantity: 1,
           price_data: {
             currency: 'usd',
+            // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
+            tax_behavior: TAX_BEHAVIOR,
             unit_amount: pricing.amount,
             product_data: { name: pricing.name },
           },
