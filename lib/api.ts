@@ -52,6 +52,12 @@ type DataAuthMode = 'userPool' | 'identityPool';
 
 export interface CurrentUser {
   userId: string;
+  /**
+   * Cognito username — the second half of the Amplify owner string,
+   * "<sub>::<username>". Empty when the identity carries none, which is the
+   * case ownerStringFor falls back to a bare sub for.
+   */
+  username: string;
   /** Friendly name for display: the part of the email before @ */
   displayName: string;
   loginId: string | null;
@@ -66,7 +72,7 @@ export async function getCurrentUserInfo(): Promise<CurrentUser | null> {
     // "seth" from "seth@example.com". The host's chosen display name lives in
     // HostProfile and is read where it's actually shown (see createNewEvent).
     const displayName = loginId ? loginId.split('@')[0] : 'Host';
-    return { userId: user.userId, displayName, loginId };
+    return { userId: user.userId, username: user.username ?? '', displayName, loginId };
   } catch {
     return null;
   }
@@ -247,17 +253,55 @@ export async function listAllEvents(): Promise<QREvent[]> {
  * has full model access: for them the query returns every event, and this page
  * is meant to show their own.
  */
+/**
+ * Every owner string this account's events could have been stored under.
+ *
+ * ownerStringFor writes "<sub>::<username>", or the bare sub when the identity
+ * carried no username. Both shapes exist, so both are asked for.
+ *
+ * For an ordinary host this is belt and braces: AppSync's own authorization
+ * step overwrites the owner argument with the caller's claims before the query
+ * runs, so whatever is passed is replaced. It matters for a global admin, whose
+ * ADMINS group authorizes them first — the substitution is skipped and the
+ * value sent is the value used. Asking for only the usual shape would show such
+ * an admin none of their own events.
+ */
+function ownerCandidates(user: CurrentUser): string[] {
+  const sub = user.userId;
+  return user.username && user.username !== sub ? [`${sub}::${user.username}`, sub] : [sub];
+}
+
+/**
+ * Return only events owned by the currently signed-in host.
+ *
+ * A Query against the owner index rather than a Scan of every event in
+ * SharePix. Without the index, owner authorization resolved to a Scan with the
+ * owner condition as a filter — DynamoDB applies the page limit to rows read
+ * and only then filters, so finding one host's events meant reading everyone's.
+ *
+ * The owner check below stays for two reasons. A global admin has full model
+ * access and this page is meant to show their own events. And an index is a
+ * denormalised copy: checking what came back against who asked costs nothing
+ * and means a wrong answer cannot pass quietly.
+ */
 export async function listMyEvents(): Promise<QREvent[]> {
   const user = await getCurrentUserInfo();
   if (!user) throw new Error('Sign in to see your events.');
 
-  const rows = await listAllPages(
-    (nextToken) =>
-      client.models.Event.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
-    'Your events could not be loaded.',
-  );
+  const byId = new Map<string, QREvent>();
+  for (const owner of ownerCandidates(user)) {
+    const rows = await listAllPages(
+      (nextToken) =>
+        client.models.Event.listEventByOwner(
+          { owner },
+          { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+        ),
+      'Your events could not be loaded.',
+    );
+    for (const row of rows as QREvent[]) byId.set(row.id, row);
+  }
 
-  return (rows as QREvent[])
+  return [...byId.values()]
     .filter((event) => event.owner?.includes(user.userId))
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }
