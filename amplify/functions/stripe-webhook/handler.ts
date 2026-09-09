@@ -7,11 +7,13 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { randomUUID } from 'node:crypto';
+import { analyticsId, type AnalyticsEventName } from './analytics';
 
 const dynamo = new DynamoDBClient({});
 const lambda = new LambdaClient({});
 const PAYMENT_TABLE = process.env.PAYMENT_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+const ANALYTICS_TABLE = process.env.ANALYTICS_TABLE_NAME ?? '';
 const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
 const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 // Background function that talks to Prodigi. The webhook only hands off to it
@@ -62,6 +64,49 @@ async function upsertCorporateSubscription(subscription: Stripe.Subscription) {
   if (graceEndsAt) item.downloadGraceEndsAt = { S: graceEndsAt };
 
   await dynamo.send(new PutItemCommand({ TableName: CORPORATE_TABLE, Item: item }));
+}
+
+/**
+ * Write one funnel event, once.
+ *
+ * The id carries the dedupe rule, so a milestone written twice is a conditional
+ * -put failure rather than a second row. Failures are swallowed: this is
+ * telemetry hanging off something that already succeeded, and nothing a
+ * customer is waiting for should fail because a counter could not be written.
+ */
+async function fireAnalytics(
+  name: AnalyticsEventName,
+  scopeId: string,
+  detail?: Record<string, unknown>,
+): Promise<void> {
+  if (!ANALYTICS_TABLE) return;
+  const now = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: ANALYTICS_TABLE,
+        Item: {
+          id: { S: analyticsId(name, scopeId, randomUUID()) },
+          __typename: { S: 'AnalyticsEvent' },
+          name: { S: name },
+          scopeId: { S: scopeId },
+          ...(detail ? { detailJson: { S: JSON.stringify(detail).slice(0, 500) } } : {}),
+          occurredAt: { S: now },
+          createdAt: { S: now },
+          updatedAt: { S: now },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (error) {
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
+    console.error('Could not record a funnel event', {
+      at: now,
+      name,
+      scopeId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 const DAY_MS_WINDOW = 24 * 60 * 60 * 1000;
@@ -269,6 +314,13 @@ export const handler = async (event: {
           // if_not_exists, because a replayed webhook must not move the date:
           // Stripe retries, and the first payment is the one that happened.
           const stampPaidAt = field === 'paid';
+          // The Decide stage closing. Keyed on the event, so a replayed webhook
+          // records nothing further — Stripe retries, and one event is bought
+          // once.
+          if (stampPaidAt) void fireAnalytics('purchase_completed', eventId, { kind });
+          if (kind === 'extend') {
+            void fireAnalytics('retention_extension_purchased', eventId);
+          }
           await dynamo.send(
             new UpdateItemCommand({
               TableName: EVENT_TABLE,

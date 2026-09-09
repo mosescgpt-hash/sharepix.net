@@ -37,6 +37,11 @@ import { isEventThemeKey } from '@/lib/eventTheme';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
 import { LIST_PAGE_LIMIT, listAllPages } from '@/lib/listPages';
 import { SURVEY_QUESTIONS } from '@/lib/survey';
+import {
+  ANALYTICS_EVENTS,
+  isAnalyticsEvent,
+  type AnalyticsEventName,
+} from '@/lib/analytics';
 import { readSurveyRow, sortSurveys, type SurveyRow } from '@/lib/surveyAdmin';
 
 /** Which attributes on a response row are answers. Built from the questions. */
@@ -474,6 +479,78 @@ export async function unsubscribeFromEmails(
     };
   }
 }
+
+/**
+ * Record one funnel event from the browser.
+ *
+ * Fire-and-forget by design. A page view that fails to record must not be
+ * visible to the person viewing the page, and nothing here is awaited into a
+ * render — telemetry that can slow a gallery down is telemetry that will be
+ * removed later for slowing a gallery down.
+ *
+ * What the browser reports is a claim, not a fact: it can be blocked, doubled
+ * by a reload, or fabricated. The server-written half of the funnel is the
+ * measured half, and lib/analytics.ts marks which is which so a dashboard never
+ * quietly adds them together.
+ */
+export function trackEvent(
+  name: AnalyticsEventName,
+  scopeId = 'anon',
+  detail?: Record<string, unknown>,
+): void {
+  if (!isAnalyticsEvent(name)) return;
+  void (async () => {
+    try {
+      await client.mutations.recordAnalyticsEvent(
+        {
+          name,
+          scopeId,
+          detailJson: detail ? JSON.stringify(detail).slice(0, 500) : undefined,
+        },
+        { authMode: await authModeFor() },
+      );
+    } catch {
+      // Never surfaced. A funnel is not worth a broken page.
+    }
+  })();
+}
+
+/** Every recorded funnel event, for the product-health dashboard. */
+export async function listAnalyticsEvents(): Promise<
+  Array<{ name: AnalyticsEventName; scopeId: string; occurredAt: string | null }>
+> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.AnalyticsEvent.list({
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'Funnel events could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>)
+    .map((row) => ({
+      name: String(row.name ?? '') as AnalyticsEventName,
+      scopeId: String(row.scopeId ?? ''),
+      occurredAt: (row.occurredAt as string) ?? null,
+    }))
+    .filter((row) => isAnalyticsEvent(row.name));
+}
+
+/** The names something in this build actually fires. See NOT_MEASURED_FUNNEL. */
+export const WIRED_ANALYTICS_EVENTS: readonly AnalyticsEventName[] = ANALYTICS_EVENTS.filter(
+  (name) =>
+    ![
+      'referral_shared',
+      'referral_converted',
+      'featured_event_invited',
+      'featured_event_submitted',
+      'landing_page_view',
+      'guest_upload_started',
+      'account_created',
+      'repeat_event_created',
+    ].includes(name),
+);
 
 export interface SurveyState {
   ok: boolean;

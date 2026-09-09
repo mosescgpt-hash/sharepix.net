@@ -14,9 +14,16 @@ import { buildAlertEmail } from './alert-email';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
+import {
+  CONTRIBUTOR_MILESTONES,
+  UPLOAD_MILESTONES,
+  analyticsId,
+  milestonesCrossed,
+  type AnalyticsEventName,
+} from './analytics';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
-import { contributorKey, contributorRowId } from './successfulEvent';
+import { contributorKey, contributorRowId, isSuccessfulEvent } from './successfulEvent';
 import { assessUsage, fairUseConfig, windowExpired } from './fairUse';
 import { entitledPhotoLimit, entitledVideoBytes, entitledVideoLimit } from './planLimits';
 
@@ -26,6 +33,7 @@ const s3 = new S3Client({});
 const ses = new SESv2Client({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+const ANALYTICS_TABLE = process.env.ANALYTICS_TABLE_NAME ?? '';
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET_NAME = process.env.BUCKET_NAME as string;
 const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME as string;
@@ -342,6 +350,97 @@ async function sendAlertEmail(input: {
   }
 }
 
+/**
+ * Write one funnel event, once.
+ *
+ * The id is the dedupe rule — a milestone is keyed by name and event, so a
+ * second write is a conditional-put failure rather than a second row. Failures
+ * are swallowed on purpose: this is telemetry attached to an upload that has
+ * already succeeded, and a photo somebody's guests are waiting for must not
+ * depend on a counter.
+ */
+async function fireAnalytics(
+  name: AnalyticsEventName,
+  scopeId: string,
+  detail?: Record<string, unknown>,
+): Promise<void> {
+  if (!ANALYTICS_TABLE) return;
+  const now = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: ANALYTICS_TABLE,
+        Item: {
+          id: { S: analyticsId(name, scopeId, randomUUID()) },
+          __typename: { S: 'AnalyticsEvent' },
+          name: { S: name },
+          scopeId: { S: scopeId },
+          ...(detail ? { detailJson: { S: JSON.stringify(detail).slice(0, 500) } } : {}),
+          occurredAt: { S: now },
+          createdAt: { S: now },
+          updatedAt: { S: now },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (error) {
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
+    console.error('Could not record a funnel event', {
+      at: now,
+      name,
+      scopeId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * The milestones this upload crossed.
+ *
+ * Only guest uploads count towards activation — the brief is explicit that a
+ * host uploading to their own event is not the product working, and it is the
+ * whole reason `first_guest_upload` exists rather than `first_upload`.
+ */
+async function recordUploadMilestones(facts: {
+  eventId: string;
+  isGuestUpload: boolean;
+  before: { guestUploads: number; contributors: number };
+  after: { guestUploads: number; contributors: number };
+}): Promise<void> {
+  if (!ANALYTICS_TABLE || !facts.isGuestUpload) return;
+  const { eventId, before, after } = facts;
+
+  await fireAnalytics('guest_upload_completed', eventId);
+
+  if (before.guestUploads === 0 && after.guestUploads > 0) {
+    await fireAnalytics('first_guest_upload', eventId);
+  }
+  if (before.contributors < 3 && after.contributors >= 3) {
+    await fireAnalytics('third_unique_contributor', eventId);
+  }
+
+  // The Successful Event line, from the one definition the rest of the codebase
+  // reads. Crossing it is what the whole funnel is pointed at.
+  const wasSuccessful = isSuccessfulEvent({
+    contributorCount: before.contributors,
+    guestUploadCount: before.guestUploads,
+  });
+  const nowSuccessful = isSuccessfulEvent({
+    contributorCount: after.contributors,
+    guestUploadCount: after.guestUploads,
+  });
+  if (!wasSuccessful && nowSuccessful) {
+    await fireAnalytics('successful_event', eventId);
+  }
+
+  for (const mark of milestonesCrossed(before.guestUploads, after.guestUploads, UPLOAD_MILESTONES)) {
+    await fireAnalytics('upload_milestone', `${eventId}#${mark}`, { uploads: mark });
+  }
+  for (const mark of milestonesCrossed(before.contributors, after.contributors, CONTRIBUTOR_MILESTONES)) {
+    await fireAnalytics('contributor_milestone', `${eventId}#${mark}`, { contributors: mark });
+  }
+}
+
 export const handler: Handler = async (event) => {
   const {
     eventId,
@@ -521,6 +620,8 @@ export const handler: Handler = async (event) => {
     UpdateExpression: string;
     ExpressionAttributeValues: Record<string, AttributeValue>;
     ConditionExpression?: string;
+    /** ALL_NEW, so the counters after the reservation come back with it. */
+    ReturnValues?: 'ALL_NEW';
   } = {
     TableName: EVENT_TABLE,
     Key: { id: { S: eventId } },
@@ -623,8 +724,13 @@ export const handler: Handler = async (event) => {
       )
       .catch(() => undefined);
 
+  // ALL_NEW so the counters after the reservation are known without a second
+  // read. Milestones are derived from the before/after pair, which is what
+  // stops a re-read racing another upload and firing the same one twice.
+  update.ReturnValues = 'ALL_NEW';
+  let reserved: Record<string, AttributeValue> | undefined;
   try {
-    await dynamo.send(new UpdateItemCommand(update));
+    reserved = (await dynamo.send(new UpdateItemCommand(update))).Attributes;
   } catch (error) {
     if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
       // Either ceiling can be the one that failed. Naming the wrong one sends
@@ -641,6 +747,23 @@ export const handler: Handler = async (event) => {
   }
 
   void advanceWindow();
+
+  // Funnel milestones. Best-effort and never awaited into the upload's own
+  // outcome: a photo that is safely stored must not fail because a counter
+  // could not be written. Each is once-per-event at the table, so a second
+  // upload crossing the same line records nothing.
+  void recordUploadMilestones({
+    eventId,
+    isGuestUpload,
+    before: {
+      guestUploads: toInt(ev.guestUploadCount?.N) ?? 0,
+      contributors: toInt(ev.contributorCount?.N) ?? 0,
+    },
+    after: {
+      guestUploads: toInt(reserved?.guestUploadCount?.N) ?? 0,
+      contributors: toInt(reserved?.contributorCount?.N) ?? 0,
+    },
+  });
 
   const releaseSlot = () =>
     dynamo

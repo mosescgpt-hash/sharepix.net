@@ -20,6 +20,8 @@ import {
   listRefunds,
   listEventFeedback,
   listSurveyResponses,
+  listAnalyticsEvents,
+  WIRED_ANALYTICS_EVENTS,
   listPaymentJurisdictions,
   type FeedbackRow,
   readSetting,
@@ -54,6 +56,12 @@ import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
 import { SURVEY_QUESTIONS, questionById } from '@/lib/survey';
+import {
+  NOT_MEASURED_FUNNEL,
+  conversion,
+  stageTotals,
+  type AnalyticsEventName,
+} from '@/lib/analytics';
 import {
   filterSurveys,
   flagsFor,
@@ -94,6 +102,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'report-recipient', label: 'Report recipient' },
   { id: 'testimonials', label: 'Ratings' },
   { id: 'surveys', label: 'Survey responses' },
+  { id: 'funnel', label: 'Product health' },
   { id: 'jobs', label: 'Scheduled jobs' },
   { id: 'rewards', label: 'Research rewards' },
   { id: 'free-claims', label: 'Free event claims' },
@@ -239,6 +248,8 @@ function GlobalAdminPage() {
   const [surveysError, setSurveysError] = useState<string | null>(null);
   const [surveyFilters, setSurveyFilters] = useState<SurveyFilters>({});
   const [openSurvey, setOpenSurvey] = useState<string | null>(null);
+  const [funnel, setFunnel] = useState<Array<{ name: AnalyticsEventName }> | null>(null);
+  const [funnelError, setFunnelError] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [reportTo, setReportTo] = useState('');
   const [reportSaved, setReportSaved] = useState<string | null>(null);
@@ -367,6 +378,18 @@ function GlobalAdminPage() {
         setFeedback([]);
         setFeedbackError(
           err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
+        );
+      }
+
+      try {
+        setFunnel(await listAnalyticsEvents());
+        setFunnelError(null);
+      } catch (err) {
+        // Before the first recorded event this table has never been written to,
+        // and an empty funnel must not blank the page around it.
+        setFunnel([]);
+        setFunnelError(
+          err instanceof Error ? err.message : 'Funnel events could not be loaded.',
         );
       }
 
@@ -1614,6 +1637,111 @@ function GlobalAdminPage() {
                             ))}
                         </ul>
                       )}
+                    </>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* Product health.
+
+                The funnel, and what it still cannot answer. Server-written
+                figures are marked as measured and browser-reported ones are
+                not, because adding the two together and printing one
+                conversion rate states a precision this does not have.
+            */}
+            <div className="spx-card mt-8 p-5">
+              <h2 id="funnel" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
+                Product health
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                Where customers get to, and where they stop. A sale is not a
+                successful event — activation is a guest uploading.
+              </p>
+
+              {funnelError ? (
+                <Notice tone="warn" className="mt-3">
+                  {funnelError}
+                </Notice>
+              ) : null}
+
+              {funnel === null ? (
+                <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+              ) : (
+                (() => {
+                  const counts = new Map<string, number>();
+                  for (const row of funnel) {
+                    counts.set(row.name, (counts.get(row.name) ?? 0) + 1);
+                  }
+                  const totals = stageTotals(
+                    [...counts.entries()].map(([name, count]) => ({
+                      name: name as AnalyticsEventName,
+                      count,
+                    })),
+                    WIRED_ANALYTICS_EVENTS,
+                  );
+
+                  return (
+                    <>
+                      <ol className="mt-5 space-y-3">
+                        {totals.map((entry, index) => {
+                          const previous = index > 0 ? totals[index - 1].total : null;
+                          const rate = conversion(previous, entry.total);
+                          return (
+                            <li
+                              key={entry.stage.key}
+                              className="border border-charcoal/15 p-4"
+                            >
+                              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                <div>
+                                  <span className="text-xs uppercase tracking-wide text-charcoal/55">
+                                    {entry.stage.index}. {entry.stage.title}
+                                  </span>
+                                  <p className="mt-0.5 text-sm text-charcoal/70">
+                                    &ldquo;{entry.stage.question}&rdquo;
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-sans text-lg font-bold">
+                                    {entry.total === null ? 'Not measured' : entry.total}
+                                  </span>
+                                  {rate !== null ? (
+                                    <span className="block text-xs text-charcoal/60">
+                                      {rate}% of the stage before
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {entry.events.length > 0 ? (
+                                <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-charcoal/70">
+                                  {entry.events.map((row) => (
+                                    <li key={row.name}>
+                                      <span className="font-medium">{row.count}</span> {row.name}
+                                      {/* Said plainly rather than left to be
+                                          assumed: a browser-reported figure can
+                                          be blocked, doubled or made up. */}
+                                      <span className="text-charcoal/50">
+                                        {row.serverTruth ? ' · measured' : ' · reported'}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ol>
+
+                      <div className="mt-6 border-t border-charcoal/15 pt-4">
+                        <p className="text-xs uppercase tracking-wide text-charcoal/55">
+                          What this cannot tell you
+                        </p>
+                        <ul className="mt-2 space-y-1 text-xs text-charcoal/60">
+                          {NOT_MEASURED_FUNNEL.map((line) => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
                     </>
                   );
                 })()
