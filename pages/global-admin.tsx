@@ -19,6 +19,7 @@ import {
   decideRefund,
   listRefunds,
   listEventFeedback,
+  listSurveyResponses,
   listPaymentJurisdictions,
   type FeedbackRow,
   readSetting,
@@ -52,6 +53,15 @@ import {
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
+import { SURVEY_QUESTIONS, questionById } from '@/lib/survey';
+import {
+  filterSurveys,
+  flagsFor,
+  stageOf,
+  summarise,
+  type SurveyFilters,
+  type SurveyRow,
+} from '@/lib/surveyAdmin';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
@@ -83,6 +93,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'storage', label: 'Storage and fair use' },
   { id: 'report-recipient', label: 'Report recipient' },
   { id: 'testimonials', label: 'Ratings' },
+  { id: 'surveys', label: 'Survey responses' },
   { id: 'jobs', label: 'Scheduled jobs' },
   { id: 'rewards', label: 'Research rewards' },
   { id: 'free-claims', label: 'Free event claims' },
@@ -224,6 +235,10 @@ function GlobalAdminPage() {
   const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
   const [refundsError, setRefundsError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
+  const [surveys, setSurveys] = useState<SurveyRow[] | null>(null);
+  const [surveysError, setSurveysError] = useState<string | null>(null);
+  const [surveyFilters, setSurveyFilters] = useState<SurveyFilters>({});
+  const [openSurvey, setOpenSurvey] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [reportTo, setReportTo] = useState('');
   const [reportSaved, setReportSaved] = useState<string | null>(null);
@@ -352,6 +367,18 @@ function GlobalAdminPage() {
         setFeedback([]);
         setFeedbackError(
           err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
+        );
+      }
+
+      try {
+        setSurveys(await listSurveyResponses());
+        setSurveysError(null);
+      } catch (err) {
+        // Never fatal: before the first invitation this table has never been
+        // written to, and an empty research programme must not blank the page.
+        setSurveys([]);
+        setSurveysError(
+          err instanceof Error ? err.message : 'Survey responses could not be loaded.',
         );
       }
 
@@ -1587,6 +1614,403 @@ function GlobalAdminPage() {
                             ))}
                         </ul>
                       )}
+                    </>
+                  );
+                })()
+              )}
+            </div>
+
+            {/* Survey responses.
+
+                A table rather than cards: at twenty responses you read every
+                one, and at two hundred you filter. The flags exist so the
+                second case still surfaces the first — they mark a response as
+                worth reading, never as a customer-support failure. A host who
+                says the upload flow confused their guests has done us a favour.
+            */}
+            <div className="spx-card mt-8 p-5">
+              <h2 id="surveys" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
+                Survey responses
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                What hosts said after their event. Flagged responses are product
+                learning, not complaints to close.
+              </p>
+
+              {surveysError ? (
+                <Notice tone="warn" className="mt-3">
+                  {surveysError}
+                </Notice>
+              ) : null}
+
+              {surveys === null ? (
+                <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+              ) : surveys.length === 0 ? (
+                <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+                  No survey invitations have gone out yet.
+                </p>
+              ) : (
+                (() => {
+                  const summary = summarise(surveys);
+                  const shown = filterSurveys(surveys, surveyFilters);
+                  const eventTypes = Array.from(
+                    new Set(
+                      surveys
+                        .map((row) => String(row.answers.eventType ?? row.metrics?.eventType ?? ''))
+                        .filter(Boolean),
+                    ),
+                  ).sort();
+                  const cohorts = Array.from(
+                    new Set(surveys.map((row) => row.metrics?.internalCohort ?? '').filter(Boolean)),
+                  ).sort();
+                  const set = (patch: Partial<SurveyFilters>) =>
+                    setSurveyFilters((current) => ({ ...current, ...patch }));
+
+                  return (
+                    <>
+                      {/* Every figure here is absent rather than zero when
+                          nothing is behind it. "NPS 0" for an empty programme
+                          states a measured result, and a reader who believes it
+                          once stops believing the rest of the page. */}
+                      <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {[
+                          ['Invited', String(summary.invited)],
+                          [
+                            'Completed',
+                            summary.responseRate === null
+                              ? String(summary.completed)
+                              : `${summary.completed} (${summary.responseRate}%)`,
+                          ],
+                          [
+                            'Mean satisfaction',
+                            summary.meanSatisfaction === null
+                              ? 'Not yet measured'
+                              : `${summary.meanSatisfaction} / 5`,
+                          ],
+                          ['NPS', summary.nps === null ? 'Not yet measured' : String(summary.nps)],
+                        ].map(([label, value]) => (
+                          <div key={label} className="border border-charcoal/15 p-3">
+                            <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                              {label}
+                            </dt>
+                            <dd className="mt-1 font-sans text-lg font-bold">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+
+                      <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+                        <input
+                          type="search"
+                          value={surveyFilters.search ?? ''}
+                          onChange={(e) => set({ search: e.target.value })}
+                          placeholder="Search answers"
+                          aria-label="Search survey answers"
+                          className="border border-charcoal/20 bg-paper px-3 py-2 text-charcoal focus:border-ink focus:outline-none"
+                        />
+                        <select
+                          aria-label="Stage"
+                          value={surveyFilters.stage ?? 'all'}
+                          onChange={(e) => set({ stage: e.target.value as SurveyFilters['stage'] })}
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="all">Any stage</option>
+                          <option value="completed">Completed</option>
+                          <option value="started">Started, not finished</option>
+                          <option value="invited">Invited, not opened</option>
+                        </select>
+                        <select
+                          aria-label="Event type"
+                          value={surveyFilters.eventType ?? 'all'}
+                          onChange={(e) => set({ eventType: e.target.value })}
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="all">Any event type</option>
+                          {eventTypes.map((type) => (
+                            <option key={type} value={type}>
+                              {questionById('eventType')?.options?.find((o) => o.value === type)
+                                ?.label ?? type}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          aria-label="Satisfaction at or below"
+                          value={surveyFilters.maxSatisfaction ?? ''}
+                          onChange={(e) =>
+                            set({ maxSatisfaction: e.target.value ? Number(e.target.value) : null })
+                          }
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="">Any satisfaction</option>
+                          {[1, 2, 3, 4].map((score) => (
+                            <option key={score} value={score}>
+                              {score} or below
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          aria-label="NPS at or below"
+                          value={surveyFilters.maxNps ?? ''}
+                          onChange={(e) =>
+                            set({ maxNps: e.target.value ? Number(e.target.value) : null })
+                          }
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="">Any NPS</option>
+                          {[6, 8].map((score) => (
+                            <option key={score} value={score}>
+                              {score} or below
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          aria-label="Would pay $79"
+                          value={surveyFilters.wouldPay ?? 'all'}
+                          onChange={(e) => set({ wouldPay: e.target.value })}
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="all">Any answer on price</option>
+                          {(questionById('wouldPay')?.options ?? []).map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          aria-label="Testimonial permission"
+                          value={surveyFilters.testimonialPermission ?? 'all'}
+                          onChange={(e) => set({ testimonialPermission: e.target.value })}
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="all">Any testimonial answer</option>
+                          {(questionById('testimonialPermission')?.options ?? []).map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          aria-label="Photo marketing interest"
+                          value={surveyFilters.photoMarketingInterest ?? 'all'}
+                          onChange={(e) => set({ photoMarketingInterest: e.target.value })}
+                          className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                        >
+                          <option value="all">Any photo answer</option>
+                          {(questionById('photoMarketingInterest')?.options ?? []).map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        {cohorts.length > 0 ? (
+                          <select
+                            aria-label="Cohort"
+                            value={surveyFilters.cohort ?? 'all'}
+                            onChange={(e) => set({ cohort: e.target.value })}
+                            className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                          >
+                            <option value="all">Any cohort</option>
+                            {cohorts.map((cohort) => (
+                              <option key={cohort} value={cohort}>
+                                {cohort}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={surveyFilters.from ?? ''}
+                            onChange={(e) => set({ from: e.target.value })}
+                            aria-label="Completed from"
+                            className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                          />
+                          <span className="text-charcoal/55">to</span>
+                          <input
+                            type="date"
+                            value={surveyFilters.to ?? ''}
+                            onChange={(e) => set({ to: e.target.value })}
+                            aria-label="Completed to"
+                            className="border border-charcoal/25 px-2 py-2 text-charcoal"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => set({ flaggedOnly: !surveyFilters.flaggedOnly })}
+                          aria-pressed={Boolean(surveyFilters.flaggedOnly)}
+                          className={`border px-3 py-2 font-medium transition ${
+                            surveyFilters.flaggedOnly
+                              ? 'border-ink bg-ink text-canvas'
+                              : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
+                          }`}
+                        >
+                          Worth reading ({summary.flagged})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSurveyFilters({})}
+                          className="px-2 py-2 text-charcoal/70 underline"
+                        >
+                          Clear
+                        </button>
+                      </div>
+
+                      <p className="mt-3 text-xs text-charcoal/60">
+                        Showing {shown.length} of {surveys.length}.
+                      </p>
+
+                      {shown.length === 0 ? (
+                        <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+                          No responses match these filters.
+                        </p>
+                      ) : (
+                        <div className="mt-4 overflow-x-auto">
+                          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                            <thead>
+                              <tr className="border-b border-charcoal/20 text-xs uppercase tracking-wide text-charcoal/55">
+                                <th scope="col" className="py-2 pr-3">Event</th>
+                                <th scope="col" className="py-2 pr-3">Stage</th>
+                                <th scope="col" className="py-2 pr-3">Satisfaction</th>
+                                <th scope="col" className="py-2 pr-3">NPS</th>
+                                <th scope="col" className="py-2 pr-3">Would pay</th>
+                                <th scope="col" className="py-2 pr-3">Value</th>
+                                <th scope="col" className="py-2 pr-3">Quote?</th>
+                                <th scope="col" className="py-2 pr-3">Photos?</th>
+                                <th scope="col" className="py-2 pr-3">Media</th>
+                                <th scope="col" className="py-2">Read</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {shown.map((response) => {
+                                const flags = flagsFor(response);
+                                const answer = (id: string) => {
+                                  const value = response.answers[id];
+                                  if (value === undefined || value === null || value === '') return '—';
+                                  const option = questionById(id)?.options?.find(
+                                    (o) => o.value === value,
+                                  );
+                                  return option?.label ?? String(value);
+                                };
+                                return (
+                                  <tr key={response.id} className="border-b border-charcoal/10 align-top">
+                                    <td className="py-2 pr-3">
+                                      <span className="font-medium">{response.eventName || response.eventId}</span>
+                                      {flags.length > 0 ? (
+                                        <span
+                                          className="ml-2 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900"
+                                          title={flags.join(', ')}
+                                        >
+                                          Worth reading
+                                        </span>
+                                      ) : null}
+                                      <span className="block text-xs text-charcoal/60">
+                                        {response.customer || 'Unknown host'}
+                                        {response.metrics?.internalCohort
+                                          ? ` · ${response.metrics.internalCohort}`
+                                          : ''}
+                                      </span>
+                                      <span className="block text-xs text-charcoal/60">
+                                        {answer('eventType')}
+                                        {response.completedAt
+                                          ? ` · ${new Date(response.completedAt).toLocaleDateString()}`
+                                          : ''}
+                                        {` · ${response.surveyVersion || 'unversioned'}`}
+                                      </span>
+                                    </td>
+                                    <td className="py-2 pr-3 text-xs text-charcoal/70">
+                                      {stageOf(response)}
+                                      {response.reminderSentAt ? ' · reminded' : ''}
+                                    </td>
+                                    <td className="py-2 pr-3">{answer('satisfaction')}</td>
+                                    <td className="py-2 pr-3">{answer('npsScore')}</td>
+                                    <td className="py-2 pr-3 text-xs">{answer('wouldPay')}</td>
+                                    <td className="py-2 pr-3 text-xs">{answer('valuePerception')}</td>
+                                    <td className="py-2 pr-3 text-xs">{answer('testimonialPermission')}</td>
+                                    <td className="py-2 pr-3 text-xs">{answer('photoMarketingInterest')}</td>
+                                    <td className="py-2 pr-3 text-xs text-charcoal/70">
+                                      {/* Storage is deliberately absent, not zero:
+                                          byte accounting does not run, and a
+                                          snapshot reading "0 GB" would be false. */}
+                                      {response.metrics
+                                        ? `${response.metrics.photoCount} photo${response.metrics.photoCount === 1 ? '' : 's'}, ${response.metrics.videoCount} video${response.metrics.videoCount === 1 ? '' : 's'}, ${response.metrics.contributorCount} contributor${response.metrics.contributorCount === 1 ? '' : 's'}`
+                                        : '—'}
+                                    </td>
+                                    <td className="py-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setOpenSurvey(openSurvey === response.id ? null : response.id)
+                                        }
+                                        aria-expanded={openSurvey === response.id}
+                                        className="border border-charcoal/25 px-2 py-1 text-xs transition hover:border-charcoal/60"
+                                      >
+                                        {openSurvey === response.id ? 'Hide' : 'Open'}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* The whole response, in the order it was asked. Every
+                          answer, not a chosen few: the point of running this
+                          ourselves is that nothing has to be summarised away
+                          before a person can read it. */}
+                      {openSurvey ? (
+                        (() => {
+                          const response = shown.find((row) => row.id === openSurvey);
+                          if (!response) return null;
+                          return (
+                            <div className="mt-6 border border-charcoal/20 bg-paper p-5">
+                              <h3 className="font-sans text-lg font-bold tracking-[-0.02em]">
+                                {response.eventName || response.eventId}
+                              </h3>
+                              <p className="mt-1 text-xs text-charcoal/60">
+                                {response.customer} · survey {response.surveyVersion || 'unversioned'}
+                                {response.completedAt
+                                  ? ` · completed ${new Date(response.completedAt).toLocaleString()}`
+                                  : ' · not completed'}
+                              </p>
+                              <dl className="mt-4 space-y-3">
+                                {SURVEY_QUESTIONS.map((question) => {
+                                  const value = response.answers[question.id];
+                                  const other = response.answers[`${question.id}Other`];
+                                  if (value === undefined && other === undefined) return null;
+                                  const label = Array.isArray(value)
+                                    ? value
+                                        .map(
+                                          (entry) =>
+                                            question.options?.find((o) => o.value === entry)?.label ??
+                                            entry,
+                                        )
+                                        .join(', ')
+                                    : (question.options?.find((o) => o.value === value)?.label ??
+                                      String(value ?? ''));
+                                  return (
+                                    <div key={question.id}>
+                                      <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                                        {question.prompt}
+                                      </dt>
+                                      <dd className="mt-0.5 whitespace-pre-wrap text-charcoal">
+                                        {label || '—'}
+                                        {other ? ` (${other})` : ''}
+                                      </dd>
+                                    </div>
+                                  );
+                                })}
+                              </dl>
+                              {response.metrics?.notMeasured?.length ? (
+                                <p className="mt-4 border-t border-charcoal/15 pt-3 text-xs text-charcoal/55">
+                                  Not captured for this event:{' '}
+                                  {response.metrics.notMeasured.join('; ')}
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })()
+                      ) : null}
                     </>
                   );
                 })()
