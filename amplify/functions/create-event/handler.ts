@@ -8,6 +8,7 @@ import {
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { Schema } from '../../data/resource';
+import { analyticsId, type AnalyticsEventName } from './analytics';
 import {
   activationFor,
   codeUsable,
@@ -26,6 +27,7 @@ import { normalizeSource } from './attribution';
 const dynamo = new DynamoDBClient({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+const ANALYTICS_TABLE = process.env.ANALYTICS_TABLE_NAME ?? '';
 const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
 const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 const HOST_PROFILE_TABLE = process.env.HOST_PROFILE_TABLE_NAME as string;
@@ -194,6 +196,49 @@ async function putEvent(item: Record<string, AttributeValue>): Promise<void> {
   );
 }
 
+/**
+ * Write one funnel event, once.
+ *
+ * The id carries the dedupe rule, so a milestone written twice is a conditional
+ * -put failure rather than a second row. Failures are swallowed: this is
+ * telemetry hanging off something that already succeeded, and nothing a
+ * customer is waiting for should fail because a counter could not be written.
+ */
+async function fireAnalytics(
+  name: AnalyticsEventName,
+  scopeId: string,
+  detail?: Record<string, unknown>,
+): Promise<void> {
+  if (!ANALYTICS_TABLE) return;
+  const now = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: ANALYTICS_TABLE,
+        Item: {
+          id: { S: analyticsId(name, scopeId, randomUUID()) },
+          __typename: { S: 'AnalyticsEvent' },
+          name: { S: name },
+          scopeId: { S: scopeId },
+          ...(detail ? { detailJson: { S: JSON.stringify(detail).slice(0, 500) } } : {}),
+          occurredAt: { S: now },
+          createdAt: { S: now },
+          updatedAt: { S: now },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (error) {
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
+    console.error('Could not record a funnel event', {
+      at: now,
+      name,
+      scopeId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export const handler: Handler = async (event) => {
   const identity = event.identity as
     | { sub?: string; username?: string; claims?: Record<string, unknown> }
@@ -310,6 +355,11 @@ export const handler: Handler = async (event) => {
     if (trial) await releaseFreeEvent(sub);
     throw err;
   }
+
+  // The funnel's Create stage, from the one place that knows an event was
+  // actually written. Not awaited into the response: a host who has an event
+  // must not be made to wait on telemetry, or fail because of it.
+  void fireAnalytics('event_created', id, { tier: row.tier, trial });
 
   return {
     id,

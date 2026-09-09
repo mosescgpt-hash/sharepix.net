@@ -18,10 +18,18 @@ import {
   isCorporateActive,
   startCheckout,
   validateDiscountCode,
+  trackEvent,
 } from '@/lib/api';
 import { QREvent } from '@/lib/types';
 
 function CreateEventPage() {
+  // The Decide stage opening. This page is behind the authenticator, so
+  // reaching it means somebody has an account and is setting an event up —
+  // which is exactly the step the funnel could not see before.
+  useEffect(() => {
+    trackEvent('create_event_started');
+  }, []);
+
   const router = useRouter();
   const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'plus';
   // Where they came from, carried in the link. A claim only — the create-event

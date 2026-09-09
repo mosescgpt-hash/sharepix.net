@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import Link from 'next/link';
 import Artwork from '@/components/Artwork';
 import Layout from '@/components/Layout';
+import { trackEvent } from '@/lib/api';
 import { PRICING_TIERS } from '@/lib/pricing';
 
 /**
@@ -16,6 +18,11 @@ import { PRICING_TIERS } from '@/lib/pricing';
  * land the registry changes and this file does not.
  */
 export default function HomePage() {
+  // The Discover stage.
+  useEffect(() => {
+    trackEvent('homepage_view');
+  }, []);
+
   return (
     <Layout width="bleed">
       <div className="bg-canvas font-sans">

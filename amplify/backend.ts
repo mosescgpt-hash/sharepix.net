@@ -46,6 +46,7 @@ import { monthlyReport } from './functions/monthly-report/resource';
 import { claimRefund } from './functions/claim-refund/resource';
 import { submitFeedback } from './functions/submit-feedback/resource';
 import { surveyResponse } from './functions/survey-response/resource';
+import { recordAnalytics } from './functions/record-analytics/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 
@@ -81,6 +82,7 @@ const backend = defineBackend({
   claimRefund,
   submitFeedback,
   surveyResponse,
+  recordAnalytics,
   reclaimStorage,
   photoEngagement,
 });
@@ -103,6 +105,7 @@ const incentiveTable = backend.data.resources.tables.ResearchIncentive;
 const refundTable = backend.data.resources.tables.Refund;
 const feedbackTable = backend.data.resources.tables.EventFeedback;
 const surveyTable = backend.data.resources.tables.SurveyResponse;
+const analyticsTable = backend.data.resources.tables.AnalyticsEvent;
 const mediaTable = backend.data.resources.tables.MediaObject;
 const settingTable = backend.data.resources.tables.AppSetting;
 const reactionTable = backend.data.resources.tables.PhotoReaction;
@@ -879,6 +882,21 @@ submitFeedbackFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
 // snapshot the counters onto a finished response and to pre-fill the event
 // type. Read-only there on purpose: nothing a host answers should be able to
 // change the event it is about.
+// The funnel recorder. Write-only on its own table and nothing else: it is
+// reachable by any browser, so the smallest possible grant is the point.
+const recordAnalyticsFn = backend.recordAnalytics.resources.lambda as LambdaFunction;
+analyticsTable.grantWriteData(recordAnalyticsFn);
+recordAnalyticsFn.addEnvironment('ANALYTICS_TABLE_NAME', analyticsTable.tableName);
+
+// The funnel events that are facts rather than claims: an event created, a
+// payment recorded, a contributor counted. All three of these functions already
+// live in the data stack, so the grant adds no cross-stack edge — the thing
+// that broke four deploys when sanitize-upload reached the other way.
+for (const fn of [createEventFn, createFn, webhookFn]) {
+  analyticsTable.grantWriteData(fn);
+  fn.addEnvironment('ANALYTICS_TABLE_NAME', analyticsTable.tableName);
+}
+
 const surveyResponseFn = backend.surveyResponse.resources.lambda as LambdaFunction;
 surveyTable.grantReadWriteData(surveyResponseFn);
 eventTable.grantReadData(surveyResponseFn);

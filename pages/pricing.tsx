@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
 import { VIDEO_GB_INCLUDED } from '@/lib/pricing';
+import { trackEvent } from '@/lib/api';
 
 const faqs = [
   {
@@ -38,6 +40,12 @@ const faqs = [
 ];
 
 export default function PricingPage() {
+  // The Believe stage. Reaching pricing is the strongest signal short of
+  // starting an event, and it is the one the funnel could never see before.
+  useEffect(() => {
+    trackEvent('pricing_view');
+  }, []);
+
   return (
     <Layout title="Pricing" width="bleed">
       <section className="spx-section-canvas">

@@ -21,6 +21,7 @@ import { completeSurvey as completeSurveyFn } from '../functions/complete-survey
 import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
 import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
 import { surveyResponse as surveyResponseFn } from '../functions/survey-response/resource';
+import { recordAnalytics as recordAnalyticsFn } from '../functions/record-analytics/resource';
 import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
 import { photoEngagement as photoEngagementFn } from '../functions/photo-engagement/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
@@ -669,6 +670,91 @@ const schema = a.schema({
   //
   // Admin-only for both read and write. Nothing here is secret, but a setting
   // a browser could write is a setting anyone could point at their own inbox.
+  /**
+   * One recorded funnel event.
+   *
+   * SharePix has no analytics vendor — Cloudflare Web Analytics counts page
+   * views and cannot join one to a purchase — so this is the first-party
+   * substitute. The vocabulary is ANALYTICS_EVENTS in lib/analytics.ts; this
+   * table only stores what that module names.
+   *
+   * The id carries the dedupe rule. A milestone is keyed `<name>#<scope>` so a
+   * second write is a conditional-put failure rather than a second row: a
+   * "first guest upload" that fired twice would turn a count of events into a
+   * count of page loads. Repeatable events get a unique suffix and are counted
+   * as often as they happen.
+   *
+   * Guests may create, and nothing else. A funnel needs the anonymous half of
+   * the journey — the visit before the account — and the cost of that is that
+   * browser-reported rows are claims rather than facts. isServerTruth marks
+   * which is which, and the dashboard keeps them apart instead of adding them
+   * up.
+   */
+  AnalyticsEvent: a
+    .model({
+      /** One of ANALYTICS_EVENTS. Anything else is refused by the function. */
+      name: a.string(),
+      /** What it happened to: an event id, or 'anon' for a visitor. */
+      scopeId: a.string(),
+      /** Free-form context, small. Never anything that identifies a person. */
+      detailJson: a.string(),
+      occurredAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  /**
+   * One host's offer of photos for marketing, and what was decided about it.
+   *
+   * The consent record. A customer's photos are theirs; buying SharePix is not
+   * a licence and answering the survey is not a licence. This row is the only
+   * thing that grants one, and it grants it per asset — see lib/marketingRelease.ts.
+   *
+   * `releaseVersion` and `releaseAcceptedAt` are stamped together and never
+   * rewritten, so a grant given under one wording is not silently reinterpreted
+   * under a later one. `assetsJson` carries the per-photo decision: only the
+   * accepted ones may ever be used, and a photo somebody showed us is not a
+   * photo we may publish.
+   *
+   * Hosts read their own and write nothing. The submission is made through a
+   * function that checks the event is theirs and stamps the release itself —
+   * a browser that could write this table could grant itself permission to
+   * publish somebody else's wedding.
+   */
+  MarketingSubmission: a
+    .model({
+      eventId: a.string(),
+      /** Amplify owner string of the host, for their own read access. */
+      customer: a.string(),
+      eventName: a.string(),
+      /** One of MARKETING_TIERS. */
+      tierKey: a.string(),
+      /** One of SUBMISSION_STATUSES. */
+      status: a.string(),
+      /** Photo ids and their per-asset decisions, as SubmittedAsset[]. */
+      assetsJson: a.string(),
+      /** Their words, if the tier asked for them. */
+      testimonial: a.string(),
+      /** The exact wording accepted, and when. Never rewritten. */
+      releaseVersion: a.string(),
+      releaseAcceptedAt: a.datetime(),
+      /** What the host confirmed about rights, as answered. */
+      rightsConfirmed: a.boolean(),
+      submittedAt: a.datetime(),
+      reviewedBy: a.string(),
+      reviewedAt: a.datetime(),
+      adminNote: a.string(),
+      /** Recorded when a person has actually sent the compensation. */
+      compensationUsd: a.integer(),
+      paidAt: a.datetime(),
+      paidBy: a.string(),
+      /** Why use was paused, when it was. */
+      pausedReason: a.string(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('customer').to(['get', 'list']),
+      allow.group('ADMINS'),
+    ]),
+
   AppSetting: a
     .model({
       /** The stored value. Interpretation is the caller's job. */
@@ -1332,6 +1418,31 @@ const schema = a.schema({
     .returns(a.ref('FeedbackResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(submitFeedbackFn)),
+
+  /**
+   * Record one funnel event.
+   *
+   * Open to guests because the funnel needs the anonymous half of the journey —
+   * the visit before the account. The function is what makes that safe: it
+   * accepts only names in the shared vocabulary, bounds what is stored, stamps
+   * the time server-side, and applies the once-per-scope rule as a condition on
+   * the write.
+   *
+   * Always returns true. Telemetry must not tell a browser it failed, and a
+   * caller that could tell "stored" from "already stored" could probe which
+   * milestones an event has reached.
+   */
+  recordAnalyticsEvent: a
+    .mutation()
+    .arguments({
+      name: a.string().required(),
+      /** An event id, or 'anon' for a visitor. */
+      scopeId: a.string(),
+      detailJson: a.string(),
+    })
+    .returns(a.boolean())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(recordAnalyticsFn)),
 
   /**
    * Open, autosave, or submit a post-event survey.
