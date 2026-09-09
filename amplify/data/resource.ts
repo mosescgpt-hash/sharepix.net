@@ -20,6 +20,7 @@ import { unsubscribeEmail as unsubscribeEmailFn } from '../functions/unsubscribe
 import { completeSurvey as completeSurveyFn } from '../functions/complete-survey/resource';
 import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource';
 import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
+import { surveyResponse as surveyResponseFn } from '../functions/survey-response/resource';
 import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
 import { photoEngagement as photoEngagementFn } from '../functions/photo-engagement/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
@@ -1162,6 +1163,26 @@ const schema = a.schema({
     eventName: a.string(),
   }),
 
+  /**
+   * The survey as it stands for the holder of this link.
+   *
+   * `answersJson` carries the answers back so an interrupted survey resumes
+   * where it stopped. It is a JSON string in transit only — the answers are
+   * stored as columns, because the admin dashboard filters on them.
+   */
+  SurveyState: a.customType({
+    ok: a.boolean().required(),
+    /** True once submitted. The page shows the thank-you and nothing else. */
+    completed: a.boolean().required(),
+    message: a.string(),
+    eventName: a.string(),
+    /** Which wording this response was collected against. */
+    surveyVersion: a.string(),
+    answersJson: a.string(),
+    /** The event's own type, so question one arrives already answered. */
+    eventType: a.string(),
+  }),
+
   RefundClaimResult: a.customType({
     filed: a.boolean().required(),
     message: a.string(),
@@ -1291,6 +1312,30 @@ const schema = a.schema({
     .returns(a.ref('FeedbackResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(submitFeedbackFn)),
+
+  /**
+   * Open, autosave, or submit a post-event survey.
+   *
+   * One operation for all three because each begins by decoding a link,
+   * loading the row it names and comparing a token in constant time. Three
+   * operations would carry that check three times, and the copy that drifted
+   * would be the hole.
+   *
+   * Open to guests as well as signed-in hosts: the link is the credential, and
+   * a host reading their email on a device they never signed in on is the
+   * ordinary case rather than the exception.
+   */
+  surveyAction: a
+    .mutation()
+    .arguments({
+      link: a.string().required(),
+      /** 'open' | 'save' | 'submit'. Anything else is refused. */
+      action: a.string().required(),
+      answersJson: a.string(),
+    })
+    .returns(a.ref('SurveyState'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(surveyResponseFn)),
 
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a
