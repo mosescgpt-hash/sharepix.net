@@ -702,6 +702,59 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  /**
+   * One host's offer of photos for marketing, and what was decided about it.
+   *
+   * The consent record. A customer's photos are theirs; buying SharePix is not
+   * a licence and answering the survey is not a licence. This row is the only
+   * thing that grants one, and it grants it per asset — see lib/marketingRelease.ts.
+   *
+   * `releaseVersion` and `releaseAcceptedAt` are stamped together and never
+   * rewritten, so a grant given under one wording is not silently reinterpreted
+   * under a later one. `assetsJson` carries the per-photo decision: only the
+   * accepted ones may ever be used, and a photo somebody showed us is not a
+   * photo we may publish.
+   *
+   * Hosts read their own and write nothing. The submission is made through a
+   * function that checks the event is theirs and stamps the release itself —
+   * a browser that could write this table could grant itself permission to
+   * publish somebody else's wedding.
+   */
+  MarketingSubmission: a
+    .model({
+      eventId: a.string(),
+      /** Amplify owner string of the host, for their own read access. */
+      customer: a.string(),
+      eventName: a.string(),
+      /** One of MARKETING_TIERS. */
+      tierKey: a.string(),
+      /** One of SUBMISSION_STATUSES. */
+      status: a.string(),
+      /** Photo ids and their per-asset decisions, as SubmittedAsset[]. */
+      assetsJson: a.string(),
+      /** Their words, if the tier asked for them. */
+      testimonial: a.string(),
+      /** The exact wording accepted, and when. Never rewritten. */
+      releaseVersion: a.string(),
+      releaseAcceptedAt: a.datetime(),
+      /** What the host confirmed about rights, as answered. */
+      rightsConfirmed: a.boolean(),
+      submittedAt: a.datetime(),
+      reviewedBy: a.string(),
+      reviewedAt: a.datetime(),
+      adminNote: a.string(),
+      /** Recorded when a person has actually sent the compensation. */
+      compensationUsd: a.integer(),
+      paidAt: a.datetime(),
+      paidBy: a.string(),
+      /** Why use was paused, when it was. */
+      pausedReason: a.string(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('customer').to(['get', 'list']),
+      allow.group('ADMINS'),
+    ]),
+
   AppSetting: a
     .model({
       /** The stored value. Interpretation is the caller's job. */

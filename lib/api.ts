@@ -43,6 +43,11 @@ import {
   type AnalyticsEventName,
 } from '@/lib/analytics';
 import { readSurveyRow, sortSurveys, type SurveyRow } from '@/lib/surveyAdmin';
+import {
+  canTransition as canTransitionMarketing,
+  type SubmissionStatus,
+  type SubmittedAsset,
+} from '@/lib/marketingRelease';
 
 /** Which attributes on a response row are answers. Built from the questions. */
 const SURVEY_ANSWER_IDS = SURVEY_QUESTIONS.flatMap((question) => [
@@ -551,6 +556,120 @@ export const WIRED_ANALYTICS_EVENTS: readonly AnalyticsEventName[] = ANALYTICS_E
       'repeat_event_created',
     ].includes(name),
 );
+
+export interface MarketingSubmissionRow {
+  id: string;
+  eventId: string;
+  eventName: string;
+  customer: string;
+  tierKey: string;
+  status: SubmissionStatus;
+  assets: SubmittedAsset[];
+  testimonial: string | null;
+  releaseVersion: string | null;
+  releaseAcceptedAt: string | null;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  adminNote: string | null;
+  compensationUsd: number | null;
+  paidAt: string | null;
+  pausedReason: string | null;
+}
+
+function readMarketingSubmission(raw: Record<string, unknown>): MarketingSubmissionRow {
+  let assets: SubmittedAsset[] = [];
+  try {
+    const parsed = JSON.parse((raw.assetsJson as string) ?? '[]');
+    if (Array.isArray(parsed)) assets = parsed as SubmittedAsset[];
+  } catch {
+    // A row we cannot read is one we show as empty rather than crash on. It
+    // still carries its status and its release stamp, which is the part that
+    // matters legally.
+    assets = [];
+  }
+  return {
+    id: String(raw.id ?? ''),
+    eventId: String(raw.eventId ?? ''),
+    eventName: String(raw.eventName ?? ''),
+    customer: String(raw.customer ?? ''),
+    tierKey: String(raw.tierKey ?? ''),
+    status: ((raw.status as string) ?? 'INVITED') as SubmissionStatus,
+    assets,
+    testimonial: (raw.testimonial as string) ?? null,
+    releaseVersion: (raw.releaseVersion as string) ?? null,
+    releaseAcceptedAt: (raw.releaseAcceptedAt as string) ?? null,
+    submittedAt: (raw.submittedAt as string) ?? null,
+    reviewedAt: (raw.reviewedAt as string) ?? null,
+    adminNote: (raw.adminNote as string) ?? null,
+    compensationUsd:
+      typeof raw.compensationUsd === 'number' ? raw.compensationUsd : null,
+    paidAt: (raw.paidAt as string) ?? null,
+    pausedReason: (raw.pausedReason as string) ?? null,
+  };
+}
+
+/** Every Featured Event submission, for the admin review queue. */
+export async function listMarketingSubmissions(): Promise<MarketingSubmissionRow[]> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.MarketingSubmission.list({
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'Marketing submissions could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>)
+    .map(readMarketingSubmission)
+    .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''));
+}
+
+/**
+ * Move a submission through review, or record a per-asset decision.
+ *
+ * Refuses a transition the state machine does not allow rather than writing it
+ * — the queue is the record of what a person decided about someone's
+ * photographs, and a status that got there by a mis-click is a record of
+ * nothing.
+ *
+ * Nothing here moves money. `paidAt` records that a person sent the
+ * compensation, in the same way the refund ledger records a refund somebody
+ * issued in Stripe by hand.
+ */
+export async function decideMarketingSubmission(
+  row: MarketingSubmissionRow,
+  next: {
+    status?: SubmissionStatus;
+    assets?: SubmittedAsset[];
+    adminNote?: string;
+    pausedReason?: string;
+    compensationUsd?: number;
+    markPaid?: boolean;
+  },
+): Promise<void> {
+  if (next.status && !canTransitionMarketing(row.status, next.status)) {
+    throw new Error(`A submission cannot go from ${row.status} to ${next.status}.`);
+  }
+  const user = await getCurrentUserInfo();
+  const now = new Date().toISOString();
+
+  const { errors } = await client.models.MarketingSubmission.update(
+    {
+      id: row.id,
+      ...(next.status ? { status: next.status, reviewedAt: now } : {}),
+      ...(next.assets ? { assetsJson: JSON.stringify(next.assets) } : {}),
+      ...(next.adminNote !== undefined ? { adminNote: next.adminNote } : {}),
+      ...(next.pausedReason !== undefined ? { pausedReason: next.pausedReason } : {}),
+      ...(next.compensationUsd !== undefined
+        ? { compensationUsd: next.compensationUsd }
+        : {}),
+      ...(next.markPaid ? { paidAt: now, paidBy: user?.displayName ?? 'admin' } : {}),
+      ...(user ? { reviewedBy: user.displayName } : {}),
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('That submission could not be updated.');
+}
 
 export interface SurveyState {
   ok: boolean;

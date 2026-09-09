@@ -21,6 +21,8 @@ import {
   listEventFeedback,
   listSurveyResponses,
   listAnalyticsEvents,
+  listMarketingSubmissions,
+  decideMarketingSubmission,
   WIRED_ANALYTICS_EVENTS,
   listPaymentJurisdictions,
   type FeedbackRow,
@@ -56,6 +58,14 @@ import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
 import { SURVEY_QUESTIONS, questionById } from '@/lib/survey';
+import {
+  REVIEW_CHECKS,
+  compensationState,
+  tierByKey,
+  usableAssets,
+  type SubmissionStatus,
+} from '@/lib/marketingRelease';
+import type { MarketingSubmissionRow } from '@/lib/api';
 import {
   NOT_MEASURED_FUNNEL,
   conversion,
@@ -103,6 +113,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'testimonials', label: 'Ratings' },
   { id: 'surveys', label: 'Survey responses' },
   { id: 'funnel', label: 'Product health' },
+  { id: 'featured', label: 'Featured Events' },
   { id: 'jobs', label: 'Scheduled jobs' },
   { id: 'rewards', label: 'Research rewards' },
   { id: 'free-claims', label: 'Free event claims' },
@@ -250,6 +261,8 @@ function GlobalAdminPage() {
   const [openSurvey, setOpenSurvey] = useState<string | null>(null);
   const [funnel, setFunnel] = useState<Array<{ name: AnalyticsEventName }> | null>(null);
   const [funnelError, setFunnelError] = useState<string | null>(null);
+  const [featured, setFeatured] = useState<MarketingSubmissionRow[] | null>(null);
+  const [featuredError, setFeaturedError] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [reportTo, setReportTo] = useState('');
   const [reportSaved, setReportSaved] = useState<string | null>(null);
@@ -378,6 +391,16 @@ function GlobalAdminPage() {
         setFeedback([]);
         setFeedbackError(
           err instanceof Error ? err.message : 'Customer feedback could not be loaded.',
+        );
+      }
+
+      try {
+        setFeatured(await listMarketingSubmissions());
+        setFeaturedError(null);
+      } catch (err) {
+        setFeatured([]);
+        setFeaturedError(
+          err instanceof Error ? err.message : 'Featured Event submissions could not be loaded.',
         );
       }
 
@@ -749,6 +772,47 @@ function GlobalAdminPage() {
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'The gift-card setting could not be updated.',
+      );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /**
+   * Move a Featured Event submission along.
+   *
+   * The confirmations are not decoration. Accepting decides that somebody's
+   * photographs may appear in advertising, and marking a payment says money
+   * left the business — both are things a person should have to mean.
+   */
+  async function handleFeatured(
+    row: MarketingSubmissionRow,
+    next: Parameters<typeof decideMarketingSubmission>[1],
+  ) {
+    if (
+      next.status === 'ACCEPTED' &&
+      !window.confirm(
+        `Accept the submission for \u201c${row.eventName}\u201d?\n\nOnly the photos marked accepted may be used, and only for showing what SharePix does. Check the review questions first.`,
+      )
+    ) {
+      return;
+    }
+    if (
+      next.markPaid &&
+      !window.confirm(
+        `Record the compensation for \u201c${row.eventName}\u201d as sent?\n\nThis records that YOU sent it. SharePix moves no money on its own.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`featured-${row.id}`);
+    try {
+      await decideMarketingSubmission(row, next);
+      setFeatured(await listMarketingSubmissions());
+      setFeaturedError(null);
+    } catch (err) {
+      setFeaturedError(
+        err instanceof Error ? err.message : 'That submission could not be updated.',
       );
     } finally {
       setWorking(null);
@@ -1640,6 +1704,132 @@ function GlobalAdminPage() {
                     </>
                   );
                 })()
+              )}
+            </div>
+
+            {/* Featured Events.
+
+                The consent record. Nothing here publishes anything and nothing
+                moves money: accepting marks which specific photos may be used,
+                and marking a payment records that a person sent it.
+            */}
+            <div className="spx-card mt-8 p-5">
+              <h2 id="featured" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
+                Featured Events
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                Photos hosts have offered for marketing. Only the ones accepted
+                here may be used, and only for showing what SharePix does.
+              </p>
+
+              {featuredError ? (
+                <Notice tone="warn" className="mt-3">
+                  {featuredError}
+                </Notice>
+              ) : null}
+
+              {featured === null ? (
+                <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+              ) : featured.length === 0 ? (
+                <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+                  No submissions yet.
+                </p>
+              ) : (
+                <ul className="mt-4 space-y-3">
+                  {featured.map((row) => {
+                    const tier = tierByKey(row.tierKey);
+                    const usable = usableAssets(row.assets).length;
+                    const money = compensationState({
+                      status: row.status,
+                      assets: row.assets,
+                      tierKey: row.tierKey,
+                      eventPriceUsd: 0,
+                      paidAt: row.paidAt,
+                    });
+                    const busy = working === `featured-${row.id}`;
+                    return (
+                      <li key={row.id} className="border border-charcoal/20 p-4">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <div>
+                            <span className="font-medium">{row.eventName || row.eventId}</span>
+                            <span className="ml-2 text-xs text-charcoal/60">
+                              {tier?.label ?? row.tierKey} · {row.status}
+                            </span>
+                          </div>
+                          <span className="text-xs text-charcoal/60">
+                            {usable} of {row.assets.length} photo
+                            {row.assets.length === 1 ? '' : 's'} accepted
+                            {row.compensationUsd ? ` · $${row.compensationUsd}` : ''}
+                            {` · ${money}`}
+                          </span>
+                        </div>
+
+                        {/* The release the host actually accepted. Shown
+                            verbatim rather than summarised, because which
+                            wording they agreed to is the whole record. */}
+                        <p className="mt-1 text-xs text-charcoal/55">
+                          {row.releaseVersion
+                            ? `Release ${row.releaseVersion}, accepted ${
+                                row.releaseAcceptedAt
+                                  ? new Date(row.releaseAcceptedAt).toLocaleString()
+                                  : 'at an unrecorded time'
+                              }`
+                            : 'No release recorded — nothing here may be used.'}
+                        </p>
+
+                        {row.testimonial ? (
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-charcoal">
+                            &ldquo;{row.testimonial}&rdquo;
+                          </p>
+                        ) : null}
+
+                        {row.status === 'SUBMITTED' || row.status === 'IN_REVIEW' ? (
+                          <details className="mt-3">
+                            <summary className="cursor-pointer text-xs font-medium text-charcoal/70">
+                              Before accepting, check these
+                            </summary>
+                            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-charcoal/70">
+                              {REVIEW_CHECKS.map((check) => (
+                                <li key={check}>{check}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          {(
+                            [
+                              ['IN_REVIEW', 'Start review'],
+                              ['ACCEPTED', 'Accept'],
+                              ['DECLINED', 'Decline'],
+                              ['PAUSED', 'Pause use'],
+                            ] as Array<[SubmissionStatus, string]>
+                          ).map(([status, label]) => (
+                            <button
+                              key={status}
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleFeatured(row, { status })}
+                              className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                          {money === 'owed' ? (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleFeatured(row, { markPaid: true })}
+                              className="border border-pine px-3 py-1.5 text-pine transition hover:bg-pine hover:text-canvas disabled:opacity-50"
+                            >
+                              Record compensation sent
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
 
