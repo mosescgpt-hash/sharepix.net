@@ -198,3 +198,93 @@ describe('who may edit', () => {
     expect(mayEdit({ sub: 'sub-h' }, owner)).toBe(false);
   });
 });
+
+/**
+ * AppSync hands the function `null` for an argument the caller did not send,
+ * not `undefined`. Every guard here used to read `field !== undefined`, which
+ * made "they left it alone" indistinguishable from "they sent nothing for it".
+ *
+ * A host picking a gallery font was told to enter an event name. That was the
+ * visible half: the name check runs first and returns early, which is the only
+ * reason the rest was not worse. Read as sent-and-empty, an absent `city`
+ * cleared the location, an absent `alertEmail` cleared the alert address, and
+ * absent QR fields reset the branding to defaults — so one setting changed
+ * would have quietly taken several others with it.
+ *
+ * Nothing in the old suite passed a null, which is why it shipped.
+ */
+describe('a field the caller did not send', () => {
+  /** What the mutation actually delivers for a one-field change. */
+  function onlyFontSet(): SettingsRequest {
+    return {
+      name: null,
+      date: null,
+      city: null,
+      state: null,
+      moderationMode: null,
+      alertEmail: null,
+      videoUploadsEnabled: null,
+      guestDownloadsBlocked: null,
+      uploadsClosed: null,
+      qrDotStyle: null,
+      qrColor: null,
+      qrLogo: null,
+      galleryFontSet: 'elegant',
+      galleryLayout: null,
+      galleryAccent: null,
+      reactionsEnabled: null,
+      commentsEnabled: null,
+    } as SettingsRequest;
+  }
+
+  it('lets a host pick a font without being asked for an event name', () => {
+    expect(patch(onlyFontSet())).toEqual({ set: { galleryFontSet: 'elegant' }, remove: [] });
+  });
+
+  it('writes nothing but the field that was sent', () => {
+    const result = patch(onlyFontSet());
+    expect(Object.keys(result.set)).toEqual(['galleryFontSet']);
+    // The destructive half: these were being cleared by their own absence.
+    expect(result.remove).toEqual([]);
+  });
+
+  it('does not read an absent name as an attempt to rename the event', () => {
+    // The event has photos, so a real rename is refused. Sending no name at all
+    // is not a rename and must not trip that lock.
+    const result = buildPatch(onlyFontSet(), WITH_PHOTOS);
+    expect(result.ok).toBe(true);
+  });
+
+  it('still refuses a name that was genuinely sent empty', () => {
+    expect(buildPatch({ name: '   ' } as SettingsRequest, EMPTY)).toEqual({
+      ok: false,
+      reason: 'Enter an event name.',
+    });
+  });
+
+  it('still clears a field when an empty string is sent deliberately', () => {
+    // Empty string is the clear signal, and stays one — lib/api.ts converts a
+    // caller's null to '' precisely to mean this.
+    expect(patch({ alertEmail: '' } as SettingsRequest).remove).toContain('alertEmail');
+    expect(patch({ galleryAccent: '' } as SettingsRequest).remove).toContain('galleryAccent');
+  });
+
+  it('reports nothing to update when every field is absent', () => {
+    const allNull = { ...onlyFontSet(), galleryFontSet: null } as SettingsRequest;
+    expect(buildPatch(allNull, EMPTY)).toEqual({ ok: false, reason: 'Nothing to update.' });
+  });
+
+  it('accepts a boolean sent as false rather than treating it as absent', () => {
+    // false is a real answer, and the guard must not confuse it with "unset".
+    expect(patch({ uploadsClosed: false } as SettingsRequest).set).toEqual({
+      uploadsClosed: false,
+    });
+  });
+
+  it('leaves QR branding alone when none of its fields were sent', () => {
+    const result = patch(onlyFontSet());
+    expect(result.set.qrDotStyle).toBeUndefined();
+    expect(result.set.qrColor).toBeUndefined();
+    expect(result.remove).not.toContain('qrLogo');
+  });
+});

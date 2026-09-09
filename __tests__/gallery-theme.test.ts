@@ -187,9 +187,9 @@ describe('the server is what enforces it', () => {
     // QR branding validates as one style because colour and logo travel
     // together. These do not: picking a layout says nothing about the fonts,
     // and resetting them would lose a choice the host already made.
-    expect(settings).toContain('if (request.galleryFontSet !== undefined)');
-    expect(settings).toContain('if (request.galleryLayout !== undefined)');
-    expect(settings).toContain('if (request.galleryAccent !== undefined)');
+    expect(settings).toContain('if (provided(request.galleryFontSet))');
+    expect(settings).toContain('if (provided(request.galleryLayout))');
+    expect(settings).toContain('if (provided(request.galleryAccent))');
   });
 
   it('renders an unknown layout as the ordinary grid', () => {
