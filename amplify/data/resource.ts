@@ -151,6 +151,23 @@ const schema = a.schema({
       // = paid or comped (active). A missing value (older events) is treated as
       // active for backward compatibility. Flipped to true by the Stripe webhook.
       paid: a.boolean(),
+      // When that flip happened. Stamped alongside `paid` by the webhook, and
+      // absent on every event paid before this field existed — and on every
+      // comped one, which was never paid for at all. The post-event survey
+      // measures from it when the host gave no event date, falling back to
+      // createdAt; see surveyDueAt in lib/survey.ts.
+      paidAt: a.datetime(),
+      // What kind of occasion this was: 'wedding', 'birthday' and so on, from
+      // the same closed set the survey offers (SURVEY_QUESTIONS, question
+      // `eventType`). Optional, and absent on every event created before it
+      // existed — which is why the survey still asks rather than assuming, and
+      // only pre-selects when there is something to pre-select.
+      eventType: a.string(),
+      // Internal cohort label, e.g. FOUNDING_20. Admin-only in practice: it is
+      // never rendered to a host, and it exists so early customers can be
+      // surveyed and reviewed as a group. Deliberately separate from `source`,
+      // which records how somebody found SharePix and means something else.
+      internalCohort: a.string(),
       // Guest downloads are off by default on every plan. Corporate hosts can
       // buy a per-event add-on that flips this to true (via the Stripe webhook).
       guestDownloadEnabled: a.boolean(),
@@ -686,6 +703,119 @@ const schema = a.schema({
       /** Random, minted with the request. Proves the holder was sent it. */
       ratingToken: a.string(),
       requestedAt: a.datetime(),
+    })
+    .authorization((allow) => [
+      allow.ownerDefinedIn('customer').to(['get', 'list']),
+      allow.group('ADMINS'),
+    ]),
+
+  /**
+   * One host's answers to the post-event survey.
+   *
+   * The id is the event id: one survey per event, which makes the conditional
+   * put at invitation time the idempotency — a job that fires twice cannot
+   * invite twice, and a reloaded page cannot open a second response.
+   *
+   * ## Why the answers are columns and not a blob
+   *
+   * Every answer is its own attribute, named for what it asks rather than for
+   * where it sits in the running order. Two reasons. The admin dashboard
+   * filters on satisfaction, NPS, willingness to pay and permissions, and a
+   * filter cannot see inside a JSON string. And the survey is versioned: when
+   * question 7a is inserted next spring, answers already collected keep meaning
+   * what they meant, because nothing is addressed by position.
+   *
+   * `surveyVersion` records which wording was actually shown. `metricsJson` is
+   * the one genuine blob, and it earns it: it is a snapshot of the event as it
+   * stood at submission, read as a whole or not at all.
+   *
+   * ## Writes
+   *
+   * Hosts never write here through the model. The row is created by the daily
+   * job with its token, filled in by the submitSurvey function after that token
+   * is checked, and read back by the host through the same function. Granting
+   * owner `update` would let a host rewrite their own answers — including the
+   * permissions below, after the fact.
+   */
+  SurveyResponse: a
+    .model({
+      eventId: a.string(),
+      /** Amplify owner string of the host, for their own read access. */
+      customer: a.string(),
+      /** Denormalised so the admin queue reads one table. */
+      eventName: a.string(),
+      /** Which wording they saw. Never back-filled onto older responses. */
+      surveyVersion: a.string(),
+
+      // Section 1
+      eventType: a.string(),
+      eventTypeOther: a.string(),
+      attendance: a.string(),
+      setupEase: a.integer(),
+      setupProblems: a.string(),
+
+      // Section 2
+      guestEase: a.integer(),
+      guestHelpNeeded: a.string(),
+      guestConfusion: a.string(),
+      /** Multi-select, stored as a list of the offered values. */
+      discoveryChannels: a.string().array(),
+      discoveryChannelsOther: a.string(),
+      reminderFrequency: a.string(),
+      participationIdeas: a.string(),
+
+      // Section 3
+      bestPart: a.string(),
+      worstPart: a.string(),
+      unmetExpectations: a.string(),
+      valuableFeatures: a.string().array(),
+      valuableFeaturesOther: a.string(),
+      /** 1-5. The same measure as EventFeedback.rating, written to both. */
+      satisfaction: a.integer(),
+
+      // Section 4
+      valuePerception: a.string(),
+      wouldPay: a.string(),
+      paymentBlockers: a.string(),
+      /** 0-10. Integer, not float: NPS is a whole number or it is absent. */
+      npsScore: a.integer(),
+      oneChange: a.string(),
+
+      // Section 5 — permissions, each stored with when it was given
+      followUpPermission: a.string(),
+      /** 'named' | 'anonymous' | 'no'. Never defaulted to a yes. */
+      testimonialPermission: a.string(),
+      testimonialPermissionAt: a.datetime(),
+      /**
+       * 'yes' | 'maybe' | 'no' — willingness to be ASKED about photos, which is
+       * not permission to use any. The people in those photographs did not
+       * answer this survey. Any use needs its own written release; see
+       * MEDIA_RELEASE_NOTE in lib/survey.ts.
+       */
+      photoMarketingInterest: a.string(),
+      photoMarketingInterestAt: a.datetime(),
+      anythingElse: a.string(),
+
+      /** Which wording the permissions above were granted against. */
+      consentVersion: a.string(),
+
+      /**
+       * The event as it stood at submission, so a response can be read years
+       * later without the event row having to still agree with it. Only metrics
+       * SharePix actually measures — see lib/surveyMetrics.ts for what is and
+       * is not available.
+       */
+      metricsJson: a.string(),
+
+      /** Random, minted with the invitation. Proves the holder was sent it. */
+      surveyToken: a.string(),
+      requestedAt: a.datetime(),
+      /** Set the first time they open it, so an abandoned survey is visible. */
+      startedAt: a.datetime(),
+      /** Set once, on final submission. Its presence is what locks the row. */
+      completedAt: a.datetime(),
+      /** Set when the one reminder goes out. Its presence prevents a second. */
+      reminderSentAt: a.datetime(),
     })
     .authorization((allow) => [
       allow.ownerDefinedIn('customer').to(['get', 'list']),
