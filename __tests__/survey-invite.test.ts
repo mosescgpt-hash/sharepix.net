@@ -156,12 +156,13 @@ describe('the outstanding gift-card invitations', () => {
     );
   });
 
-  it('creates no new gift-card obligations', () => {
-    // The current invitation email promises no gift card, so nothing may quietly
-    // record that one is owed.
-    expect(handler).not.toContain('openResearchInvite');
-    expect(handler).not.toContain('INCENTIVE_AMOUNT_USD');
-    expect(handler).not.toContain("status: { S: 'PENDING' }");
+  it('opens an obligation only when an admin chose to offer one', () => {
+    // Off unless set. A comped event is already a gift, and stacking a reward
+    // on it by default would pay twice for the same feedback.
+    expect(handler).toContain('const offersReward = event.researchIncentiveOffered;');
+    expect(handler).toContain(
+      'if (offersReward && !(await openIncentiveObligation(event, nowISO))) continue;',
+    );
   });
 });
 
@@ -172,13 +173,27 @@ describe('the invitation email', () => {
     expect(source).toContain('not just the good stuff');
   });
 
-  it('promises no gift card, since none is opened', () => {
-    const invitePass = source.slice(
-      source.indexOf('---- the invitation'),
-      source.indexOf('Rating requests.'),
-    );
-    expect(invitePass.length).toBeGreaterThan(0);
-    expect(invitePass).not.toMatch(/gift card/i);
+  it('mentions a gift card only when there is an obligation behind it', () => {
+    // The reward line and the obligation come from the same flag, so an email
+    // cannot promise something nothing is recording.
+    const invitePass = pass('---- the invitation', 'Rating requests.');
+    expect(invitePass).toContain('const rewardLine = offersReward');
+    expect(invitePass).not.toMatch(/gift card for completing it[\s\S]*const offersReward/);
+  });
+
+  it('records the obligation before the email that promises it', () => {
+    const invitePass = pass('---- the invitation', 'Rating requests.');
+    const obligation = invitePass.indexOf('openIncentiveObligation(event, nowISO)');
+    const sending = invitePass.indexOf('await send(event.alertEmail');
+    expect(obligation).toBeGreaterThan(-1);
+    expect(sending).toBeGreaterThan(obligation);
+  });
+
+  it('says the reward does not depend on the answers', () => {
+    // If it did we would be paying for agreement and the research would be
+    // worthless.
+    expect(source).toMatch(/whatever you tell us/i);
+    expect(source).toMatch(/critical feedback earns exactly the same/i);
   });
 
   it('sends exactly one reminder, worded as a smaller ask', () => {

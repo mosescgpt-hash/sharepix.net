@@ -14,6 +14,8 @@ export interface QREvent {
   photoLimit?: number | null;
   extraPhotoCredits?: number | null;
   photoCount?: number | null;
+  /** Admin choice: does this event's survey invitation offer a gift card? */
+  researchIncentiveOffered?: boolean | null;
   /** Videos included by the plan. Missing means unlimited (pre-limit events). */
   videoLimit?: number | null;
   extraVideoCredits?: number | null;

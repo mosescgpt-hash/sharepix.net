@@ -14,6 +14,11 @@ import { dueReminder, formatExpiryDate, lapsedReminders, reminderKey } from './e
 import { mayReceive, preferenceKey } from './emailPreferences';
 import { buildExpiryMessage, galleryExpiresAt } from './expiryMessage';
 import { isSuccessfulEvent } from './successfulEvent';
+import {
+  INCENTIVE_AMOUNT_USD,
+  INCENTIVE_TYPE,
+  incentiveId,
+} from './researchIncentive';
 import { encodeSurveyLink } from './surveyLink';
 import { SURVEY_VERSION, reminderIsDue, surveyIsDue } from './survey';
 import { encodeRatingLink } from './ratingLink';
@@ -85,6 +90,8 @@ interface EventRow {
   internalCohort: string;
   /** What kind of occasion it was, when the event row knows. */
   eventType: string;
+  /** Whether an admin chose to offer a gift card for this event's survey. */
+  researchIncentiveOffered: boolean;
 }
 
 function readEvent(item: Record<string, AttributeValue>): EventRow {
@@ -103,6 +110,7 @@ function readEvent(item: Record<string, AttributeValue>): EventRow {
     createdAt: item.createdAt?.S ?? null,
     internalCohort: item.internalCohort?.S ?? '',
     eventType: item.eventType?.S ?? '',
+    researchIncentiveOffered: item.researchIncentiveOffered?.BOOL === true,
   };
 }
 
@@ -124,7 +132,7 @@ async function* allEvents(): AsyncGenerator<EventRow> {
         TableName: EVENT_TABLE,
         ExclusiveStartKey: startKey,
         ProjectionExpression:
-          '#id, #name, tier, alertEmail, uploadWindowEndsAt, paid, #owner, contributorCount, guestUploadCount, #date, paidAt, createdAt, internalCohort, eventType',
+          '#id, #name, tier, alertEmail, uploadWindowEndsAt, paid, #owner, contributorCount, guestUploadCount, #date, paidAt, createdAt, internalCohort, eventType, researchIncentiveOffered',
         // `name`, `owner` and `date` are reserved in DynamoDB expressions; `id`
         // is safest aliased alongside them.
         ExpressionAttributeNames: {
@@ -286,6 +294,55 @@ async function markSent(email: string, nowISO: string): Promise<void> {
       }),
     )
     .catch(() => undefined);
+}
+
+/**
+ * Open the gift-card obligation for an event whose invitation offers one.
+ *
+ * PENDING means "invited, has not completed" — nothing is owed until they
+ * answer. The conditional put is the idempotency: one obligation per event per
+ * survey, however many times this job runs.
+ *
+ * Called only when an admin has turned the offer on for this event, and always
+ * before the email is sent, so an email promising a gift card cannot go out
+ * without the obligation being recorded. If this fails, the invitation is
+ * skipped entirely and retried tomorrow — a promise nothing is tracking is
+ * worse than a late invitation.
+ */
+async function openIncentiveObligation(event: EventRow, nowISO: string): Promise<boolean> {
+  if (!INCENTIVE_TABLE) return false;
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: INCENTIVE_TABLE,
+        Item: {
+          id: { S: incentiveId(event.id, SURVEY_ID) },
+          __typename: { S: 'ResearchIncentive' },
+          customer: { S: event.owner },
+          eventId: { S: event.id },
+          surveyId: { S: SURVEY_ID },
+          participantEmail: { S: event.alertEmail },
+          incentiveType: { S: INCENTIVE_TYPE },
+          amountUsd: { N: String(INCENTIVE_AMOUNT_USD) },
+          status: { S: 'PENDING' },
+          createdAt: { S: nowISO },
+          updatedAt: { S: nowISO },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+    return true;
+  } catch (error) {
+    // Already recorded, which is the ordinary answer if a previous run opened
+    // the obligation and then failed to send.
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return true;
+    console.error('Could not open a gift-card obligation', {
+      at: nowISO,
+      eventId: event.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
 }
 
 /**
@@ -767,11 +824,18 @@ export const handler = async () => {
           at: nowISO,
           eventId: event.id,
           founding,
+          reward: event.researchIncentiveOffered,
           basis: event.date ? 'event date' : 'acquisition',
         });
         skipped += 1;
         continue;
       }
+
+      // If this event offers a reward, record the obligation BEFORE the email
+      // that promises it. Failing here skips the invitation and retries
+      // tomorrow: a promise nothing is tracking is worse than a late ask.
+      const offersReward = event.researchIncentiveOffered;
+      if (offersReward && !(await openIncentiveObligation(event, nowISO))) continue;
 
       const link = await openSurveyInvite(event, nowISO);
       // Null means already invited, which is the common case on every run
@@ -780,12 +844,20 @@ export const handler = async () => {
 
       const url = `${APP_URL}/survey/${link}`;
       const subject = `How did SharePix do at ${event.name}?`;
+      // Said the same way in both versions of the email, and only when there is
+      // an obligation recorded to back it: the reward does not depend on what
+      // they say. If it did we would be paying for agreement, and the research
+      // would be worthless.
+      const rewardLine = offersReward
+        ? `There is a $${INCENTIVE_AMOUNT_USD} Amazon gift card for completing it — whatever you tell us. Critical feedback earns exactly the same as praise; we would rather know.`
+        : '';
       const text = [
         `Thank you for using SharePix for ${event.name}.`,
         '',
         'We are working hard to make SharePix the easiest way to collect the photos and videos guests capture at an event, and your experience can help us improve it.',
         '',
         'Would you take about five minutes to tell us what worked, what was confusing, and what you would change? We genuinely want the honest version — not just the good stuff.',
+        ...(rewardLine ? ['', rewardLine] : []),
         '',
         url,
         '',
@@ -799,6 +871,9 @@ export const handler = async () => {
         `<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px">How did SharePix do at ${event.name}?</h1>`,
         '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">We are working hard to make SharePix the easiest way to collect the photos and videos guests capture at an event, and your experience can help us improve it.</p>',
         '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">Would you take about five minutes to tell us what worked, what was confusing, and what you would change? We genuinely want the honest version — not just the good stuff.</p>',
+        rewardLine
+          ? `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">${rewardLine}</p>`
+          : '',
         `<p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#12211c;color:#faf9f6;padding:14px 24px;text-decoration:none;font-weight:600">Give feedback</a></p>`,
         '<p style="font-size:13px;line-height:1.6;color:#1f2421;opacity:.6;margin:24px 0 0">Thank you for helping us make SharePix better.<br>SharePix LLC</p>',
         '</div></body></html>',

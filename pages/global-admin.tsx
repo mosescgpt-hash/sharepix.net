@@ -35,6 +35,7 @@ import {
   sendTestAlertEmail,
   setDiscountCodeActive,
   setEventUploadWindowEnd,
+  setResearchIncentiveOffered,
   setEventTheme,
   startCheckout,
 } from '@/lib/api';
@@ -50,7 +51,7 @@ import {
 } from '@/lib/taxNexus';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
-import { canTransition } from '@/lib/researchIncentive';
+import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
@@ -664,6 +665,41 @@ function GlobalAdminPage() {
       setReportSaved(value);
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'That could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /**
+   * Offer, or stop offering, a gift card for this event's survey.
+   *
+   * Off unless chosen, per event, because a comped event is already a gift and
+   * stacking a reward on it by default would pay twice for the same feedback.
+   * Only has an effect before the invitation goes out: once the survey row
+   * exists the email either promised a reward or did not, and the obligation
+   * was opened alongside it.
+   */
+  async function handleIncentiveOffer(event: QREvent, offered: boolean) {
+    if (
+      offered &&
+      !window.confirm(
+        `Offer a $${INCENTIVE_AMOUNT_USD} gift card for the survey on \u201c${event.name}\u201d?\n\nThe invitation will promise it and the obligation is recorded when it sends. Do not stack this on a comped event unless you mean to.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`incentive-${event.id}`);
+    try {
+      await setResearchIncentiveOffered(event.id, offered);
+      setEvents((current) =>
+        current.map((row) =>
+          row.id === event.id ? { ...row, researchIncentiveOffered: offered } : row,
+        ),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'The gift-card setting could not be updated.',
+      );
     } finally {
       setWorking(null);
     }
@@ -1953,6 +1989,23 @@ function GlobalAdminPage() {
                               Add photos
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            disabled={working === `incentive-${event.id}`}
+                            onClick={() =>
+                              void handleIncentiveOffer(event, !event.researchIncentiveOffered)
+                            }
+                            title="Whether this event's survey invitation offers a gift card"
+                            className={`border px-3 py-1.5 transition disabled:opacity-50 ${
+                              event.researchIncentiveOffered
+                                ? 'border-pine bg-sage/40 text-pine'
+                                : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
+                            }`}
+                          >
+                            {event.researchIncentiveOffered
+                              ? `Gift card on ($${INCENTIVE_AMOUNT_USD})`
+                              : 'Gift card off'}
+                          </button>
                           {lifecyclePhase(event).archivable ? (
                             <button
                               type="button"

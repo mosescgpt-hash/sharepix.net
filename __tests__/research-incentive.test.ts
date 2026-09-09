@@ -275,24 +275,23 @@ describe('the gift-card programme, now that the survey is in the product', () =>
    * promises are kept, and no new ones are made by accident.
    */
 
-  it('opens no new obligations', () => {
-    expect(job).not.toContain('async function openResearchInvite');
-    expect(job).not.toContain("status: { S: 'PENDING' }");
-    expect(job).not.toContain('INCENTIVE_AMOUNT_USD');
+  it('offers a reward only where an admin chose to', () => {
+    // Not a rule the job applies: a decision a person makes with the event in
+    // front of them. Off unless set, so a comped event is not paid for twice.
+    const code = codeOnly(job);
+    expect(code).toContain('const offersReward = event.researchIncentiveOffered;');
+    expect(code).toContain('async function openIncentiveObligation');
   });
 
-  it('promises no reward in the invitation it does send', () => {
-    // If the email said there was a gift card, one would be owed — and nothing
-    // would be recording it.
-    //
-    // Against code with the comments stripped, because the prose in this file
-    // says "gift card" repeatedly while explaining why the emails do not. That
-    // mistake — a guard matching the sentence that documents the absence — has
-    // now been made seven times in this repository, which is what sourceGuards
-    // exists for.
+  it('never promises a reward it has not recorded', () => {
+    // The email line and the obligation come from the same flag, and the
+    // obligation is written first — an invitation whose obligation failed is
+    // skipped and retried rather than sent.
     const code = codeOnly(job);
-    expect(code).not.toMatch(/gift card/i);
-    expect(code).not.toMatch(/critical feedback earns exactly the same/i);
+    expect(code).toContain(
+      'if (offersReward && !(await openIncentiveObligation(event, nowISO))) continue;',
+    );
+    expect(code).toContain('const rewardLine = offersReward');
   });
 
   it('keeps the promise already made to everyone invited', () => {

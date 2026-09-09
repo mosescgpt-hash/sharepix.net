@@ -169,6 +169,13 @@ const schema = a.schema({
       // surveyed and reviewed as a group. Deliberately separate from `source`,
       // which records how somebody found SharePix and means something else.
       internalCohort: a.string(),
+      // Whether this event's survey invitation offers a gift card, chosen per
+      // event by an admin. Off unless set, which is the important half: a
+      // comped event is already a gift, and stacking a reward on top of it by
+      // default would pay twice for the same feedback. Turning it on both
+      // opens the obligation and changes what the email promises, so the two
+      // can never disagree.
+      researchIncentiveOffered: a.boolean(),
       // Guest downloads are off by default on every plan. Corporate hosts can
       // buy a per-event add-on that flips this to true (via the Stripe webhook).
       guestDownloadEnabled: a.boolean(),

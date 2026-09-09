@@ -1645,6 +1645,30 @@ export async function setEventUploadWindowEnd(eventId: string, iso: string): Pro
   if (errors?.length) throw new Error('The event window could not be updated.');
 }
 
+/**
+ * Global-admin only: choose whether this event's survey invitation offers a
+ * gift card.
+ *
+ * Off unless someone turns it on, per event. A comped event is already a gift,
+ * and stacking a reward on top of it by default would pay twice for the same
+ * feedback — so this is a decision a person makes with the event in front of
+ * them, not a rule the job applies.
+ *
+ * It only has an effect before the invitation goes out. Once a survey row
+ * exists the obligation either was opened or was not, and turning this on
+ * afterwards must not conjure one for an email that never promised it.
+ */
+export async function setResearchIncentiveOffered(
+  eventId: string,
+  offered: boolean,
+): Promise<void> {
+  const { errors } = await client.models.Event.update(
+    { id: eventId, researchIncentiveOffered: offered },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The gift-card setting could not be updated.');
+}
+
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {
   const { data } = await client.models.Event.get(
     { id: eventId },
