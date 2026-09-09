@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import {
   DynamoDBClient,
   GetItemCommand,
@@ -32,14 +30,18 @@ const BUCKET = process.env.BUCKET_NAME as string;
  */
 let r2Client: S3Client | null = null;
 function r2(): S3Client | null {
-  if (!mirrorConfigured(process.env)) return null;
+  // Held in a local so the predicate narrows it: mirrorConfigured is what
+  // establishes that all four are strings, and the client is built from the
+  // narrowed value rather than from `string | undefined` waved through.
+  const env = process.env;
+  if (!mirrorConfigured(env)) return null;
   if (!r2Client) {
     r2Client = new S3Client({
       region: 'auto',
-      endpoint: process.env.R2_ACCOUNT_ENDPOINT,
+      endpoint: env.R2_ACCOUNT_ENDPOINT,
       credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
       },
     });
   }

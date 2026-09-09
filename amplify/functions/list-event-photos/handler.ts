@@ -1,6 +1,5 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { DynamoDBClient, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { isVisibleTo } from './visibility';
 
@@ -40,7 +39,7 @@ type PhotoItem = Record<string, { S?: string; BOOL?: boolean }>;
  */
 async function photosForEvent(eventId: string): Promise<PhotoItem[]> {
   const items: PhotoItem[] = [];
-  let startKey: Record<string, unknown> | undefined;
+  let startKey: Record<string, AttributeValue> | undefined;
 
   try {
     do {
@@ -69,7 +68,7 @@ async function photosForEvent(eventId: string): Promise<PhotoItem[]> {
   // Anything already collected before the failure is discarded rather than
   // merged: a partial page plus a full scan would list some photos twice.
   const scanned: PhotoItem[] = [];
-  startKey = undefined;
+  let scanKey: Record<string, AttributeValue> | undefined;
   do {
     const result = await dynamo.send(
       new ScanCommand({
@@ -77,12 +76,12 @@ async function photosForEvent(eventId: string): Promise<PhotoItem[]> {
         FilterExpression: '#eventId = :eventId',
         ExpressionAttributeNames: { '#eventId': 'eventId' },
         ExpressionAttributeValues: { ':eventId': { S: eventId } },
-        ExclusiveStartKey: startKey,
+        ExclusiveStartKey: scanKey,
       }),
     );
     for (const item of result.Items ?? []) scanned.push(item as PhotoItem);
-    startKey = result.LastEvaluatedKey;
-  } while (startKey);
+    scanKey = result.LastEvaluatedKey;
+  } while (scanKey);
   return scanned;
 }
 

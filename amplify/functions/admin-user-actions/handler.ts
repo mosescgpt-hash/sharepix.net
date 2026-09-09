@@ -1,4 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime / bundled at deploy,
 // not installed for the backend type-check.
 import {
   CognitoIdentityProviderClient,

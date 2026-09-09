@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import {
   S3Client,
   HeadObjectCommand,
@@ -95,14 +93,18 @@ async function recordBytes(key: string, size: unknown): Promise<void> {
  */
 let r2Client: S3Client | null = null;
 function r2(): S3Client | null {
-  if (!mirrorConfigured(process.env)) return null;
+  // Held in a local so the predicate narrows it: mirrorConfigured is what
+  // establishes that all four are strings, and the client is built from the
+  // narrowed value rather than from `string | undefined` waved through.
+  const env = process.env;
+  if (!mirrorConfigured(env)) return null;
   if (!r2Client) {
     r2Client = new S3Client({
       region: 'auto',
-      endpoint: process.env.R2_ACCOUNT_ENDPOINT,
+      endpoint: env.R2_ACCOUNT_ENDPOINT,
       credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
       },
     });
   }
@@ -156,9 +158,20 @@ async function removeFromR2(key: string) {
 // don't need to be re-validated.
 const ORIGINAL_KEY = /^events\/[^/]+\/photos\//;
 
-async function readBytes(stream): Promise<Uint8Array> {
+/**
+ * Drain an S3 object body.
+ *
+ * Typed loosely on purpose: the SDK's body is a union across runtimes (a Node
+ * Readable here, a web stream or Blob elsewhere) and is optional besides. In
+ * Lambda it is always the Readable, which is async-iterable — so the narrow
+ * cast is the honest description of the one runtime this runs in, and the
+ * missing-body case is an error rather than an empty file, because treating a
+ * failed read as zero bytes would let an unscannable upload through.
+ */
+async function readBytes(body: unknown): Promise<Uint8Array> {
+  if (!body) throw new Error('The stored object had no body to read.');
   const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  for await (const chunk of body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
   return new Uint8Array(Buffer.concat(chunks));
 }
 
@@ -183,7 +196,12 @@ async function reject(bucket: string, key: string, reason: string, detail: Recor
   await removeFromR2(key);
 }
 
-async function processRecord(record) {
+/** One S3 event notification record, as far as this function reads it. */
+interface S3EventRecord {
+  s3?: { bucket?: { name?: string }; object?: { key?: string; size?: number } };
+}
+
+async function processRecord(record: S3EventRecord) {
   const bucket = record?.s3?.bucket?.name;
   const rawKey = record?.s3?.object?.key;
   if (!bucket || !rawKey) return;
@@ -293,8 +311,10 @@ async function stripMetadata(
         Key: key,
         Body: Buffer.from(stripped),
         ContentType: object.ContentType ?? (jpeg ? 'image/jpeg' : 'image/heic'),
+        // A PutObject always replaces metadata with what is sent, so there is
+        // no directive to give it. MetadataDirective belongs to CopyObject;
+        // here the SDK simply ignored it, which is what the type check found.
         Metadata: { ...(object.Metadata ?? {}), sanitized: 'true' },
-        MetadataDirective: 'REPLACE',
       }),
     );
     console.log('Stripped photo metadata', {
@@ -316,7 +336,7 @@ async function stripMetadata(
  * S3 ObjectCreated trigger. Each record is handled independently and never
  * throws: an unhandled error would make S3 retry the whole event.
  */
-export const handler = async (event: { Records?: unknown[] }) => {
+export const handler = async (event: { Records?: S3EventRecord[] }) => {
   for (const record of event.Records ?? []) {
     try {
       await processRecord(record);

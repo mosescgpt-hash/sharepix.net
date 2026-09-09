@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import {
   DynamoDBClient,
   GetItemCommand,
@@ -177,7 +175,9 @@ export const handler: Handler = async (event) => {
   }
 
   return {
-    id: item.id.S,
+    // Set above, but the attribute type is optional; fall back rather than
+    // assert a null is a string.
+    id: item.id.S ?? '',
     eventId,
     name,
     message: message || null,

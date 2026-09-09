@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import {
   DynamoDBClient,
   GetItemCommand,
@@ -375,8 +373,13 @@ export const handler: Handler = async (event) => {
   const SAFE_KEY = /^[a-zA-Z0-9._/-]+$/;
   const DANGEROUS_EXT =
     /\.(svg|svgz|html|htm|xhtml|xml|js|mjs|exe|dll|bat|cmd|com|msi|scr|sh|ps1|vbs|php|phtml|jsp|asp|aspx|cgi|pl|py|rb|zip|rar|7z|tar|gz|tgz|htaccess)$/i;
+  // The predicate form of filter, because `.filter(Boolean)` does not narrow:
+  // the keys are nullable, and inside the find they were being treated as
+  // strings on trust. This is the check that stops a crafted request
+  // registering an .svg or escaping the event folder, so it is the last place
+  // to be reasoning about a value whose type nobody established.
   const badKey = [s3Key, previewS3Key, thumbS3Key]
-    .filter(Boolean)
+    .filter((k): k is string => typeof k === 'string' && k.length > 0)
     .find((k) => k.includes('..') || !SAFE_KEY.test(k) || DANGEROUS_EXT.test(k));
   if (badKey) {
     const identity = event.identity as { sub?: string; sourceIp?: string[] } | undefined;

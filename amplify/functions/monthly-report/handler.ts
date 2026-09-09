@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { DynamoDBClient, GetItemCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
