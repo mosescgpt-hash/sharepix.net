@@ -89,18 +89,29 @@ describe('the research rules the questions follow', () => {
   });
 });
 
-describe('what the document admits it cannot do', () => {
-  it('says updating the form is a manual step', () => {
-    // A test that proves the doc matches the code, read carelessly, looks like
-    // a test that proves the survey is correct. It is not, and the document
-    // has to say so where someone will read it.
-    expect(doc).toMatch(/Editing the form is a manual step/i);
+describe('what the document is, now that the survey is in the product', () => {
+  it('says it is not the wording', () => {
+    // It was the source of truth while the survey lived in a form provider.
+    // It is not any more, and two files claiming to define the same questions
+    // is the drift this whole exercise existed to end.
+    expect(doc).toMatch(/This file is not the wording/i);
   });
 
-  it('points at the environment variable the form actually lives behind', () => {
-    expect(doc).toContain('NEXT_PUBLIC_RESEARCH_SURVEY_URL');
-    expect(readSource('pages/survey/[link].tsx')).toContain(
-      'NEXT_PUBLIC_RESEARCH_SURVEY_URL',
-    );
+  it('points at the module that actually defines the questions', () => {
+    expect(doc).toContain('lib/survey.ts');
+    expect(doc).toContain('SURVEY_QUESTIONS');
+  });
+
+  it('tells the next editor to bump the version', () => {
+    // Responses already collected have to keep meaning what they meant.
+    expect(doc).toContain('SURVEY_VERSION');
+  });
+
+  it('is backed by a page that renders those definitions', () => {
+    const page = readSource('pages/survey/[link].tsx');
+    expect(page).toContain("from '@/lib/survey'");
+    // The external form is gone; a page still reaching for it would mean the
+    // host was sent somewhere this repository cannot see.
+    expect(page).not.toContain('NEXT_PUBLIC_RESEARCH_SURVEY_URL');
   });
 });

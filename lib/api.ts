@@ -421,6 +421,75 @@ export async function unsubscribeFromEmails(
   }
 }
 
+export interface SurveyState {
+  ok: boolean;
+  completed: boolean;
+  message: string;
+  eventName: string;
+  surveyVersion: string;
+  /** Answers already stored, so an interrupted survey resumes. */
+  answers: Record<string, string | number | string[]>;
+  /** The event's own type, when SharePix knows it. */
+  eventType: string | null;
+}
+
+/**
+ * Open, autosave or submit a post-event survey.
+ *
+ * Never throws for a bad link, and gives the same answer for a malformed one, a
+ * wrong token and an unknown event — anything else lets a stranger discover
+ * which event ids are real by feeding it guesses.
+ *
+ * Answers travel as JSON and are stored as columns. The server validates them
+ * again on arrival: what happens in the page is a courtesy to the host, and the
+ * function is the fence.
+ */
+export async function surveyAction(
+  link: string,
+  action: 'open' | 'save' | 'submit',
+  answers?: Record<string, unknown>,
+): Promise<SurveyState> {
+  const refused: SurveyState = {
+    ok: false,
+    completed: false,
+    message: 'That link is not valid. It may have expired.',
+    eventName: '',
+    surveyVersion: '',
+    answers: {},
+    eventType: null,
+  };
+  try {
+    const { data, errors } = await client.mutations.surveyAction(
+      {
+        link,
+        action,
+        answersJson: answers ? JSON.stringify(answers) : undefined,
+      },
+      { authMode: await authModeFor() },
+    );
+    if (errors?.length || !data) return refused;
+    let parsed: Record<string, string | number | string[]> = {};
+    try {
+      const raw = data.answersJson ? JSON.parse(data.answersJson) : {};
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) parsed = raw;
+    } catch {
+      // A response we cannot read is one we start empty rather than crash on.
+      parsed = {};
+    }
+    return {
+      ok: data.ok === true,
+      completed: data.completed === true,
+      message: data.message ?? '',
+      eventName: data.eventName ?? '',
+      surveyVersion: data.surveyVersion ?? '',
+      answers: parsed,
+      eventType: data.eventType ?? null,
+    };
+  } catch {
+    return refused;
+  }
+}
+
 /**
  * Record that someone finished the research survey.
  *
