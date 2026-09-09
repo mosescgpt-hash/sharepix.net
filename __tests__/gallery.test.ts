@@ -63,6 +63,7 @@ describe('gallery permissions', () => {
     expect(
       isEventHost(event, {
         userId: 'owner-sub',
+        username: 'owner@example.com',
         displayName: 'owner',
         loginId: 'owner@example.com',
       }),

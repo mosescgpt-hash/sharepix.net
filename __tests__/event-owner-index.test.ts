@@ -74,25 +74,40 @@ describe('what still writes the owner', () => {
   });
 });
 
-describe('the read has not been switched over yet', () => {
+describe('the read', () => {
   const api = codeOnly(readSource('lib/api.ts'));
+  const fn = api.slice(api.indexOf('export async function listMyEvents'));
 
-  it('still lists a host their events by paging the model', () => {
-    // Deliberate, and not caution about authorization — that was verified. A
-    // secondary index added to a table that already holds data is backfilled by
-    // DynamoDB asynchronously, and a query against it while that runs returns
-    // an incomplete list. Showing a host some of their events is the failure
-    // this whole thread of work exists to end, so the read moves in a separate
-    // change once the index is live.
-    const fn = api.slice(api.indexOf('export async function listMyEvents'));
-    expect(fn.slice(0, 900)).toContain('client.models.Event.list(');
-    expect(fn.slice(0, 900)).toContain('listAllPages(');
+  it('queries the index rather than paging the whole table', () => {
+    expect(fn.slice(0, 1200)).toContain('client.models.Event.listEventByOwner(');
+    expect(fn.slice(0, 1200)).not.toContain('client.models.Event.list(');
+  });
+
+  it('still reads every page of the result', () => {
+    // An index makes the query cheap; it does not make one page enough.
+    expect(fn.slice(0, 1200)).toContain('listAllPages(');
+  });
+
+  it('asks for both shapes the owner string can take', () => {
+    // "<sub>::<username>" and the bare sub. For an ordinary host this is belt
+    // and braces — AppSync overwrites the argument with the caller's own claims
+    // — but a global admin is authorized by their group first, so that
+    // substitution is skipped and the value sent is the value used. Asking for
+    // only the usual shape would show such an admin none of their own events.
+    expect(api).toContain('function ownerCandidates(');
+    expect(api).toContain('`${sub}::${user.username}`');
+  });
+
+  it('de-duplicates across the two queries', () => {
+    // Both candidates can return the same row once AppSync has substituted the
+    // caller's claims into each.
+    expect(fn.slice(0, 1200)).toContain('byId.set(row.id, row)');
   });
 
   it('still checks what came back against who asked', () => {
     // A global admin has full model access, and this page shows their own
-    // events.
-    const fn = api.slice(api.indexOf('export async function listMyEvents'));
-    expect(fn.slice(0, 900)).toContain('event.owner?.includes(user.userId)');
+    // events. An index is also a denormalised copy: checking the answer against
+    // the question costs nothing and stops a wrong one passing quietly.
+    expect(fn.slice(0, 1200)).toContain('event.owner?.includes(user.userId)');
   });
 });
