@@ -713,6 +713,12 @@ dailyTasksFn.addEnvironment(
 // anyone was sent it.
 feedbackTable.grantReadWriteData(dailyTasksFn);
 dailyTasksFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
+// Survey invitations and the one reminder. Read-write: the job opens the row
+// with its token and claims the reminder with a conditional update, and it
+// reads back which surveys are already complete so those hosts are not asked
+// for a rating as well.
+surveyTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('SURVEY_TABLE_NAME', surveyTable.tableName);
 dailyTasksFn.addEnvironment('RATING_DELAY_DAYS', process.env.RATING_DELAY_DAYS ?? '2');
 
 const completeSurveyFn = backend.completeSurvey.resources.lambda as LambdaFunction;

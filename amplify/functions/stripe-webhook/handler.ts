@@ -252,11 +252,19 @@ export const handler = async (event: {
                 : kind === 'guest_book'
                   ? 'guestBookEnabled'
                   : 'paid';
+          // When this is the event payment itself, record when it happened.
+          // The post-event survey measures from it for a host who gave no event
+          // date, and "two weeks after purchase" needs a purchase to point at.
+          // if_not_exists, because a replayed webhook must not move the date:
+          // Stripe retries, and the first payment is the one that happened.
+          const stampPaidAt = field === 'paid';
           await dynamo.send(
             new UpdateItemCommand({
               TableName: EVENT_TABLE,
               Key: { id: { S: eventId } },
-              UpdateExpression: 'SET #field = :true, #updatedAt = :now',
+              UpdateExpression: stampPaidAt
+                ? 'SET #field = :true, paidAt = if_not_exists(paidAt, :now), #updatedAt = :now'
+                : 'SET #field = :true, #updatedAt = :now',
               ConditionExpression: 'attribute_exists(id)',
               ExpressionAttributeNames: { '#field': field, '#updatedAt': 'updatedAt' },
               ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: now } },
