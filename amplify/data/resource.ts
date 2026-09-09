@@ -202,6 +202,18 @@ const schema = a.schema({
       // host; 'allow_all' skips screening entirely and shows everything
       // immediately. The host chooses on the event dashboard.
       moderationMode: a.string(),
+      // The Amplify owner string, "<sub>::<username>", written by createEvent
+      // via ownerStringFor. Declared explicitly rather than left implicit for
+      // one reason: an implicit owner field cannot be indexed, and without an
+      // index owner authorization resolves to a Scan with the owner condition
+      // as a FILTER — DynamoDB applies the page limit to rows READ and only
+      // then filters, so finding one host's events means reading everyone's.
+      //
+      // The generated @auth directive is unchanged by this: allow.owner()
+      // already compiled to `ownerField: "owner"`, which is exactly what
+      // ownerDefinedIn('owner') produces. Verified by diffing the synthesised
+      // model schema and resolvers, not assumed.
+      owner: a.string(),
       // How this event's host found SharePix: 'guest_upload' when they had
       // already used it at somebody else's event, and so on. A closed set,
       // validated by create-event against lib/attribution.ts — the value
@@ -252,8 +264,9 @@ const schema = a.schema({
     // Admins keep full model access. They can already comp any event, so
     // restricting them buys nothing, and the global-admin dashboard writes
     // extraPhotoCredits and uploadWindowEndsAt directly.
+    .secondaryIndexes((index) => [index('owner')])
     .authorization((allow) => [
-      allow.owner().to(['get', 'list', 'delete']),
+      allow.ownerDefinedIn('owner').to(['get', 'list', 'delete']),
       allow.group('ADMINS'),
       allow.authenticated().to(['get']),
       allow.guest().to(['get']),
