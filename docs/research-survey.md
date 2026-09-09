@@ -1,23 +1,33 @@
 # Post-event research survey
 
-The question set behind `NEXT_PUBLIC_RESEARCH_SURVEY_URL`.
+Why the survey asks what it asks. **The wording itself lives in `lib/survey.ts`**,
+which is what the host actually sees.
 
 ## Why this file exists
 
-The survey lives in a form provider, so nothing in this repository could stop it
-describing a product we no longer sell. It drifted: the questions asked about a
-90-day gallery, implied a $49 price, and implied a photo cap. All three were
-true once. None of them is now, and a respondent answering "was that fair?"
-about a price they did not pay is not data, it is noise that looks like data.
+The survey used to live in a form provider, behind `NEXT_PUBLIC_RESEARCH_SURVEY_URL`,
+and nothing in this repository could stop it describing a product we no longer
+sell. It drifted: the questions asked about a 90-day gallery, implied a $49
+price, and implied a photo cap. All three were true once. None of them is now,
+and a respondent answering "was that fair?" about a price they did not pay is
+not data, it is noise that looks like data.
 
-This file is the source of truth for the wording. `__tests__/research-survey.test.ts`
-checks the product facts stated here against `lib/pricing.ts` and
-`lib/researchIncentive.ts`, so the next reprice fails a test instead of
-quietly invalidating a month of responses.
+That drift is why the survey is now part of the product. The questions are
+`SURVEY_QUESTIONS` in `lib/survey.ts`, the page renders them, and the
+survey-response function validates against the same definitions — so a question
+cannot be asked in one place and stored under another name in a second. The
+manual step is gone, and with it the class of bug that produced this file.
 
-**Editing the form is a manual step.** The test proves this file agrees with the
-code; it cannot prove the form agrees with this file. When this file changes,
-update the form.
+What stays here is the reasoning: the rules the questions follow, the product
+facts they assume, and the history of what a stale survey cost.
+`__tests__/research-survey.test.ts` checks the product facts stated below
+against `lib/pricing.ts` and `lib/researchIncentive.ts`, so the next reprice
+fails a test instead of quietly invalidating a month of responses.
+
+**This file is not the wording.** Where it quotes a question, it is illustrating
+the reasoning, not defining what gets asked — change `lib/survey.ts` for that,
+and bump `SURVEY_VERSION` so responses already collected keep meaning what they
+meant.
 
 ## What was wrong, and what it cost
 

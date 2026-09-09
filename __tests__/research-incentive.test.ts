@@ -13,6 +13,7 @@ import {
   type IncentiveStatus,
 } from '../lib/researchIncentive';
 import { decodeSurveyLink, encodeSurveyLink } from '../lib/surveyLink';
+import { codeOnly } from './sourceGuards';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -263,39 +264,54 @@ describe('the completion endpoint', () => {
   });
 });
 
-describe('the invitation', () => {
+describe('the gift-card programme, now that the survey is in the product', () => {
   const job = read('amplify/functions/daily-tasks/handler.ts');
 
-  it('only goes to events that actually worked', () => {
-    // Asking someone whose event nobody came to how the product went is both
-    // useless as research and unkind.
-    expect(job).toContain('if (!isSuccessfulEvent(event)) continue;');
+  /**
+   * The invitation this file used to describe sent people to a form provider
+   * and opened a $25 obligation at the same time. The survey is now part of
+   * SharePix, the invitation email promises no gift card, and nothing opens a
+   * new obligation. What is asserted here is that the pause is clean: existing
+   * promises are kept, and no new ones are made by accident.
+   */
+
+  it('offers a reward only where an admin chose to', () => {
+    // Not a rule the job applies: a decision a person makes with the event in
+    // front of them. Off unless set, so a comped event is not paid for twice.
+    const code = codeOnly(job);
+    expect(code).toContain('const offersReward = event.researchIncentiveOffered;');
+    expect(code).toContain('async function openIncentiveObligation');
   });
 
-  it('waits until uploads have closed and the dust has settled', () => {
-    expect(job).toContain('SURVEY_DELAY_DAYS');
-    expect(job).toContain('if (now.getTime() < inviteAt) continue;');
+  it('never promises a reward it has not recorded', () => {
+    // The email line and the obligation come from the same flag, and the
+    // obligation is written first — an invitation whose obligation failed is
+    // skipped and retried rather than sent.
+    const code = codeOnly(job);
+    expect(code).toContain(
+      'if (offersReward && !(await openIncentiveObligation(event, nowISO))) continue;',
+    );
+    expect(code).toContain('const rewardLine = offersReward');
   });
 
-  it('is optional mail, so an opt-out is absolute', () => {
-    // Nothing about the gift card changes that.
+  it('keeps the promise already made to everyone invited', () => {
+    // Their link carries the ResearchIncentive token, so the survey row they
+    // land on has to carry the same one or the link says it is invalid.
+    const fn = job.slice(job.indexOf('async function backfillResearchInvites'));
+    expect(fn.slice(0, 2600)).toContain("(item.status?.S ?? '') !== 'PENDING'");
+    expect(fn.slice(0, 2600)).toContain('surveyToken: { S: token }');
+    expect(fn.slice(0, 2600)).toContain("ConditionExpression: 'attribute_not_exists(id)'");
+  });
+
+  it('leaves the fulfilment rules and the admin queue alone', () => {
+    // Paused, not retired: the statuses, the transitions and the amount are
+    // unchanged, and the rows already owed are still worked from the dashboard.
+    expect(INCENTIVE_AMOUNT_USD).toBe(25);
+    expect(read('lib/researchIncentive.ts')).toContain('INCENTIVE_STATUSES');
+  });
+
+  it('still treats the survey invitation as optional mail', () => {
+    // We are asking for something for ourselves, so an opt-out is absolute.
     expect(job).toContain("mayReceive(event.alertEmail, 'research-survey', preference)");
-  });
-
-  it('does nothing at all when there is no survey to point at', () => {
-    // The programme being off, not an error. Mailing people a link to nowhere
-    // is worse than not mailing them.
-    expect(job).toContain('if (SURVEY_URL) {');
-  });
-
-  it('creates the obligation with a conditional put', () => {
-    const fn = job.slice(job.indexOf('async function openResearchInvite'));
-    expect(fn.slice(0, 1500)).toContain("ConditionExpression: 'attribute_not_exists(id)'");
-    expect(fn.slice(0, 1500)).toContain("status: { S: 'PENDING' }");
-  });
-
-  it('tells the recipient the reward does not depend on their answers', () => {
-    expect(job).toMatch(/whatever you tell us/i);
-    expect(job).toMatch(/critical feedback earns exactly the same/i);
   });
 });

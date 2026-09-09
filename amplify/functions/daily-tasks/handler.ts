@@ -20,6 +20,7 @@ import {
   incentiveId,
 } from './researchIncentive';
 import { encodeSurveyLink } from './surveyLink';
+import { SURVEY_VERSION, reminderIsDue, surveyIsDue } from './survey';
 import { encodeRatingLink } from './ratingLink';
 
 const dynamo = new DynamoDBClient({});
@@ -30,19 +31,16 @@ const NOTIFICATION_TABLE = process.env.NOTIFICATION_TABLE_NAME as string;
 const PREFERENCE_TABLE = process.env.PREFERENCE_TABLE_NAME as string;
 const INCENTIVE_TABLE = process.env.INCENTIVE_TABLE_NAME as string;
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE_NAME as string;
+const SURVEY_TABLE = process.env.SURVEY_TABLE_NAME as string;
 /**
- * Where the survey itself lives.
+ * Which survey they were asked. A second survey is a second programme.
  *
- * Configuration, not code, because whether it is a Typeform, a Google Form or
- * a page we build later changes nothing about who gets invited or what they
- * are owed. Unset means no invitation is ever sent — the programme is simply
- * off, rather than mailing people a link to nowhere.
+ * There is no longer a URL beside this. The survey is a page in this
+ * application, so there is nothing to configure and nothing that can be
+ * misconfigured into mailing people a link to nowhere. When it goes out is in
+ * lib/survey.ts, measured from the event rather than from the upload window.
  */
-const SURVEY_URL = process.env.RESEARCH_SURVEY_URL ?? '';
-/** Which survey they were asked. A second survey is a second programme. */
 const SURVEY_ID = process.env.RESEARCH_SURVEY_ID ?? 'post-event-v1';
-/** Days after the upload window closes before the invitation goes out. */
-const SURVEY_DELAY_DAYS = Number(process.env.RESEARCH_SURVEY_DELAY_DAYS ?? '7');
 /**
  * Days after the upload window closes before the rating request goes out.
  *
@@ -83,6 +81,17 @@ interface EventRow {
   owner: string;
   contributorCount: number;
   guestUploadCount: number;
+  /** The host's stated event date, a plain YYYY-MM-DD, or null. */
+  date: string | null;
+  /** When the event was paid for. Absent on comped and older events. */
+  paidAt: string | null;
+  createdAt: string | null;
+  /** Internal cohort label, e.g. FOUNDING_20. Never shown to a host. */
+  internalCohort: string;
+  /** What kind of occasion it was, when the event row knows. */
+  eventType: string;
+  /** Whether an admin chose to offer a gift card for this event's survey. */
+  researchIncentiveOffered: boolean;
 }
 
 function readEvent(item: Record<string, AttributeValue>): EventRow {
@@ -96,6 +105,12 @@ function readEvent(item: Record<string, AttributeValue>): EventRow {
     owner: item.owner?.S ?? '',
     contributorCount: Number(item.contributorCount?.N ?? '0'),
     guestUploadCount: Number(item.guestUploadCount?.N ?? '0'),
+    date: item.date?.S ?? null,
+    paidAt: item.paidAt?.S ?? null,
+    createdAt: item.createdAt?.S ?? null,
+    internalCohort: item.internalCohort?.S ?? '',
+    eventType: item.eventType?.S ?? '',
+    researchIncentiveOffered: item.researchIncentiveOffered?.BOOL === true,
   };
 }
 
@@ -117,10 +132,15 @@ async function* allEvents(): AsyncGenerator<EventRow> {
         TableName: EVENT_TABLE,
         ExclusiveStartKey: startKey,
         ProjectionExpression:
-          '#id, #name, tier, alertEmail, uploadWindowEndsAt, paid, #owner, contributorCount, guestUploadCount',
-        // `name` and `owner` are reserved in DynamoDB expressions; `id` is
-        // safest aliased alongside them.
-        ExpressionAttributeNames: { '#id': 'id', '#name': 'name', '#owner': 'owner' },
+          '#id, #name, tier, alertEmail, uploadWindowEndsAt, paid, #owner, contributorCount, guestUploadCount, #date, paidAt, createdAt, internalCohort, eventType, researchIncentiveOffered',
+        // `name`, `owner` and `date` are reserved in DynamoDB expressions; `id`
+        // is safest aliased alongside them.
+        ExpressionAttributeNames: {
+          '#id': 'id',
+          '#name': 'name',
+          '#owner': 'owner',
+          '#date': 'date',
+        },
       }),
     );
     for (const item of page.Items ?? []) yield readEvent(item);
@@ -277,23 +297,20 @@ async function markSent(email: string, nowISO: string): Promise<void> {
 }
 
 /**
- * Create this event's research obligation, in PENDING, and hand back the link.
+ * Open the gift-card obligation for an event whose invitation offers one.
  *
- * PENDING means "invited, has not completed" — nothing is owed yet. The row is
- * created at invitation time rather than on completion because it carries the
- * random token the link needs, and because one row per event per survey is
- * exactly the idempotency required: a job retry cannot invite twice, and a
- * reloaded thank-you page cannot create a second gift-card obligation.
+ * PENDING means "invited, has not completed" — nothing is owed until they
+ * answer. The conditional put is the idempotency: one obligation per event per
+ * survey, however many times this job runs.
  *
- * Returns null when a row already exists, which is the ordinary "already
- * invited" answer rather than a failure.
+ * Called only when an admin has turned the offer on for this event, and always
+ * before the email is sent, so an email promising a gift card cannot go out
+ * without the obligation being recorded. If this fails, the invitation is
+ * skipped entirely and retried tomorrow — a promise nothing is tracking is
+ * worse than a late invitation.
  */
-async function openResearchInvite(
-  event: EventRow,
-  nowISO: string,
-): Promise<string | null> {
-  if (!INCENTIVE_TABLE) return null;
-  const token = randomBytes(24).toString('hex');
+async function openIncentiveObligation(event: EventRow, nowISO: string): Promise<boolean> {
+  if (!INCENTIVE_TABLE) return false;
   try {
     await dynamo.send(
       new PutItemCommand({
@@ -308,16 +325,149 @@ async function openResearchInvite(
           incentiveType: { S: INCENTIVE_TYPE },
           amountUsd: { N: String(INCENTIVE_AMOUNT_USD) },
           status: { S: 'PENDING' },
-          surveyToken: { S: token },
           createdAt: { S: nowISO },
           updatedAt: { S: nowISO },
         },
         ConditionExpression: 'attribute_not_exists(id)',
       }),
     );
+    return true;
+  } catch (error) {
+    // Already recorded, which is the ordinary answer if a previous run opened
+    // the obligation and then failed to send.
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return true;
+    console.error('Could not open a gift-card obligation', {
+      at: nowISO,
+      eventId: event.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Give every outstanding gift-card invitation a survey row to land on.
+ *
+ * The research programme used to send people to a form provider and record the
+ * obligation in ResearchIncentive; the link they were sent carries that row's
+ * token. Now that the survey is part of the product, a link like that resolves
+ * against SurveyResponse, finds nothing, and tells a person who was promised
+ * twenty-five dollars that their link is invalid.
+ *
+ * So each PENDING obligation gets a survey row carrying the same token. The
+ * link they already have then works, and the promise made to them stands. The
+ * conditional put means this is a no-op once done, and it never disturbs a row
+ * the new invitation flow created.
+ *
+ * Nothing here creates new obligations: no gift card is promised by the current
+ * invitation email, and nothing opens a ResearchIncentive any more. Existing
+ * ones are honoured; the programme is paused rather than retired, and the rows
+ * and the admin queue behind it are untouched.
+ */
+async function backfillResearchInvites(nowISO: string): Promise<number> {
+  if (!INCENTIVE_TABLE || !SURVEY_TABLE) return 0;
+  let adopted = 0;
+  let startKey: Record<string, AttributeValue> | undefined;
+  do {
+    const page = await dynamo
+      .send(
+        new ScanCommand({
+          TableName: INCENTIVE_TABLE,
+          ExclusiveStartKey: startKey,
+          ProjectionExpression: 'eventId, customer, surveyToken, #status',
+          ExpressionAttributeNames: { '#status': 'status' },
+        }),
+      )
+      .catch(() => null);
+    if (!page) return adopted;
+
+    for (const item of page.Items ?? []) {
+      if ((item.status?.S ?? '') !== 'PENDING') continue;
+      const eventId = item.eventId?.S ?? '';
+      const token = item.surveyToken?.S ?? '';
+      if (!eventId || !token) continue;
+
+      try {
+        await dynamo.send(
+          new PutItemCommand({
+            TableName: SURVEY_TABLE,
+            Item: {
+              id: { S: eventId },
+              __typename: { S: 'SurveyResponse' },
+              eventId: { S: eventId },
+              customer: { S: item.customer?.S ?? '' },
+              surveyVersion: { S: SURVEY_VERSION },
+              // The same token the person already holds in their inbox.
+              surveyToken: { S: token },
+              requestedAt: { S: nowISO },
+              createdAt: { S: nowISO },
+              updatedAt: { S: nowISO },
+            },
+            ConditionExpression: 'attribute_not_exists(id)',
+          }),
+        );
+        adopted += 1;
+      } catch (error) {
+        // Already has a row, which is the ordinary answer after the first run.
+        if ((error as { name?: string }).name === 'ConditionalCheckFailedException') continue;
+        console.error('Could not adopt a research invitation', {
+          at: nowISO,
+          eventId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    startKey = page.LastEvaluatedKey;
+  } while (startKey);
+
+  if (adopted > 0) {
+    console.log('Adopted outstanding research invitations', { at: nowISO, adopted });
+  }
+  return adopted;
+}
+
+/**
+ * Open this event's survey row, in the invited state, and hand back the link.
+ *
+ * The row is created here with its token, before anybody answers — the
+ * survey-response function only ever fills a row in, never creates one. That is
+ * what makes the token unforgeable: a row that appeared because somebody
+ * guessed an id would be a row with no proof anyone was ever sent it.
+ *
+ * The conditional put is also the idempotency. One invitation per event, however
+ * many times this job runs, and a retry mid-send cannot invite twice.
+ *
+ * Returns null when a row already exists, which is the ordinary answer on every
+ * run after the first.
+ */
+async function openSurveyInvite(event: EventRow, nowISO: string): Promise<string | null> {
+  if (!SURVEY_TABLE) return null;
+  const token = randomBytes(24).toString('hex');
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: SURVEY_TABLE,
+        Item: {
+          id: { S: event.id },
+          __typename: { S: 'SurveyResponse' },
+          eventId: { S: event.id },
+          customer: { S: event.owner },
+          eventName: { S: event.name },
+          surveyVersion: { S: SURVEY_VERSION },
+          surveyToken: { S: token },
+          requestedAt: { S: nowISO },
+          createdAt: { S: nowISO },
+          updatedAt: { S: nowISO },
+          // Pre-filled from the event so question one arrives answered. The
+          // host can change it; this is a starting point, not a claim.
+          ...(event.eventType ? { eventType: { S: event.eventType } } : {}),
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
   } catch (error) {
     if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return null;
-    console.error('Could not open a research invite', {
+    console.error('Could not open a survey invitation', {
       at: nowISO,
       eventId: event.id,
       error: error instanceof Error ? error.message : String(error),
@@ -328,16 +478,77 @@ async function openResearchInvite(
 }
 
 /**
- * Open a rating request, or null if this event already has one.
+ * Every survey row that has been invited, so the job can decide who is owed a
+ * reminder and which events must not be asked for a rating as well.
  *
- * The row is created here, with its token, BEFORE anybody rates — the submit
- * function only ever fills a row in, never creates one. That is what makes the
- * token unforgeable: a row that appeared because somebody guessed an id would
- * be a row with no proof anyone was ever sent it.
- *
- * The conditional put is also the idempotency: one request per event, however
- * many times this job runs.
+ * A scan of a table with one row per invited event — far smaller than the event
+ * table this job already scans nightly.
  */
+async function surveyRows(): Promise<
+  Map<string, { requestedAt: string | null; reminderSentAt: string | null; completedAt: string | null; token: string }>
+> {
+  const rows = new Map<
+    string,
+    { requestedAt: string | null; reminderSentAt: string | null; completedAt: string | null; token: string }
+  >();
+  if (!SURVEY_TABLE) return rows;
+  let startKey: Record<string, AttributeValue> | undefined;
+  do {
+    const page = await dynamo.send(
+      new ScanCommand({
+        TableName: SURVEY_TABLE,
+        ExclusiveStartKey: startKey,
+        ProjectionExpression: '#id, requestedAt, reminderSentAt, completedAt, surveyToken',
+        ExpressionAttributeNames: { '#id': 'id' },
+      }),
+    );
+    for (const item of page.Items ?? []) {
+      const id = item.id?.S ?? '';
+      if (!id) continue;
+      rows.set(id, {
+        requestedAt: item.requestedAt?.S ?? null,
+        reminderSentAt: item.reminderSentAt?.S ?? null,
+        completedAt: item.completedAt?.S ?? null,
+        token: item.surveyToken?.S ?? '',
+      });
+    }
+    startKey = page.LastEvaluatedKey;
+  } while (startKey);
+  return rows;
+}
+
+/**
+ * Claim the one reminder this survey is allowed.
+ *
+ * The conditional update is the "only one" rule, not the caller remembering:
+ * two runs overlapping, or a retry after a timeout, both try and only one
+ * writes. Returns false when somebody already claimed it.
+ */
+async function claimSurveyReminder(eventId: string, nowISO: string): Promise<boolean> {
+  if (!SURVEY_TABLE) return false;
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: SURVEY_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: 'SET reminderSentAt = :now, updatedAt = :now',
+        ConditionExpression:
+          'attribute_exists(id) AND attribute_not_exists(reminderSentAt) AND attribute_not_exists(completedAt)',
+        ExpressionAttributeValues: { ':now': { S: nowISO } },
+      }),
+    );
+    return true;
+  } catch (error) {
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return false;
+    console.error('Could not claim a survey reminder', {
+      at: nowISO,
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
 async function openRatingRequest(event: EventRow, nowISO: string): Promise<string | null> {
   if (!FEEDBACK_TABLE) return null;
   const token = randomBytes(24).toString('hex');
@@ -501,75 +712,170 @@ export const handler = async () => {
   }
 
   // ---------------------------------------------------------------------
-  // Research survey invitations.
+  // Post-event survey invitations, and the one reminder.
   // ---------------------------------------------------------------------
   //
   // A second pass rather than more work inside the first, because the two jobs
   // answer different questions about different events and interleaving them
   // would make either one hard to reason about or switch off.
   //
-  // The whole pass is skipped when there is no survey to point at. That is the
-  // programme being off, not an error: mailing people a link to nowhere is
-  // worse than not mailing them.
+  // The survey is part of the product now — pages/survey/[link].tsx — so there
+  // is no external form to point at and no URL to check before starting. What
+  // gates this pass instead is the table: without it there is nowhere to record
+  // an invitation, and an invitation nothing recorded would be sent again every
+  // night.
+  // Outstanding gift-card invitations first, so a link already in somebody's
+  // inbox has a row to land on before this run decides who still needs one.
+  await backfillResearchInvites(nowISO);
+  const surveys = SURVEY_TABLE ? await surveyRows() : new Map();
   let invited = 0;
-  if (SURVEY_URL) {
+  let reminded = 0;
+
+  if (SURVEY_TABLE) {
     for await (const event of allEvents()) {
-      if (invited >= MAX_SENDS_PER_RUN) break;
-      if (!event.id || !event.paid) continue;
+      if (invited + reminded >= MAX_SENDS_PER_RUN) break;
+      if (!event.id || !event.alertEmail) continue;
 
-      // Only events that actually worked. Asking someone whose event nobody
-      // came to how the product went is both useless as research and unkind.
-      if (!isSuccessfulEvent(event)) continue;
+      const founding = Boolean(event.internalCohort);
+      // Paid hosts, and comped ones in a research cohort. A free-tier trial is
+      // neither: surveying every tyre-kicker would drown the signal from the
+      // people who actually ran an event.
+      if (!event.paid && !founding) continue;
 
-      // Only after uploads have closed and the dust has settled, so they are
-      // answering about a finished event rather than one still running.
-      const windowEnd = event.uploadWindowEndsAt
-        ? Date.parse(event.uploadWindowEndsAt)
-        : NaN;
-      if (!Number.isFinite(windowEnd)) continue;
-      const inviteAt = windowEnd + SURVEY_DELAY_DAYS * 24 * 60 * 60 * 1000;
-      if (now.getTime() < inviteAt) continue;
+      // Ordinary customers are asked only when their event worked — asking
+      // someone whose event nobody came to how the product went is unkind, and
+      // it is not what they bought. A research cohort is different: they agreed
+      // to be asked, and an event that did not work is the most informative
+      // case there is.
+      if (!founding && !isSuccessfulEvent(event)) continue;
+
+      const existing = surveys.get(event.id);
+
+      // ---- the reminder ------------------------------------------------
+      //
+      // One, ever. reminderIsDue refuses a second and refuses one for a
+      // completed survey; claimSurveyReminder then makes that a condition on
+      // the write, so two overlapping runs cannot both send it.
+      if (existing) {
+        if (!reminderIsDue(existing, now)) continue;
+
+        const preference = await preferencesFor(event.alertEmail, nowISO);
+        if (!mayReceive(event.alertEmail, 'research-survey', preference)) continue;
+
+        if (!SENDING_ENABLED) {
+          console.log('[dry-run] would send the one survey reminder', {
+            at: nowISO,
+            eventId: event.id,
+          });
+          skipped += 1;
+          continue;
+        }
+
+        if (!(await claimSurveyReminder(event.id, nowISO))) continue;
+
+        const url = `${APP_URL}/survey/${encodeSurveyLink({
+          eventId: event.id,
+          surveyId: SURVEY_ID,
+          token: existing.token,
+        })}`;
+        const subject = `One quick favour about ${event.name}`;
+        const text = [
+          `We asked a few days ago how SharePix went at ${event.name}, and we know how easy that is to miss.`,
+          '',
+          'If you have five minutes, we would still love to hear it — especially anything that annoyed you.',
+          '',
+          url,
+          '',
+          'SharePix LLC',
+        ].join('\n');
+        const html = [
+          '<!doctype html><html><body style="margin:0;background:#faf9f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;color:#1f2421">',
+          '<div style="max-width:520px;margin:0 auto;padding:32px 24px">',
+          '<p style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#0b7a52;margin:0 0 12px">SharePix</p>',
+          `<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px">One quick favour</h1>`,
+          `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">We asked a few days ago how SharePix went at ${event.name}. If you have five minutes, we would still love to hear it — especially anything that annoyed you.</p>`,
+          `<p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#12211c;color:#faf9f6;padding:14px 24px;text-decoration:none;font-weight:600">Give feedback</a></p>`,
+          '<p style="font-size:13px;line-height:1.6;color:#1f2421;opacity:.6;margin:24px 0 0">SharePix LLC</p>',
+          '</div></body></html>',
+        ].join('');
+
+        if (await send(event.alertEmail, subject, html, text)) {
+          await markSent(event.alertEmail, nowISO);
+          reminded += 1;
+        }
+        continue;
+      }
+
+      // ---- the invitation ----------------------------------------------
+      //
+      // Three days after the host's stated event date, or a fortnight after
+      // they got the event when they gave none. Never measured from the upload
+      // window, which closes sixty days after the event was created and has
+      // nothing to do with when the event happened.
+      if (!surveyIsDue(event, now)) continue;
 
       // Optional mail: this one we send because WE want something, so an
-      // opt-out is absolute. Nothing about the gift card changes that.
+      // opt-out is absolute.
       const preference = await preferencesFor(event.alertEmail, nowISO);
       if (!mayReceive(event.alertEmail, 'research-survey', preference)) continue;
 
       if (!SENDING_ENABLED) {
-        console.log('[dry-run] would invite to research survey', {
+        console.log('[dry-run] would invite to the post-event survey', {
           at: nowISO,
           eventId: event.id,
-          contributors: event.contributorCount,
-          guestUploads: event.guestUploadCount,
+          founding,
+          reward: event.researchIncentiveOffered,
+          basis: event.date ? 'event date' : 'acquisition',
         });
         skipped += 1;
         continue;
       }
 
-      const link = await openResearchInvite(event, nowISO);
+      // If this event offers a reward, record the obligation BEFORE the email
+      // that promises it. Failing here skips the invitation and retries
+      // tomorrow: a promise nothing is tracking is worse than a late ask.
+      const offersReward = event.researchIncentiveOffered;
+      if (offersReward && !(await openIncentiveObligation(event, nowISO))) continue;
+
+      const link = await openSurveyInvite(event, nowISO);
       // Null means already invited, which is the common case on every run
       // after the first.
       if (!link) continue;
 
       const url = `${APP_URL}/survey/${link}`;
-      const subject = `A few questions about ${event.name}?`;
+      const subject = `How did SharePix do at ${event.name}?`;
+      // Said the same way in both versions of the email, and only when there is
+      // an obligation recorded to back it: the reward does not depend on what
+      // they say. If it did we would be paying for agreement, and the research
+      // would be worthless.
+      const rewardLine = offersReward
+        ? `There is a $${INCENTIVE_AMOUNT_USD} Amazon gift card for completing it — whatever you tell us. Critical feedback earns exactly the same as praise; we would rather know.`
+        : '';
       const text = [
-        `Your SharePix event ${event.name} is wrapped up, and we would like to know how it went.`,
+        `Thank you for using SharePix for ${event.name}.`,
         '',
-        `It takes about ten minutes, and there is a $${INCENTIVE_AMOUNT_USD} Amazon gift card for completing it — whatever you tell us. Critical feedback earns exactly the same as praise; we would rather know.`,
+        'We are working hard to make SharePix the easiest way to collect the photos and videos guests capture at an event, and your experience can help us improve it.',
+        '',
+        'Would you take about five minutes to tell us what worked, what was confusing, and what you would change? We genuinely want the honest version — not just the good stuff.',
+        ...(rewardLine ? ['', rewardLine] : []),
         '',
         url,
         '',
+        'Thank you for helping us make SharePix better.',
         'SharePix LLC',
       ].join('\n');
       const html = [
         '<!doctype html><html><body style="margin:0;background:#faf9f6;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif;color:#1f2421">',
         '<div style="max-width:520px;margin:0 auto;padding:32px 24px">',
         '<p style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#0b7a52;margin:0 0 12px">SharePix</p>',
-        `<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px">How did ${event.name} go?</h1>`,
-        `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">It takes about ten minutes, and there is a $${INCENTIVE_AMOUNT_USD} Amazon gift card for completing it — whatever you tell us. Critical feedback earns exactly the same as praise; we would rather know.</p>`,
-        `<p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#12211c;color:#faf9f6;padding:14px 24px;text-decoration:none;font-weight:600">Start the survey</a></p>`,
-        '<p style="font-size:13px;line-height:1.6;color:#1f2421;opacity:.6;margin:24px 0 0">SharePix LLC</p>',
+        `<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px">How did SharePix do at ${event.name}?</h1>`,
+        '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">We are working hard to make SharePix the easiest way to collect the photos and videos guests capture at an event, and your experience can help us improve it.</p>',
+        '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">Would you take about five minutes to tell us what worked, what was confusing, and what you would change? We genuinely want the honest version — not just the good stuff.</p>',
+        rewardLine
+          ? `<p style="font-size:15px;line-height:1.6;margin:0 0 16px">${rewardLine}</p>`
+          : '',
+        `<p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#12211c;color:#faf9f6;padding:14px 24px;text-decoration:none;font-weight:600">Give feedback</a></p>`,
+        '<p style="font-size:13px;line-height:1.6;color:#1f2421;opacity:.6;margin:24px 0 0">Thank you for helping us make SharePix better.<br>SharePix LLC</p>',
         '</div></body></html>',
       ].join('');
 
@@ -597,6 +903,11 @@ export const handler = async () => {
   for await (const event of allEvents()) {
     if (ratingsRequested >= MAX_SENDS_PER_RUN) break;
     if (!event.id || !event.paid) continue;
+
+    // Never ask twice. The survey asks how satisfied they are and whether we
+    // may quote them; a rating request arriving weeks later asks both again,
+    // and two permission records that can disagree is worse than none.
+    if (surveys.get(event.id)?.completedAt) continue;
 
     // Once the event is over and the dust has settled, so they are rating a
     // finished event rather than one still running.
@@ -654,6 +965,7 @@ export const handler = async () => {
     lapsed,
     skipped,
     invited,
+    reminded,
     ratingsRequested,
     dryRun: !SENDING_ENABLED,
   };
@@ -669,12 +981,12 @@ export const handler = async () => {
     summary: [
       `${considered} active event${considered === 1 ? '' : 's'} checked.`,
       SENDING_ENABLED
-        ? `${sent} expiry reminder${sent === 1 ? '' : 's'} sent, ${invited} survey invitation${invited === 1 ? '' : 's'} sent, ${ratingsRequested} rating request${ratingsRequested === 1 ? '' : 's'} sent.`
+        ? `${sent} expiry reminder${sent === 1 ? '' : 's'} sent, ${invited} survey invitation${invited === 1 ? '' : 's'} sent, ${reminded} survey reminder${reminded === 1 ? '' : 's'} sent, ${ratingsRequested} rating request${ratingsRequested === 1 ? '' : 's'} sent.`
         : `Nothing was sent — EMAIL_SENDING_ENABLED is off. ${skipped} message${skipped === 1 ? '' : 's'} would have gone out.`,
       lapsed > 0
         ? `${lapsed} reminder milestone${lapsed === 1 ? '' : 's'} had already passed and were recorded rather than sent late.`
         : '',
-      SURVEY_URL ? '' : 'No survey URL configured, so no invitations were considered.',
+      SURVEY_TABLE ? '' : 'No survey table configured, so no invitations were considered.',
     ]
       .filter(Boolean)
       .join(' '),

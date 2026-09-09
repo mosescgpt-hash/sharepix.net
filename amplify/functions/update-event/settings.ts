@@ -121,6 +121,29 @@ export type PatchResult = { ok: true; patch: Patch } | { ok: false; reason: stri
  * Every branch either produces a cleaned value or refuses. Nothing falls
  * through to "write what they sent".
  */
+/**
+ * Was this field part of the request at all?
+ *
+ * AppSync hands the function `null` for an argument the caller did not send,
+ * not `undefined`, so `field !== undefined` reads "they sent it" for every
+ * field on the mutation — including all the ones they left alone. Selecting a
+ * gallery font arrived here looking like an attempt to set the name to nothing,
+ * and was refused with "Enter an event name."
+ *
+ * That was the visible half. The name check runs first and returned early,
+ * which is the only reason the rest was not worse: read as sent-and-empty, an
+ * absent `city` cleared the location, an absent `alertEmail` cleared the alert
+ * address, and absent QR fields reset the branding to defaults. A host changing
+ * one setting would have silently lost several others.
+ *
+ * So null and undefined both mean "not provided". Clearing a field is an empty
+ * string, which every caller in lib/api.ts already sends deliberately — see the
+ * `=== null ? '' :` conversions there.
+ */
+function provided<T>(value: T | null | undefined): value is T {
+  return value !== undefined && value !== null;
+}
+
 export function buildPatch(request: SettingsRequest, event: EventState): PatchResult {
   const set: Record<string, string | boolean> = {};
   const remove: string[] = [];
@@ -128,7 +151,7 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
   // The name and date lock once guests have uploaded, so an event can't rename
   // itself underneath the people whose memories are in it. The client hides the
   // fields; this is what actually enforces it.
-  const changingIdentity = request.name !== undefined || request.date !== undefined;
+  const changingIdentity = provided(request.name) || provided(request.date);
   if (changingIdentity && event.photoCount > 0) {
     return {
       ok: false,
@@ -136,13 +159,13 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
     };
   }
 
-  if (request.name !== undefined) {
+  if (provided(request.name)) {
     const name = collapse(request.name ?? '', MAX_EVENT_NAME);
     if (!name) return { ok: false, reason: 'Enter an event name.' };
     set.name = name;
   }
 
-  if (request.date !== undefined) {
+  if (provided(request.date)) {
     const date = sanitizeEventDate(request.date);
     if (date) set.date = date;
     else if ((request.date ?? '').trim() === '') remove.push('date');
@@ -151,13 +174,13 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
 
   // City and state arrive separately and are stored as one label, so either one
   // changing means rebuilding it from both.
-  if (request.city !== undefined || request.state !== undefined) {
+  if (provided(request.city) || provided(request.state)) {
     const location = formatEventLocation(request.city, request.state);
     if (location) set.location = location;
     else remove.push('location');
   }
 
-  if (request.moderationMode !== undefined) {
+  if (provided(request.moderationMode)) {
     const mode = (request.moderationMode ?? '').trim().toLowerCase();
     if (!MODERATION_MODES.includes(mode)) {
       return { ok: false, reason: 'Choose one of the available screening settings.' };
@@ -165,7 +188,7 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
     set.moderationMode = mode;
   }
 
-  if (request.alertEmail !== undefined) {
+  if (provided(request.alertEmail)) {
     const email = collapse(request.alertEmail ?? '', MAX_ALERT_EMAIL);
     if (!email) {
       // Clearing it turns the alerts off; held photos stay reviewable in the
@@ -183,14 +206,14 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
   // written as one. Absent fields fall back to the defaults inside
   // validateQrBranding rather than erroring.
   if (
-    request.qrDotStyle !== undefined ||
-    request.qrColor !== undefined ||
-    request.qrLogo !== undefined
+    provided(request.qrDotStyle) ||
+    provided(request.qrColor) ||
+    provided(request.qrLogo)
   ) {
     const branding = validateQrBranding({
-      qrDotStyle: request.qrDotStyle,
-      qrColor: request.qrColor,
-      qrLogo: request.qrLogo,
+      qrDotStyle: request.qrDotStyle ?? undefined,
+      qrColor: request.qrColor ?? undefined,
+      qrLogo: request.qrLogo ?? undefined,
     });
     if (!branding.ok) return { ok: false, reason: branding.reason };
     set.qrDotStyle = branding.branding.qrDotStyle;
@@ -207,21 +230,21 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
   // refused rather than stored and ignored. Storing an unknown key would put a
   // value we never validated one render away from being trusted by whatever
   // reads it next.
-  if (request.galleryFontSet !== undefined) {
+  if (provided(request.galleryFontSet)) {
     if (!isFontSetKey(request.galleryFontSet)) {
       return { ok: false, reason: 'Choose one of the available font styles.' };
     }
     set.galleryFontSet = request.galleryFontSet as string;
   }
 
-  if (request.galleryLayout !== undefined) {
+  if (provided(request.galleryLayout)) {
     if (!isGalleryLayout(request.galleryLayout)) {
       return { ok: false, reason: 'Choose one of the available layouts.' };
     }
     set.galleryLayout = request.galleryLayout as string;
   }
 
-  if (request.galleryAccent !== undefined) {
+  if (provided(request.galleryAccent)) {
     const raw = (request.galleryAccent ?? '').trim();
     if (raw === '') {
       // Clearing it returns the gallery to the SharePix palette, which is a
@@ -248,7 +271,7 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
     'commentsEnabled',
   ] as const) {
     const value = request[flag];
-    if (value === undefined) continue;
+    if (!provided(value)) continue;
     if (typeof value !== 'boolean') {
       return { ok: false, reason: 'That setting could not be updated.' };
     }

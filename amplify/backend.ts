@@ -42,6 +42,7 @@ import { completeSurvey } from './functions/complete-survey/resource';
 import { monthlyReport } from './functions/monthly-report/resource';
 import { claimRefund } from './functions/claim-refund/resource';
 import { submitFeedback } from './functions/submit-feedback/resource';
+import { surveyResponse } from './functions/survey-response/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 
@@ -75,6 +76,7 @@ const backend = defineBackend({
   monthlyReport,
   claimRefund,
   submitFeedback,
+  surveyResponse,
   reclaimStorage,
   photoEngagement,
 });
@@ -96,6 +98,7 @@ const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
 const incentiveTable = backend.data.resources.tables.ResearchIncentive;
 const refundTable = backend.data.resources.tables.Refund;
 const feedbackTable = backend.data.resources.tables.EventFeedback;
+const surveyTable = backend.data.resources.tables.SurveyResponse;
 const mediaTable = backend.data.resources.tables.MediaObject;
 const settingTable = backend.data.resources.tables.AppSetting;
 const reactionTable = backend.data.resources.tables.PhotoReaction;
@@ -710,6 +713,12 @@ dailyTasksFn.addEnvironment(
 // anyone was sent it.
 feedbackTable.grantReadWriteData(dailyTasksFn);
 dailyTasksFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
+// Survey invitations and the one reminder. Read-write: the job opens the row
+// with its token and claims the reminder with a conditional update, and it
+// reads back which surveys are already complete so those hosts are not asked
+// for a rating as well.
+surveyTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('SURVEY_TABLE_NAME', surveyTable.tableName);
 dailyTasksFn.addEnvironment('RATING_DELAY_DAYS', process.env.RATING_DELAY_DAYS ?? '2');
 
 const completeSurveyFn = backend.completeSurvey.resources.lambda as LambdaFunction;
@@ -840,3 +849,15 @@ reclaimFn.addEnvironment(
 const submitFeedbackFn = backend.submitFeedback.resources.lambda as LambdaFunction;
 feedbackTable.grantReadWriteData(submitFeedbackFn);
 submitFeedbackFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
+
+// Opens, autosaves and submits a post-event survey, from an emailed link.
+//
+// Writes the survey table and reads the event table, the second only to
+// snapshot the counters onto a finished response and to pre-fill the event
+// type. Read-only there on purpose: nothing a host answers should be able to
+// change the event it is about.
+const surveyResponseFn = backend.surveyResponse.resources.lambda as LambdaFunction;
+surveyTable.grantReadWriteData(surveyResponseFn);
+eventTable.grantReadData(surveyResponseFn);
+surveyResponseFn.addEnvironment('SURVEY_TABLE_NAME', surveyTable.tableName);
+surveyResponseFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);

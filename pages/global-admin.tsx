@@ -13,7 +13,6 @@ import {
   deleteEventAsGlobalAdmin,
   getCurrentUserInfo,
   listAllEvents,
-  listAllPhotos,
   listDiscountCodes,
   listFreeEventClaims,
   listPaymentsCount,
@@ -36,6 +35,7 @@ import {
   sendTestAlertEmail,
   setDiscountCodeActive,
   setEventUploadWindowEnd,
+  setResearchIncentiveOffered,
   setEventTheme,
   startCheckout,
 } from '@/lib/api';
@@ -51,7 +51,7 @@ import {
 } from '@/lib/taxNexus';
 import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
-import { canTransition } from '@/lib/researchIncentive';
+import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
@@ -202,7 +202,6 @@ function GlobalAdminPage() {
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [events, setEvents] = useState<QREvent[]>([]);
   const [codes, setCodes] = useState<DiscountCode[]>([]);
-  const [photoCounts, setPhotoCounts] = useState<Record<string, number>>({});
   const [paymentsCount, setPaymentsCount] = useState<number | null>(null);
   // null while loading. Kept separate from `error` so a missing or empty claim
   // table never blanks out the whole dashboard.
@@ -299,21 +298,12 @@ function GlobalAdminPage() {
       setAuthorized(admin);
       if (!admin) return;
 
-      const [eventItems, codeItems, photos] = await Promise.all([
-        listAllEvents(),
-        listDiscountCodes(),
-        listAllPhotos(),
-      ]);
-      const counts = photos.reduce<Record<string, number>>((result, photo) => {
-        result[photo.eventId] = (result[photo.eventId] ?? 0) + 1;
-        return result;
-      }, {});
+      const [eventItems, codeItems] = await Promise.all([listAllEvents(), listDiscountCodes()]);
 
       setEvents(
         eventItems.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
       );
       setCodes(codeItems.sort((a, b) => b.expiresAt.localeCompare(a.expiresAt)));
-      setPhotoCounts(counts);
 
       // Payments count is best-effort: don't let a missing/empty Payment table
       // (e.g. before the webhook has ever fired) blank out the whole dashboard.
@@ -421,7 +411,11 @@ function GlobalAdminPage() {
     [events],
   );
 
-  const totalPhotos = Object.values(photoCounts).reduce((sum, count) => sum + count, 0);
+  // Summed from the counter on each event row. This used to sum a client-side
+  // tally built by downloading every Photo row in the system, which stopped at
+  // the first page — so the total silently under-reported once the table passed
+  // a thousand photos, which one busy event is enough to do.
+  const totalPhotos = events.reduce((sum, event) => sum + (event.photoCount ?? 0), 0);
   const activeCodes = codes.filter(
     (item) =>
       item.active &&
@@ -671,6 +665,41 @@ function GlobalAdminPage() {
       setReportSaved(value);
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : 'That could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /**
+   * Offer, or stop offering, a gift card for this event's survey.
+   *
+   * Off unless chosen, per event, because a comped event is already a gift and
+   * stacking a reward on it by default would pay twice for the same feedback.
+   * Only has an effect before the invitation goes out: once the survey row
+   * exists the email either promised a reward or did not, and the obligation
+   * was opened alongside it.
+   */
+  async function handleIncentiveOffer(event: QREvent, offered: boolean) {
+    if (
+      offered &&
+      !window.confirm(
+        `Offer a $${INCENTIVE_AMOUNT_USD} gift card for the survey on \u201c${event.name}\u201d?\n\nThe invitation will promise it and the obligation is recorded when it sends. Do not stack this on a comped event unless you mean to.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`incentive-${event.id}`);
+    try {
+      await setResearchIncentiveOffered(event.id, offered);
+      setEvents((current) =>
+        current.map((row) =>
+          row.id === event.id ? { ...row, researchIncentiveOffered: offered } : row,
+        ),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'The gift-card setting could not be updated.',
+      );
     } finally {
       setWorking(null);
     }
@@ -1863,7 +1892,7 @@ function GlobalAdminPage() {
                             ) : null}
                           </h3>
                           <p className="mt-1 text-sm text-charcoal/60">
-                            {event.createdBy ?? 'Unknown host'} · {event.tier} · {photoCounts[event.id] ?? 0}
+                            {event.createdBy ?? 'Unknown host'} · {event.tier} · {event.photoCount ?? 0}
                             {entitledPhotoLimit(event) == null
                               ? ' photos (unlimited)'
                               : ` / ${entitledPhotoLimit(event)! + (event.extraPhotoCredits ?? 0)} photos`}
@@ -1960,6 +1989,23 @@ function GlobalAdminPage() {
                               Add photos
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            disabled={working === `incentive-${event.id}`}
+                            onClick={() =>
+                              void handleIncentiveOffer(event, !event.researchIncentiveOffered)
+                            }
+                            title="Whether this event's survey invitation offers a gift card"
+                            className={`border px-3 py-1.5 transition disabled:opacity-50 ${
+                              event.researchIncentiveOffered
+                                ? 'border-pine bg-sage/40 text-pine'
+                                : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
+                            }`}
+                          >
+                            {event.researchIncentiveOffered
+                              ? `Gift card on ($${INCENTIVE_AMOUNT_USD})`
+                              : 'Gift card off'}
+                          </button>
                           {lifecyclePhase(event).archivable ? (
                             <button
                               type="button"
