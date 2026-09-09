@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
@@ -79,7 +77,10 @@ async function samplePreview(): Promise<{ bytes: Uint8Array; contentType: string
   }
 }
 
-export const handler = async (event) => {
+export const handler = async (event: {
+  arguments?: { to?: string | null };
+  identity?: { groups?: string[] | null } | null;
+}) => {
   const from = process.env.ALERT_FROM_ADDRESS;
   if (!from) {
     return {

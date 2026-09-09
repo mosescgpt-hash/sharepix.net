@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import {
   DynamoDBClient,
   GetItemCommand,
@@ -148,7 +146,7 @@ export const handler: Handler = async (event) => {
   // deploy; guessing wrong fails at runtime, in production, on a path a host
   // hits. Same known debt as the other two, tracked in docs/redesign-audit.md.
   let existing = 0;
-  let countKey: Record<string, unknown> | undefined;
+  let countKey: Record<string, AttributeValue> | undefined;
   do {
     const page = await dynamo.send(
       new ScanCommand({
@@ -191,5 +189,9 @@ export const handler: Handler = async (event) => {
     }),
   );
 
-  return { id: item.id.S, eventId, name, description, sortOrder, createdAt: now };
+  // `id` is set a few lines above and the schema promises a string, but the
+  // attribute type is optional — fall back rather than assert, so a shape that
+  // somehow lacks one returns an empty id instead of claiming a null is a
+  // string.
+  return { id: item.id.S ?? '', eventId, name, description, sortOrder, createdAt: now };
 };

@@ -1,6 +1,5 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { timingSafeEqual } from 'node:crypto';
 import type { Schema } from '../../data/resource';
 import {
@@ -57,7 +56,7 @@ export const handler: Handler = async (event) => {
   const existingRating = Number.isFinite(Number(row.rating?.N)) ? Number(row.rating?.N) : null;
 
   const sets: string[] = ['updatedAt = :now'];
-  const values: Record<string, unknown> = { ':now': { S: now } };
+  const values: Record<string, AttributeValue> = { ':now': { S: now } };
   const names: Record<string, string> = {};
 
   // ---- The score -------------------------------------------------------

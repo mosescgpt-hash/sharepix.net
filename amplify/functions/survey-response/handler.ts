@@ -1,6 +1,5 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { timingSafeEqual } from 'node:crypto';
 import type { Schema } from '../../data/resource';
 import {
@@ -58,7 +57,7 @@ function toAttribute(value: SurveyAnswers[string]) {
 }
 
 /** Read the answers already stored, so an interrupted survey can resume. */
-function storedAnswers(row: Record<string, Record<string, unknown>>): SurveyAnswers {
+function storedAnswers(row: Record<string, AttributeValue>): SurveyAnswers {
   const answers: SurveyAnswers = {};
   for (const id of WRITABLE) {
     const cell = row[id];
@@ -66,7 +65,7 @@ function storedAnswers(row: Record<string, Record<string, unknown>>): SurveyAnsw
     if (typeof cell.S === 'string') answers[id] = cell.S;
     else if (typeof cell.N === 'string') answers[id] = Number(cell.N);
     else if (Array.isArray(cell.L)) {
-      answers[id] = (cell.L as Array<{ S?: string }>).map((entry) => entry.S ?? '');
+      answers[id] = cell.L.map((entry) => entry.S ?? '');
     }
   }
   return answers;
@@ -188,7 +187,10 @@ export const handler: Handler = async (event) => {
   }
 
   const sets: string[] = ['updatedAt = :now', '#surveyVersion = :version'];
-  const values: Record<string, unknown> = { ':now': { S: now }, ':version': { S: SURVEY_VERSION } };
+  const values: Record<string, AttributeValue> = {
+    ':now': { S: now },
+    ':version': { S: SURVEY_VERSION },
+  };
   const names: Record<string, string> = { '#surveyVersion': 'surveyVersion' };
 
   let index = 0;

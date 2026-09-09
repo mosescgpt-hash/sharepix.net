@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -61,6 +59,47 @@ async function signPrintAsset(key: string, ttlSeconds: number): Promise<string> 
   });
 }
 
+/**
+ * The parts of a Stripe Checkout Session this function reads.
+ *
+ * Declared rather than imported from the Stripe SDK: the session arrives as
+ * JSON through an async Lambda invocation, so it is whatever the webhook put on
+ * the wire, and naming exactly the fields relied on is the honest description
+ * of that. Shipping addresses appear under two keys depending on API version,
+ * which is why both are here.
+ */
+interface StripeAddress {
+  line1?: string | null;
+  line2?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  city?: string | null;
+  state?: string | null;
+}
+
+interface StripeShipping {
+  name?: string | null;
+  address?: StripeAddress | null;
+}
+
+interface StripeSession {
+  id: string;
+  amount_total?: number | null;
+  metadata?: Record<string, string | undefined> | null;
+  shipping_details?: StripeShipping | null;
+  collected_information?: { shipping_details?: StripeShipping | null } | null;
+  customer_details?: { address?: StripeAddress | null; name?: string | null; email?: string | null } | null;
+  customer_email?: string | null;
+}
+
+/** One line of a stored print order, as itemsJson holds it. */
+interface PrintItem {
+  s3Key: string;
+  sku: string;
+  copies: number;
+  photoId?: string | null;
+}
+
 // Prodigi fetches the print asset shortly after the order is placed, so a
 // couple of days of validity on the signed URL is ample.
 const PRINT_ASSET_URL_TTL_SECONDS = 48 * 60 * 60;
@@ -88,7 +127,7 @@ const PRODUCT_ATTRIBUTES: Record<string, Record<string, string>> = {
  * order with the shipping address Stripe collected. Idempotent: skipped if the
  * row is already `submitted`, so a duplicate invocation can't double-order.
  */
-async function fulfillPrintOrder(session) {
+async function fulfillPrintOrder(session: StripeSession) {
   const printOrderId = session.metadata?.printOrderId;
   if (!printOrderId) return;
 
@@ -116,7 +155,7 @@ async function fulfillPrintOrder(session) {
 
   // Build fresh signed URLs Prodigi can pull the originals from.
   const prodigiItems = await Promise.all(
-    items.map(async (item) => {
+    items.map(async (item: PrintItem) => {
       const url = await signPrintAsset(item.s3Key, PRINT_ASSET_URL_TTL_SECONDS);
       return {
         merchantReference: item.photoId || undefined,
@@ -220,7 +259,7 @@ async function fulfillPrintOrder(session) {
 }
 
 /** Invoked asynchronously by the Stripe webhook with { session }. */
-export const handler = async (event) => {
+export const handler = async (event: { session?: StripeSession }) => {
   const session = event?.session;
   if (!session) {
     console.error('print-fulfill invoked without a session');

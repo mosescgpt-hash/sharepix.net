@@ -36,6 +36,16 @@ import { sanitizeDisplayName } from '@/lib/account';
 import { isEventThemeKey } from '@/lib/eventTheme';
 import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
 import { LIST_PAGE_LIMIT, listAllPages } from '@/lib/listPages';
+import { SURVEY_QUESTIONS } from '@/lib/survey';
+import { readSurveyRow, sortSurveys, type SurveyRow } from '@/lib/surveyAdmin';
+
+/** Which attributes on a response row are answers. Built from the questions. */
+const SURVEY_ANSWER_IDS = SURVEY_QUESTIONS.flatMap((question) => [
+  question.id,
+  ...((question.options ?? []).some((option) => option.withText)
+    ? [`${question.id}Other`]
+    : []),
+]);
 
 const client = generateClient<Schema>();
 type DataAuthMode = 'userPool' | 'identityPool';
@@ -843,6 +853,31 @@ export async function listEventFeedback(): Promise<FeedbackRow[]> {
     (b.ratingSubmittedAt ?? b.requestedAt ?? '').localeCompare(
       a.ratingSubmittedAt ?? a.requestedAt ?? '',
     ),
+  );
+}
+
+/**
+ * Every survey response, for the admin dashboard.
+ *
+ * Paged, because a first-page-only list of research responses would quietly
+ * hide the newest ones and nothing on the page would say so.
+ *
+ * The token is deliberately not read out of the row. It proves who was invited
+ * and has no business reaching a screen; the dashboard never needs it, and a
+ * value that never leaves the table cannot leak from one.
+ */
+export async function listSurveyResponses(): Promise<SurveyRow[]> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.SurveyResponse.list({
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'Survey responses could not be loaded.',
+  );
+  return sortSurveys(
+    rows.map((row) => readSurveyRow(row as Record<string, unknown>, SURVEY_ANSWER_IDS)),
   );
 }
 

@@ -487,11 +487,17 @@ describe('the counters are not a 32-bit integer', () => {
 
 describe('the accounting is idempotent', () => {
   const handler = read('amplify/functions/sanitize-upload/handler.ts');
+  // The counting moved to a data-stack consumer: sanitize-upload publishes the
+  // size to a queue, because a storage-stack function holding data-stack tables
+  // was a cycle between nested stacks. The property below is unchanged, and now
+  // has two at-least-once deliveries to survive rather than one — S3's, and
+  // SQS's.
+  const counter = read('amplify/functions/record-bytes/handler.ts');
 
   it('gates the increment on a conditional put', () => {
     // S3 delivers at-least-once, and a strippable original arrives twice by
     // design. The counter must move only when the ledger row is genuinely new.
-    expect(handler).toContain("ConditionExpression: 'attribute_not_exists(id)'");
+    expect(counter).toContain("ConditionExpression: 'attribute_not_exists(id)'");
     expect(handler).toContain('recordBytes');
   });
 

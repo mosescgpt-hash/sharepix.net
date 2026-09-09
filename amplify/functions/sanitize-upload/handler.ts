@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import {
   S3Client,
   HeadObjectCommand,
@@ -7,81 +5,56 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
-import { DynamoDBClient, PutItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { sniffMediaKind, maxBytesForKind } from './safety';
-import { counterForKind, eventIdForKey, kindForKey, usableSize } from './accounting';
+import { usableSize } from './accounting';
 import { isJpeg, isHeic, stripJpegMetadata, stripHeicGps } from './exif';
 import { mirrorConfigured, mirrorDecision, r2KeyFor } from './mirror';
 
 const s3 = new S3Client({});
-const dynamo = new DynamoDBClient({});
+// No DynamoDB client, deliberately. This function touches no table at all now,
+// which is what makes the storage stack independent of the data stack and is
+// the reason the deploys unblocked.
+const sqs = new SQSClient({});
+const BYTES_QUEUE_URL = process.env.BYTES_QUEUE_URL ?? '';
 
-const MEDIA_TABLE = process.env.MEDIA_TABLE_NAME as string;
-const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 
 /**
- * Record one object's size against its event, exactly once.
+ * Hand one stored object's size to the accounting queue.
  *
- * The conditional put is the whole mechanism: S3 delivers at-least-once and a
- * strippable original arrives twice by design, so the counter must move only
- * when the ledger row is genuinely new. A redelivery fails the condition and
- * this returns having done nothing.
+ * This function used to do the accounting itself, writing MediaObject and the
+ * counter on Event. That meant a storage-stack function holding grants on
+ * data-stack tables while the data stack has always needed the storage bucket —
+ * a circular dependency between nested stacks that CloudFormation only
+ * discovers at deploy time. Four deploys failed on it before
+ * scripts/check-stack-cycles.mjs existed to say so, and the grants were removed
+ * to unblock them, which is why byte accounting has been off since.
  *
- * Best-effort throughout. Accounting is not worth failing an upload over — the
- * photo is already safe and serveable, and an undercount is a number an admin
- * reconciles later rather than a memory somebody lost.
+ * A queue makes the dependency one-way: this publishes, record-bytes in the
+ * data stack consumes, and data already depends on storage.
+ *
+ * Best-effort, as it was before. Accounting is not worth failing an upload
+ * over — the photo is already safe and serveable, and an uncounted object is a
+ * number an admin reconciles rather than a memory somebody lost.
  */
 async function recordBytes(key: string, size: unknown): Promise<void> {
-  if (!MEDIA_TABLE || !EVENT_TABLE) return;
+  if (!BYTES_QUEUE_URL) return;
+  // Sent raw. Which counter it belongs to and which event it is on are derived
+  // by the consumer from the same rules, so a message cannot assert either.
   const bytes = usableSize(size);
-  const kind = kindForKey(key);
-  const eventId = eventIdForKey(key);
-  if (bytes === null || !kind || !eventId) return;
+  if (bytes === null) return;
 
-  const now = new Date().toISOString();
   try {
-    await dynamo.send(
-      new PutItemCommand({
-        TableName: MEDIA_TABLE,
-        Item: {
-          id: { S: key },
-          __typename: { S: 'MediaObject' },
-          eventId: { S: eventId },
-          kind: { S: kind },
-          bytes: { N: String(bytes) },
-          recordedAt: { S: now },
-          createdAt: { S: now },
-          updatedAt: { S: now },
-        },
-        ConditionExpression: 'attribute_not_exists(id)',
+    await sqs.send(
+      new SendMessageCommand({
+        QueueUrl: BYTES_QUEUE_URL,
+        MessageBody: JSON.stringify({ key, size: bytes }),
       }),
     );
   } catch (error) {
-    // Already counted. The overwhelmingly common case on a sanitized rewrite,
-    // and not worth a log line each time.
-    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
-    console.error('Could not record a media object', {
-      at: now,
+    console.error('Could not queue an object for accounting', {
+      at: new Date().toISOString(),
       key,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return;
-  }
-
-  try {
-    await dynamo.send(
-      new UpdateItemCommand({
-        TableName: EVENT_TABLE,
-        Key: { id: { S: eventId } },
-        UpdateExpression: `ADD ${counterForKind(kind)} :bytes`,
-        ExpressionAttributeValues: { ':bytes': { N: String(bytes) } },
-      }),
-    );
-  } catch (error) {
-    console.error('Could not add stored bytes to the event', {
-      at: now,
-      key,
-      eventId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -95,14 +68,18 @@ async function recordBytes(key: string, size: unknown): Promise<void> {
  */
 let r2Client: S3Client | null = null;
 function r2(): S3Client | null {
-  if (!mirrorConfigured(process.env)) return null;
+  // Held in a local so the predicate narrows it: mirrorConfigured is what
+  // establishes that all four are strings, and the client is built from the
+  // narrowed value rather than from `string | undefined` waved through.
+  const env = process.env;
+  if (!mirrorConfigured(env)) return null;
   if (!r2Client) {
     r2Client = new S3Client({
       region: 'auto',
-      endpoint: process.env.R2_ACCOUNT_ENDPOINT,
+      endpoint: env.R2_ACCOUNT_ENDPOINT,
       credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        accessKeyId: env.R2_ACCESS_KEY_ID,
+        secretAccessKey: env.R2_SECRET_ACCESS_KEY,
       },
     });
   }
@@ -156,9 +133,20 @@ async function removeFromR2(key: string) {
 // don't need to be re-validated.
 const ORIGINAL_KEY = /^events\/[^/]+\/photos\//;
 
-async function readBytes(stream): Promise<Uint8Array> {
+/**
+ * Drain an S3 object body.
+ *
+ * Typed loosely on purpose: the SDK's body is a union across runtimes (a Node
+ * Readable here, a web stream or Blob elsewhere) and is optional besides. In
+ * Lambda it is always the Readable, which is async-iterable — so the narrow
+ * cast is the honest description of the one runtime this runs in, and the
+ * missing-body case is an error rather than an empty file, because treating a
+ * failed read as zero bytes would let an unscannable upload through.
+ */
+async function readBytes(body: unknown): Promise<Uint8Array> {
+  if (!body) throw new Error('The stored object had no body to read.');
   const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  for await (const chunk of body as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
   return new Uint8Array(Buffer.concat(chunks));
 }
 
@@ -183,7 +171,12 @@ async function reject(bucket: string, key: string, reason: string, detail: Recor
   await removeFromR2(key);
 }
 
-async function processRecord(record) {
+/** One S3 event notification record, as far as this function reads it. */
+interface S3EventRecord {
+  s3?: { bucket?: { name?: string }; object?: { key?: string; size?: number } };
+}
+
+async function processRecord(record: S3EventRecord) {
   const bucket = record?.s3?.bucket?.name;
   const rawKey = record?.s3?.object?.key;
   if (!bucket || !rawKey) return;
@@ -293,8 +286,10 @@ async function stripMetadata(
         Key: key,
         Body: Buffer.from(stripped),
         ContentType: object.ContentType ?? (jpeg ? 'image/jpeg' : 'image/heic'),
+        // A PutObject always replaces metadata with what is sent, so there is
+        // no directive to give it. MetadataDirective belongs to CopyObject;
+        // here the SDK simply ignored it, which is what the type check found.
         Metadata: { ...(object.Metadata ?? {}), sanitized: 'true' },
-        MetadataDirective: 'REPLACE',
       }),
     );
     console.log('Stripped photo metadata', {
@@ -316,7 +311,7 @@ async function stripMetadata(
  * S3 ObjectCreated trigger. Each record is handled independently and never
  * throws: an unhandled error would make S3 retry the whole event.
  */
-export const handler = async (event: { Records?: unknown[] }) => {
+export const handler = async (event: { Records?: S3EventRecord[] }) => {
   for (const record of event.Records ?? []) {
     try {
       await processRecord(record);

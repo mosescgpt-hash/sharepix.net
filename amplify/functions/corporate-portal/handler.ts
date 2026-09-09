@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import Stripe from 'stripe';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
@@ -16,7 +14,13 @@ export const handler: Handler = async (event) => {
   }
 
   // Identify the caller from their verified token — never trust client input.
-  const userId = event.identity?.sub;
+  //
+  // `identity` is a union across the four AppSync auth modes and only the token
+  // ones carry a `sub`. Narrowed rather than asserted: an IAM-authorised caller
+  // reaching here has no user id, and reading one off them would be reading
+  // undefined and calling it a customer.
+  const identity = event.identity as { sub?: string } | null | undefined;
+  const userId = identity?.sub;
   if (!userId) throw new Error('You must be signed in.');
 
   const found = await dynamo.send(

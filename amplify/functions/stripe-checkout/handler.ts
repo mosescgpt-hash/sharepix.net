@@ -1,6 +1,5 @@
 import Stripe from 'stripe';
 import { pricingSourceFor } from './pricing';
-// @ts-ignore -- @aws-sdk/* is provided by the Lambda runtime, not installed as a dep.
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { effectiveAmountOffCents, distributeDiscount } from './discount-math';

@@ -1,6 +1,5 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { entryVisibleToGuests } from './visibility';
 
@@ -17,7 +16,7 @@ export const handler: Handler = async (event) => {
   // listEventPhotos: fine at pilot scale, and it moves to the secondary index
   // when the table justifies it.
   const items: Record<string, { S?: string; BOOL?: boolean }>[] = [];
-  let startKey: Record<string, unknown> | undefined;
+  let startKey: Record<string, AttributeValue> | undefined;
   do {
     const result = await dynamo.send(
       new ScanCommand({

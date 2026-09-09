@@ -3,6 +3,8 @@ import { Duration } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Queue } from 'aws-cdk-lib/aws-sqs';
+import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { EmailSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
 import {
@@ -34,6 +36,7 @@ import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
+import { recordBytes } from './functions/record-bytes/resource';
 import { mediaUrl } from './functions/media-url/resource';
 import { moderatePhoto } from './functions/moderate-photo/resource';
 import { dailyTasks } from './functions/daily-tasks/resource';
@@ -68,6 +71,7 @@ const backend = defineBackend({
   stripeWebhook,
   corporatePortal,
   sanitizeUpload,
+  recordBytes,
   mediaUrl,
   moderatePhoto,
   dailyTasks,
@@ -178,40 +182,59 @@ sanitizeFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT
 sanitizeFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 sanitizeFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
 sanitizeFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
-// Byte accounting. This is the only place in SharePix that knows an object's
-// real size — uploads go browser to S3 directly, so no application server sees
-// the bytes and anything the browser reported would be a claim. The ledger row
-// is what makes the count idempotent under S3's at-least-once delivery.
-// BYTE ACCOUNTING IS DISABLED HERE, AND THIS IS WHY.
+// Byte accounting, through a queue.
 //
-// These four lines shipped in #121 and broke every production deploy for four
-// merges. sanitize-upload is the S3 onUpload trigger, so it lives in the
-// STORAGE stack; granting it data-stack tables made storage depend on data,
-// while data has always depended on storage for the bucket. CloudFormation
-// refuses a cycle between nested stacks, and synthesis does not detect one —
-// so CI stayed green while nothing reached production.
+// sanitize-upload is the only place in SharePix that knows an object's real
+// size: uploads go from the browser to S3 directly, so no application server
+// sees the bytes and anything the browser reported would be a claim.
 //
-// `resourceGroupName: 'data'` is the documented workaround and does NOT work
-// here: it only reverses the cycle, because the storage stack then needs the
-// trigger's ARN. Verified with scripts/check-stack-cycles.mjs rather than
+// It cannot do the counting itself. It is the S3 onUpload trigger, so it lives
+// in the STORAGE stack, and granting it the data-stack tables made storage
+// depend on data while data has always depended on storage for the bucket.
+// CloudFormation refuses a cycle between nested stacks and synthesis does not
+// detect one, so CI stayed green through four merges while nothing reached
+// production. `resourceGroupName: 'data'` is the documented workaround and does
+// not help: it only reverses the cycle, because the storage stack then needs
+// the trigger's ARN. Verified with scripts/check-stack-cycles.mjs rather than
 // assumed.
 //
-// The handler already guards on these env vars being absent
-// (`if (!MEDIA_TABLE || !EVENT_TABLE) return;`), so removing them makes the
-// accounting a clean no-op rather than an error. What that costs: photoBytes,
-// videoBytes and derivedBytes stay at zero, so fair use falls back to photo
-// COUNT thresholds, which create-event-photo still maintains. The byte
-// thresholds simply never fire. Nothing else in #121-#124 depends on this.
-//
-// The real fix is to decouple the two stacks rather than to squeeze the
-// dependency into a different shape: sanitize-upload publishes to a queue in
-// the storage stack, and a data-stack consumer does the accounting. That is
-// data -> storage, the direction that is already allowed. It is a new queue
-// and a new function, so it is a deliberate change rather than something to
-// slip into a hotfix.
-//
-// scripts/check-stack-cycles.mjs now fails the build on any cycle, so this
-// class of failure cannot reach production silently again.
+// So the dependency is made one-way instead of being squeezed into a different
+// shape. The queue lives in the storage stack beside the publisher; record-bytes
+// lives in the data stack beside the tables and consumes from it. That is
+// data -> storage, which already exists.
+const bytesQueue = new Queue(backend.storage.resources.bucket.stack, 'MediaBytesQueue', {
+  // Long enough for a retry or two of a DynamoDB write, short enough that a
+  // stuck message is not still arriving tomorrow.
+  visibilityTimeout: Duration.minutes(5),
+  retentionPeriod: Duration.days(4),
+  deadLetterQueue: {
+    // Three attempts, then park it. A message that cannot be counted is a
+    // number an admin reconciles from the MediaObject rows, not something to
+    // retry forever.
+    maxReceiveCount: 3,
+    queue: new Queue(backend.storage.resources.bucket.stack, 'MediaBytesDeadLetterQueue', {
+      retentionPeriod: Duration.days(14),
+    }),
+  },
+});
+
+bytesQueue.grantSendMessages(sanitizeFn);
+sanitizeFn.addEnvironment('BYTES_QUEUE_URL', bytesQueue.queueUrl);
+
+const recordBytesFn = backend.recordBytes.resources.lambda as LambdaFunction;
+mediaTable.grantReadWriteData(recordBytesFn);
+eventTable.grantReadWriteData(recordBytesFn);
+recordBytesFn.addEnvironment('MEDIA_TABLE_NAME', mediaTable.tableName);
+recordBytesFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+recordBytesFn.addEventSource(
+  new SqsEventSource(bytesQueue, {
+    batchSize: 10,
+    // Per-message failure reporting, so one bad message does not send nine good
+    // ones back for redelivery — and the ledger row is what keeps a redelivered
+    // message from counting twice.
+    reportBatchItemFailures: true,
+  }),
+);
 
 // Signs R2 URLs for the gallery and downloads. Reads the event row to decide
 // what a caller may have, and holds the same R2 credentials as the mirror —

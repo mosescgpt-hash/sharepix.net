@@ -97,13 +97,26 @@ export function r2KeyFor(s3Key: string): string {
   return s3Key;
 }
 
-/** Is the mirror configured? With anything missing, SharePix stays on S3 alone. */
-export function mirrorConfigured(env: {
+export interface MirrorEnv {
   R2_ACCOUNT_ENDPOINT?: string;
   R2_BUCKET?: string;
   R2_ACCESS_KEY_ID?: string;
   R2_SECRET_ACCESS_KEY?: string;
-}): boolean {
+}
+
+/** The same four, once this function has established they are all present. */
+export type ConfiguredMirrorEnv = Required<MirrorEnv>;
+
+/**
+ * Is the mirror configured? With anything missing, SharePix stays on S3 alone.
+ *
+ * A type predicate rather than a boolean, so the check narrows the four values
+ * for the caller. Returning a plain boolean left every caller building an
+ * S3Client out of `string | undefined` and asserting its way past it, which is
+ * the shape where a missing credential becomes a runtime surprise instead of a
+ * compile error.
+ */
+export function mirrorConfigured(env: MirrorEnv): env is ConfiguredMirrorEnv {
   return Boolean(
     env.R2_ACCOUNT_ENDPOINT && env.R2_BUCKET && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY,
   );

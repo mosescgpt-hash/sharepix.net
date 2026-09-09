@@ -1,5 +1,3 @@
-// @ts-nocheck -- @aws-sdk/* is provided by the Lambda runtime, not installed as a
-// dependency, so it's excluded from the backend type-check.
 import Stripe from 'stripe';
 import {
   DynamoDBClient,
@@ -29,7 +27,20 @@ async function upsertCorporateSubscription(subscription: Stripe.Subscription) {
   if (!userId) return; // not one of ours
   const owner = subscription.metadata?.owner ?? '';
   const now = new Date().toISOString();
-  const periodEndMs = (subscription.current_period_end ?? 0) * 1000;
+  // Stripe moved current_period_end off the subscription and onto its items in
+  // the 2025-03-31 API version. This read `subscription.current_period_end`,
+  // which has been undefined ever since — so periodEndMs was 0, and both
+  // currentPeriodEnd and downloadGraceEndsAt were written as empty strings and
+  // then skipped by the guards below. Corporate subscribers have been seeing a
+  // blank renewal date on /corporate, and the grace date the download gate is
+  // meant to read has never existed.
+  //
+  // A subscription can hold several items; the period is the same across them,
+  // so the first one that has it answers for the subscription.
+  const periodEndSeconds = subscription.items?.data?.find(
+    (item) => typeof item?.current_period_end === 'number',
+  )?.current_period_end;
+  const periodEndMs = (periodEndSeconds ?? 0) * 1000;
   const currentPeriodEnd = periodEndMs ? new Date(periodEndMs).toISOString() : '';
   // Downloads stay available until 30 days past the current period end.
   const graceEndsAt = periodEndMs ? new Date(periodEndMs + 30 * DAY_MS).toISOString() : '';
