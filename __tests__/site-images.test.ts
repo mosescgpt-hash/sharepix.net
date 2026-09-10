@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { IMAGE_SLOTS } from '../lib/imagery';
 import { DEMO_GALLERY_KEYS } from '../lib/demoEvent';
@@ -91,5 +91,23 @@ describe('what the folders are allowed to contain', () => {
 
   it('documents itself where somebody adding a photo will look', () => {
     expect(existsSync(join(root, 'public', 'site', 'README.md'))).toBe(true);
+  });
+});
+
+describe('no page claims to know what it is showing', () => {
+  // Three pages carried "illustrations, not photographs" as a flat sentence.
+  // Two were switched to the data when the photographs landed and the third
+  // was missed, so /demo/try told visitors its photographs were illustrations
+  // until somebody noticed. The rule is the fix: a page that says the word at
+  // all has to be choosing, not asserting.
+  const PAGES = ['pages/demo/gallery.tsx', 'pages/demo/live.tsx', 'pages/demo/try.tsx'];
+
+  it.each(PAGES)('%s decides from the data rather than asserting', (page) => {
+    const source = readFileSync(join(root, page), 'utf8');
+    if (!/illustrations|photographs/.test(source)) return;
+    // Either flag counts: the gallery reads the active event's own
+    // `isPhotography`, the single-event pages read the module-level
+    // DEMO_IS_PHOTOGRAPHY. What is not allowed is neither.
+    expect(source).toMatch(/isPhotography|IS_PHOTOGRAPHY/);
   });
 });

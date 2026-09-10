@@ -12,7 +12,13 @@ import {
   stepNumber,
   visitorPhotoVisible,
 } from '@/lib/demoFlow';
-import { DEMO_EVENT, DEMO_PHOTOS, DEMO_SLIDE_MS, nextSlide } from '@/lib/demoEvent';
+import {
+  DEMO_EVENT,
+  DEMO_IS_PHOTOGRAPHY,
+  DEMO_PHOTOS,
+  DEMO_SLIDE_MS,
+  nextSlide,
+} from '@/lib/demoEvent';
 import type { DisplayPhoto } from '@/lib/types';
 
 const VISITOR_PHOTO_ID = 'demo-your-photo';
@@ -329,8 +335,13 @@ export default function DemoTryPage() {
         </div>
 
         <p className="mt-8 text-center text-sm text-charcoal/60">
-          The sample photos are illustrations, not photographs, and this is not a real
-          event.{' '}
+          {/* Chosen from the data, like the same sentence on /demo/gallery and
+              /demo/live. This was the third copy of it and it was missed when
+              the photographs landed, which is exactly why none of the three is
+              written as a standing claim any more. */}
+          {DEMO_IS_PHOTOGRAPHY
+            ? 'The sample photos are our own, and this is not a real event.'
+            : 'The sample photos are illustrations, not photographs, and this is not a real event.'}{' '}
           <Link href="/pricing" className="text-pine underline">
             See pricing
           </Link>
