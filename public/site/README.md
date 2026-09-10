@@ -3,7 +3,7 @@
 Two folders. Put image files in them, and they appear on the site.
 
     slots/     the homepage hero and the six occasion squares
-    gallery/   the sample gallery at /demo/gallery
+    gallery/   the three sample galleries at /demo/gallery
 
 Then run:
 
@@ -43,11 +43,23 @@ The square returns to the gradient it had before — never a broken image.
 
 ## gallery/
 
-Any filenames. They are shown in alphabetical order, so number them:
+`/demo/gallery` shows three sample events, and a visitor switches between them.
+**One folder each:**
 
-    01-the-aisle.webp
-    02-family.webp
-    03-the-long-table.webp
+    gallery/wedding/    Sam & Riley’s Wedding
+    gallery/business/   Northline at Expo West
+    gallery/holiday/    Christmas at the Ruizes
+
+A folder named anything else fails the build, and so does an image left loose in
+`gallery/` rather than in one of the three — it belongs to one of these events
+and only you know which.
+
+Inside a folder the filenames are yours. They are shown in alphabetical order,
+so number them:
+
+    01-the-vows.webp
+    02-with-the-newlyweds.webp
+    03-a-quiet-moment.webp
 
 **The filename becomes the photo's description.** `05-first-dance.webp` becomes
 "First dance" — the leading number is dropped and the hyphens become spaces.
@@ -57,8 +69,17 @@ shown as a visible caption under the tiles in the grid; the grid has never had
 captions. Name the files properly anyway — it is the only description these
 images have.
 
-Empty the folder and the sample gallery falls back to the generated gradient
-tiles it used before. Nothing breaks either way.
+Empty a folder and that event falls back to generated gradient tiles. Nothing
+breaks either way, and the page stops calling them photographs.
+
+**Keep each event to itself.** No shared faces, no shared venue, no shared guest
+name across the three — a wedding gallery with a trade stand in it says SharePix
+does not know what it is for. A test enforces the guest names; the rest is your
+eye.
+
+To add a fourth occasion, add its key to `DEMO_GALLERY_KEYS` in
+`lib/demoEvent.ts` along with its name, location and guest names. The folder
+becomes valid at that point and not before.
 
 ## What to put in
 

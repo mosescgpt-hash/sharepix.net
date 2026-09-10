@@ -1,7 +1,7 @@
 /**
- * A worked example of an event, for the public demo pages.
+ * Three worked examples of an event, for the public demo pages.
  *
- * Two rules shaped this:
+ * Three rules shaped this:
  *
  * 1. **The demo renders through the real components.** `/demo/gallery` feeds
  *    these photos to the same PhotoGrid a paying host sees. A hand-built
@@ -9,14 +9,20 @@
  *    lying to prospects; this cannot.
  *
  * 2. **The imagery comes from a folder, or from nothing.** Files dropped into
- *    `public/site/gallery/` are the gallery; the filename becomes the caption
- *    and the order. With that folder empty, every tile is an SVG built here and
- *    inlined as a data URI — no stock licence to honour, no network request,
- *    nothing to keep in sync with a CDN. Either way the page works, which is
- *    what makes the folder safe to empty.
+ *    `public/site/gallery/<event>/` are that event's gallery; the filename
+ *    gives the order and the description. With a folder empty, every tile is an
+ *    SVG built here and inlined as a data URI — no stock licence to honour, no
+ *    network request, nothing to keep in sync with a CDN. Either way the page
+ *    works, which is what makes a folder safe to empty.
  *
  *    The generated tiles read as illustrations, which is honest about what they
  *    are. Real photographs are not, so the page says which it is showing.
+ *
+ * 3. **Each sample event is one event, all the way through.** A wedding gallery
+ *    with a graduation in it says SharePix does not know what it is for. The
+ *    three sets share nothing — not a face, not a venue, not a guest name —
+ *    because the point of having three is to show the same product working at
+ *    three genuinely different occasions.
  *
  * The one thing that does not follow the folder is consent. A recognisable
  * person on a public marketing page has to have agreed to be there; the flow
@@ -24,15 +30,28 @@
  * says so where somebody about to add a file will read it.
  */
 
-import { GALLERY_FILES } from './siteImages.generated';
+import { GALLERY_SETS } from './siteImages.generated';
 import type { DisplayPhoto, GuestBookEntry, QREvent } from '@/lib/types';
 
-/** Not a real event id. Nothing here touches the database. */
-export const DEMO_EVENT_ID = 'demo-sharepix-example';
+/**
+ * The sample events, in the order the switcher shows them.
+ *
+ * Also the folder names under `public/site/gallery/`, which
+ * scripts/build-site-images.mjs reads out of this very list — so adding a
+ * fourth occasion here is what makes `public/site/gallery/<name>/` a folder the
+ * build will accept rather than reject.
+ */
+export const DEMO_GALLERY_KEYS = ['wedding', 'business', 'holiday'] as const;
+
+export type DemoGalleryKey = (typeof DEMO_GALLERY_KEYS)[number];
+
+export function isDemoGalleryKey(value: unknown): value is DemoGalleryKey {
+  return typeof value === 'string' && (DEMO_GALLERY_KEYS as readonly string[]).includes(value);
+}
 
 /**
  * Palettes for the generated tiles. Warm and celebratory rather than corporate,
- * because the thing being demonstrated is a wedding gallery.
+ * because what is being demonstrated is a room full of people.
  */
 const PALETTES: [string, string][] = [
   ['#f8b4c4', '#7c3f5b'],
@@ -75,103 +94,250 @@ export function demoImage(index: number, label: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-/**
- * Names on the demo photos. Ordinary guest names, not real people.
- *
- * Fewer names than photos on purpose: at a real event a handful of people take
- * most of the pictures, so several names repeat. A gallery where every photo
- * has a different uploader makes "sort by uploader" look pointless, which is
- * the opposite of what the demo is for.
- */
-const UPLOADERS = ['Maya', 'Dev', 'Priya', 'Jonas', 'Aunt Bea', 'Theo', 'Nina'];
-
-const CAPTIONS = [
-  'First look',
-  'The aisle',
-  'Vows',
-  'Confetti',
-  'Toasts',
-  'First dance',
-  'The band',
-  'Sparklers',
-  'Cake',
-  'Golden hour',
-  'Late night',
-  'Goodbyes',
-];
-
-/**
- * How many tiles to generate when `public/site/gallery/` is empty.
- *
- * Enough to fill a grid, few enough to load instantly. Once there are files in
- * the folder, the folder decides how many there are and this is not consulted.
- */
+/** How many tiles to generate for an event whose folder is empty. */
 export const DEMO_FALLBACK_PHOTO_COUNT = 12;
 
-/** Whether the sample gallery is showing photographs rather than generated tiles. */
-export const DEMO_IS_PHOTOGRAPHY = GALLERY_FILES.length > 0;
+/** What one sample event is made of, before its photos are resolved. */
+interface DemoSpec {
+  key: DemoGalleryKey;
+  /** The switcher label. Two words at most; it sits in a row of three. */
+  label: string;
+  /** One line under the switcher saying what this event was. */
+  blurb: string;
+  event: Omit<QREvent, 'photoCount'>;
+  /**
+   * Names on this event's photos. Fewer names than photos on purpose: at a real
+   * event a handful of people take most of the pictures, so several repeat. A
+   * gallery where every photo has a different uploader makes "sort by uploader"
+   * look pointless, which is the opposite of what the demo is for.
+   *
+   * Never shared between events — two sample galleries crediting the same
+   * "Aunt Bea" would read as one family attending a trade show.
+   */
+  uploaders: string[];
+  /** Labels for the generated tiles, used only when the folder is empty. */
+  fallbackCaptions: string[];
+  /** When the first photo was taken. The rest follow at eleven-minute intervals. */
+  startedAt: Date;
+}
 
-/**
- * The demo photos, shaped exactly like real ones so the real components accept
- * them. There is no `fallbackUrl` because there is no second copy to fall back
- * to: a `/site/gallery/` file either resolves or the deploy is broken in a way
- * a second URL would not rescue.
- *
- * The two branches produce identically shaped rows on purpose. The gallery, the
- * slideshow and the guest book all read this array, and none of them should
- * have to know which kind of image it holds.
- */
-const DEMO_TILES: Array<{ caption: string; url: string; ext: string }> =
-  GALLERY_FILES.length > 0
-    ? GALLERY_FILES.map((file) => ({ caption: file.caption, url: file.src, ext: 'webp' }))
+/** Not real event ids. Nothing here touches the database. */
+export const DEMO_EVENT_ID = 'demo-sharepix-example';
+const BUSINESS_EVENT_ID = 'demo-sharepix-business';
+const HOLIDAY_EVENT_ID = 'demo-sharepix-holiday';
+
+/** Shared by all three: paid, never expiring, slideshow on. */
+const NEVER_EXPIRES = {
+  tier: 'event',
+  photoLimit: 1000,
+  // `paid` so nothing renders an "awaiting payment" state, and the windows are
+  // far enough out that the sample never looks expired to somebody visiting a
+  // year from now.
+  paid: true,
+  liveSlideshowEnabled: true,
+  accessExpiresAt: '2099-01-01T00:00:00.000Z',
+  uploadWindowEndsAt: '2099-01-01T00:00:00.000Z',
+} as const;
+
+const SPECS: readonly DemoSpec[] = [
+  {
+    key: 'wedding',
+    label: 'A wedding',
+    blurb: 'One evening, photographed by everyone who was there.',
+    event: {
+      ...NEVER_EXPIRES,
+      id: DEMO_EVENT_ID,
+      name: 'Sam & Riley’s Wedding',
+      eventCode: 'DEMO26',
+      date: '2026-06-20',
+      location: 'Minneapolis, MN',
+      createdBy: 'Riley',
+      createdAt: '2026-05-01T12:00:00.000Z',
+    },
+    uploaders: ['Maya', 'Dev', 'Priya', 'Jonas', 'Aunt Bea', 'Theo', 'Nina'],
+    fallbackCaptions: [
+      'First look',
+      'The aisle',
+      'Vows',
+      'Confetti',
+      'Toasts',
+      'First dance',
+      'The band',
+      'Sparklers',
+      'Cake',
+      'Golden hour',
+      'Late night',
+      'Goodbyes',
+    ],
+    startedAt: new Date(Date.UTC(2026, 5, 20, 17, 0, 0)),
+  },
+  {
+    key: 'business',
+    label: 'A company event',
+    blurb: 'Two days on a stand, without asking anyone to install anything.',
+    event: {
+      ...NEVER_EXPIRES,
+      id: BUSINESS_EVENT_ID,
+      name: 'Northline at Expo West',
+      eventCode: 'DEMOEX',
+      date: '2026-03-12',
+      location: 'Chicago, IL',
+      createdBy: 'Northline',
+      createdAt: '2026-02-20T12:00:00.000Z',
+    },
+    uploaders: ['Marcus', 'Elena', 'Tomas', 'Ana', 'Wei'],
+    fallbackCaptions: [
+      'Setting up',
+      'First visitors',
+      'The demo',
+      'A closer look',
+      'At the stand',
+      'Getting talking',
+      'Comparing notes',
+      'On the screen',
+      'Across the hall',
+      'The quiet hour',
+      'A group shot',
+      'Packing down',
+    ],
+    // A trade-show floor, so daytime rather than an evening.
+    startedAt: new Date(Date.UTC(2026, 2, 12, 9, 0, 0)),
+  },
+  {
+    key: 'holiday',
+    label: 'A holiday',
+    blurb: 'Four phones in one house, and one album at the end of it.',
+    event: {
+      ...NEVER_EXPIRES,
+      id: HOLIDAY_EVENT_ID,
+      // No surname, and the uploaders are relations rather than first names.
+      // A made-up family name printed over a photograph of actual-looking
+      // people is a claim about who they are, and there is no reason to make
+      // one — "Grandma's" says everything the sample needs to say.
+      name: 'Christmas at Grandma’s',
+      eventCode: 'DEMOXM',
+      date: '2025-12-25',
+      location: 'Asheville, NC',
+      createdBy: 'Mum',
+      createdAt: '2025-12-01T12:00:00.000Z',
+    },
+    uploaders: ['Mum', 'Dad', 'Grandpa', 'Auntie June', 'Ellie'],
+    fallbackCaptions: [
+      'In the kitchen',
+      'The tree',
+      'The cookies',
+      'A quiet moment',
+      'Presents',
+      'Opening presents',
+      'The photo screen',
+      'Christmas dinner',
+      'Photos on the wall',
+      'Charades',
+      'The big screen',
+      'All of us',
+    ],
+    startedAt: new Date(Date.UTC(2025, 11, 25, 10, 0, 0)),
+  },
+];
+
+/** One sample event, with its photos resolved from the folder or generated. */
+export interface DemoGallery {
+  key: DemoGalleryKey;
+  label: string;
+  blurb: string;
+  event: QREvent;
+  photos: DisplayPhoto[];
+  /**
+   * What each photo is of, by photo id.
+   *
+   * Kept beside the photos rather than on them: `DisplayPhoto` is the product's
+   * shape, and putting a demo-only field on it would invite somebody to build a
+   * real caption feature on a field only the demo ever populates.
+   */
+  captions: Readonly<Record<string, string>>;
+  /** True when these are photographs, false when they are generated tiles. */
+  isPhotography: boolean;
+  /** How many uploaders are credited. The header counts guests with it. */
+  contributors: number;
+}
+
+const ELEVEN_MINUTES = 11 * 60 * 1000;
+
+function build(spec: DemoSpec): DemoGallery {
+  const files = GALLERY_SETS[spec.key] ?? [];
+  const isPhotography = files.length > 0;
+
+  const tiles = isPhotography
+    ? files.map((file) => ({ caption: file.caption, url: file.src, ext: 'webp' }))
     : Array.from({ length: DEMO_FALLBACK_PHOTO_COUNT }, (_, i) => {
-        const caption = CAPTIONS[i % CAPTIONS.length];
+        const caption = spec.fallbackCaptions[i % spec.fallbackCaptions.length];
         // The generated tile draws its own caption; a photograph cannot, so
-        // there the caption becomes alt text instead. See DEMO_CAPTIONS.
+        // there the caption becomes alt text instead. See `captions`.
         return { caption, url: demoImage(i, caption), ext: 'svg' };
       });
 
-export const DEMO_PHOTOS: DisplayPhoto[] = DEMO_TILES.map(({ url, ext }, i) => ({
-  id: `demo-photo-${i + 1}`,
-  eventId: DEMO_EVENT_ID,
-  // A plausible key shape, so anything that parses keys behaves normally.
-  s3Key: `events/${DEMO_EVENT_ID}/photos/demo-${i + 1}.${ext}`,
-  uploadedBy: UPLOADERS[i % UPLOADERS.length],
-  approved: true,
-  url,
-  // Spread over an evening so the sort-by-time control has something to do.
-  createdAt: new Date(Date.UTC(2026, 5, 20, 17, 0, 0) + i * 11 * 60 * 1000).toISOString(),
-}));
+  const photos: DisplayPhoto[] = tiles.map(({ url, ext }, i) => ({
+    id: `${spec.key}-photo-${i + 1}`,
+    eventId: spec.event.id,
+    // A plausible key shape, so anything that parses keys behaves normally.
+    s3Key: `events/${spec.event.id}/photos/demo-${i + 1}.${ext}`,
+    uploadedBy: spec.uploaders[i % spec.uploaders.length],
+    approved: true,
+    url,
+    // Spread out so the sort-by-time control has something to do.
+    createdAt: new Date(spec.startedAt.getTime() + i * ELEVEN_MINUTES).toISOString(),
+  }));
+
+  return {
+    key: spec.key,
+    label: spec.label,
+    blurb: spec.blurb,
+    event: { ...spec.event, photoCount: photos.length },
+    photos,
+    captions: Object.fromEntries(photos.map((photo, i) => [photo.id, tiles[i].caption])),
+    isPhotography,
+    contributors: new Set(photos.map((photo) => photo.uploadedBy)).size,
+  };
+}
+
+export const DEMO_GALLERIES: readonly DemoGallery[] = SPECS.map(build);
 
 /**
- * What each demo photo is of, by photo id.
+ * The gallery for a key, falling back to the first rather than to nothing.
  *
- * Kept beside DEMO_PHOTOS rather than on them: `DisplayPhoto` is the product's
- * shape, and putting a demo-only field on it would invite somebody to build a
- * real caption feature on a field only the demo ever populates.
+ * Takes `unknown` because its caller is a URL query parameter. `?event=' OR 1=1`
+ * is a wedding gallery here, which is the only sane reading of it.
  */
-export const DEMO_CAPTIONS: Readonly<Record<string, string>> = Object.fromEntries(
-  DEMO_TILES.map((tile, i) => [`demo-photo-${i + 1}`, tile.caption]),
-);
-
-/** How many tiles the demo gallery is actually showing. */
-export const DEMO_PHOTO_COUNT = DEMO_PHOTOS.length;
+export function demoGallery(key: unknown): DemoGallery {
+  return DEMO_GALLERIES.find((gallery) => gallery.key === key) ?? DEMO_GALLERIES[0];
+}
 
 /**
- * The demo event. `paid` is true so nothing renders an "awaiting payment"
- * state, and the windows are far in the future so it never looks expired to
- * someone visiting the page a year from now.
+ * The wedding, which every demo page other than the gallery still shows.
+ *
+ * `/demo/try`, `/demo/live` and `/demo/guestbook` walk through one event and
+ * have a written script attached to it; three of each would be three times the
+ * copy to keep true for no more persuasion. The gallery is the page where
+ * showing range is the point.
  */
+const WEDDING = DEMO_GALLERIES[0];
+
+export const DEMO_EVENT: QREvent = WEDDING.event;
+export const DEMO_PHOTOS: DisplayPhoto[] = WEDDING.photos;
+export const DEMO_CAPTIONS: Readonly<Record<string, string>> = WEDDING.captions;
+export const DEMO_IS_PHOTOGRAPHY = WEDDING.isPhotography;
+export const DEMO_PHOTO_COUNT = WEDDING.photos.length;
+
 /**
  * Notes for the worked example, written the way real ones read: short, warm,
  * and uneven in length. Two carry an attachment, one is a video message with
  * no words, so the album shows every shape it can take.
  *
  * The attached `photoId`s stay within the first eight, which is the smallest
- * gallery the folder is allowed to produce and still pass its own test. A note
+ * gallery a folder is allowed to produce and still pass its own test. A note
  * pointing at a photo that is not there renders as a note with a hole in it,
- * and the person who emptied `public/site/gallery/` would have no way to guess
- * that was why.
+ * and the person who emptied `public/site/gallery/wedding/` would have no way
+ * to guess that was why.
  */
 export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
   {
@@ -187,7 +353,7 @@ export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
     eventId: DEMO_EVENT_ID,
     name: 'Dev',
     message: 'Caught this one right as the light went. Congratulations, both of you.',
-    photoId: 'demo-photo-3',
+    photoId: 'wedding-photo-3',
     createdAt: new Date(Date.UTC(2026, 5, 20, 19, 4, 0)).toISOString(),
   },
   {
@@ -203,27 +369,10 @@ export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
     name: 'Theo',
     message:
       'Speech went better in my head.\n\nAnyway: to the two of you, and to whatever comes next.',
-    photoId: 'demo-photo-6',
+    photoId: 'wedding-photo-6',
     createdAt: new Date(Date.UTC(2026, 5, 20, 21, 26, 0)).toISOString(),
   },
 ];
-
-export const DEMO_EVENT: QREvent = {
-  id: DEMO_EVENT_ID,
-  name: 'Sam & Riley’s Wedding',
-  eventCode: 'DEMO26',
-  date: '2026-06-20',
-  tier: 'event',
-  location: 'Minneapolis, MN',
-  photoLimit: 1000,
-  photoCount: DEMO_PHOTO_COUNT,
-  paid: true,
-  liveSlideshowEnabled: true,
-  createdBy: 'Riley',
-  createdAt: '2026-05-01T12:00:00.000Z',
-  accessExpiresAt: '2099-01-01T00:00:00.000Z',
-  uploadWindowEndsAt: '2099-01-01T00:00:00.000Z',
-};
 
 /** How long the demo slideshow holds each photo, in milliseconds. */
 export const DEMO_SLIDE_MS = 3500;

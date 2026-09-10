@@ -16,18 +16,19 @@
  *
  * ## The rules the folders enforce
  *
- * A file in `slots/` must be named after a slot in lib/imagery.ts. A misspelled
- * name is a hard error rather than a file quietly ignored — the failure mode
- * this replaces is someone dropping in `occassion-wedding.webp`, seeing the
- * placeholder still there, and having nothing to tell them why.
+ * A file in `slots/` must be named after a slot in lib/imagery.ts, and a folder
+ * in `gallery/` after one of the sample events in lib/demoEvent.ts. A
+ * misspelled name is a hard error rather than a file quietly ignored — the
+ * failure mode this replaces is someone dropping in `occassion-wedding.webp`,
+ * seeing the placeholder still there, and having nothing to tell them why.
  *
- * `gallery/` takes any names. They are sorted, so the order in the grid is the
- * order in the folder listing, and the caption under each tile is derived from
- * the filename. That makes the folder self-documenting: to change a caption,
- * rename the file.
+ * Inside a gallery folder the filenames are free. They are sorted, so the order
+ * in the grid is the order in the folder listing, and each photo's description
+ * is derived from its filename. That makes the folder self-documenting: to
+ * change a description, rename the file.
  */
 
-import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, dirname, extname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -45,18 +46,25 @@ const OUTPUT = join(root, 'lib', 'siteImages.generated.ts');
 const IMAGE_EXTENSIONS = new Set(['.webp', '.avif', '.jpg', '.jpeg', '.png']);
 
 /**
- * The slot names, read out of lib/imagery.ts rather than duplicated here.
+ * A `['a', 'b'] as const` list, read out of a TypeScript source file.
  *
  * Parsing the source is uglier than importing it, and it is what keeps this
  * script runnable by plain node with no TypeScript loader in the way — the
  * prebuild step has to work on a clean CI checkout before anything is compiled.
+ * It also means this can read lib/demoEvent.ts, which imports the file this
+ * script writes and so cannot be imported here at all.
  */
-function knownSlots() {
-  const source = readFileSync(join(root, 'lib', 'imagery.ts'), 'utf8');
-  const block = source.match(/export const IMAGE_SLOTS = \[([\s\S]*?)\] as const;/);
-  if (!block) throw new Error('Could not find IMAGE_SLOTS in lib/imagery.ts');
+function namesIn(file, constant) {
+  const source = readFileSync(join(root, ...file.split('/')), 'utf8');
+  const block = source.match(
+    new RegExp(`export const ${constant} = \\[([\\s\\S]*?)\\] as const;`),
+  );
+  if (!block) throw new Error(`Could not find ${constant} in ${file}`);
   return [...block[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
 }
+
+const knownSlots = () => namesIn('lib/imagery.ts', 'IMAGE_SLOTS');
+const knownGalleries = () => namesIn('lib/demoEvent.ts', 'DEMO_GALLERY_KEYS');
 
 function imagesIn(dir) {
   if (!existsSync(dir)) return [];
@@ -100,22 +108,59 @@ export function buildManifest() {
     slotFiles[name] = `/site/slots/${file}`;
   }
 
-  const gallery = imagesIn(GALLERY_DIR).map((file) => ({
-    src: `/site/gallery/${file}`,
-    caption: captionFromFilename(file),
-  }));
+  // One folder per sample event. Loose files here used to be the whole gallery
+  // and are now ambiguous — they belong to one of the events, and only the
+  // person who put them there knows which.
+  const loose = imagesIn(GALLERY_DIR);
+  if (loose.length > 0) {
+    throw new Error(
+      `public/site/gallery holds ${loose.length} loose image(s), starting with ${loose[0]}.\n` +
+        `Photos go in a folder named for the sample event they belong to:\n  ` +
+        knownGalleries()
+          .map((key) => `public/site/gallery/${key}/`)
+          .join('\n  '),
+    );
+  }
 
-  return { slotFiles, gallery };
+  const galleries = {};
+  const known = knownGalleries();
+  const folders = existsSync(GALLERY_DIR)
+    ? readdirSync(GALLERY_DIR).filter((name) => statSync(join(GALLERY_DIR, name)).isDirectory())
+    : [];
+
+  for (const folder of folders.sort()) {
+    if (!known.includes(folder)) {
+      throw new Error(
+        `public/site/gallery/${folder}/ is not a sample event.\n` +
+          `Rename it to one of:\n  ${known.join('\n  ')}`,
+      );
+    }
+    galleries[folder] = imagesIn(join(GALLERY_DIR, folder)).map((file) => ({
+      src: `/site/gallery/${folder}/${file}`,
+      caption: captionFromFilename(file),
+    }));
+  }
+
+  return { slotFiles, galleries };
 }
 
-export function render({ slotFiles, gallery }) {
+export function render({ slotFiles, galleries }) {
   const slotEntries = Object.keys(slotFiles)
     .sort()
     .map((slot) => `  '${slot}': '${slotFiles[slot]}',`)
     .join('\n');
 
-  const galleryEntries = gallery
-    .map((photo) => `  { src: '${photo.src}', caption: ${JSON.stringify(photo.caption)} },`)
+  const galleryEntries = Object.keys(galleries)
+    .sort()
+    .map((key) => {
+      const photos = galleries[key]
+        .map(
+          (photo) =>
+            `    { src: '${photo.src}', caption: ${JSON.stringify(photo.caption)} },`,
+        )
+        .join('\n');
+      return `  ${key}: [\n${photos}\n  ],`;
+    })
     .join('\n');
 
   return `/**
@@ -140,10 +185,13 @@ export interface GalleryFile {
   caption: string;
 }
 
-/** The sample gallery, in folder order. Empty means fall back to generated tiles. */
-export const GALLERY_FILES: readonly GalleryFile[] = [
+/**
+ * The sample galleries, keyed by the event they belong to, each in folder
+ * order. A key that is missing or empty falls back to generated tiles.
+ */
+export const GALLERY_SETS: Readonly<Record<string, readonly GalleryFile[]>> = {
 ${galleryEntries}
-];
+};
 `;
 }
 
@@ -159,10 +207,12 @@ function main() {
 
   mkdirSync(dirname(OUTPUT), { recursive: true });
   writeFileSync(OUTPUT, output);
+  const sets = Object.entries(manifest.galleries)
+    .map(([key, photos]) => `${key} ${photos.length}`)
+    .join(', ');
   console.log(
     `Wrote lib/siteImages.generated.ts — ` +
-      `${Object.keys(manifest.slotFiles).length} slot photos, ` +
-      `${manifest.gallery.length} gallery photos.`,
+      `${Object.keys(manifest.slotFiles).length} slot photos; galleries: ${sets || 'none'}.`,
   );
 }
 

@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { IMAGE_SLOTS } from '../lib/imagery';
-import { GALLERY_FILES, SLOT_FILES } from '../lib/siteImages.generated';
+import { DEMO_GALLERY_KEYS } from '../lib/demoEvent';
+import { GALLERY_SETS, SLOT_FILES } from '../lib/siteImages.generated';
 
 /**
  * The committed manifest against the folders it claims to describe.
@@ -35,9 +36,23 @@ describe('the manifest matches the folders', () => {
     expect(Object.values(SLOT_FILES).sort()).toEqual(onDisk);
   });
 
-  it('lists every file in public/site/gallery, in folder order', () => {
-    const onDisk = imagesIn(GALLERY_DIR).map((file) => `/site/gallery/${file}`);
-    expect(GALLERY_FILES.map((photo) => photo.src)).toEqual(onDisk);
+  it('lists every file in each gallery folder, in folder order', () => {
+    for (const key of DEMO_GALLERY_KEYS) {
+      const onDisk = imagesIn(join(GALLERY_DIR, key)).map((file) => `/site/gallery/${key}/${file}`);
+      expect((GALLERY_SETS[key] ?? []).map((photo) => photo.src)).toEqual(onDisk);
+    }
+  });
+
+  it('names no gallery folder that is not a sample event', () => {
+    for (const key of Object.keys(GALLERY_SETS)) {
+      expect(DEMO_GALLERY_KEYS).toContain(key);
+    }
+  });
+
+  it('leaves no loose image directly in public/site/gallery', () => {
+    // Ambiguous by construction: it belongs to one of the three events and
+    // only whoever put it there knows which.
+    expect(imagesIn(GALLERY_DIR)).toEqual([]);
   });
 
   it('names each slot file after the slot it fills', () => {
@@ -50,19 +65,23 @@ describe('the manifest matches the folders', () => {
 
 describe('what the folders are allowed to contain', () => {
   it('gives every gallery photo a description derived from its name', () => {
-    for (const photo of GALLERY_FILES) {
-      expect(photo.caption.length).toBeGreaterThan(2);
-      // The leading sort number is an ordering device, not part of the name.
-      expect(photo.caption).not.toMatch(/^\d/);
-      expect(photo.caption[0]).toBe(photo.caption[0].toUpperCase());
+    for (const photos of Object.values(GALLERY_SETS)) {
+      for (const photo of photos) {
+        expect(photo.caption.length).toBeGreaterThan(2);
+        // The leading sort number is an ordering device, not part of the name.
+        expect(photo.caption).not.toMatch(/^\d/);
+        expect(photo.caption[0]).toBe(photo.caption[0].toUpperCase());
+      }
     }
   });
 
-  it('keeps the gallery big enough to look like a gallery, or empty', () => {
+  it('keeps each gallery big enough to look like a gallery, or empty', () => {
     // Three photographs in a grid built for a wedding's worth of them looks
     // like a page that failed. Empty is fine — that falls back to generated
     // tiles — but a token handful is not.
-    expect(GALLERY_FILES.length === 0 || GALLERY_FILES.length >= 8).toBe(true);
+    for (const photos of Object.values(GALLERY_SETS)) {
+      expect(photos.length === 0 || photos.length >= 8).toBe(true);
+    }
   });
 
   it('has no two files claiming one slot', () => {
