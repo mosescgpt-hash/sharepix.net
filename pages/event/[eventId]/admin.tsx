@@ -620,6 +620,27 @@ function AdminDashboardPage() {
               }}
             />
 
+            {/* Only once there is something to offer. Asking a host to submit
+                photos from an empty gallery is asking for nothing, and the
+                page they would land on would have no tiles to choose from. */}
+            {photos.length > 0 ? (
+              <div className="spx-card mt-10 p-6">
+                <p className="spx-eyebrow">Featured Events</p>
+                <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">
+                  Show future hosts what this looked like
+                </h2>
+                <p className="mt-2 text-sm text-charcoal/70">
+                  If you are happy with how this went, you can offer us a few photos to use
+                  in our own marketing — and get some of what you paid back. You choose which
+                  photos, nothing is published unless we come back to you about it, and you
+                  can change your mind at any time.
+                </p>
+                <Link href={`/featured/${event.id}`} className="spx-btn-outline mt-4">
+                  See what is involved
+                </Link>
+              </div>
+            ) : null}
+
             <div className="spx-card mt-10 p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Event settings</h2>

@@ -549,13 +549,63 @@ export const WIRED_ANALYTICS_EVENTS: readonly AnalyticsEventName[] = ANALYTICS_E
       'referral_shared',
       'referral_converted',
       'featured_event_invited',
-      'featured_event_submitted',
       'landing_page_view',
       'guest_upload_started',
       'account_created',
       'repeat_event_created',
     ].includes(name),
 );
+
+/**
+ * Offer photos from an event for marketing.
+ *
+ * The page collects the choice; the function decides what it means. Which
+ * release wording was accepted and when is stamped server-side, and every asset
+ * arrives PENDING however this call is made.
+ */
+export async function submitMarketingOffer(input: {
+  eventId: string;
+  tierKey: string;
+  photoIds: string[];
+  testimonial?: string;
+  rightsConfirmed: boolean;
+}): Promise<{ recorded: boolean; message: string }> {
+  try {
+    const { data, errors } = await client.mutations.submitMarketingOffer(
+      {
+        eventId: input.eventId,
+        tierKey: input.tierKey,
+        photoIds: input.photoIds,
+        testimonial: input.testimonial,
+        rightsConfirmed: input.rightsConfirmed,
+      },
+      { authMode: 'userPool' },
+    );
+    if (errors?.length) {
+      return { recorded: false, message: errors.map((e) => e.message).join(' · ') };
+    }
+    return {
+      recorded: data?.recorded === true,
+      message: data?.message ?? '',
+    };
+  } catch (err) {
+    return {
+      recorded: false,
+      message: err instanceof Error ? err.message : 'That could not be sent.',
+    };
+  }
+}
+
+/** This host's own offer for one event, if they have made one. */
+export async function fetchMyMarketingSubmission(
+  eventId: string,
+): Promise<MarketingSubmissionRow | null> {
+  const { data } = await client.models.MarketingSubmission.get(
+    { id: eventId },
+    { authMode: 'userPool' },
+  );
+  return data ? readMarketingSubmission(data as Record<string, unknown>) : null;
+}
 
 export interface MarketingSubmissionRow {
   id: string;

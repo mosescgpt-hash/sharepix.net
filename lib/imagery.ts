@@ -11,7 +11,22 @@
  * That means dropping real assets in later is an edit to REGISTRY and nothing
  * else. No page changes, no layout reflow, and `missingPhotography()` says at
  * any moment exactly how much of the shoot is still outstanding.
+ *
+ * ## Where the files come from
+ *
+ * REGISTRY is no longer hand-edited. A file dropped into `public/site/slots/`
+ * and named after a slot fills that slot, via the manifest that
+ * `scripts/build-site-images.mjs` writes. See `public/site/README.md`.
+ *
+ * The *dimensions and the alt text stay here* rather than being read off the
+ * file, because they are facts about the position on the page, not about
+ * whichever photograph is in it this month. A swap must not silently change the
+ * layout, and it must never silently drop the accessibility work.
  */
+
+// Relative, not `@/`: the node test project deliberately does not resolve the
+// alias, and unlike `import type` a value import has to survive to runtime.
+import { SLOT_FILES } from './siteImages.generated';
 
 export const IMAGE_SLOTS = [
   'home-hero',
@@ -147,10 +162,23 @@ const SLOT_META: Record<ImageSlot, SlotMeta> = {
 };
 
 /**
- * Licensed photography, keyed by slot. EMPTY ON PURPOSE — every slot currently
- * falls through to a placeholder. Adding a photo is a one-line edit here.
+ * Photography, keyed by slot, built from whatever is in `public/site/slots/`.
+ *
+ * A slot with no file falls through to a placeholder, so an empty folder is a
+ * working site rather than a page of broken images. The manifest can name a
+ * slot this build no longer knows about — someone deleted it from IMAGE_SLOTS
+ * while the file stayed — and that entry is dropped rather than trusted.
  */
-const REGISTRY: Partial<Record<ImageSlot, Omit<PhotoArtwork, 'kind' | 'alt'>>> = {};
+const REGISTRY: Partial<Record<ImageSlot, Omit<PhotoArtwork, 'kind' | 'alt'>>> = (() => {
+  const built: Partial<Record<ImageSlot, Omit<PhotoArtwork, 'kind' | 'alt'>>> = {};
+  for (const slot of IMAGE_SLOTS) {
+    const src = SLOT_FILES[slot];
+    if (!src) continue;
+    const meta = SLOT_META[slot];
+    built[slot] = { src, width: meta.width, height: meta.height };
+  }
+  return built;
+})();
 
 /**
  * Placeholder tints, drawn from the palette so an empty slot still looks like

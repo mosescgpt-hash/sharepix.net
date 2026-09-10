@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
 import { QRCodeSVG } from 'qrcode.react';
-import { DEMO_EVENT, DEMO_PHOTOS, DEMO_SLIDE_MS, nextSlide } from '@/lib/demoEvent';
+import {
+  DEMO_CAPTIONS,
+  DEMO_EVENT,
+  DEMO_IS_PHOTOGRAPHY,
+  DEMO_PHOTOS,
+  DEMO_SLIDE_MS,
+  nextSlide,
+} from '@/lib/demoEvent';
 
 /**
  * The sample live slideshow — what goes on a screen at the venue.
@@ -57,7 +64,7 @@ export default function DemoLivePage() {
           <img
             key={photo.id}
             src={photo.url}
-            alt=""
+            alt={DEMO_CAPTIONS[photo.id] ?? ''}
             className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ${
               fading ? 'opacity-0' : 'opacity-100'
             }`}
@@ -87,7 +94,9 @@ export default function DemoLivePage() {
             A venue screen is meant to run untouched; a demo is meant to be left. */}
         <div className="flex shrink-0 items-center justify-between gap-4 bg-black px-6 py-3 text-sm">
           <p className="text-white/50">
-            Sample slideshow · illustrations, not photographs · advances every{' '}
+            Sample slideshow ·{' '}
+            {DEMO_IS_PHOTOGRAPHY ? 'not a real event' : 'illustrations, not photographs'} ·
+            advances every{' '}
             {Math.round(DEMO_SLIDE_MS / 1000)}s
           </p>
           <div className="flex shrink-0 gap-3">
