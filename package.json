@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "images": "node scripts/build-site-images.mjs",
+    "prebuild": "node scripts/build-site-images.mjs",
     "build": "next build",
     "start": "next start",
     "test": "jest",

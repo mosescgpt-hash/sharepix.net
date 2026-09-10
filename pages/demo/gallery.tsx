@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
-import { DEMO_EVENT, DEMO_PHOTOS } from '@/lib/demoEvent';
+import { DEMO_EVENT, DEMO_IS_PHOTOGRAPHY, DEMO_PHOTOS } from '@/lib/demoEvent';
 
 /**
  * The sample gallery.
@@ -31,7 +31,13 @@ export default function DemoGalleryPage() {
       <section className="spx-section-canvas py-10 sm:py-14">
         <div className="spx-inner">
         <Notice label="This is a sample">
-          The images are illustrations, not photographs, and nothing here is a real event.{' '}
+          {/* Which of the two it is depends on whether public/site/gallery has
+              files in it, so the sentence is chosen rather than written. A
+              standing claim that these are illustrations would quietly become
+              untrue the first time somebody dropped a photograph in. */}
+          {DEMO_IS_PHOTOGRAPHY
+            ? 'Nothing here is a real event — these are our own images, shown to give you a feel for the layout.'
+            : 'The images are illustrations, not photographs, and nothing here is a real event.'}{' '}
           <Link href="/demo" className="text-pine underline">
             See how it works
           </Link>{' '}

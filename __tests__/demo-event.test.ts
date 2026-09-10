@@ -1,6 +1,9 @@
 import {
+  DEMO_CAPTIONS,
   DEMO_EVENT,
   DEMO_EVENT_ID,
+  DEMO_GUEST_BOOK,
+  DEMO_IS_PHOTOGRAPHY,
   DEMO_PHOTOS,
   DEMO_PHOTO_COUNT,
   DEMO_SLIDE_MS,
@@ -14,11 +17,43 @@ describe('the demo photos', () => {
     expect(DEMO_PHOTO_COUNT).toBeGreaterThanOrEqual(8);
   });
 
-  it('gives every photo a self-contained image', () => {
-    // Inline SVG, so the demo needs no network, no CDN and no stock licence.
+  it('gives every photo an image that needs no third party', () => {
+    // Either an inline SVG or a file this repository serves itself. Never a
+    // stock CDN: the demo has to render with no network beyond our own origin,
+    // and no licence to keep track of.
     for (const photo of DEMO_PHOTOS) {
-      expect(photo.url.startsWith('data:image/svg+xml,')).toBe(true);
-      expect(photo.url.length).toBeGreaterThan(100);
+      const inline = photo.url.startsWith('data:image/svg+xml,');
+      const ours = photo.url.startsWith('/site/gallery/');
+      expect(inline || ours).toBe(true);
+      if (inline) expect(photo.url.length).toBeGreaterThan(100);
+    }
+  });
+
+  it('takes all its tiles from one source, never a mix', () => {
+    // Half photographs and half gradient placeholders in one grid reads as a
+    // gallery that failed to load, not as a sample.
+    const kinds = new Set(DEMO_PHOTOS.map((p) => (p.url.startsWith('data:') ? 'svg' : 'file')));
+    expect(kinds.size).toBe(1);
+  });
+
+  it('says which kind it is showing, so the page can say so too', () => {
+    expect(DEMO_IS_PHOTOGRAPHY).toBe(!DEMO_PHOTOS[0].url.startsWith('data:'));
+  });
+
+  it('describes every photo, whichever source it came from', () => {
+    // The grid has no visible captions, so for a photograph this text is the
+    // only description a screen reader gets.
+    for (const photo of DEMO_PHOTOS) {
+      expect((DEMO_CAPTIONS[photo.id] ?? '').length).toBeGreaterThan(2);
+    }
+  });
+
+  it('leaves no guest-book note pointing at a photo that is not there', () => {
+    // The notes are written against the first few ids; emptying the gallery
+    // folder shortens the array and must not strand one.
+    const ids = new Set(DEMO_PHOTOS.map((p) => p.id));
+    for (const note of DEMO_GUEST_BOOK) {
+      if (note.photoId) expect(ids.has(note.photoId)).toBe(true);
     }
   });
 

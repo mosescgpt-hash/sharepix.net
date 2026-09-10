@@ -8,16 +8,23 @@
  *    imitation would drift from the product within a release or two and start
  *    lying to prospects; this cannot.
  *
- * 2. **The imagery is generated, not photographed.** Every tile below is an SVG
- *    built here and inlined as a data URI. No stock licence to honour, no
- *    network request, nothing to keep in sync with a CDN, and — the part that
- *    matters — no real person's face used as set dressing without their say.
- *    They read as illustrations, which is honest about what the demo is.
+ * 2. **The imagery comes from a folder, or from nothing.** Files dropped into
+ *    `public/site/gallery/` are the gallery; the filename becomes the caption
+ *    and the order. With that folder empty, every tile is an SVG built here and
+ *    inlined as a data URI — no stock licence to honour, no network request,
+ *    nothing to keep in sync with a CDN. Either way the page works, which is
+ *    what makes the folder safe to empty.
  *
- * When there are real photos to show, from an event whose guests have agreed to
- * it, `DEMO_PHOTOS` is the one place to change.
+ *    The generated tiles read as illustrations, which is honest about what they
+ *    are. Real photographs are not, so the page says which it is showing.
+ *
+ * The one thing that does not follow the folder is consent. A recognisable
+ * person on a public marketing page has to have agreed to be there; the flow
+ * that records that agreement is Featured Events, and `public/site/README.md`
+ * says so where somebody about to add a file will read it.
  */
 
+import { GALLERY_FILES } from './siteImages.generated';
 import type { DisplayPhoto, GuestBookEntry, QREvent } from '@/lib/types';
 
 /** Not a real event id. Nothing here touches the database. */
@@ -93,31 +100,62 @@ const CAPTIONS = [
   'Goodbyes',
 ];
 
-/** How many tiles the demo gallery shows. Enough to fill a grid, few enough to load instantly. */
-export const DEMO_PHOTO_COUNT = 12;
+/**
+ * How many tiles to generate when `public/site/gallery/` is empty.
+ *
+ * Enough to fill a grid, few enough to load instantly. Once there are files in
+ * the folder, the folder decides how many there are and this is not consulted.
+ */
+export const DEMO_FALLBACK_PHOTO_COUNT = 12;
+
+/** Whether the sample gallery is showing photographs rather than generated tiles. */
+export const DEMO_IS_PHOTOGRAPHY = GALLERY_FILES.length > 0;
 
 /**
  * The demo photos, shaped exactly like real ones so the real components accept
- * them. `url` carries the generated image; there is no `fallbackUrl` because
- * there is no second copy to fall back to.
+ * them. There is no `fallbackUrl` because there is no second copy to fall back
+ * to: a `/site/gallery/` file either resolves or the deploy is broken in a way
+ * a second URL would not rescue.
+ *
+ * The two branches produce identically shaped rows on purpose. The gallery, the
+ * slideshow and the guest book all read this array, and none of them should
+ * have to know which kind of image it holds.
  */
-export const DEMO_PHOTOS: DisplayPhoto[] = Array.from(
-  { length: DEMO_PHOTO_COUNT },
-  (_, i) => {
-    const caption = CAPTIONS[i % CAPTIONS.length];
-    return {
-      id: `demo-photo-${i + 1}`,
-      eventId: DEMO_EVENT_ID,
-      // A plausible key shape, so anything that parses keys behaves normally.
-      s3Key: `events/${DEMO_EVENT_ID}/photos/demo-${i + 1}.svg`,
-      uploadedBy: UPLOADERS[i % UPLOADERS.length],
-      approved: true,
-      url: demoImage(i, caption),
-      // Spread over an evening so the sort-by-time control has something to do.
-      createdAt: new Date(Date.UTC(2026, 5, 20, 17, 0, 0) + i * 11 * 60 * 1000).toISOString(),
-    };
-  },
+const DEMO_TILES: Array<{ caption: string; url: string; ext: string }> =
+  GALLERY_FILES.length > 0
+    ? GALLERY_FILES.map((file) => ({ caption: file.caption, url: file.src, ext: 'webp' }))
+    : Array.from({ length: DEMO_FALLBACK_PHOTO_COUNT }, (_, i) => {
+        const caption = CAPTIONS[i % CAPTIONS.length];
+        // The generated tile draws its own caption; a photograph cannot, so
+        // there the caption becomes alt text instead. See DEMO_CAPTIONS.
+        return { caption, url: demoImage(i, caption), ext: 'svg' };
+      });
+
+export const DEMO_PHOTOS: DisplayPhoto[] = DEMO_TILES.map(({ url, ext }, i) => ({
+  id: `demo-photo-${i + 1}`,
+  eventId: DEMO_EVENT_ID,
+  // A plausible key shape, so anything that parses keys behaves normally.
+  s3Key: `events/${DEMO_EVENT_ID}/photos/demo-${i + 1}.${ext}`,
+  uploadedBy: UPLOADERS[i % UPLOADERS.length],
+  approved: true,
+  url,
+  // Spread over an evening so the sort-by-time control has something to do.
+  createdAt: new Date(Date.UTC(2026, 5, 20, 17, 0, 0) + i * 11 * 60 * 1000).toISOString(),
+}));
+
+/**
+ * What each demo photo is of, by photo id.
+ *
+ * Kept beside DEMO_PHOTOS rather than on them: `DisplayPhoto` is the product's
+ * shape, and putting a demo-only field on it would invite somebody to build a
+ * real caption feature on a field only the demo ever populates.
+ */
+export const DEMO_CAPTIONS: Readonly<Record<string, string>> = Object.fromEntries(
+  DEMO_TILES.map((tile, i) => [`demo-photo-${i + 1}`, tile.caption]),
 );
+
+/** How many tiles the demo gallery is actually showing. */
+export const DEMO_PHOTO_COUNT = DEMO_PHOTOS.length;
 
 /**
  * The demo event. `paid` is true so nothing renders an "awaiting payment"
@@ -128,6 +166,12 @@ export const DEMO_PHOTOS: DisplayPhoto[] = Array.from(
  * Notes for the worked example, written the way real ones read: short, warm,
  * and uneven in length. Two carry an attachment, one is a video message with
  * no words, so the album shows every shape it can take.
+ *
+ * The attached `photoId`s stay within the first eight, which is the smallest
+ * gallery the folder is allowed to produce and still pass its own test. A note
+ * pointing at a photo that is not there renders as a note with a hole in it,
+ * and the person who emptied `public/site/gallery/` would have no way to guess
+ * that was why.
  */
 export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
   {
@@ -143,7 +187,7 @@ export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
     eventId: DEMO_EVENT_ID,
     name: 'Dev',
     message: 'Caught this one right as the light went. Congratulations, both of you.',
-    photoId: 'demo-photo-4',
+    photoId: 'demo-photo-3',
     createdAt: new Date(Date.UTC(2026, 5, 20, 19, 4, 0)).toISOString(),
   },
   {
@@ -159,7 +203,7 @@ export const DEMO_GUEST_BOOK: GuestBookEntry[] = [
     name: 'Theo',
     message:
       'Speech went better in my head.\n\nAnyway: to the two of you, and to whatever comes next.',
-    photoId: 'demo-photo-9',
+    photoId: 'demo-photo-6',
     createdAt: new Date(Date.UTC(2026, 5, 20, 21, 26, 0)).toISOString(),
   },
 ];
