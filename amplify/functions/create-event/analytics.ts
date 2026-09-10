@@ -187,7 +187,7 @@ export function isServerTruth(name: AnalyticsEventName): boolean {
 export const NOT_MEASURED_FUNNEL: readonly string[] = [
   'Unique visitors — these are event counts, not people; nothing here identifies a returning browser',
   'Referrals and conversions from them — referral_shared and referral_converted have no code that fires them yet',
-  'Featured Event invitations and submissions — the programme those belong to is not built',
+  'Featured Event invitations — a host reaches the offer from their own dashboard, and nothing records the moment they were asked',
   'Experiments and visitor intent — not built, and deliberately so until there is traffic worth splitting',
 ];
 
@@ -256,6 +256,40 @@ export function milestonesCrossed(
 ): number[] {
   if (!(after > before)) return [];
   return thresholds.filter((mark) => before < mark && after >= mark);
+}
+
+/**
+ * How long a raw funnel event is kept.
+ *
+ * These rows are the highest-volume thing SharePix stores after media: one per
+ * page view, forever, on a table nothing prunes. At a thousand events a month
+ * `homepage_view` alone would outgrow every other table in the system, and the
+ * dashboard reads all of them on every load.
+ *
+ * Ninety days is what a funnel is for — quarter-over-quarter comparison — and
+ * anything older is answered better by the monthly report, which is already a
+ * summary and is already kept.
+ *
+ * Milestones are exempt. `successful_event` is a fact about an event, not a
+ * page view, and the event itself outlives ninety days by a year.
+ */
+export const ANALYTICS_RETENTION_DAYS = 90;
+
+/** Should this row be pruned? Milestones never are. */
+export function isExpiredAnalytics(
+  row: { name: string; occurredAt?: string | null },
+  now: Date,
+  retentionDays: number = ANALYTICS_RETENTION_DAYS,
+): boolean {
+  if (!isAnalyticsEvent(row.name)) return false;
+  // A fact about an event outlives the traffic that surrounded it.
+  if (firesOnce(row.name)) return false;
+  const at = Date.parse(row.occurredAt ?? '');
+  // No timestamp is not a licence to delete: a row we cannot date is one we
+  // keep, because guessing wrong here destroys evidence rather than saving
+  // storage.
+  if (!Number.isFinite(at)) return false;
+  return now.getTime() - at > retentionDays * 24 * 60 * 60 * 1000;
 }
 
 export interface FunnelFacts {

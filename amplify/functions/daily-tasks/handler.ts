@@ -2,6 +2,7 @@ import {
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
+  DeleteItemCommand,
   ScanCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
@@ -19,6 +20,7 @@ import {
 } from './researchIncentive';
 import { encodeSurveyLink } from './surveyLink';
 import { SURVEY_VERSION, reminderIsDue, surveyIsDue } from './survey';
+import { ANALYTICS_RETENTION_DAYS, isExpiredAnalytics } from './analytics';
 import { encodeRatingLink } from './ratingLink';
 
 const dynamo = new DynamoDBClient({});
@@ -30,6 +32,7 @@ const PREFERENCE_TABLE = process.env.PREFERENCE_TABLE_NAME as string;
 const INCENTIVE_TABLE = process.env.INCENTIVE_TABLE_NAME as string;
 const FEEDBACK_TABLE = process.env.FEEDBACK_TABLE_NAME as string;
 const SURVEY_TABLE = process.env.SURVEY_TABLE_NAME as string;
+const ANALYTICS_TABLE = process.env.ANALYTICS_TABLE_NAME ?? '';
 /**
  * Which survey they were asked. A second survey is a second programme.
  *
@@ -341,6 +344,67 @@ async function openIncentiveObligation(event: EventRow, nowISO: string): Promise
     });
     return false;
   }
+}
+
+/**
+ * Delete funnel rows older than the retention window.
+ *
+ * These are the highest-volume rows SharePix stores after media — one per page
+ * view — and until now nothing pruned them. At a thousand events a month
+ * `homepage_view` alone would outgrow every other table, and the product-health
+ * dashboard reads all of them on every load.
+ *
+ * Milestones are exempt, and a row with no readable timestamp is kept: guessing
+ * wrong here destroys evidence rather than saving storage.
+ *
+ * Bounded per run. A backlog is cleared over several nights rather than in one
+ * job that times out halfway and leaves nobody knowing how far it got.
+ */
+const MAX_ANALYTICS_DELETES_PER_RUN = 5000;
+
+async function pruneAnalytics(now: Date): Promise<number> {
+  if (!ANALYTICS_TABLE) return 0;
+  let deleted = 0;
+  let startKey: Record<string, AttributeValue> | undefined;
+
+  do {
+    const page = await dynamo
+      .send(
+        new ScanCommand({
+          TableName: ANALYTICS_TABLE,
+          ExclusiveStartKey: startKey,
+          ProjectionExpression: '#id, #name, occurredAt',
+          ExpressionAttributeNames: { '#id': 'id', '#name': 'name' },
+        }),
+      )
+      .catch(() => null);
+    if (!page) return deleted;
+
+    for (const item of page.Items ?? []) {
+      if (deleted >= MAX_ANALYTICS_DELETES_PER_RUN) return deleted;
+      const id = item.id?.S ?? '';
+      if (!id) continue;
+      if (!isExpiredAnalytics({ name: item.name?.S ?? '', occurredAt: item.occurredAt?.S ?? null }, now)) {
+        continue;
+      }
+      await dynamo
+        .send(new DeleteItemCommand({ TableName: ANALYTICS_TABLE, Key: { id: { S: id } } }))
+        .then(() => {
+          deleted += 1;
+        })
+        .catch(() => undefined);
+    }
+    startKey = page.LastEvaluatedKey;
+  } while (startKey && deleted < MAX_ANALYTICS_DELETES_PER_RUN);
+
+  if (deleted > 0) {
+    console.log('Pruned expired funnel events', {
+      at: now.toISOString(),
+      deleted,
+      retentionDays: ANALYTICS_RETENTION_DAYS,
+    });
+  }
+  return deleted;
 }
 
 /**
@@ -725,6 +789,9 @@ export const handler = async () => {
   // Outstanding gift-card invitations first, so a link already in somebody's
   // inbox has a row to land on before this run decides who still needs one.
   await backfillResearchInvites(nowISO);
+  // Housekeeping, before the sending passes: a job that times out mailing
+  // people should not also be the reason the funnel table never shrinks.
+  const prunedAnalytics = await pruneAnalytics(now);
   const surveys = SURVEY_TABLE ? await surveyRows() : new Map();
   let invited = 0;
   let reminded = 0;
@@ -965,6 +1032,7 @@ export const handler = async () => {
     invited,
     reminded,
     ratingsRequested,
+    prunedAnalytics,
     dryRun: !SENDING_ENABLED,
   };
   console.log('Daily tasks complete', summary);
@@ -981,6 +1049,9 @@ export const handler = async () => {
       SENDING_ENABLED
         ? `${sent} expiry reminder${sent === 1 ? '' : 's'} sent, ${invited} survey invitation${invited === 1 ? '' : 's'} sent, ${reminded} survey reminder${reminded === 1 ? '' : 's'} sent, ${ratingsRequested} rating request${ratingsRequested === 1 ? '' : 's'} sent.`
         : `Nothing was sent — EMAIL_SENDING_ENABLED is off. ${skipped} message${skipped === 1 ? '' : 's'} would have gone out.`,
+      prunedAnalytics > 0
+        ? `${prunedAnalytics} funnel event${prunedAnalytics === 1 ? '' : 's'} older than ${ANALYTICS_RETENTION_DAYS} days removed.`
+        : '',
       lapsed > 0
         ? `${lapsed} reminder milestone${lapsed === 1 ? '' : 's'} had already passed and were recorded rather than sent late.`
         : '',

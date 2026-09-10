@@ -22,6 +22,7 @@ import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource
 import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
 import { surveyResponse as surveyResponseFn } from '../functions/survey-response/resource';
 import { recordAnalytics as recordAnalyticsFn } from '../functions/record-analytics/resource';
+import { submitMarketing as submitMarketingFn } from '../functions/submit-marketing/resource';
 import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
 import { photoEngagement as photoEngagementFn } from '../functions/photo-engagement/resource';
 import { dailyTasks as dailyTasksFn } from '../functions/daily-tasks/resource';
@@ -1289,6 +1290,11 @@ const schema = a.schema({
     eventType: a.string(),
   }),
 
+  MarketingOfferResult: a.customType({
+    recorded: a.boolean().required(),
+    message: a.string(),
+  }),
+
   RefundClaimResult: a.customType({
     filed: a.boolean().required(),
     message: a.string(),
@@ -1418,6 +1424,29 @@ const schema = a.schema({
     .returns(a.ref('FeedbackResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(submitFeedbackFn)),
+
+  /**
+   * Offer photos from an event for marketing.
+   *
+   * The consent record, so nothing that decides what the offer means comes from
+   * the request: the function checks the event is the caller's, stamps the
+   * release version and the moment, and marks every asset PENDING regardless of
+   * what was sent. An asset arriving marked accepted would be a licence nobody
+   * granted.
+   */
+  submitMarketingOffer: a
+    .mutation()
+    .arguments({
+      eventId: a.string().required(),
+      tierKey: a.string().required(),
+      photoIds: a.string().array(),
+      testimonial: a.string(),
+      /** Must be true. Without it there is no offer, only a list of photos. */
+      rightsConfirmed: a.boolean(),
+    })
+    .returns(a.ref('MarketingOfferResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(submitMarketingFn)),
 
   /**
    * Record one funnel event.

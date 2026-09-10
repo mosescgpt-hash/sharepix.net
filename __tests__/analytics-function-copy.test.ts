@@ -107,7 +107,15 @@ describe('the grants', () => {
   it('are write-only for every function that records', () => {
     expect(backend).toContain('analyticsTable.grantWriteData(recordAnalyticsFn)');
     expect(backend).toContain('analyticsTable.grantWriteData(fn)');
-    expect(backend).not.toContain('analyticsTable.grantReadWriteData');
+    expect(backend).toContain('analyticsTable.grantWriteData(submitMarketingFn)');
+  });
+
+  it('grants read and delete to the pruner alone', () => {
+    // Retention needs to read rows to decide which have expired and delete the
+    // ones that have. Nothing that RECORDS may read: a function that can read
+    // the funnel can be made to leak it, and none of them has a reason to.
+    const readWrite = backend.match(/analyticsTable\.grantReadWriteData\((\w+)\)/g) ?? [];
+    expect(readWrite).toEqual(['analyticsTable.grantReadWriteData(dailyTasksFn)']);
   });
 
   it('reach no function outside the data stack', () => {

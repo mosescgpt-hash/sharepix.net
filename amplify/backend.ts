@@ -47,6 +47,7 @@ import { claimRefund } from './functions/claim-refund/resource';
 import { submitFeedback } from './functions/submit-feedback/resource';
 import { surveyResponse } from './functions/survey-response/resource';
 import { recordAnalytics } from './functions/record-analytics/resource';
+import { submitMarketing } from './functions/submit-marketing/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 
@@ -83,6 +84,7 @@ const backend = defineBackend({
   submitFeedback,
   surveyResponse,
   recordAnalytics,
+  submitMarketing,
   reclaimStorage,
   photoEngagement,
 });
@@ -106,6 +108,7 @@ const refundTable = backend.data.resources.tables.Refund;
 const feedbackTable = backend.data.resources.tables.EventFeedback;
 const surveyTable = backend.data.resources.tables.SurveyResponse;
 const analyticsTable = backend.data.resources.tables.AnalyticsEvent;
+const marketingTable = backend.data.resources.tables.MarketingSubmission;
 const mediaTable = backend.data.resources.tables.MediaObject;
 const settingTable = backend.data.resources.tables.AppSetting;
 const reactionTable = backend.data.resources.tables.PhotoReaction;
@@ -745,6 +748,10 @@ dailyTasksFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
 // for a rating as well.
 surveyTable.grantReadWriteData(dailyTasksFn);
 dailyTasksFn.addEnvironment('SURVEY_TABLE_NAME', surveyTable.tableName);
+// Funnel retention. Read to find expired rows, delete to remove them — the one
+// place in SharePix that removes analytics, and it is bounded per run.
+analyticsTable.grantReadWriteData(dailyTasksFn);
+dailyTasksFn.addEnvironment('ANALYTICS_TABLE_NAME', analyticsTable.tableName);
 dailyTasksFn.addEnvironment('RATING_DELAY_DAYS', process.env.RATING_DELAY_DAYS ?? '2');
 
 const completeSurveyFn = backend.completeSurvey.resources.lambda as LambdaFunction;
@@ -882,6 +889,18 @@ submitFeedbackFn.addEnvironment('FEEDBACK_TABLE_NAME', feedbackTable.tableName);
 // snapshot the counters onto a finished response and to pre-fill the event
 // type. Read-only there on purpose: nothing a host answers should be able to
 // change the event it is about.
+// Records a host offering photos for marketing. Write-only on the submission
+// table and read-only on events: it checks the event is the caller's before
+// writing a consent record, and nothing a host offers should be able to change
+// the event it came from.
+const submitMarketingFn = backend.submitMarketing.resources.lambda as LambdaFunction;
+marketingTable.grantWriteData(submitMarketingFn);
+eventTable.grantReadData(submitMarketingFn);
+submitMarketingFn.addEnvironment('MARKETING_TABLE_NAME', marketingTable.tableName);
+submitMarketingFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+analyticsTable.grantWriteData(submitMarketingFn);
+submitMarketingFn.addEnvironment('ANALYTICS_TABLE_NAME', analyticsTable.tableName);
+
 // The funnel recorder. Write-only on its own table and nothing else: it is
 // reachable by any browser, so the smallest possible grant is the point.
 const recordAnalyticsFn = backend.recordAnalytics.resources.lambda as LambdaFunction;
