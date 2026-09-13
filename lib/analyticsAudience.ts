@@ -115,3 +115,22 @@ export function stopExcludingThisBrowser(): void {
     // Nothing to undo if storage was never readable in the first place.
   }
 }
+
+/**
+ * Whether a row falls on or after the baseline.
+ *
+ * No baseline set means count everything, which is the behaviour before this
+ * existed. A row whose timestamp cannot be read is counted rather than
+ * dropped: an undated row is not evidence that it predates the baseline, and
+ * silently discarding it would under-report.
+ */
+export function countsFromBaseline(
+  occurredAt: string | null | undefined,
+  countFrom: string,
+): boolean {
+  const from = Date.parse(countFrom);
+  if (!Number.isFinite(from)) return true;
+  const at = Date.parse(occurredAt ?? '');
+  if (!Number.isFinite(at)) return true;
+  return at >= from;
+}

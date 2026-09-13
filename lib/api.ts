@@ -44,6 +44,7 @@ import {
 } from '@/lib/analytics';
 import {
   browserExcluded,
+  countsFromBaseline,
   excludeThisBrowser,
   shouldCount,
   type Viewer,
@@ -569,6 +570,10 @@ function viewerForAnalytics(): Promise<Viewer> {
 export async function listAnalyticsEvents(): Promise<
   Array<{ name: AnalyticsEventName; scopeId: string; occurredAt: string | null }>
 > {
+  // Read first: a baseline that failed to load must not silently widen the
+  // window back to everything, which would show the contaminated counts again
+  // with no sign anything had gone wrong.
+  const countFrom = await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => '');
   const rows = await listAllPages(
     (nextToken) =>
       client.models.AnalyticsEvent.list({
@@ -584,8 +589,10 @@ export async function listAnalyticsEvents(): Promise<
       scopeId: String(row.scopeId ?? ''),
       occurredAt: (row.occurredAt as string) ?? null,
     }))
-    .filter((row) => isAnalyticsEvent(row.name));
+    .filter((row) => isAnalyticsEvent(row.name))
+    .filter((row) => countsFromBaseline(row.occurredAt, countFrom));
 }
+
 
 /** The names something in this build actually fires. See NOT_MEASURED_FUNNEL. */
 export const WIRED_ANALYTICS_EVENTS: readonly AnalyticsEventName[] = ANALYTICS_EVENTS.filter(
@@ -1070,6 +1077,20 @@ export async function decideRefund(
  */
 export const SETTING_KEYS = {
   monthlyReportRecipient: 'monthly-report-recipient',
+  /**
+   * ISO timestamp. Funnel events before it are ignored by the dashboard.
+   *
+   * The counts from before the self-exclusion fix contain the operator's own
+   * visits mixed in with real prospects', and nothing can separate them
+   * retroactively. This gives a clean baseline without deleting anything: the
+   * rows stay, the dashboard reads from here forward, and the 90-day pruner
+   * clears the old ones on its own schedule.
+   *
+   * Non-destructive on purpose. "Reset the counts" and "destroy the evidence"
+   * should not be the same button, and a baseline can be moved back if it
+   * turns out to have been set in error.
+   */
+  analyticsCountFrom: 'analytics-count-from',
 } as const;
 
 export async function readSetting(key: string): Promise<string> {
