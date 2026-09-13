@@ -82,6 +82,7 @@ import {
 } from '@/lib/surveyAdmin';
 import { EVENT_SOURCES, countBySource, sourceLabel } from '@/lib/attribution';
 import { formatCents, canTransition as canTransitionRefund } from '@/lib/refunds';
+import { reviewEvent } from '@/lib/eventReview';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
 import { assessUsage, formatBytes, totalBytes } from '@/lib/fairUse';
 import { OWNER_EMAIL_PLACEHOLDER } from '@/lib/businessInfo';
@@ -108,6 +109,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string }> = [
   { id: 'payments', label: 'Payments' },
   { id: 'users', label: 'Users' },
   { id: 'refunds', label: 'Refunds' },
+  { id: 'refund-review', label: 'Refund review' },
   { id: 'storage', label: 'Storage and fair use' },
   { id: 'report-recipient', label: 'Report recipient' },
   { id: 'testimonials', label: 'Ratings' },
@@ -253,6 +255,8 @@ function GlobalAdminPage() {
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
   const [jobResult, setJobResult] = useState<{ text: string; ok: boolean } | null>(null);
   const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
+  // What the operator typed into the refund-review lookup.
+  const [reviewQuery, setReviewQuery] = useState('');
   const [refundsError, setRefundsError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
   const [surveys, setSurveys] = useState<SurveyRow[] | null>(null);
@@ -1274,6 +1278,111 @@ function GlobalAdminPage() {
             </div>
 
             <div className="spx-card mt-8 p-5">
+              <h2 id="refund-review" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refund review</h2>
+              <p className="text-sm text-charcoal/70">
+                Somebody got in touch unhappy. Find their event and see what actually
+                happened at it, before answering.
+              </p>
+              <label className="mt-4 block">
+                <span className="text-sm font-medium text-charcoal">
+                  Event code, name, or id
+                </span>
+                <input
+                  value={reviewQuery}
+                  onChange={(e) => setReviewQuery(e.target.value)}
+                  placeholder="SPX1234"
+                  className="spx-input mt-2 w-full sm:max-w-sm"
+                />
+              </label>
+
+              {(() => {
+                const query = reviewQuery.trim().toLowerCase();
+                if (!query) {
+                  return (
+                    <p className="mt-4 text-sm text-charcoal/55">
+                      Nothing is shown until you look something up — this reads a
+                      customer&rsquo;s event, so it should take a deliberate act.
+                    </p>
+                  );
+                }
+                const matches = events.filter(
+                  (event) =>
+                    (event.eventCode ?? '').toLowerCase() === query ||
+                    event.id.toLowerCase() === query ||
+                    (event.name ?? '').toLowerCase().includes(query),
+                );
+                if (matches.length === 0) {
+                  return (
+                    <p className="mt-4 text-sm text-charcoal/55">
+                      No event matches that.
+                    </p>
+                  );
+                }
+                if (matches.length > 1) {
+                  return (
+                    <div className="mt-4">
+                      <p className="text-sm text-charcoal/70">
+                        {matches.length} events match. Narrow it down, or use the code:
+                      </p>
+                      <ul className="mt-2 space-y-1">
+                        {matches.slice(0, 8).map((event) => (
+                          <li key={event.id}>
+                            <button
+                              type="button"
+                              onClick={() => setReviewQuery(event.eventCode ?? event.id)}
+                              className="text-sm text-pine underline"
+                            >
+                              {event.name} · {event.eventCode ?? event.id}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                }
+
+                const event = matches[0];
+                const review = reviewEvent(
+                  event,
+                  (refunds ?? []).filter((row) => row.eventId === event.id),
+                );
+                return (
+                  <div className="mt-5">
+                    <p className="text-sm font-medium text-charcoal">
+                      {event.name} · {event.eventCode ?? event.id}
+                    </p>
+                    <Notice
+                      tone={review.stance === 'owed' ? 'warn' : 'info'}
+                      className="mt-3"
+                    >
+                      {review.headline}
+                    </Notice>
+                    <dl className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                      {review.findings.map((finding) => (
+                        <div key={finding.label} className="py-2.5">
+                          <div className="flex items-baseline justify-between gap-4">
+                            <dt className="text-sm text-charcoal/70">{finding.label}</dt>
+                            <dd className="text-sm font-medium text-charcoal">
+                              {finding.value}
+                            </dd>
+                          </div>
+                          {finding.note ? (
+                            <p className="mt-1 text-xs text-charcoal/55">{finding.note}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </dl>
+                    <p className="mt-4 text-xs text-charcoal/55">
+                      Counts are read off the event row. Nothing on this screen moves
+                      money — record a refund in the section below, after issuing it in
+                      Stripe.
+                    </p>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="spx-card mt-8 p-5">
               <h2 id="refunds" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refunds</h2>
               <p className="text-sm text-charcoal/70">
                 Guest Upload Promise claims and any other money going back.{' '}
@@ -1847,6 +1956,16 @@ function GlobalAdminPage() {
               <p className="text-sm text-charcoal/70">
                 Where customers get to, and where they stop. A sale is not a
                 successful event — activation is a guest uploading.
+              </p>
+              {/* Said here rather than nowhere: an operator who does not know
+                  their own visits are excluded will eventually conclude the
+                  page-view numbers are broken, and go looking. */}
+              <p className="mt-2 text-xs text-charcoal/55">
+                Your own visits are not counted, signed in or not — this browser is
+                excluded once it has been recognised as an admin&rsquo;s. To undo that,
+                run <code>localStorage.removeItem(&apos;spx.analytics.exclude&apos;)</code> in
+                the console. Server-recorded events (purchases, events created, milestones)
+                are never filtered, so an event you create yourself does still appear.
               </p>
 
               {funnelError ? (

@@ -42,6 +42,13 @@ import {
   isAnalyticsEvent,
   type AnalyticsEventName,
 } from '@/lib/analytics';
+import {
+  browserExcluded,
+  excludeThisBrowser,
+  shouldCount,
+  type Viewer,
+} from '@/lib/analyticsAudience';
+import { isGlobalAdmin } from '@/lib/admin';
 import { readSurveyRow, sortSurveys, type SurveyRow } from '@/lib/surveyAdmin';
 import {
   canTransition as canTransitionMarketing,
@@ -506,6 +513,7 @@ export function trackEvent(
   if (!isAnalyticsEvent(name)) return;
   void (async () => {
     try {
+      if (!shouldCount(await viewerForAnalytics())) return;
       await client.mutations.recordAnalyticsEvent(
         {
           name,
@@ -518,6 +526,43 @@ export function trackEvent(
       // Never surfaced. A funnel is not worth a broken page.
     }
   })();
+}
+
+/**
+ * Is the current viewer one whose visits count? Resolved once per page load.
+ *
+ * The admin check is a Cognito session read, and `trackEvent` is called from
+ * page views — doing it per event would put a token refresh on the render path
+ * of every marketing page. Cached in a module-level promise, so concurrent
+ * calls on one page load share a single check and later ones are free.
+ *
+ * Not cached across a sign-in: a fresh page load follows one, which is when
+ * this is re-resolved. The gap is a page the operator was already on when they
+ * signed in, whose remaining events still count. That is the right side to err
+ * on and it is self-correcting on the next navigation.
+ */
+let viewerPromise: Promise<Viewer> | null = null;
+
+function viewerForAnalytics(): Promise<Viewer> {
+  if (!viewerPromise) {
+    viewerPromise = (async (): Promise<Viewer> => {
+      const excluded = browserExcluded();
+      let admin: boolean | null = null;
+      try {
+        admin = await isGlobalAdmin();
+      } catch {
+        // Signed out throws here, which is the common case and not an error.
+        // Null means "could not tell", which counts. See lib/analyticsAudience.
+        admin = null;
+      }
+      // Recognised once, remembered after: most operator visits to the
+      // marketing site are from a logged-out tab, which the group check alone
+      // would never catch.
+      if (admin === true && !excluded) excludeThisBrowser();
+      return { isAdmin: admin, browserExcluded: excluded };
+    })();
+  }
+  return viewerPromise;
 }
 
 /** Every recorded funnel event, for the product-health dashboard. */
