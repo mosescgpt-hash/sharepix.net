@@ -52,9 +52,13 @@ import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 
 import { findEventByCode } from './functions/find-event-by-code/resource';
+import { proUpload } from './functions/pro-upload/resource';
+import { processProPhoto } from './functions/process-pro-photo/resource';
 
 const backend = defineBackend({
   findEventByCode,
+  proUpload,
+  processProPhoto,
   auth,
   data,
   storage,
@@ -182,6 +186,37 @@ s3Bucket.addLifecycleRule({
 // bucket; the trigger wiring itself is set up by defineStorage.
 const sanitizeFn = backend.sanitizeUpload.resources.lambda as LambdaFunction;
 bucket.grantReadWrite(sanitizeFn);
+
+// --- SharePix Pro ------------------------------------------------------
+//
+// The pro/ prefix has no entry in amplify/storage/resource.ts, so no browser
+// role can reach it — not a guest's, not a signed-in host's. These two grants
+// are the only way in, which is what makes "a professional original is never
+// publicly exposed" a fact about IAM rather than a promise in the UI.
+const connectionTable = backend.data.resources.tables.EventPhotographer;
+const photographerProfileTable = backend.data.resources.tables.PhotographerProfile;
+
+// Issues one presigned PUT. Write-only, and it never reads an object: it does
+// not need to, and a signer that could read is a signer that could leak.
+const proUploadFn = backend.proUpload.resources.lambda as LambdaFunction;
+bucket.grantPut(proUploadFn);
+connectionTable.grantReadData(proUploadFn);
+proUploadFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+proUploadFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Reads the original, writes the derivatives, deletes the original. The one
+// component that holds all three, which is why it is also the only one that
+// decides whether the delete may happen — see discardDecision.
+const processProFn = backend.processProPhoto.resources.lambda as LambdaFunction;
+bucket.grantReadWrite(processProFn);
+bucket.grantDelete(processProFn);
+connectionTable.grantReadData(processProFn);
+photographerProfileTable.grantReadData(processProFn);
+photoTable.grantReadWriteData(processProFn);
+processProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+processProFn.addEnvironment('PROFILE_TABLE_NAME', photographerProfileTable.tableName);
+processProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+processProFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
 bucket.grantDelete(sanitizeFn);
 // Cloudflare R2 mirror. Uploads are still vetted in S3; once the bytes are
 // final this copies them to R2, which is where reads get served from because

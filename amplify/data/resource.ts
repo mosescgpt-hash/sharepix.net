@@ -37,6 +37,8 @@ import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/re
  *   moderate/delete any photo in their event, not just their own uploads.
  */
 import { findEventByCode } from '../functions/find-event-by-code/resource';
+import { proUpload } from '../functions/pro-upload/resource';
+import { processProPhoto } from '../functions/process-pro-photo/resource';
 
 const schema = a.schema({
   Event: a
@@ -1470,6 +1472,38 @@ const schema = a.schema({
     .returns(a.ref('EventCodeLookup'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(findEventByCode)),
+
+  /** Where to PUT one professional original, and under what id. */
+  ProUploadSlot: a.customType({
+    uploadId: a.string().required(),
+    uploadUrl: a.string().required(),
+    expiresInSeconds: a.integer().required(),
+  }),
+
+  ProProcessResult: a.customType({
+    uploadId: a.string().required(),
+    publishStatus: a.string().required(),
+    message: a.string().required(),
+  }),
+
+  // The caller supplies the event and the content type; the key is built
+  // server-side from a fresh uuid, because a presigned URL is a capability and
+  // whatever it is signed for is what the holder can write.
+  requestProUploadSlot: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), contentType: a.string() })
+    .returns(a.ref('ProUploadSlot'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(proUpload)),
+
+  // Called after the PUT completes. Idempotent on uploadId, so the future
+  // Bridge can retry a queued upload without producing a second gallery tile.
+  processProPhoto: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), uploadId: a.string().required() })
+    .returns(a.ref('ProProcessResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(processProPhoto)),
 
   claimGuestUploadPromise: a
     .mutation()
