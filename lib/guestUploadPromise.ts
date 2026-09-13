@@ -27,6 +27,38 @@
  *
  * Both ends are configuration, as the brief asks, because the right numbers are
  * a guess until real events have gone through.
+ *
+ * ## v2: not every event wants guests uploading
+ *
+ * A church shares photos with parents. One person uploads, everyone else looks.
+ * A photographer delivers a shoot. A school posts pictures for families. In all
+ * of these "no guest uploads" is the plan working, not the product failing —
+ * and v1 would have told them their event failed and offered them their money
+ * back for it.
+ *
+ * Two changes, and the first matters more than the second:
+ *
+ * 1. **SharePix stops volunteering the refund.** v1 put "No guests uploaded
+ *    anything — that is not what you paid for" on the dashboard of any event
+ *    that qualified. Read that as the church: everything went exactly to plan
+ *    and the product is telling you it went wrong. The claim is now something a
+ *    host goes and finds, always available and never pushed. Most of the hole
+ *    closes right here, without knowing anything about the event.
+ *
+ * 2. **A host filing a claim says what they planned.** Asked once, at claim
+ *    time rather than at setup, because intent at setup is a guess about the
+ *    future and this is a question about what already happened. The wording is
+ *    deliberately even — see PLANNED_USE_OPTIONS — because a question that
+ *    signals which answer pays is not a question.
+ *
+ * ## What stops someone simply picking the answer that pays
+ *
+ * Mostly: nothing in this module, and that is fine. A claim files a REQUESTED
+ * row and a person approves it. Nothing here moves money, so a host who picks
+ * the profitable answer meets a human holding the upload counts for their
+ * event — one uploader and two hundred photos is not subtle. Being findable is
+ * safe *because* the decision is human; if this ever auto-refunded, none of the
+ * above would be sufficient and the design would have to change.
  */
 
 /** Uploads by anyone other than the host. Below this, the promise applies. */
@@ -38,8 +70,55 @@ export const CLAIM_OPENS_DAYS_AFTER = 7;
 /** Or after this many. */
 export const CLAIM_CLOSES_DAYS_AFTER = 21;
 
-/** Which version of the promise an event was sold under. */
-export const PROMISE_VERSION = 'v1';
+/** Which version of the promise a claim was filed under. */
+export const PROMISE_VERSION = 'v2';
+
+/**
+ * What the host says they planned, asked when they file rather than at setup.
+ *
+ * Two options and no third, because "other" here would collect free text that
+ * nobody can decide from. A host whose plan was neither of these picks the
+ * closer one and says the rest in the note.
+ */
+export const PLANNED_USES = ['guests-upload', 'i-upload'] as const;
+
+export type PlannedUse = (typeof PLANNED_USES)[number];
+
+export function isPlannedUse(value: unknown): value is PlannedUse {
+  return typeof value === 'string' && (PLANNED_USES as readonly string[]).includes(value);
+}
+
+export const PLANNED_USE_QUESTION = 'Which is closest to what you planned for this event?';
+
+/**
+ * The two answers, worded to weigh the same.
+ *
+ * This is the whole trick and it is easy to get wrong. Neither option mentions
+ * refunds, money, guests failing to do something, or anything going wrong;
+ * both describe an ordinary way to run an event, in the host's own terms. A
+ * host reading them should not be able to tell which one pays — and if they
+ * can, the question has stopped measuring intent and started measuring how
+ * badly they want the money.
+ *
+ * Contrast ATTESTATION_QUESTION below, which is unavoidably leading: anybody
+ * who wants a refund can see that "yes" is the answer that continues. That one
+ * is a signed statement rather than a measurement, which is why it is asked
+ * second and only on the path where it is relevant.
+ */
+export const PLANNED_USE_OPTIONS: ReadonlyArray<{ value: PlannedUse; label: string }> = [
+  { value: 'guests-upload', label: 'I wanted guests to add their own photos' },
+  { value: 'i-upload', label: 'I was going to add the photos myself and share them' },
+];
+
+/**
+ * What a host is told when they planned to upload everything themselves.
+ *
+ * Not a rejection, and it does not argue. The promise covers a specific thing
+ * that did not happen to them; something else may well have, and the sentence
+ * ends by asking rather than closing the door.
+ */
+export const PLANNED_SOLO_MESSAGE =
+  'The Guest Upload Promise covers events where guests were meant to add their own photos, so it does not apply here. That does not mean nothing went wrong — tell us what happened and we will take a look.';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -162,21 +241,44 @@ export function promiseEligibility(
 export const ATTESTATION_QUESTION =
   'Did you make your SharePix QR code or event link available to guests at your event?';
 
+export interface ClaimAnswers {
+  /** Which of PLANNED_USE_OPTIONS the host chose. */
+  plannedUse?: PlannedUse | string | null;
+  /** ATTESTATION_QUESTION, ticked. */
+  attested?: boolean | null;
+}
+
 /**
- * Whether a claim may be filed: eligible AND attested.
+ * Whether a claim may be filed.
  *
  * Split from `promiseEligibility` because they fail for different reasons and
- * the host should be told which. "Not yet — claims open on the 14th" and "we
- * need you to confirm you put the code out" are different conversations.
+ * the host should be told which. "Not yet — claims open on the 14th", "this
+ * promise does not cover what you planned" and "we need you to confirm you put
+ * the code out" are three different conversations.
+ *
+ * The order is deliberate. Intent is asked before the attestation, so a host
+ * who planned to upload everything themselves is never shown the leading
+ * question at all — they are answered and sent to a person, rather than walked
+ * through a form whose next step is a statement they have no reason to sign.
  */
 export function canFileClaim(
   event: PromiseEventFacts | null | undefined,
-  attested: boolean,
+  answers: ClaimAnswers,
   now: Date = new Date(),
 ): { ok: boolean; message: string } {
   const eligibility = promiseEligibility(event, now);
   if (!eligibility.eligible) return { ok: false, message: eligibility.message };
-  if (!attested) {
+
+  if (!isPlannedUse(answers.plannedUse)) {
+    // Includes the unanswered case. Never defaulted: picking one for them is
+    // inventing the fact this whole question exists to establish.
+    return { ok: false, message: `Please answer: ${PLANNED_USE_QUESTION}` };
+  }
+  if (answers.plannedUse === 'i-upload') {
+    return { ok: false, message: PLANNED_SOLO_MESSAGE };
+  }
+
+  if (answers.attested !== true) {
     return {
       ok: false,
       message: 'Please confirm you made the QR code or event link available to guests.',

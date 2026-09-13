@@ -211,6 +211,8 @@ export interface RefundRow {
   decidedBy: string | null;
   recordedAt: string | null;
   createdAt: string | null;
+  /** Which of PLANNED_USE_OPTIONS the host chose. Null on a pre-v2 claim. */
+  plannedUse: string | null;
 }
 
 export interface DiscountCode {

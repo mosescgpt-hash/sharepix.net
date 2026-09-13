@@ -127,7 +127,10 @@ export const handler: Handler = async (event) => {
       date: row.date?.S ?? null,
       createdAt: row.createdAt?.S ?? null,
     },
-    event.arguments.attested === true,
+    {
+      plannedUse: event.arguments.plannedUse,
+      attested: event.arguments.attested === true,
+    },
   );
   if (!check.ok) throw new Error(check.message);
 
@@ -151,6 +154,10 @@ export const handler: Handler = async (event) => {
           status: { S: 'REQUESTED' },
           amountCents: { N: String(decision.amountCents) },
           attestation: { S: ATTESTATION_QUESTION },
+          // What they said they planned. Only 'guests-upload' can reach here —
+          // the other answer is refused above — but it is stored rather than
+          // assumed, so the row says what was asked and answered.
+          plannedUse: { S: String(event.arguments.plannedUse) },
           hostNote: { S: cleanNote(event.arguments.note) },
           promiseVersion: { S: PROMISE_VERSION },
           createdAt: { S: now },

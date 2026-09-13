@@ -963,11 +963,12 @@ export async function runScheduledJob(
  */
 export async function claimGuestUploadPromise(
   eventId: string,
+  plannedUse: string,
   attested: boolean,
   note?: string,
 ): Promise<{ filed: boolean; message: string }> {
   const { data, errors } = await client.mutations.claimGuestUploadPromise(
-    { eventId, attested, note: note?.trim() || undefined },
+    { eventId, plannedUse, attested, note: note?.trim() || undefined },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -986,6 +987,7 @@ function readRefund(row: Record<string, unknown>): RefundRow {
     decidedBy: (row.decidedBy as string) ?? null,
     recordedAt: (row.recordedAt as string) ?? null,
     createdAt: (row.createdAt as string) ?? null,
+    plannedUse: (row.plannedUse as string) ?? null,
   };
 }
 

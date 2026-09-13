@@ -31,7 +31,11 @@ import {
   type EventAddOnKey,
   updateEventDetails,
 } from '@/lib/api';
-import { promiseEligibility, ATTESTATION_QUESTION } from '@/lib/guestUploadPromise';
+import {
+  ATTESTATION_QUESTION,
+  PLANNED_USE_OPTIONS,
+  PLANNED_USE_QUESTION,
+} from '@/lib/guestUploadPromise';
 import {
   CORPORATE_PLAN,
   GUEST_BOOK_ADDON_PRICE,
@@ -87,7 +91,10 @@ function AdminDashboardPage() {
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension or slideshow add-on.
   const [discountCode, setDiscountCode] = useState('');
-  // Guest Upload Promise claim.
+  // Guest Upload Promise claim. `promiseOpen` is the disclosure: the form is
+  // behind a link rather than on the page, so nothing is offered unasked.
+  const [promiseOpen, setPromiseOpen] = useState(false);
+  const [plannedUse, setPlannedUse] = useState('');
   const [attested, setAttested] = useState(false);
   const [claimNote, setClaimNote] = useState('');
   const [claiming, setClaiming] = useState(false);
@@ -242,18 +249,12 @@ function AdminDashboardPage() {
 
   const lifecycle = eventLifecycle(event);
 
-  // The Guest Upload Promise: a paid event that nobody uploaded to gets its
-  // money back. Shown only when it applies, because offering a refund to a host
-  // whose event worked is a strange thing to put on their dashboard. Every
-  // check here is re-derived server-side when the claim is filed.
-  const promise = promiseEligibility(event);
-
   async function handleClaimPromise() {
     if (!event) return;
     setClaiming(true);
     setClaimResult(null);
     try {
-      const result = await claimGuestUploadPromise(event.id, attested, claimNote);
+      const result = await claimGuestUploadPromise(event.id, plannedUse, attested, claimNote);
       setClaimResult({ text: result.message, ok: result.filed });
     } catch (err) {
       setClaimResult({
@@ -893,54 +894,103 @@ function AdminDashboardPage() {
                 ) : null}
               </div>
 
-              {/* The Guest Upload Promise. Shown only when it actually applies:
-                  offering a refund to a host whose event worked is a strange
-                  thing to put on their dashboard, and offering one to a host
-                  whose window has not opened yet is worse. Every check is
-                  re-derived server-side when the claim is filed. */}
-              {promise.eligible ? (
-                <div className="mt-5 border-t border-ink/10 pt-5">
-                  <p className="text-sm font-medium">No guests uploaded anything</p>
-                  <p className="mt-1 text-xs text-charcoal/60">
-                    That is not what you paid for. If you put your QR code or link out at the
-                    event and nobody used it, we will refund what you paid, back to the card
-                    you paid with.
-                  </p>
-                  {claimResult ? (
-                    <Notice tone={claimResult.ok ? 'success' : 'warn'} className="mt-3">
-                      {claimResult.text}
-                    </Notice>
-                  ) : (
-                    <>
-                      <label className="mt-3 flex items-start gap-2 text-xs text-charcoal/75">
-                        <input
-                          type="checkbox"
-                          checked={attested}
-                          onChange={(e) => setAttested(e.target.checked)}
-                          className="mt-0.5"
+              {/* Something went wrong.
+
+                  Always here, never announced. v1 put "No guests uploaded
+                  anything — that is not what you paid for" on the dashboard of
+                  every event that qualified, which meant a church sharing
+                  photos with parents, exactly as they planned, was told their
+                  event had failed and offered their money back for it.
+
+                  So the offer is gone and the door stays open: one quiet line
+                  a host finds when they are looking for it, on every event
+                  whatever its counts. What happens after they open it is
+                  decided server-side; this only decides what is on screen. */}
+              <div className="mt-5 border-t border-ink/10 pt-5">
+                {!promiseOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => setPromiseOpen(true)}
+                    className="text-xs text-charcoal/60 underline transition hover:text-charcoal"
+                  >
+                    Something not right with this event?
+                  </button>
+                ) : (
+                  <div>
+                    <p className="text-sm font-medium">Something not right?</p>
+                    {claimResult ? (
+                      <Notice tone={claimResult.ok ? 'success' : 'warn'} className="mt-3">
+                        {claimResult.text}
+                      </Notice>
+                    ) : (
+                      <>
+                        <fieldset className="mt-3">
+                          <legend className="text-xs text-charcoal/75">
+                            {PLANNED_USE_QUESTION}
+                          </legend>
+                          <div className="mt-2 space-y-1.5">
+                            {PLANNED_USE_OPTIONS.map((option) => (
+                              <label
+                                key={option.value}
+                                className="flex items-start gap-2 text-xs text-charcoal/75"
+                              >
+                                <input
+                                  type="radio"
+                                  name="plannedUse"
+                                  className="mt-0.5"
+                                  // Nothing pre-selected. A default here would
+                                  // answer the question for them, and this is
+                                  // the one fact the form exists to collect.
+                                  checked={plannedUse === option.value}
+                                  onChange={() => setPlannedUse(option.value)}
+                                />
+                                <span>{option.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+
+                        {/* The attestation appears only once they have said
+                            guests were meant to upload. A host who planned to
+                            upload alone is answered by the server instead, and
+                            never shown a statement they have no reason to
+                            sign. */}
+                        {plannedUse === 'guests-upload' ? (
+                          <label className="mt-3 flex items-start gap-2 text-xs text-charcoal/75">
+                            <input
+                              type="checkbox"
+                              checked={attested}
+                              onChange={(e) => setAttested(e.target.checked)}
+                              className="mt-0.5"
+                            />
+                            <span>{ATTESTATION_QUESTION}</span>
+                          </label>
+                        ) : null}
+
+                        <textarea
+                          value={claimNote}
+                          onChange={(e) => setClaimNote(e.target.value)}
+                          rows={2}
+                          maxLength={500}
+                          placeholder="What happened? (optional)"
+                          className="spx-input mt-2 w-full text-sm"
                         />
-                        <span>{ATTESTATION_QUESTION}</span>
-                      </label>
-                      <textarea
-                        value={claimNote}
-                        onChange={(e) => setClaimNote(e.target.value)}
-                        rows={2}
-                        maxLength={500}
-                        placeholder="Anything you want to tell us about what happened (optional)"
-                        className="spx-input mt-2 w-full text-sm"
-                      />
-                      <button
-                        type="button"
-                        disabled={!attested || claiming}
-                        onClick={() => void handleClaimPromise()}
-                        className="mt-2 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
-                      >
-                        {claiming ? 'Sending…' : 'Ask for a refund'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              ) : null}
+                        <button
+                          type="button"
+                          disabled={!plannedUse || claiming}
+                          onClick={() => void handleClaimPromise()}
+                          className="mt-2 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                        >
+                          {claiming ? 'Sending…' : 'Send'}
+                        </button>
+                        <p className="mt-2 text-xs text-charcoal/55">
+                          We read these by hand.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="mt-5 border-t border-ink/10 pt-5">
                 <p className="text-sm font-medium">Add-ons</p>

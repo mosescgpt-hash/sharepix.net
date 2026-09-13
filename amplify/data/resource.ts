@@ -540,6 +540,11 @@ const schema = a.schema({
       amountCents: a.integer(),
       /** What the host confirmed when claiming, if this came from a claim. */
       attestation: a.string(),
+      /**
+       * Which of PLANNED_USE_OPTIONS the host chose, if this came from a
+       * claim. Null on anything filed before v2 of the promise.
+       */
+      plannedUse: a.string(),
       /** Free text from the host: what they think went wrong. */
       hostNote: a.string(),
       /** Which admin decided, and when. */
@@ -1311,6 +1316,12 @@ const schema = a.schema({
     .mutation()
     .arguments({
       eventId: a.id().required(),
+      /**
+       * Which of PLANNED_USE_OPTIONS the host chose. Required, and never
+       * defaulted server-side: picking one for them invents the fact the
+       * question exists to establish. See lib/guestUploadPromise.ts.
+       */
+      plannedUse: a.string().required(),
       /** The host confirming they made the code available. See lib/guestUploadPromise.ts. */
       attested: a.boolean().required(),
       note: a.string(),
