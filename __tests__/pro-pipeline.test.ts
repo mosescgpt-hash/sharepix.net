@@ -22,6 +22,8 @@ describe('the duplicated modules have not drifted', () => {
     ['professionalMedia', 'process-pro-photo'],
     ['photographerAccess', 'process-pro-photo'],
     ['proProcessing', 'process-pro-photo'],
+    ['professionalMedia', 'decide-pro-photo'],
+    ['photographerAccess', 'decide-pro-photo'],
   ])('%s in %s', (name, fn) => {
     const original = readSource(`lib/${name}.ts`);
     const copy = readSource(`amplify/functions/${fn}/${name}.ts`);
@@ -132,5 +134,56 @@ describe('the processor', () => {
     // stored original is untouched whatever the setting says.
     expect(stamp).toBeGreaterThan(handler.indexOf('image.resize'));
     expect(stamp).toBeLessThan(handler.indexOf("getBuffer('image/jpeg'"));
+  });
+});
+
+describe('the decision handler', () => {
+  const handler = codeOnly(read('amplify', 'functions', 'decide-pro-photo', 'handler.ts'));
+
+  it('only ever touches the photographer’s own photo', () => {
+    // Not the host's, not another photographer on the same event. A
+    // photographer decides what happens to their own work and nobody else's.
+    expect(handler).toContain('photo.photographerId?.S !== sub');
+  });
+
+  it('refuses to reach a guest photo through this path', () => {
+    // A guest photo has no publish status and must not acquire one here.
+    expect(handler).toContain("photo.sourceType?.S !== 'professional'");
+  });
+
+  it('re-checks the transition server-side', () => {
+    expect(handler).toContain('canTransition(from, target)');
+  });
+
+  it('re-checks the connection, so a removed photographer stops immediately', () => {
+    expect(handler).toContain('mayReviewEvent(connection, photoEventId, sub)');
+  });
+
+  it('writes only from the status it checked', () => {
+    // Two tabs open on one queue must not both win, and a stale button must
+    // not undo a decision already made.
+    expect(handler).toContain("ConditionExpression: 'publishStatus = :from'");
+  });
+
+  it('lets an approval publish only when the photographer is live', () => {
+    expect(handler).toContain('shouldPublishOnApproval({ livePublishing: live, mode })');
+  });
+
+  it('keeps the gallery’s own flag in step with publication', () => {
+    // `approved` is what the existing gallery reads. If the two disagreed, a
+    // photo could be visible in one and not the other.
+    expect(handler).toContain("':approved': { BOOL: landing === 'published' }");
+  });
+
+  it('gives one answer for every way of not being allowed', () => {
+    expect(handler).toContain('const DENIED =');
+    const thrown = handler.match(/throw new Error\(DENIED\)/g) ?? [];
+    expect(thrown.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('has no bucket access at all', () => {
+    // Deciding what a guest sees never needs to touch an object.
+    const backend = codeOnly(read('amplify', 'backend.ts'));
+    expect(backend).not.toMatch(/bucket\.grant\w*\(decideProFn\)/);
   });
 });

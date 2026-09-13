@@ -39,6 +39,7 @@ import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/re
 import { findEventByCode } from '../functions/find-event-by-code/resource';
 import { proUpload } from '../functions/pro-upload/resource';
 import { processProPhoto } from '../functions/process-pro-photo/resource';
+import { decideProPhoto } from '../functions/decide-pro-photo/resource';
 
 const schema = a.schema({
   Event: a
@@ -539,6 +540,13 @@ const schema = a.schema({
       invitedAt: a.datetime(),
       acceptedAt: a.datetime(),
       removedAt: a.datetime(),
+      // Go Live / Pause, per photographer per event. Lives here rather than on
+      // the profile because a photographer shooting two events on one weekend
+      // needs to pause one without touching the other. Absent means paused:
+      // nothing reaches a gallery because somebody forgot to decide.
+      livePublishing: a.boolean(),
+      // One of PUBLISHING_MODES. Absent means DEFAULT_PUBLISHING_MODE.
+      publishingMode: a.string(),
       // Who ended it, when someone did. For support conversations.
       removedBy: a.string(),
     })
@@ -1504,6 +1512,39 @@ const schema = a.schema({
     .returns(a.ref('ProProcessResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(processProPhoto)),
+
+  ProDecisionResult: a.customType({
+    uploadId: a.string().required(),
+    publishStatus: a.string().required(),
+    message: a.string().required(),
+  }),
+
+  // approve | reject | publish | unpublish, on one of the photographer's own
+  // photos. The legal transitions are in lib/professionalMedia.ts and are
+  // re-checked server-side; the dashboard decides which buttons to draw and
+  // nothing else.
+  decideProPhoto: a
+    .mutation()
+    .arguments({
+      uploadId: a.string().required(),
+      decision: a.string().required(),
+    })
+    .returns(a.ref('ProDecisionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(decideProPhoto)),
+
+  // Go Live / Pause, and the publishing mode. Writes the connection row, which
+  // the photographer cannot write directly for the reasons on that model.
+  setProPublishing: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      livePublishing: a.boolean(),
+      publishingMode: a.string(),
+    })
+    .returns(a.ref('ProDecisionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(decideProPhoto)),
 
   claimGuestUploadPromise: a
     .mutation()

@@ -582,6 +582,73 @@ export async function findEventByCode(code: string): Promise<string | null> {
   return data?.found ? (data.eventId ?? null) : null;
 }
 
+/** Ask for somewhere to put one professional photograph. */
+export async function requestProUploadSlot(
+  eventId: string,
+  contentType: string,
+): Promise<{ uploadId: string; uploadUrl: string }> {
+  const { data, errors } = await client.mutations.requestProUploadSlot(
+    { eventId, contentType },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data) throw new Error('That upload could not be started.');
+  return { uploadId: data.uploadId, uploadUrl: data.uploadUrl };
+}
+
+/** Turn an uploaded original into a preview. Safe to call twice. */
+export async function processProPhoto(eventId: string, uploadId: string) {
+  const { data, errors } = await client.mutations.processProPhoto(
+    { eventId, uploadId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { publishStatus: data?.publishStatus ?? 'received', message: data?.message ?? '' };
+}
+
+/** approve | reject | publish | unpublish, on the photographer's own photo. */
+export async function decideProPhoto(uploadId: string, decision: string) {
+  const { data, errors } = await client.mutations.decideProPhoto(
+    { uploadId, decision },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { publishStatus: data?.publishStatus ?? '', message: data?.message ?? '' };
+}
+
+/** Go Live, Pause, and the publishing mode for one event. */
+export async function setProPublishing(input: {
+  eventId: string;
+  livePublishing?: boolean;
+  publishingMode?: string;
+}) {
+  const { data, errors } = await client.mutations.setProPublishing(input, {
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { message: data?.message ?? '' };
+}
+
+/** This photographer's connections, for the /pro event list. */
+export async function fetchMyProConnections() {
+  const user = await getCurrentUserInfo();
+  if (!user) return [];
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.EventPhotographer.listEventPhotographerByPhotographerId(
+        { photographerId: user.userId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'Your events could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    eventId: String(row.eventId ?? ''),
+    status: String(row.status ?? ''),
+    livePublishing: row.livePublishing === true,
+    publishingMode: (row.publishingMode as string) ?? null,
+  }));
+}
+
 /** Every recorded funnel event, for the product-health dashboard. */
 export async function listAnalyticsEvents(): Promise<
   Array<{ name: AnalyticsEventName; scopeId: string; occurredAt: string | null }>

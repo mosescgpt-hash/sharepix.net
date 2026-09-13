@@ -54,11 +54,13 @@ import { photoEngagement } from './functions/photo-engagement/resource';
 import { findEventByCode } from './functions/find-event-by-code/resource';
 import { proUpload } from './functions/pro-upload/resource';
 import { processProPhoto } from './functions/process-pro-photo/resource';
+import { decideProPhoto } from './functions/decide-pro-photo/resource';
 
 const backend = defineBackend({
   findEventByCode,
   proUpload,
   processProPhoto,
+  decideProPhoto,
   auth,
   data,
   storage,
@@ -217,6 +219,14 @@ processProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
 processProFn.addEnvironment('PROFILE_TABLE_NAME', photographerProfileTable.tableName);
 processProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 processProFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Approve, reject, publish, and the Go Live switch. No bucket access at all:
+// deciding what a guest sees never needs to touch an object.
+const decideProFn = backend.decideProPhoto.resources.lambda as LambdaFunction;
+connectionTable.grantReadWriteData(decideProFn);
+photoTable.grantReadWriteData(decideProFn);
+decideProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+decideProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 bucket.grantDelete(sanitizeFn);
 // Cloudflare R2 mirror. Uploads are still vetted in S3; once the bytes are
 // final this copies them to R2, which is where reads get served from because
