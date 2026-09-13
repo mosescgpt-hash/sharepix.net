@@ -184,6 +184,20 @@ export default function TermsPage() {
               responsible for content that is lost because you did not download it before your
               event&rsquo;s retention period ended.
             </p>
+            <p>
+              <strong>Things outside our control.</strong> Uploading needs a working internet
+              connection at your venue. We are not responsible for photos that fail to upload
+              because of a venue&rsquo;s wifi or mobile coverage, and we cannot fix a connection
+              we have no access to.
+            </p>
+            <p>
+              The Service also runs on infrastructure we buy from other companies, including
+              Amazon Web Services and Cloudflare. We do not control whether those providers stay
+              up. If one of them has an outage that stops your event working, we will do what we
+              reasonably can to put it right, and that may include a partial or full refund of
+              what you paid for that event. Any such refund is at our discretion and will never
+              exceed what you paid us for that event &mdash; see section 12.
+            </p>
           </div>
 
           <div>

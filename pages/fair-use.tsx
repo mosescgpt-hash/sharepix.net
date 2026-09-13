@@ -63,8 +63,8 @@ export default function FairUsePage() {
             <h2>The short version</h2>
             <p>
               <strong>
-                We will never restrict your event for being popular, and we will never
-                stop your guests uploading without talking to you first.
+                We will never restrict your event for being popular, and where we can we
+                will contact you before we stop your guests uploading.
               </strong>{' '}
               The limits below exist to catch someone using a one-off $79 purchase as a
               backup drive. They are set far above what a celebration produces.

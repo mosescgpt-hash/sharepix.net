@@ -51,7 +51,10 @@ import { submitMarketing } from './functions/submit-marketing/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 
+import { findEventByCode } from './functions/find-event-by-code/resource';
+
 const backend = defineBackend({
+  findEventByCode,
   auth,
   data,
   storage,
@@ -247,6 +250,11 @@ recordBytesFn.addEventSource(
 // with them unset it returns nothing and every caller falls back to S3.
 const mediaUrlFn = backend.mediaUrl.resources.lambda as LambdaFunction;
 eventTable.grantReadData(mediaUrlFn);
+// Read-only, and only the eventsByEventCode index in practice: this function
+// turns a typed code into one event id and must never be able to change one.
+const findEventFn = backend.findEventByCode.resources.lambda as LambdaFunction;
+eventTable.grantReadData(findEventFn);
+findEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 mediaUrlFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
 mediaUrlFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');

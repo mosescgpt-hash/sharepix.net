@@ -362,7 +362,7 @@ describe('the fair use page', () => {
 
   it('says the two things that make the promise honest', () => {
     expect(page).toMatch(/never restrict your event for being popular/i);
-    expect(page).toMatch(/never\s*\n?\s*stop your guests uploading without talking to you first/i);
+    expect(page).toMatch(/where we can we\s*\n?\s*will contact you before we stop your guests uploading/i);
   });
 
   it('is what the asterisk actually points at', () => {

@@ -35,7 +35,7 @@ describe('the owner field', () => {
   });
 
   it('is indexed', () => {
-    expect(codeOnly(eventModel)).toContain("secondaryIndexes((index) => [index('owner')])");
+    expect(codeOnly(eventModel)).toContain("index('owner')");
   });
 
   it('is what the authorization rule names', () => {

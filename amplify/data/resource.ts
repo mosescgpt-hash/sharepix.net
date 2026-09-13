@@ -36,6 +36,8 @@ import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/re
  * - Photos carry `eventOwner` (the host's owner id) so the HOST can
  *   moderate/delete any photo in their event, not just their own uploads.
  */
+import { findEventByCode } from '../functions/find-event-by-code/resource';
+
 const schema = a.schema({
   Event: a
     .model({
@@ -266,7 +268,10 @@ const schema = a.schema({
     // Admins keep full model access. They can already comp any event, so
     // restricting them buys nothing, and the global-admin dashboard writes
     // extraPhotoCredits and uploadWindowEndsAt directly.
-    .secondaryIndexes((index) => [index('owner')])
+    // `owner` for a host's own list; `eventCode` so a guest who has the code
+    // but not the QR link can be sent to the right event. The lookup itself is
+    // a Lambda, not a model query — see findEventByCode in amplify/functions.
+    .secondaryIndexes((index) => [index('owner'), index('eventCode')])
     .authorization((allow) => [
       allow.ownerDefinedIn('owner').to(['get', 'list', 'delete']),
       allow.group('ADMINS'),
@@ -1450,6 +1455,22 @@ const schema = a.schema({
   // claim window is open. The browser decides which button to show and nothing
   // else. The amount is never sent by the caller: it is computed from the
   // Payment rows for that event, capped by what has already been refunded.
+  /** What a code lookup returns. The id, and whether there was one. */
+  EventCodeLookup: a.customType({
+    found: a.boolean().required(),
+    eventId: a.string(),
+  }),
+
+  // A guest who has the code but not the QR link. Callable by guests, because
+  // that is exactly who needs it, and it returns one event id and nothing
+  // else. See the handler for the enumeration trade-off this accepts.
+  findEventByCode: a
+    .query()
+    .arguments({ code: a.string().required() })
+    .returns(a.ref('EventCodeLookup'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(findEventByCode)),
+
   claimGuestUploadPromise: a
     .mutation()
     .arguments({
