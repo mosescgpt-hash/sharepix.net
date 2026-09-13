@@ -93,6 +93,14 @@ describe('the copy does not send people somewhere that does not exist', () => {
     expect(help).not.toMatch(/enter it on the sharepix\.net home page/i);
     expect(help).not.toMatch(/enter the event code on the home page/i);
   });
+
+  it('sends them to /join, which exists and has a field', () => {
+    const help = read('lib', 'help.ts');
+    expect(help).toMatch(/sharepix\.net\/join/);
+    const join = read('pages', 'join.tsx');
+    expect(join).toMatch(/<input/);
+    expect(join).toMatch(/findEventByCode/);
+  });
 });
 
 describe('privacy is described the same way everywhere', () => {

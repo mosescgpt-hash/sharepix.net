@@ -1,3 +1,4 @@
+import { EVENT_CODE_WORDS } from './eventCodeWords';
 /**
  * What a new event is, and whether it starts active.
  *
@@ -469,25 +470,33 @@ export function newEventRow({
   };
 }
 
-/**
- * The alphabet event codes are drawn from: no 0/O and no 1/I/L, because these
- * get read aloud and typed off a table tent.
- */
-export const EVENT_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-export const EVENT_CODE_LENGTH = 6;
+/** Words in a code, and what joins them. Mirrors lib/eventCodeFormat.ts. */
+export const EVENT_CODE_WORD_COUNT = 3;
+export const EVENT_CODE_SEPARATOR = '-';
 
 /**
- * A short human-friendly event code, e.g. "K7MPQ2".
+ * A human-friendly event code, e.g. "brave-copper-lantern".
  *
- * Takes its randomness as an argument so the handler can pass the CSPRNG and
- * the tests can pass something predictable. The browser version used Math.random,
- * which was fine when the code was only a convenience; now that it is generated
- * server-side it costs nothing to make it unguessable.
+ * Three words rather than six characters, because this gets read aloud across
+ * a noisy room and typed off a table tent by somebody who has had a drink.
+ * "K7M2QX" is where they ask whether that was a J or a 7; three ordinary words
+ * are longer to type and far harder to get wrong.
+ *
+ * It is also a much larger keyspace — 7,772³ is about 4.7e11 against the old
+ * 8.9e8 — but that is the lesser half of the argument. The lookup endpoint can
+ * be brute-forced whatever the code looks like, and what stops that is rate
+ * limiting in front of it. The longer code makes the attack infeasible; the
+ * throttle makes it impossible. Both.
+ *
+ * Takes its randomness as an argument so the handler passes the CSPRNG and the
+ * tests pass something predictable. `randomIndex` must be uniform over
+ * [0, max) — a modulo-biased source would quietly shrink the keyspace, which
+ * is the kind of bug that never shows up in a test that only checks the shape.
  */
 export function eventCodeFrom(randomIndex: (max: number) => number): string {
-  let code = '';
-  for (let i = 0; i < EVENT_CODE_LENGTH; i += 1) {
-    code += EVENT_CODE_ALPHABET[randomIndex(EVENT_CODE_ALPHABET.length)];
+  const words: string[] = [];
+  for (let i = 0; i < EVENT_CODE_WORD_COUNT; i += 1) {
+    words.push(EVENT_CODE_WORDS[randomIndex(EVENT_CODE_WORDS.length)]);
   }
-  return code;
+  return words.join(EVENT_CODE_SEPARATOR);
 }

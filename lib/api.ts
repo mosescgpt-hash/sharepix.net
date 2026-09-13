@@ -566,6 +566,22 @@ function viewerForAnalytics(): Promise<Viewer> {
   return viewerPromise;
 }
 
+/**
+ * Turn an event code a guest typed into the event it belongs to.
+ *
+ * Guest auth, because a guest is exactly who needs this. Returns the id or
+ * nothing; the page decides what to say, and it says the same thing for a
+ * malformed code and a code nobody has.
+ */
+export async function findEventByCode(code: string): Promise<string | null> {
+  const { data, errors } = await client.queries.findEventByCode(
+    { code },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return data?.found ? (data.eventId ?? null) : null;
+}
+
 /** Every recorded funnel event, for the product-health dashboard. */
 export async function listAnalyticsEvents(): Promise<
   Array<{ name: AnalyticsEventName; scopeId: string; occurredAt: string | null }>

@@ -80,7 +80,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'note',
-        text: 'No QR code handy? Ask the host to send you the event link — it opens the same upload page the QR code does.',
+        text: 'No QR code handy? Ask the host for the event code — three words joined by dashes — and enter it at sharepix.net/join.',
       },
     ],
     related: ['camera-opens-gallery', 'video-wont-upload', 'upload-failed'],
@@ -218,7 +218,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'How do I get back to the gallery?',
     audience: 'guest',
     category: 'Finding and viewing photos',
-    summary: 'Scan the QR code again, or ask the host for the event link.',
+    summary: 'Scan the QR code again, or enter the event code at sharepix.net/join.',
     keywords: ['find', 'gallery', 'link', 'event code', 'lost', 'back'],
     blocks: [
       {
