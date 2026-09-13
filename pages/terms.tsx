@@ -123,8 +123,9 @@ export default function TermsPage() {
                 Card details are entered on Stripe and are never stored by SharePix.
               </li>
               <li>
-                Every event includes a <strong>60-day upload window</strong>{' '}(extendable in
-                30-day blocks for half the plan price). After it closes, the gallery stays
+                Every event includes a <strong>60-day upload window</strong>. On a paid event
+                this can be extended in 30-day blocks for half the plan price; a free event
+                cannot be extended. After it closes, the gallery stays
                 available for <strong>12 months</strong> — guests at reduced resolution, and the
                 host with full access and downloads throughout. A <strong>free event</strong> keeps
                 its gallery for 30 days rather than 12 months, and events on a retired plan keep

@@ -1,3 +1,4 @@
+import { VIDEO_GB_INCLUDED, getTier } from '../lib/pricing';
 import {
   HELP_ARTICLES,
   HELP_CATEGORIES,
@@ -98,11 +99,18 @@ describe('help content stays true to the product', () => {
     expect(text).toContain('250 MB');
   });
 
-  it('quotes the current per-plan video allowances', () => {
+  it('quotes the video allowance from lib/pricing.ts, not from memory', () => {
+    // This test used to assert 'Two', 'ten' and 'thirty' — the per-plan clip
+    // counts for Starter, Standard and Premium. Those plans were retired when
+    // the offering collapsed to Free + $79, and because the assertion named
+    // the numbers rather than deriving them, it went on passing and held the
+    // stale article in place. A test called "stays true to the product" was
+    // enforcing the contradiction it was meant to catch.
     const article = findArticle('video-limits')!;
-    expect(article.summary).toContain('Two');
-    expect(article.summary).toContain('ten');
-    expect(article.summary).toContain('thirty');
+    expect(article.summary).toContain(`${VIDEO_GB_INCLUDED} GB`);
+    const free = getTier('free');
+    expect(free?.videoLimit).toBe(1);
+    expect(article.summary).toMatch(/one video/i);
   });
 });
 
