@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   DEFAULT_PREVIEW_LONG_EDGE,
   DEFAULT_PUBLISHING_MODE,
@@ -10,6 +12,7 @@ import {
   defaultsFor,
   galleryLinksFor,
   guestVariantFor,
+  isProfessionalKey,
   isProfessionalOriginalKey,
   mayServeToGuest,
   previewLongEdge,
@@ -189,7 +192,7 @@ describe('where professional objects live', () => {
   const keys = professionalKeys('evt1', 'up1');
 
   it('keeps originals in their own prefix', () => {
-    expect(keys.original).toBe('events/evt1/professional/originals/up1');
+    expect(keys.original).toBe('pro/evt1/originals/up1');
     expect(isProfessionalOriginalKey(keys.original)).toBe(true);
   });
 
@@ -201,6 +204,29 @@ describe('where professional objects live', () => {
   it('does not mistake a guest photo for one', () => {
     expect(isProfessionalOriginalKey('events/evt1/photos/abc.jpg')).toBe(false);
     expect(isProfessionalOriginalKey('events/evt1/previews/abc.jpg')).toBe(false);
+  });
+
+  it('keeps every professional variant out of the guest-readable prefix', () => {
+    // amplify/storage/resource.ts grants allow.guest.to(['read']) on
+    // 'events/*', and Amplify Gen 2 storage paths take a wildcard only at the
+    // end — there is no way to carve an exception back out. So anything under
+    // events/ is readable by any guest holding the key, and none of these may
+    // live there. A preview still in the review queue is as private as the
+    // original; "the key is a UUID" is not an access rule.
+    for (const key of Object.values(keys)) {
+      expect(key.startsWith('events/')).toBe(false);
+      expect(isProfessionalKey(key)).toBe(true);
+    }
+  });
+
+  it('is not granted to anyone by the storage rules', () => {
+    const rules = readFileSync(
+      join(__dirname, '..', 'amplify', 'storage', 'resource.ts'),
+      'utf8',
+    );
+    // The prefix appears in no access rule at all, which is what makes it
+    // reachable only by a Lambda holding an explicit IAM grant.
+    expect(rules).not.toMatch(/'pro\//);
   });
 
   it('gives the three variants three distinct keys', () => {

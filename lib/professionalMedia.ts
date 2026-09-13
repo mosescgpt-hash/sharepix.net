@@ -315,18 +315,44 @@ export function galleryLinksFor(profile: PhotographerLinks): GalleryLink[] {
   return links;
 }
 
-/** Where professional objects live. Originals stay in their own prefix. */
+/**
+ * Where professional objects live — and why it is not under `events/`.
+ *
+ * The obvious layout is `events/<eventId>/professional/originals/`, and it is
+ * unusable. `amplify/storage/resource.ts` grants `allow.guest.to(['read'])` on
+ * `events/*`, and Amplify Gen 2 storage paths take a wildcard only at the end:
+ * there is no way to write `events/*​/professional/originals/*` to carve an
+ * exception back out. Anything placed under `events/` is readable by any guest
+ * who has the key, full stop.
+ *
+ * So all three professional variants live under `pro/`, which has no access
+ * rule at all. Nothing but a Lambda holding an explicit IAM grant can read
+ * them, and every guest-facing URL is minted by the signing function after it
+ * has checked `mayServeToGuest`. That is a stronger position than the guest
+ * path holds today, and it is the right one for somebody else's livelihood.
+ *
+ * Previews are in there too, not just originals. A preview of a photo still
+ * in the review queue — or one the photographer rejected — is exactly as
+ * private as the original, and "the key is a UUID so nobody will guess it" is
+ * not an access rule.
+ */
 export function professionalKeys(eventId: string, uploadId: string) {
-  const base = `events/${eventId}/professional`;
+  const base = `pro/${eventId}`;
   return {
-    /** Private. Never signed for a guest, never mirrored to a public path. */
+    /** Private. Never signed for a guest, at any status. */
     original: `${base}/originals/${uploadId}`,
+    /** Private storage, served to guests only through the signing gate. */
     preview: `${base}/previews/${uploadId}`,
     thumbnail: `${base}/thumbnails/${uploadId}`,
   };
 }
 
-/** True for a key under the professional originals prefix. */
+/** True for any key under the professional prefix, whatever the variant. */
+export function isProfessionalKey(key: string): boolean {
+  return /^pro\//.test(key);
+}
+
+/** True for a key under the professional originals prefix specifically. */
 export function isProfessionalOriginalKey(key: string): boolean {
-  return /^events\/[^/]+\/professional\/originals\//.test(key);
+  return /^pro\/[^/]+\/originals\//.test(key);
 }
