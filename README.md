@@ -1,113 +1,188 @@
 # sharepix.net
 
-Event photo sharing: a host creates an event, gets a QR code, guests scan it and upload photos, and everyone views the shared gallery. Mobile-first — works one-handed on iPhone and Android, and the same in any desktop browser.
+Event photo sharing. A host creates an event and gets a QR code; guests scan it
+and upload from their phones with no app and no account; everyone sees one
+gallery. Mobile-first — it has to work one-handed, at a wedding, on venue wifi.
 
-**Stack:** Next.js · React · TypeScript · Tailwind CSS · **AWS Amplify Gen 2** · Cognito (host auth via email) · S3 (photos) · AppSync + DynamoDB (data) · Amplify Hosting
+**Stack:** Next.js · React · TypeScript · Tailwind · **AWS Amplify Gen 2**
+(Cognito · AppSync · DynamoDB · S3 · Lambda · SES · SQS) · Cloudflare R2 ·
+Stripe · Prodigi · Amplify Hosting
 
-The backend is defined in code under `amplify/` (auth, data, storage) — no interactive CLI prompts needed.
+The backend is defined in code under `amplify/`. There are no interactive CLI
+prompts and no console-only configuration except the secrets and the domain.
 
 ---
 
-## Setup (Windows-friendly)
+## Running it
 
-**One-time machine setup:**
-1. Install Node.js 18+ from nodejs.org
-2. Configure an AWS profile if you haven't:
-   ```
-   npm install -g @aws-amplify/cli
-   amplify configure
-   ```
-   (Only the profile it creates matters — note its name, e.g. `seth`. The IAM user needs the `AdministratorAccess-Amplify` policy.)
+Node 18+. One-time, if you have no AWS profile yet:
 
-**Project setup — two commands:**
+```
+npm install -g @aws-amplify/cli
+amplify configure
+```
+
+Only the profile it creates matters — note its name. The IAM user needs
+`AdministratorAccess-Amplify`.
+
+Then, in the project:
 
 ```
 npm install
-npx ampx sandbox --profile seth
+npx ampx sandbox --profile <yourprofile>
 ```
 
-`ampx sandbox` reads `amplify/backend.ts`, builds your personal cloud backend (Cognito + AppSync + DynamoDB + S3) in your AWS account, and writes `amplify_outputs.json` for the app. First run takes several minutes. **Leave it running** — it watches for backend changes. It's your dev backend; production gets its own copy at deploy time.
+`ampx sandbox` reads `amplify/backend.ts`, builds a personal backend in your AWS
+account, and writes `amplify_outputs.json`. The first run takes several minutes.
+**Leave it running** — it redeploys on change. It is your backend, not
+production; `npx ampx sandbox delete` does not touch production.
 
-**In a second terminal:**
+In a second terminal, `npm run dev`, then http://localhost:3000.
+
+### What runs before a build
+
+`npm run build` runs `prebuild` first, which regenerates two committed things:
+
+- `lib/siteImages.generated.ts`, from the photo folders under `public/site/`
+- `public/robots.txt` and `public/sitemap.xml`, from `lib/seo.ts`
+
+Both are committed on purpose, and `npm test` fails if either has drifted from
+its source. A generated file nobody can see go stale is how you ship last
+month's site map.
+
+## Checks
 
 ```
-npm run dev
+npm test                 # two Jest projects: node (pure) and jsdom (components)
+npm run typecheck:backend
+npm run validate:backend # synthesises the CDK app and checks for stack cycles
 ```
 
-Open http://localhost:3000.
-
-### Pilot access codes
-
-Global administrators create and manage complimentary pilot codes at
-`/global-admin`. Each code can be assigned to one person, limited to a specific
-number of uses, expired immediately, or given a future expiration date. Pilot codes
-only unlock the Standard plan.
-
-The dashboard is secured by the Cognito `ADMINS` group. Add an administrator to that
-group in the Amazon Cognito console after deploying a new backend, or run
-`npm run admin:grant -- email-prefix` with the appropriate AWS profile configured.
-Group membership is included in the user's token, so sign out and back in after it changes.
+CI (`.github/workflows/ci.yml`) runs all four in that order. `validate:backend`
+is not optional ceremony: CloudFormation nested-stack cycles do **not** fail
+synthesis, so `scripts/check-stack-cycles.mjs` is the only thing that catches
+them before a deploy hangs.
 
 ## Smoke test
 
-1. **Create an event** → sign up with an email (Cognito sends a verification code) → you get the QR code screen.
-2. **Upload as a guest**: open `/event/{id}/upload` in an incognito window. Photos from guests tag as "Anonymous"; host uploads tag with the email name (e.g. `seth`).
-3. **Gallery** at `/event/{id}`: "Uploaded by" + download button per photo.
-4. **Admin** at `/event/{id}/admin` as the host: hide/approve and delete photos. Non-owners are turned away.
-5. **Global admin** at `/global-admin` as an `ADMINS` user: monitor all events and manage pilot codes.
+1. **Create an event** → sign up with an email → QR code screen.
+2. **Upload as a guest**: open `/event/{id}/upload` in a private window. Guest
+   uploads are labelled per browser; host uploads carry the host's name.
+3. **Gallery** at `/event/{id}`: attribution and a download button per photo.
+4. **Dashboard** at `/event/{id}/admin` as the host — see "Share it / Watch it /
+   Set it up". Non-owners are turned away by the server, not just the UI.
+5. **Find an event without a QR code**: `/join`, then the event code.
+6. **Global admin** at `/global-admin` as a member of the Cognito `ADMINS` group.
 
-## Tests
+Add yourself to `ADMINS` with `npm run admin:grant -- <email-prefix>`, or in the
+Cognito console. Group membership rides in the token, so sign out and back in.
 
-```
-npm test
-```
-
-## Deploy to production + sharepix.net
-
-Gen 2 production deploys through Amplify Hosting from a Git repo:
-
-1. Install Git (gitforwindows.org), then push this folder to a new GitHub repository.
-2. AWS console → **Amplify** → **Create new app** → connect the GitHub repo and branch.
-3. Amplify detects `amplify.yml`, builds the backend (`ampx pipeline-deploy`) and the frontend, and deploys both. Every `git push` redeploys.
-4. **Domain management** → Add domain → `sharepix.net` → follow the DNS steps at your registrar. SSL is automatic.
-
-## Project structure
+## Where things are
 
 ```
 amplify/
-  backend.ts               Backend entry point
-  auth/resource.ts         Cognito: email sign-in for hosts
-  data/resource.ts         Event + Photo models with auth rules
-  storage/resource.ts      S3: guests upload/read, hosts delete
-amplify.yml                Amplify Hosting build spec (backend + frontend)
-pages/                     Homepage, pricing, create-event, event gallery/upload/admin
-components/                Logo, EventQRCode, UploadForm, PhotoGrid, PhotoCard,
-                           AdminPhotoGrid, PricingCards, Layout, Navbar
-lib/                       api.ts (all AWS calls), pricing.ts, validation.ts, types.ts
-__tests__/                 Jest tests
+  backend.ts           Wiring: every function's env, IAM, queues and triggers
+  auth/resource.ts     Cognito — email sign-in for hosts
+  data/resource.ts     Models, auth rules, and the custom mutations
+  storage/resource.ts  S3 — read/write for everyone, delete for nobody
+  waf.ts               API rate limiting, off unless WAF_ENABLED is set
+  functions/           37 Lambdas; each has resource.ts (config) + handler.ts
+pages/                 Routes. lib/seo.ts says which are public
+components/            Shared UI
+lib/                   Rules, as pure functions. This is where behaviour lives
+__tests__/             Jest. Two projects — see jest.config.js for why
+docs/                  The notes below
+scripts/               Build-time generators and one-off operator scripts
 ```
+
+**`lib/` is the important convention.** Rules live there as pure functions so
+they can be tested without a browser or an AWS account — who may see a
+professional's photo (`professionalMedia.ts`), when a refund is owed
+(`refunds.ts`), what a plan includes (`pricing.ts`), which pages search engines
+may index (`seo.ts`). Pages and Lambdas call into it; they do not re-decide.
+
+Amplify functions **cannot import from `lib/`** — they are bundled separately.
+Where a rule is needed in both places the module is duplicated by hand, with a
+test that compares the two copies byte for byte after the opening comment (see
+`__tests__/*-function-copy.test.ts`). Ugly, deliberate, and the alternative is
+two copies that quietly disagree about money.
+
+## Documentation
+
+| | |
+| --- | --- |
+| [docs/deploying.md](docs/deploying.md) | Deploying, every environment variable, and the manual steps |
+| [docs/pro-uploader.md](docs/pro-uploader.md) | The API a DSLR/bridge uploader speaks, for SharePix Pro |
+| [docs/decisions.md](docs/decisions.md) | Product decisions, each naming what it supersedes |
+| [docs/r2-hybrid.md](docs/r2-hybrid.md) | Why writes go to S3 and reads come from R2 |
+| [docs/event-authorization.md](docs/event-authorization.md) | Who may write an event, and why the obvious approach was not safe |
+| [docs/moderation.md](docs/moderation.md) | Content screening, and what is deliberately never flagged |
+| [docs/media-limits.md](docs/media-limits.md) | Upload size limits and where each is enforced |
+| [docs/alerting.md](docs/alerting.md) | What pages an operator when a Lambda starts failing |
+| [docs/go-live-prints.md](docs/go-live-prints.md) | Taking print ordering off sandbox — both halves, together |
+| [docs/research-survey.md](docs/research-survey.md) | Why the post-event survey asks what it asks |
+| [docs/design-system.md](docs/design-system.md) | Palette, type, and the rules the pages follow |
+| [docs/business-records.md](docs/business-records.md) | Public records that name SharePix LLC and have to agree |
+| [docs/mn-sales-tax-request.md](docs/mn-sales-tax-request.md) | Draft request asking Minnesota whether SharePix is taxable at all |
+| [docs/moments-verification.md](docs/moments-verification.md) | The walkthrough that proved Moments really writes to DynamoDB |
+| [docs/redesign-audit.md](docs/redesign-audit.md) | What existed before the redesign, and what it must not disturb |
 
 ## How authorization works
 
-- **Hosts** sign in with email (user pool). Events are `owner`-protected: only the creator can update/delete.
-- **Guests** never sign in; the identity pool's unauthenticated role lets them read events and create/read photos, and upload to `events/*` in S3.
-- **Moderation**: every photo is stamped with `eventOwner` (the host's owner id) at upload, and the `ownerDefinedIn('eventOwner')` rule lets the host update/delete any photo in their event — enforced server-side, not just in the UI.
+- **Hosts** sign in with email. Events are `owner`-protected.
+- **Guests** never sign in. The identity pool's unauthenticated role lets them
+  read events, create photos, and write to `events/*` in S3.
+- **Nobody gets S3 delete.** `storage/resource.ts` grants `read` and `write` and
+  stops there; deletion runs through the `deleteEventPhoto` function, which
+  checks ownership first. A blanket delete grant would let any signed-in user
+  remove another event's files.
+- **Photos** are stamped with `eventOwner` at upload, and
+  `ownerDefinedIn('eventOwner')` lets the host moderate every photo in their
+  event — server-side, not in the UI.
+- **Limits are reservations, not checks.** `create-event-photo` reserves a slot
+  with a conditional DynamoDB update, so concurrent uploads cannot both take the
+  last one. Same for the one free event per account.
+- **Professional originals are never signed.** A photographer's full-resolution
+  file has no access rule that reaches it and no code path that mints a URL for
+  it; guests are served a reduced-resolution preview. See `lib/professionalMedia.ts`.
+- **Event codes** are three words from a 7,772-word list (~4.7 × 10¹¹
+  combinations). `amplify/waf.ts` adds rate limiting in front of the lookup, off
+  by default because it costs about $7 a month whether or not anyone attacks it.
 
-## Design notes
+## What is not finished
 
-- Brand palette from the SharePix logo: navy `#123851`, mint `#7AD8C0`, green `#099361`, white cards on light gray, large tap targets. Tagline: Capture. Connect. Celebrate.
-- Logo (components/Logo.tsx + public/favicon.svg): a camera whose film window is a QR code, with the green play lens.
-- Guest upload shows the consent line about photos being visible to other guests.
+Kept short and kept true. Everything here was checked against the code on
+2026-09-14, and `__tests__/readme.test.ts` fails if an item is fixed without
+this list being updated.
 
-## Known gaps (deliberate for an MVP)
-
-- **Payments not wired up** — event creation is free while testing. Next: Stripe Checkout + a backend function that verifies payment before creating the Event.
-- **Photo limits not enforced server-side** — add a function/custom mutation before launch.
-- **S3 delete scope**: any signed-in user can delete S3 objects under `events/*` (the database rules are properly scoped; tighten storage with a custom authorizer or move deletes behind a function before launch).
+- **Email sending is behind `EMAIL_SENDING_ENABLED`.** Unset, every send is a
+  dry run that logs what it would have sent. Nothing has run against SES in
+  anger yet, so the first production send should be watched.
+- **Prints run against Prodigi sandbox and Stripe test mode.** Both flip
+  together or not at all — see `docs/go-live-prints.md`.
+- **API rate limiting is off** (`WAF_ENABLED` unset). The word codes are what
+  currently makes guessing infeasible; the throttle is the second lock.
+- **Storage reclaim is off** (`STORAGE_RECLAIM_ENABLED` unset). Expired events
+  keep their bytes until it is turned on.
+- **`sharepix.net` does not redirect to `www.sharepix.net`.** The apex is still
+  on the registrar's parking IPs. Every link the product mints — QR codes,
+  emails, the canonical tags — says `www`, so the redirect is the missing half.
+- **No face recognition, and none planned.** Rekognition is used for explicit
+  content only.
 
 ## Troubleshooting
 
-- **Yellow "AWS is not configured" banner** → `npx ampx sandbox` hasn't generated `amplify_outputs.json` yet, or it's not running from the project root.
-- **`ampx sandbox` credential errors** → pass `--profile yourname`; the IAM user needs `AdministratorAccess-Amplify`.
-- **Guest upload Unauthorized** → make sure you're running the sandbox from this project (rules live in `amplify/data/resource.ts` and `amplify/storage/resource.ts`).
-- **Sandbox vs production** → the sandbox is your personal dev backend; deleting it (`npx ampx sandbox delete`) doesn't touch production.
+- **"AWS is not configured" banner** → `npx ampx sandbox` has not written
+  `amplify_outputs.json` yet, or is not running from the project root.
+- **`ampx sandbox` credential errors** → pass `--profile`; the IAM user needs
+  `AdministratorAccess-Amplify`.
+- **A deploy hangs with no error** → almost always a nested-stack cycle. Run
+  `npm run validate:backend`, which names the loop.
+- **A function throws `Could not load the "sharp" module`** → esbuild reports
+  success bundling `sharp` and the artifact fails at runtime. Image work uses
+  Jimp for this reason. Jimp cannot decode WebP; that is the trade.
+- **Guest upload Unauthorized** → the rules live in `amplify/data/resource.ts`
+  and `amplify/storage/resource.ts`; make sure the sandbox is this project's.
+- **`npm ci` fails in CI with "Missing: <pkg> from lock file"** → something ran
+  `npm install` behind a proxy that prunes the lockfile. Fix with
+  `npm install --package-lock-only`, then verify with `npm ci --dry-run`.

@@ -74,3 +74,12 @@ export const GALLERY_SETS: Readonly<Record<string, readonly GalleryFile[]>> = {
     { src: '/site/gallery/wedding/12-the-farewell.webp', caption: "The farewell" },
   ],
 };
+
+/**
+ * Where these images came from, read from public/site/PROVENANCE.
+ *
+ * lib/demoEvent.ts turns this into the sentence the demo pages and the footer
+ * show. Change the file, not this line.
+ */
+export type ImageProvenance = 'ai-generated' | 'photographed' | 'mixed';
+export const IMAGE_PROVENANCE: ImageProvenance = 'ai-generated';

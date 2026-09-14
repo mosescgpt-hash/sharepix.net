@@ -9,8 +9,11 @@ interface Props {
 }
 
 export default function HelpArticlePage({ article, related }: Props) {
+  // The article's own summary is the meta description. Passed explicitly rather
+  // than looked up from the route, so it does not depend on router.query being
+  // resolved at the moment the page renders.
   return (
-    <Layout title={article.title}>
+    <Layout title={article.title} description={article.summary}>
       <article className="mx-auto max-w-2xl py-10">
         <Link href="/help" className="text-sm text-charcoal/60 transition hover:text-charcoal">
           ← All help articles

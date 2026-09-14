@@ -9,6 +9,7 @@ import {
   DEMO_PHOTOS,
   DEMO_SLIDE_MS,
   nextSlide,
+  sampleImageNoticeShort,
 } from '@/lib/demoEvent';
 
 /**
@@ -95,7 +96,7 @@ export default function DemoLivePage() {
         <div className="flex shrink-0 items-center justify-between gap-4 bg-black px-6 py-3 text-sm">
           <p className="text-white/50">
             Sample slideshow ·{' '}
-            {DEMO_IS_PHOTOGRAPHY ? 'not a real event' : 'illustrations, not photographs'} ·
+            {sampleImageNoticeShort(DEMO_IS_PHOTOGRAPHY)} ·
             advances every{' '}
             {Math.round(DEMO_SLIDE_MS / 1000)}s
           </p>

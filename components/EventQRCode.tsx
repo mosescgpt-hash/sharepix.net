@@ -11,6 +11,7 @@ import {
   qrStylingOptions,
 } from '@/lib/qrBranding';
 import { prepareQrLogo } from '@/lib/qrLogoImage';
+import { invitesUploads, parseAudience } from '@/lib/eventAudience';
 
 interface EventQRCodeProps {
   eventId: string;
@@ -24,6 +25,12 @@ interface EventQRCodeProps {
    * confirmation screen uses it, before there is anything to save against.
    */
   branding?: { qrDotStyle?: string | null; qrColor?: string | null; qrLogo?: string | null } | null;
+  /**
+   * What the host said at setup about who is adding the photos, so the caption
+   * matches the signs this code will be printed on. Absent reads as 'guests',
+   * which is what every event created before the question was asked carries.
+   */
+  uploadAudience?: string | null;
   /** Called after a successful save, so the page can refresh its event. */
   onBrandingSaved?: () => void;
 }
@@ -46,11 +53,13 @@ export default function EventQRCode({
   eventName,
   allowCustomization = false,
   branding = null,
+  uploadAudience = null,
   onBrandingSaved,
 }: EventQRCodeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const qrCodeRef = useRef<QRCodeStyling | null>(null);
   const saved = useMemo(() => brandingForEvent(branding), [branding]);
+  const audience = parseAudience(uploadAudience);
 
   const [fgColor, setFgColor] = useState(saved.qrColor);
   const [dotStyle, setDotStyle] = useState<QrDotStyle>(saved.qrDotStyle);
@@ -160,8 +169,11 @@ export default function EventQRCode({
       <div className="border border-charcoal/10 bg-paper p-2">
         <div ref={containerRef} className="h-[240px] w-[240px] overflow-hidden" aria-label="Event upload QR code" />
       </div>
+      {/* Says what the printed signs will say, so a host reading the dashboard
+          and a guest reading the card are told the same thing. */}
       <p className="text-sm text-charcoal/70">
-        Guests scan this code to upload photos and videos to <strong>{eventName}</strong>.
+        {invitesUploads(audience) ? 'Guests scan this code to upload photos and videos to ' : 'Guests scan this code to see the photos from '}
+        <strong>{eventName}</strong>.
       </p>
       <p className="max-w-full break-all text-xs text-charcoal/60">{uploadUrl}</p>
 

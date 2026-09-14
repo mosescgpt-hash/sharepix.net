@@ -108,6 +108,7 @@ export const handler: Handler = async (event) => {
       city: event.arguments.city,
       state: event.arguments.state,
       moderationMode: event.arguments.moderationMode,
+      uploadAudience: event.arguments.uploadAudience,
       alertEmail: event.arguments.alertEmail,
       videoUploadsEnabled: event.arguments.videoUploadsEnabled,
       guestDownloadsBlocked: event.arguments.guestDownloadsBlocked,

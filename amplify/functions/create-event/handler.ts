@@ -329,6 +329,16 @@ export const handler: Handler = async (event) => {
   };
   if (row.date) item.date = { S: row.date };
   if (row.location) item.location = { S: row.location };
+  // Who the QR signs will be addressed to. Normalised against the two answers
+  // and otherwise left off — an unrecognised value means the event is worded
+  // the way every event was before the question existed, which is the right
+  // fallback and never an error worth failing a paid creation over.
+  {
+    const audience = String(event.arguments.uploadAudience ?? '').trim().toLowerCase();
+    if (audience === 'guests' || audience === 'host-only') {
+      item.uploadAudience = { S: audience };
+    }
+  }
   // A missing limit means unlimited, which is what Premium and Corporate get —
   // so the attribute is left off rather than written as null.
   if (row.photoLimit !== null) item.photoLimit = { N: String(row.photoLimit) };

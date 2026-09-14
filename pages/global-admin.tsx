@@ -45,7 +45,8 @@ import {
   startCheckout,
 } from '@/lib/api';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
-import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
+import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
+import { ARCHIVE_DAYS, GRACE_DAYS, lifespanDays } from '@/lib/storageReclaim';
 import { entitledPhotoLimit, limitsAreStale } from '@/lib/planLimits';
 import {
   HOME_JURISDICTION_NOTE,
@@ -54,7 +55,7 @@ import {
   assessNexus,
   nexusMessages,
 } from '@/lib/taxNexus';
-import { archiveWindowEnd, eventLifecycle } from '@/lib/lifecycle';
+import { archiveWindowEnd, eventLifecycle, reclaimSpread } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
 import { SURVEY_QUESTIONS, questionById } from '@/lib/survey';
@@ -2563,9 +2564,19 @@ function GlobalAdminPage() {
               </div>
               <p className="mt-3 text-sm text-charcoal/70">
                 <strong>Reclamation deletes photos permanently</strong> — every event whose
-                12-month gallery and 90-day archive have both closed, plus a week of grace.
-                It is switched off until <code>STORAGE_RECLAIM_ENABLED</code> is set, and
-                until then it reports what it would have removed and removes nothing.
+                gallery retention and {ARCHIVE_DAYS}-day archive have both closed, plus{' '}
+                {GRACE_DAYS} days of grace. It is switched off until{' '}
+                <code>STORAGE_RECLAIM_ENABLED</code> is set, and until then it reports what
+                it would have removed and removes nothing.
+              </p>
+              {/* Retention is per plan, and the spread is wide enough that
+                  "12-month gallery" — which this said until somebody checked —
+                  would have an operator reading a non-zero dry run as a bug.
+                  Free events age out in about six months. */}
+              <p className="mt-2 text-sm text-charcoal/70">
+                Retention is per plan, so events do not all age out together —{' '}
+                {reclaimSpread([...PRICING_TIERS, CORPORATE_PLAN], UPLOAD_WINDOW_DAYS, lifespanDays)} after the
+                event is created. The clock starts when the upload window closes.
               </p>
               {jobResult ? (
                 <p

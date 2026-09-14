@@ -21,6 +21,11 @@ import {
   trackEvent,
 } from '@/lib/api';
 import { QREvent } from '@/lib/types';
+import {
+  AUDIENCE_HELP,
+  AUDIENCE_OPTIONS,
+  AUDIENCE_QUESTION,
+} from '@/lib/eventAudience';
 
 function CreateEventPage() {
   // The Decide stage opening. This page is behind the authenticator, so
@@ -40,6 +45,9 @@ function CreateEventPage() {
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
   const [city, setCity] = useState('');
+  // Who the QR signs will be addressed to. Defaults to guests because that is
+  // the common case; the point of asking is that it is not the only one.
+  const [audience, setAudience] = useState<'guests' | 'host-only'>('guests');
   const [stateRegion, setStateRegion] = useState('');
   // A link to a retired plan (an old bookmark, a stale email) must not select
   // something that is no longer for sale.
@@ -167,6 +175,7 @@ function CreateEventPage() {
         city,
         state: stateRegion,
         tier: tierId,
+        uploadAudience: audience,
         discountCode: pilotCodeStatus === 'valid' ? pilotCode : undefined,
         source,
       });
@@ -311,6 +320,45 @@ function CreateEventPage() {
               always removed on upload.
             </p>
           </div>
+
+          {/* Asked here because only the host knows, and only now. The counts
+              can tell you afterwards that one person uploaded; they cannot tell
+              you whether that was the plan, and that is the difference between
+              a disappointing event and a church sharing photos with parents
+              exactly as intended. See lib/eventAudience.ts. */}
+          <fieldset>
+            <legend className="text-sm font-medium text-charcoal">{AUDIENCE_QUESTION}</legend>
+            <p className="mt-1 text-xs text-charcoal/55">{AUDIENCE_HELP}</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {AUDIENCE_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className={`cursor-pointer border p-4 text-sm transition ${
+                    audience === option.value
+                      ? 'border-ink bg-ink text-canvas'
+                      : 'border-charcoal/15 bg-paper hover:border-charcoal/40'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="audience"
+                    value={option.value}
+                    checked={audience === option.value}
+                    onChange={() => setAudience(option.value)}
+                    className="sr-only"
+                  />
+                  <span className="block font-medium">{option.label}</span>
+                  <span
+                    className={`mt-1 block text-xs ${
+                      audience === option.value ? 'text-canvas/70' : 'text-charcoal/55'
+                    }`}
+                  >
+                    {option.detail}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <fieldset>
             <legend className="text-sm font-medium text-charcoal">Plan</legend>

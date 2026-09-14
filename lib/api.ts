@@ -209,6 +209,8 @@ export async function createNewEvent(input: {
   state?: string;
   /** An optional code. The server validates it and decides what it's worth. */
   discountCode?: string;
+  /** Who will add the photos. See lib/eventAudience.ts. */
+  uploadAudience?: 'guests' | 'host-only';
   /** Where they came from. Normalised server-side; see lib/attribution.ts. */
   source?: string;
 }): Promise<QREvent> {
@@ -220,6 +222,7 @@ export async function createNewEvent(input: {
       city: input.city || undefined,
       state: input.state || undefined,
       discountCode: input.discountCode?.trim().toUpperCase() || undefined,
+      uploadAudience: input.uploadAudience || undefined,
       source: input.source || undefined,
     },
     { authMode: 'userPool' },
@@ -1779,6 +1782,7 @@ async function updateEventSettings(
     city?: string;
     state?: string;
     moderationMode?: 'review' | 'allow_all';
+    uploadAudience?: 'guests' | 'host-only';
     alertEmail?: string | null;
     videoUploadsEnabled?: boolean;
     guestDownloadsBlocked?: boolean;
@@ -1807,6 +1811,7 @@ async function updateEventSettings(
       city: changes.city,
       state: changes.state,
       moderationMode: changes.moderationMode,
+      uploadAudience: changes.uploadAudience,
       alertEmail: changes.alertEmail === null ? '' : changes.alertEmail,
       videoUploadsEnabled: changes.videoUploadsEnabled,
       guestDownloadsBlocked: changes.guestDownloadsBlocked,
@@ -1859,6 +1864,24 @@ export async function setEventModerationMode(
     eventId,
     { moderationMode: mode },
     'The screening setting could not be updated.',
+  );
+}
+
+/**
+ * Change who the event's QR signs are addressed to.
+ *
+ * Nothing else follows from it — guests of a `host-only` event can still upload
+ * if they reach the page, and everyone can always view. It words the signs, and
+ * it tells the refund review whether one uploader was the plan.
+ */
+export async function setEventUploadAudience(
+  eventId: string,
+  audience: 'guests' | 'host-only',
+): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    { uploadAudience: audience },
+    'That setting could not be updated.',
   );
 }
 

@@ -16,6 +16,8 @@
  * tested without a DOM; the page owns rendering and the QR code.
  */
 
+import { parseAudience, signHeadline, signMessage } from './eventAudience';
+
 /** Finished tent dimensions in inches, after the single fold. */
 export const TENT_WIDTH_IN = 8.5;
 export const TENT_HEIGHT_IN = 5.5;
@@ -24,10 +26,21 @@ export const TENT_HEIGHT_IN = 5.5;
 export const MAX_HEADLINE = 60;
 export const MAX_MESSAGE = 160;
 
-/** What the tent says when the host customizes nothing. */
-export const DEFAULT_HEADLINE = 'Scan to add your photos';
-export const DEFAULT_MESSAGE =
-  "Point your phone's camera at the code and upload the pictures you took. No app, no account — everyone's photos land in one gallery.";
+/**
+ * What the tent says when the host customizes nothing.
+ *
+ * Two sets, chosen by what the host answered at setup. A church sharing photos
+ * with parents — one person shooting, one person uploading, everyone else
+ * looking — was being handed a card on every table reading "Scan to add your
+ * photos", an instruction nobody in the room was meant to follow. See
+ * lib/eventAudience.ts for why the answer is asked for rather than inferred.
+ *
+ * Kept exported under these names because they are also the placeholder text in
+ * the customization form, where a host needs to see what they would get by
+ * leaving the field alone.
+ */
+export const DEFAULT_HEADLINE = signHeadline('guests');
+export const DEFAULT_MESSAGE = signMessage('guests');
 
 /**
  * Colour themes. Each is a full set, so no combination can produce unreadable
@@ -115,6 +128,8 @@ export interface TentEvent {
   eventCode: string;
   date?: string | null;
   location?: string | null;
+  /** 'guests' | 'host-only'. Absent reads as 'guests'. */
+  uploadAudience?: string | null;
 }
 
 /** What the host has changed, if anything. Every field is optional. */
@@ -172,8 +187,11 @@ export function tentContent(
   uploadUrl: string,
   custom: TentCustomization = {},
 ): TentContent {
-  const headline = sanitizeTentText(custom.headline, MAX_HEADLINE) || DEFAULT_HEADLINE;
-  const message = sanitizeTentText(custom.message, MAX_MESSAGE) || DEFAULT_MESSAGE;
+  // The host's own words win over both defaults; the defaults follow what they
+  // said at setup about who is adding the photos.
+  const audience = parseAudience(event.uploadAudience);
+  const headline = sanitizeTentText(custom.headline, MAX_HEADLINE) || signHeadline(audience);
+  const message = sanitizeTentText(custom.message, MAX_MESSAGE) || signMessage(audience);
   const date = custom.showDate === false ? null : formatTentDate(event.date);
   const location =
     custom.showLocation === false ? null : sanitizeTentText(event.location, 100) || null;

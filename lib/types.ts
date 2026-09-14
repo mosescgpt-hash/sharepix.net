@@ -62,6 +62,8 @@ export interface QREvent {
   guestBookCount?: number | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
   moderationMode?: string | null;
+  /** 'guests' | 'host-only'. Absent means asked before the question existed. */
+  uploadAudience?: string | null;
   /** Where to email the host when a photo is held for review. */
   alertEmail?: string | null;
   /** False when the host has turned video uploads off. Missing means allowed. */

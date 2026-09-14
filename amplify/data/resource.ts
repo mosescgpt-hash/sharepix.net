@@ -232,6 +232,16 @@ const schema = a.schema({
       // Where to email the host when a photo is held for review. Optional — a
       // held photo is always reviewable from the dashboard regardless.
       alertEmail: a.string(),
+      // What the host said at setup about who would be adding photos:
+      // 'guests' or 'host-only'. Absent means the event predates the question,
+      // and reads as 'guests' — which is the wording every sign printed before
+      // this carried, and changing it under a host mid-event would put the card
+      // on the table at odds with the page it opens. See lib/eventAudience.ts.
+      //
+      // It words the QR signs and it tells the refund review whether one
+      // uploader was the plan. It is not a limit: a 'host-only' event's guests
+      // can still upload if they find the page.
+      uploadAudience: a.string(),
       // Whether guests may upload video. Missing means allowed, so existing
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
@@ -1888,6 +1898,10 @@ const schema = a.schema({
       city: a.string(),
       state: a.string(),
       discountCode: a.string(),
+      // 'guests' | 'host-only'. Anything else is stored as absent rather than
+      // rejected: this only picks a sentence, and a typo here must not cost
+      // somebody an event they have just paid for.
+      uploadAudience: a.string(),
       // A claim about where they came from, normalised server-side against a
       // closed set — anything unrecognised becomes 'direct' rather than being
       // stored. See lib/attribution.ts.
@@ -1915,6 +1929,7 @@ const schema = a.schema({
       city: a.string(),
       state: a.string(),
       moderationMode: a.string(),
+      uploadAudience: a.string(),
       alertEmail: a.string(),
       videoUploadsEnabled: a.boolean(),
       guestDownloadsBlocked: a.boolean(),

@@ -47,12 +47,15 @@ import {
   type PromiseBlocker,
 } from './guestUploadPromise';
 import { successProgress, type EventSuccessFacts } from './successfulEvent';
+import { parseAudience, reviewNote } from './eventAudience';
 
 export interface ReviewEventFacts extends PromiseEventFacts, EventSuccessFacts {
   id: string;
   name?: string | null;
   eventCode?: string | null;
   photoCount?: number | null;
+  /** What the host said at setup. See lib/eventAudience.ts. */
+  uploadAudience?: string | null;
 }
 
 /** A refund already recorded against this event. */
@@ -174,6 +177,21 @@ export function reviewEvent(
         progress.contributors <= 1
           ? 'One uploader is normal for plenty of events and is not itself a fault.'
           : null,
+    },
+    {
+      // The setup-time answer, which is the one thing the counts cannot supply.
+      // "One uploader" means something different when the host said at the
+      // start that they would be the only one — that is not a disappointed
+      // customer, it is the event they bought. Worded as what the host said
+      // rather than as a fact, because that is what it is.
+      label: 'Who was going to upload',
+      value:
+        parseAudience(event.uploadAudience) === 'host-only'
+          ? 'The host, alone'
+          : parseAudience(event.uploadAudience) === 'guests'
+            ? 'The guests'
+            : 'Not recorded',
+      note: reviewNote(parseAudience(event.uploadAudience)),
     },
     {
       label: 'Successful Event',
