@@ -1,16 +1,59 @@
 # Going live with print ordering
 
-Prints run against **Prodigi sandbox** and **Stripe test mode** today. Going
-live means flipping **both** together — never one without the other:
+**This already happened.** `PRODIGI_ENV` is `'live'` (flipped in #56) and
+`STRIPE_SECRET_KEY` is an `sk_live_…` key, so a print checkout today charges a
+real card and submits a real order to `api.prodigi.com`. Both halves are
+flipped, which is the state this document was written to reach.
 
-- **Stripe live + Prodigi sandbox** → real charge, no real print (customer paid,
-  nothing ships).
-- **Stripe test + Prodigi live** → real print + real Prodigi charge to you, no
-  real payment collected.
+What is left is in two places: the **price sheet** below, which is wrong and is
+costing money on every order, and one **real order**, which has never been
+placed.
 
-Do all four parts in one sitting.
+> This file said "Prints run against Prodigi sandbox and Stripe test mode
+> today" for months after that stopped being true, and so did the README. The
+> guard meant to catch it was pinned to whether *this file still exists* —
+> which going live does not change. It now reads `PRODIGI_ENV` instead.
 
-## The four-part switch
+## The price sheet is stale
+
+`lib/prints.ts` carries Prodigi's base costs and shipping from the US price
+sheet. **Print provider check** quotes the live catalogue, so it reports what
+Prodigi actually charges — and on **14 September 2026** the two disagreed on
+every line:
+
+| Size | Base in code | Base quoted | Shipping in code | Shipping quoted |
+| --- | --- | --- | --- | --- |
+| 4×6 | $0.15 | $0.25 | $8.95 | $10.75 |
+| 5×7 | $0.65 | $0.50 | $8.95 | $10.75 |
+| 8×10 | $2.00 | $2.00 | $9.95 | $11.85 |
+| 11×14 | $12.00 | $14.00 | $9.95 | $11.85 |
+| 12×16 | $39.00 | $40.00 | $20.00 | $24.80 |
+
+Shipping is the expensive half: it is meant to be a pass-through, and it is
+under-charged by **$1.80 to $4.80 an order**. Because SharePix's whole margin
+is the per-print profit, a shipping shortfall comes straight out of it — and
+the three cheap sizes are smaller than the shortfall, so a single 4×6, 5×7 or
+8×10 order **loses money**:
+
+| Size | Intended profit | Actual, one copy |
+| --- | --- | --- |
+| 4×6 | $1.50 | **−$0.96** |
+| 5×7 | $1.50 | **−$0.72** |
+| 8×10 | $1.50 | **−$0.99** |
+| 11×14 | $6.00 | $1.52 |
+| 12×16 | $10.00 | $3.31 |
+
+There is a third, separate gap. `printUnitPrice` grosses up by Stripe's
+*percentage* fee only — it divides by `1 - STRIPE_PCT` and never accounts for
+the **$0.30 fixed fee**. Correcting both tables above still leaves a cheap
+print earning about **$0.85** against a $1.50 floor, because that $0.30 is a
+fifth of the floor. Whether to raise `PRINT_MIN_PROFIT` or fold the fixed fee
+into the gross-up is a pricing decision, not a bug fix.
+
+Re-run **Print provider check** before trusting any of these numbers: it costs
+nothing and Prodigi's sheet moves.
+
+## What was switched, and what rollback reverses
 
 ### 1. Prodigi → live
 
@@ -56,8 +99,10 @@ It proves the three things that actually differ between sandbox and live:
   exactly as it would mid-order), and
 - every **SKU and its required attributes** are valid in the live catalogue.
 
-A green result reports the per-print and shipping cost Prodigi quoted, which is
-also a free check that `lib/prints.ts`'s base costs are still right.
+A green result also reports the per-print and shipping cost Prodigi quoted,
+which is the only free way to check `lib/prints.ts` against reality. Nothing
+compares them automatically — read the numbers, or the drift above happens
+again.
 
 It does **not** exercise order creation or Prodigi's fetch of the signed asset
 URL — those happen only on a real order. That code is identical to what sandbox
@@ -69,6 +114,11 @@ The check's SKU/attribute table is duplicated from `print-fulfill` by hand, and
 check quoting a different product than fulfilment orders would prove nothing.
 
 ## Verify with a real order
+
+**Still not done.** This is the only part of the print path that has never run:
+Prodigi creating an order, and Prodigi fetching the signed asset URL. The quote
+check cannot reach either. Fix the price sheet first, or this test loses money
+as well as proving something.
 
 1. Place **one real order** of a cheap size (e.g. a 4×6) with a real card.
 2. Stripe shows the payment; the webhook delivery returns `200` quickly.
@@ -108,7 +158,11 @@ return Stripe to test keys. Redeploy.
 
 Catalog SKUs, base costs, and the profit rules live in `lib/prints.ts` (mirrored
 in `amplify/functions/print-checkout/handler.ts`). They came from the Prodigi US
-price sheet; re-check base costs against the live pricing sheet before launch so
-the margin math (base + profit, grossed up for Stripe's fee) stays correct. All
-five sizes — photo 4×6 / 5×7 / 8×10, fine-art 11×14, framed 12×16 — were verified
-end-to-end in sandbox, including their required Prodigi attributes.
+price sheet, and **they are out of date** — see "The price sheet is stale"
+above. That section is the live comparison; this one is only where the numbers
+live.
+
+All five sizes — photo 4×6 / 5×7 / 8×10, fine-art 11×14, framed 12×16 — were
+verified end-to-end in sandbox, including their required Prodigi attributes,
+and all five quote cleanly against the live catalogue. Neither of those checks
+looks at price, which is how the drift survived go-live.

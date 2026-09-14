@@ -161,8 +161,11 @@ this goes stale within a day.
 `__tests__/readme.test.ts` fails if one of these is fixed without this list
 being updated.
 
-- **Prints run against Prodigi sandbox and Stripe test mode.** Both flip
-  together or not at all — see [docs/go-live-prints.md](docs/go-live-prints.md).
+- **No real print order has ever been placed.** `PRODIGI_ENV` is `live` and the
+  Stripe key is a live one, so a print checkout charges a real card and submits
+  a real order. What has never run is the last hop: Prodigi creating the order
+  and fetching the signed asset URL. Everything up to it is proven —
+  see [docs/go-live-prints.md](docs/go-live-prints.md).
 - **No face recognition, and none planned.** Rekognition is used for explicit
   content only.
 
