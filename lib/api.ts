@@ -582,6 +582,48 @@ export async function findEventByCode(code: string): Promise<string | null> {
   return data?.found ? (data.eventId ?? null) : null;
 }
 
+/**
+ * invite | pair | remove, on a photographer's connection to an event.
+ *
+ * `invite` returns the pairing code once. It is not readable afterwards by
+ * anybody, so a caller that loses it issues a new one.
+ */
+export async function connectPhotographer(input: {
+  action: 'invite' | 'pair' | 'remove';
+  eventId?: string;
+  code?: string;
+  photographerId?: string;
+}): Promise<{ ok: boolean; code: string | null; message: string; eventId: string | null }> {
+  const { data, errors } = await client.mutations.connectPhotographer(input, {
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return {
+    ok: data?.ok ?? false,
+    code: data?.code ?? null,
+    message: data?.message ?? '',
+    eventId: data?.eventId ?? null,
+  };
+}
+
+/** The photographers on one of the host's own events. */
+export async function fetchEventPhotographers(eventId: string) {
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.EventPhotographer.listEventPhotographerByEventId(
+        { eventId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'The photographers on this event could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    photographerId: String(row.photographerId ?? ''),
+    status: String(row.status ?? ''),
+    acceptedAt: (row.acceptedAt as string) ?? null,
+    livePublishing: row.livePublishing === true,
+  }));
+}
+
 /** Ask for somewhere to put one professional photograph. */
 export async function requestProUploadSlot(
   eventId: string,

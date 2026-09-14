@@ -55,12 +55,14 @@ import { findEventByCode } from './functions/find-event-by-code/resource';
 import { proUpload } from './functions/pro-upload/resource';
 import { processProPhoto } from './functions/process-pro-photo/resource';
 import { decideProPhoto } from './functions/decide-pro-photo/resource';
+import { connectPhotographer } from './functions/connect-photographer/resource';
 
 const backend = defineBackend({
   findEventByCode,
   proUpload,
   processProPhoto,
   decideProPhoto,
+  connectPhotographer,
   auth,
   data,
   storage,
@@ -227,6 +229,17 @@ connectionTable.grantReadWriteData(decideProFn);
 photoTable.grantReadWriteData(decideProFn);
 decideProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
 decideProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// Host invites, photographer pairs, either side removes. The only writer of
+// EventPhotographer and PhotographerPairingCode.
+const pairingTable = backend.data.resources.tables.PhotographerPairingCode;
+const connectFn = backend.connectPhotographer.resources.lambda as LambdaFunction;
+eventTable.grantReadData(connectFn);
+connectionTable.grantReadWriteData(connectFn);
+pairingTable.grantReadWriteData(connectFn);
+connectFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+connectFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+connectFn.addEnvironment('PAIRING_TABLE_NAME', pairingTable.tableName);
 bucket.grantDelete(sanitizeFn);
 // Cloudflare R2 mirror. Uploads are still vetted in S3; once the bytes are
 // final this copies them to R2, which is where reads get served from because
@@ -301,6 +314,11 @@ const findEventFn = backend.findEventByCode.resources.lambda as LambdaFunction;
 eventTable.grantReadData(findEventFn);
 findEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+// Read-only on Photo, for one thing: whether a professional photo is
+// published. That fact lives on the row rather than in the key, so the signing
+// path cannot settle it from the key alone.
+photoTable.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 mediaUrlFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
 mediaUrlFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 mediaUrlFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');

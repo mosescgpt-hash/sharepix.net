@@ -40,6 +40,7 @@ import { findEventByCode } from '../functions/find-event-by-code/resource';
 import { proUpload } from '../functions/pro-upload/resource';
 import { processProPhoto } from '../functions/process-pro-photo/resource';
 import { decideProPhoto } from '../functions/decide-pro-photo/resource';
+import { connectPhotographer } from '../functions/connect-photographer/resource';
 
 const schema = a.schema({
   Event: a
@@ -1545,6 +1546,28 @@ const schema = a.schema({
     .returns(a.ref('ProDecisionResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(decideProPhoto)),
+
+  ProConnectResult: a.customType({
+    ok: a.boolean().required(),
+    /** The pairing code, returned once by `invite` and never readable again. */
+    code: a.string(),
+    message: a.string().required(),
+    eventId: a.string(),
+  }),
+
+  // invite | pair | remove. The only path that writes EventPhotographer, which
+  // grants create and update to nobody — see that model for why.
+  connectPhotographer: a
+    .mutation()
+    .arguments({
+      action: a.string().required(),
+      eventId: a.id(),
+      code: a.string(),
+      photographerId: a.string(),
+    })
+    .returns(a.ref('ProConnectResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(connectPhotographer)),
 
   claimGuestUploadPromise: a
     .mutation()

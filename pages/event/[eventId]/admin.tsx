@@ -26,11 +26,17 @@ import {
   setEventGuestDownloadsBlocked,
   setEventVideoUploads,
   claimGuestUploadPromise,
+  connectPhotographer,
+  fetchEventPhotographers,
   requestEventCapacity,
   startAddOnCheckout,
   type EventAddOnKey,
   updateEventDetails,
 } from '@/lib/api';
+import {
+  PAIRING_CODE_TTL_MINUTES,
+  formatPairingCode,
+} from '@/lib/photographerAccess';
 import {
   ATTESTATION_QUESTION,
   PLANNED_USE_OPTIONS,
@@ -93,6 +99,12 @@ function AdminDashboardPage() {
   const [discountCode, setDiscountCode] = useState('');
   // Guest Upload Promise claim. `promiseOpen` is the disclosure: the form is
   // behind a link rather than on the page, so nothing is offered unasked.
+  // SharePix Pro: the pairing code is shown once, by the call that makes it.
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
+  const [photographers, setPhotographers] = useState<
+    Awaited<ReturnType<typeof fetchEventPhotographers>>
+  >([]);
   const [promiseOpen, setPromiseOpen] = useState(false);
   const [plannedUse, setPlannedUse] = useState('');
   const [attested, setAttested] = useState(false);
@@ -150,6 +162,9 @@ function AdminDashboardPage() {
       setEvent(ev);
       const items = await fetchEventPhotos(eventId, { includeUnapproved: true, useOriginals: true });
       setPhotos(items);
+      // Separately caught: a host whose photographer list fails to load should
+      // still get their dashboard, not an error page.
+      setPhotographers(await fetchEventPhotographers(eventId).catch(() => []));
     } catch {
       setError('Something went wrong loading the dashboard. Try again in a moment.');
     } finally {
@@ -248,6 +263,36 @@ function AdminDashboardPage() {
     .reduce((sum, addon) => sum + addon.price, 0);
 
   const lifecycle = eventLifecycle(event);
+
+  async function handleInvitePhotographer() {
+    if (!event) return;
+    setInviting(true);
+    try {
+      const result = await connectPhotographer({ action: 'invite', eventId: event.id });
+      // The only moment this value exists outside the database. Nothing can
+      // read it back, so it is held in state rather than re-fetched.
+      setPairingCode(result.code);
+    } catch {
+      setPairingCode(null);
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleRemovePhotographer(photographerId: string) {
+    if (!event) return;
+    if (
+      !window.confirm(
+        'Remove this photographer?\n\nThey stop being able to send or publish photos straight away. Photos already live stay live — take those down individually if you need to.',
+      )
+    ) {
+      return;
+    }
+    await connectPhotographer({ action: 'remove', eventId: event.id, photographerId }).catch(
+      () => null,
+    );
+    setPhotographers(await fetchEventPhotographers(event.id).catch(() => []));
+  }
 
   async function handleClaimPromise() {
     if (!event) return;
@@ -620,6 +665,72 @@ function AdminDashboardPage() {
                 );
               }}
             />
+
+            {/* SharePix Pro. Always here, because a host books a photographer
+                before the event rather than after it — unlike Featured Events
+                below, which needs photos to exist first. */}
+            <div className="spx-card mt-10 p-6">
+              <p className="spx-eyebrow">SharePix Pro</p>
+              <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">
+                Add your photographer
+              </h2>
+              <p className="spx-body mt-2 text-sm">
+                Their photos appear in this gallery within minutes of being taken, as
+                previews they approve one by one. Guests can see them but not download
+                them, so the photographer keeps their originals and their print sales.
+              </p>
+
+              {pairingCode ? (
+                <div className="mt-4 border border-pine/40 bg-sage/30 p-4">
+                  <p className="text-sm font-medium">Give this to your photographer</p>
+                  <p className="mt-2 font-mono text-2xl tracking-widest">
+                    {formatPairingCode(pairingCode)}
+                  </p>
+                  <p className="mt-2 text-xs text-charcoal/70">
+                    They enter it at sharepix.net/pro/join. It works once and expires in{' '}
+                    {PAIRING_CODE_TTL_MINUTES} minutes — we cannot show it again, but you
+                    can make another.
+                  </p>
+                </div>
+              ) : null}
+
+              <button
+                type="button"
+                disabled={inviting}
+                onClick={() => void handleInvitePhotographer()}
+                className="mt-4 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+              >
+                {inviting ? 'Making a code…' : pairingCode ? 'Make another code' : 'Invite a photographer'}
+              </button>
+
+              {photographers.length > 0 ? (
+                <ul className="mt-5 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                  {photographers.map((row) => (
+                    <li
+                      key={row.photographerId}
+                      className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                      <span className="min-w-0 truncate text-sm">
+                        {row.status === 'accepted'
+                          ? row.livePublishing
+                            ? 'Connected · publishing'
+                            : 'Connected · paused'
+                          : row.status}
+                      </span>
+                      {row.status === 'accepted' ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleRemovePhotographer(row.photographerId)}
+                          className="shrink-0 text-xs text-charcoal/60 underline hover:text-charcoal"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
 
             {/* Only once there is something to offer. Asking a host to submit
                 photos from an empty gallery is asking for nothing, and the

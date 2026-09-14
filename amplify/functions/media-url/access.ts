@@ -46,13 +46,50 @@ const ORIGINAL = /^events\/([^/]+)\/photos\//;
 const PREVIEW = /^events\/([^/]+)\/previews\//;
 const THUMB = /^events\/([^/]+)\/thumbs\//;
 
-export type Variant = 'original' | 'preview' | 'thumb' | 'unknown';
+/**
+ * SharePix Pro. `pro/<eventId>/originals|previews|thumbnails/<uploadId>`.
+ *
+ * A professional original is a photographer's livelihood and is never signed
+ * for anybody — not a guest, not the host, not an admin. It exists only so the
+ * processor can read it, and it is usually deleted seconds later.
+ */
+const PRO_ORIGINAL = /^pro\/([^/]+)\/originals\//;
+const PRO_PREVIEW = /^pro\/([^/]+)\/previews\//;
+const PRO_THUMB = /^pro\/([^/]+)\/thumbnails\//;
+
+export type Variant =
+  | 'original'
+  | 'preview'
+  | 'thumb'
+  | 'pro-original'
+  | 'pro-preview'
+  | 'pro-thumb'
+  | 'unknown';
 
 export function variantOf(key: string): Variant {
   if (ORIGINAL.test(key)) return 'original';
   if (PREVIEW.test(key)) return 'preview';
   if (THUMB.test(key)) return 'thumb';
+  if (PRO_ORIGINAL.test(key)) return 'pro-original';
+  if (PRO_PREVIEW.test(key)) return 'pro-preview';
+  if (PRO_THUMB.test(key)) return 'pro-thumb';
   return 'unknown';
+}
+
+/** True for any professional key, whatever the variant. */
+export function isProKey(key: string): boolean {
+  return /^pro\//.test(key);
+}
+
+/**
+ * The upload id in a professional key, which is also its Photo row id.
+ *
+ * The publish status a guest is gated on lives on the row, not in the key, so
+ * this is how the handler knows which rows to read.
+ */
+export function proUploadIdOf(key: string): string {
+  const match = key.match(/^pro\/[^/]+\/(?:originals|previews|thumbnails)\/(.+)$/);
+  return match ? match[1] : '';
 }
 
 export function isVideoKey(key: string): boolean {
@@ -67,7 +104,7 @@ export function isVideoKey(key: string): boolean {
  * itself is what makes that pairing detectable.
  */
 export function eventIdOfKey(key: string): string {
-  const match = key.match(/^events\/([^/]+)\//);
+  const match = key.match(/^events\/([^/]+)\//) ?? key.match(/^pro\/([^/]+)\//);
   return match ? match[1] : '';
 }
 
@@ -131,9 +168,21 @@ export function canSign({
   const variant = variantOf(key);
   if (variant === 'unknown') return refuse;
 
+  // A professional original is never signed, for anybody. Checked BEFORE the
+  // host/admin branch on purpose: the host bought the event, not the
+  // photographer's negatives, and an admin has no business handing one out
+  // either. It exists so the processor can read it once, and the processor
+  // reads it with its own IAM grant rather than through this function.
+  if (variant === 'pro-original') return refuse;
+
   const host = isHostOrAdmin(caller, event.owner);
   if (host) return { allowed: true, host: true };
 
+  // A professional preview or thumbnail is gated on the photo's publish
+  // status, which lives on its row rather than in its key — so this function
+  // cannot settle it alone. The handler drops unpublished ones before calling
+  // here; `allowed` from this point means "allowed if published", and
+  // proUploadIdOf is how the handler knows which rows to check.
   if (isVideoKey(key)) return refuse;
   if (event.guestResolution === 'none') return refuse;
 
