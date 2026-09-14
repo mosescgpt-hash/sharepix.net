@@ -40,7 +40,7 @@ cannot set, and for the environment variables.
 | **S3** | Every uploaded photo and video, as written | Rarely. Deletion goes through a function; nothing grants console-free delete. |
 | **DynamoDB** | Events, photos, payments, refunds, everything | Rarely, and read-only unless something has gone badly wrong |
 | **AppSync** | The GraphQL API | Query logs when a mutation misbehaves |
-| **Lambda** | 37 functions | CloudWatch logs. Do **not** edit environment variables here — the next backend deploy overwrites them from Amplify. |
+| **Lambda** | 38 functions | CloudWatch logs. Do **not** edit environment variables here — the next backend deploy overwrites them from Amplify. |
 | **SES** | Outbound email | Sandbox status, verified identities, bounce rate |
 | **SQS** | The byte-counting queue | Only if the storage numbers stop moving |
 | **Rekognition** | Explicit-content screening | Never directly; it has no console worth visiting |
@@ -94,10 +94,11 @@ charges a real card and submits a real order. `/global-admin → Print check`
 quotes all five sizes against the live catalogue for free, and is also the only
 thing that will tell you Prodigi's prices have moved.
 
-They had, badly enough that small orders lost money on every sale. The catalog
-now matches a live quote and carries an 8% buffer, and `daily-tasks` re-checks
-it every Monday — a mismatch raises `sharepix-print-price-drift` rather than
-waiting to be noticed. See [go-live-prints.md](go-live-prints.md).
+They had, badly enough that small orders would have lost money on every sale —
+prospectively, since no print order has ever been placed. The catalog now
+matches a live quote and carries an 8% buffer, and `daily-tasks` re-checks it
+every Monday: a mismatch raises `sharepix-print-price-drift` rather than waiting
+to be noticed. See [go-live-prints.md](go-live-prints.md).
 
 ## GitHub
 

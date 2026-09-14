@@ -44,6 +44,7 @@ import {
   setResearchIncentiveOffered,
   setEventTheme,
   startCheckout,
+  backfillR2,
 } from '@/lib/api';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
@@ -107,24 +108,48 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * a jump link to a missing anchor is worse than no link: it silently does
  * nothing and the operator concludes the control is not there.
  */
-const ADMIN_SECTIONS: Array<{ id: string; label: string }> = [
-  { id: 'payments', label: 'Payments' },
-  { id: 'users', label: 'Users' },
-  { id: 'refunds', label: 'Refunds' },
-  { id: 'refund-review', label: 'Refund review' },
-  { id: 'storage', label: 'Storage and fair use' },
-  { id: 'report-recipient', label: 'Report recipient' },
-  { id: 'testimonials', label: 'Ratings' },
-  { id: 'surveys', label: 'Survey responses' },
-  { id: 'funnel', label: 'Product health' },
-  { id: 'featured', label: 'Featured Events' },
-  { id: 'jobs', label: 'Scheduled jobs' },
-  { id: 'rewards', label: 'Research rewards' },
-  { id: 'free-claims', label: 'Free event claims' },
-  { id: 'print-check', label: 'Print check' },
-  { id: 'alert-check', label: 'Alert email check' },
-  { id: 'events', label: 'Events' },
-  { id: 'discounts', label: 'Discount codes' },
+/**
+ * The three kinds of thing this page does.
+ *
+ * It had grown to eighteen sections on one scroll, which meant the numbers you
+ * read weekly and the buttons you press twice a year sat in the same list and
+ * were equally hard to find. Splitting by *what you came here to do* rather
+ * than by subject: run the business, look at numbers, or check something works.
+ *
+ * Every section still lives in one array with its tab beside it, because
+ * `__tests__/global-admin-nav.test.ts` insists nothing is reachable only by
+ * scrolling — and a second array to keep in step would be the easiest way to
+ * lose one.
+ */
+export type AdminTab = 'events' | 'discounts' | 'metrics' | 'tests';
+
+export const ADMIN_TABS: Array<{ id: AdminTab; label: string; blurb: string }> = [
+  // Events opens first: it is the only one with something to do on a normal day.
+  { id: 'events', label: 'Events', blurb: 'Events, the people who host them, and the money that moves.' },
+  { id: 'discounts', label: 'Discounts', blurb: 'Codes that take a percentage off anything paid on the site.' },
+  { id: 'metrics', label: 'Metrics', blurb: 'What is actually happening, and what it is costing.' },
+  { id: 'tests', label: 'Tests', blurb: 'Prove something works, without waiting for it to fail.' },
+];
+
+const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
+  { id: 'payments', label: 'Payments', tab: 'events' },
+  { id: 'users', label: 'Users', tab: 'events' },
+  { id: 'refunds', label: 'Refunds', tab: 'events' },
+  { id: 'refund-review', label: 'Refund review', tab: 'events' },
+  { id: 'storage', label: 'Storage and fair use', tab: 'metrics' },
+  { id: 'report-recipient', label: 'Report recipient', tab: 'events' },
+  { id: 'testimonials', label: 'Ratings', tab: 'metrics' },
+  { id: 'surveys', label: 'Survey responses', tab: 'metrics' },
+  { id: 'funnel', label: 'Product health', tab: 'metrics' },
+  { id: 'featured', label: 'Featured Events', tab: 'events' },
+  { id: 'jobs', label: 'Scheduled jobs', tab: 'tests' },
+  { id: 'rewards', label: 'Research rewards', tab: 'events' },
+  { id: 'free-claims', label: 'Free event claims', tab: 'events' },
+  { id: 'print-check', label: 'Print check', tab: 'tests' },
+  { id: 'r2-backfill', label: 'Copy old photos', tab: 'tests' },
+  { id: 'alert-check', label: 'Alert email check', tab: 'tests' },
+  { id: 'events', label: 'Events', tab: 'events' },
+  { id: 'discounts', label: 'Discount codes', tab: 'discounts' },
 ];
 
 /** Upload-window end date that lands an event in a chosen lifecycle phase (testing). */
@@ -254,6 +279,12 @@ function GlobalAdminPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
+  const [adminTab, setAdminTab] = useState<AdminTab>('events');
+  const [backfill, setBackfill] = useState<{ text: string; ok: boolean } | null>(null);
+  // Held between presses so a run that stopped on its time budget can carry on
+  // from where it got to rather than re-walking the bucket.
+  const [backfillToken, setBackfillToken] = useState<string | null>(null);
+  const [backfillEventId, setBackfillEventId] = useState('');
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
   // Whether each switch is actually on, asked of the functions themselves
   // rather than assumed. `null` means the probe has not answered.
@@ -623,6 +654,31 @@ function GlobalAdminPage() {
     } catch (err) {
       setUserMessage({
         text: err instanceof Error ? err.message : 'The action could not be completed.',
+        ok: false,
+      });
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleBackfill(apply: boolean) {
+    setWorking(apply ? 'backfill-apply' : 'backfill-dry');
+    setBackfill(null);
+    try {
+      const result = await backfillR2({
+        apply,
+        eventId: backfillEventId.trim() || undefined,
+        nextToken: backfillToken,
+      });
+      setBackfill({ text: result.message, ok: result.ok });
+      // Only a finished run clears the token. `done` rather than a null token:
+      // a run can stop on the budget during the first page with nothing to hand
+      // back, and treating that as complete is how a half-done backfill would
+      // look finished.
+      setBackfillToken(result.done ? null : result.nextToken);
+    } catch (err) {
+      setBackfill({
+        text: err instanceof Error ? err.message : 'The backfill could not be run.',
         ok: false,
       });
     } finally {
@@ -1180,9 +1236,34 @@ function GlobalAdminPage() {
                 shipped control. Plain anchors rather than tabs: everything
                 stays on one page, Ctrl-F still works, and there is no state to
                 get wrong. */}
-            <nav aria-label="Sections" className="mt-6 border border-charcoal/15 p-3">
+            <div role="tablist" aria-label="Admin areas" className="mt-6 flex flex-wrap gap-2">
+              {ADMIN_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={adminTab === tab.id}
+                  onClick={() => setAdminTab(tab.id)}
+                  className={`px-4 py-2.5 text-sm font-medium transition ${
+                    adminTab === tab.id
+                      ? 'bg-ink text-canvas'
+                      : 'border border-charcoal/20 bg-paper text-charcoal hover:border-charcoal/40'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-sm text-charcoal/60">
+              {ADMIN_TABS.find((tab) => tab.id === adminTab)?.blurb}
+            </p>
+
+            {/* The index lists only the open tab's sections. A link to a hidden
+                section would jump to nothing, which is worse than not offering
+                it — the section list is one array so the two cannot disagree. */}
+            <nav aria-label="Sections" className="mt-4 border border-charcoal/15 p-3">
               <ul className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                {ADMIN_SECTIONS.map((section) => (
+                {ADMIN_SECTIONS.filter((section) => section.tab === adminTab).map((section) => (
                   <li key={section.id}>
                     <a
                       href={`#${section.id}`}
@@ -1251,7 +1332,7 @@ function GlobalAdminPage() {
               </p>
             </div>
 
-            <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5">
+            <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5" hidden={adminTab !== 'events'}>
               <div className="flex flex-col gap-1">
                 <h2 id="payments" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Payments</h2>
                 {/* This said "Payments — test mode", and underneath it "No real
@@ -1297,7 +1378,7 @@ function GlobalAdminPage() {
               </div>
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="users" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">User management</h2>
               <p className="text-sm text-charcoal/70">
                 Reset a host&apos;s password (they get an email to set a new one — this also lets
@@ -1349,7 +1430,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="refund-review" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refund review</h2>
               <p className="text-sm text-charcoal/70">
                 Somebody got in touch unhappy. Find their event and see what actually
@@ -1454,7 +1535,7 @@ function GlobalAdminPage() {
               })()}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="refunds" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refunds</h2>
               <p className="text-sm text-charcoal/70">
                 Guest Upload Promise claims and any other money going back.{' '}
@@ -1523,7 +1604,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'metrics'}>
               <h2 id="storage" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Storage and fair use</h2>
               <p className="text-sm text-charcoal/70">
                 Events by what they actually store. A flag here means{' '}
@@ -1710,7 +1791,7 @@ function GlobalAdminPage() {
               </div>
             ) : null}
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="report-recipient" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>
               <p className="text-sm text-charcoal/70">
                 Where the monthly analytics report goes. Changing it here takes effect on
@@ -1754,7 +1835,7 @@ function GlobalAdminPage() {
               </p>
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'metrics'}>
               <h2 id="testimonials" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Ratings and testimonials
               </h2>
@@ -1915,7 +1996,7 @@ function GlobalAdminPage() {
                 moves money: accepting marks which specific photos may be used,
                 and marking a payment records that a person sent it.
             */}
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="featured" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Featured Events
               </h2>
@@ -2042,7 +2123,7 @@ function GlobalAdminPage() {
                 not, because adding the two together and printing one
                 conversion rate states a precision this does not have.
             */}
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'metrics'}>
               <h2 id="funnel" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Product health
               </h2>
@@ -2189,7 +2270,7 @@ function GlobalAdminPage() {
                 worth reading, never as a customer-support failure. A host who
                 says the upload flow confused their guests has done us a favour.
             */}
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'metrics'}>
               <h2 id="surveys" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Survey responses
               </h2>
@@ -2578,7 +2659,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="jobs" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Scheduled jobs</h2>
               <p className="text-sm text-charcoal/70">
                 The nightly job runs at 14:00 UTC and the report on the 1st of the month.
@@ -2679,7 +2760,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="rewards" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Research rewards
               </h2>
@@ -2743,7 +2824,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="free-claims" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
               <p className="text-sm text-charcoal/70">
                 One free event per account, and taking it is permanent — the claim is not
@@ -2803,7 +2884,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="print-check" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Print provider check</h2>
               <p className="text-sm text-charcoal/70">
                 Asks Prodigi to price one of each print we sell. This only requests a{' '}
@@ -2830,7 +2911,76 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5">
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
+              <h2 id="r2-backfill" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
+                Copy old photos to Cloudflare
+              </h2>
+              <p className="text-sm text-charcoal/70">
+                Photos uploaded before <strong>1 September 2026</strong> were never copied to
+                Cloudflare, because the copying did not exist yet. Their galleries still work —
+                every image is fetched from Cloudflare, fails, and is fetched again from
+                Amazon — but each photo is loaded twice, which is slow for the guest and
+                billed to us.
+              </p>
+              <p className="mt-2 text-sm text-charcoal/70">
+                This copies the missing ones across. It only ever <strong>reads</strong> from
+                Amazon and <strong>writes</strong> to Cloudflare — nothing is deleted, and a
+                photo already copied is skipped, so running it twice is harmless.
+              </p>
+
+              <label className="mt-4 block text-sm">
+                <span className="font-medium">One event only (optional)</span>
+                <input
+                  type="text"
+                  value={backfillEventId}
+                  onChange={(event) => setBackfillEventId(event.target.value)}
+                  placeholder="Event ID — leave blank for every event"
+                  className="mt-1 w-full border border-charcoal/20 bg-paper px-3 py-2 focus:border-ink focus:outline-none"
+                />
+              </label>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={working === 'backfill-dry' || working === 'backfill-apply'}
+                  onClick={() => void handleBackfill(false)}
+                  className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+                >
+                  {working === 'backfill-dry' ? 'Checking…' : 'Check what is missing'}
+                </button>
+                <button
+                  type="button"
+                  disabled={working === 'backfill-dry' || working === 'backfill-apply'}
+                  onClick={() => void handleBackfill(true)}
+                  className="border border-charcoal/20 bg-paper px-4 py-3 text-sm font-medium transition hover:border-charcoal/40 disabled:opacity-50"
+                >
+                  {working === 'backfill-apply' ? 'Copying…' : 'Copy them across'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-charcoal/60">
+                &ldquo;Check&rdquo; writes nothing — run it first and read what it found.
+              </p>
+
+              {backfillToken !== null ? (
+                <p className="mt-3 border border-charcoal/10 border-l-2 border-l-pine bg-paper px-4 py-3 text-sm text-charcoal/75">
+                  There is more to do — the last run stopped at its time limit, which is normal
+                  on a big bucket. Press the same button again to carry on from where it
+                  stopped.
+                </p>
+              ) : null}
+
+              {backfill ? (
+                <pre
+                  className={`mt-3 overflow-x-auto whitespace-pre-wrap border border-charcoal/10 px-3 py-2 text-sm ${
+                    backfill.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {backfill.text}
+                </pre>
+              ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="alert-check" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Alert email check</h2>
               <p className="text-sm text-charcoal/70">
                 Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
@@ -2857,8 +3007,8 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
-              <section>
+            <div className="mt-10">
+              <section hidden={adminTab !== 'events'}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 id="events" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Events</h2>
@@ -3109,7 +3259,7 @@ function GlobalAdminPage() {
                 </div>
               </section>
 
-              <section>
+              <section hidden={adminTab !== 'discounts'}>
                 <h2 id="discounts" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Discount codes</h2>
                 <p className="text-sm text-charcoal/60">
                   Take a percentage off anything paid on the site. Default usage is one redemption.

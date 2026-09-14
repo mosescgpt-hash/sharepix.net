@@ -93,7 +93,7 @@ amplify/
   data/resource.ts     Models, auth rules, and the custom mutations
   storage/resource.ts  S3 — read/write for everyone, delete for nobody
   waf.ts               API rate limiting, off unless WAF_ENABLED is set
-  functions/           37 Lambdas; each has resource.ts (config) + handler.ts
+  functions/           38 Lambdas; each has resource.ts (config) + handler.ts
 pages/                 Routes. lib/seo.ts says which are public
 components/            Shared UI
 lib/                   Rules, as pure functions. This is where behaviour lives
@@ -130,7 +130,7 @@ two copies that quietly disagree about money.
 | [docs/deploying.md](docs/deploying.md) | Deploying, every environment variable, and the manual steps |
 | [docs/pro-uploader.md](docs/pro-uploader.md) | The API a DSLR/bridge uploader speaks, for SharePix Pro |
 | [docs/decisions.md](docs/decisions.md) | Product decisions, each naming what it supersedes |
-| [docs/r2-hybrid.md](docs/r2-hybrid.md) | Why writes go to S3 and reads come from R2 |
+| [docs/r2-hybrid.md](docs/r2-hybrid.md) | Why writes go to S3 and reads come from R2, and the backfill for what predates it |
 | [docs/event-authorization.md](docs/event-authorization.md) | Who may write an event, and why the obvious approach was not safe |
 | [docs/moderation.md](docs/moderation.md) | Content screening, and what is deliberately never flagged |
 | [docs/media-limits.md](docs/media-limits.md) | Upload size limits and where each is enforced |

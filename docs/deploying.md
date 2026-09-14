@@ -258,6 +258,34 @@ If you leave it off, expired events keep their bytes forever and "unlimited
 photos" on a one-time payment becomes an unbounded liability. That is the whole
 reason the job exists.
 
+### CloudWatch, once
+
+Every Lambda's log retention is set in `amplify/backend.ts` — 90 days, or a year
+for the five whose logs are a record rather than a diagnostic. That loop covers
+the functions declared in `defineBackend` and nothing else, so two kinds of log
+group are left at the service default of **Never expire**:
+
+- **The CDK and Amplify helper Lambdas** (`CustomS3AutoDeleteObjects`,
+  `TableManager`, `BucketNotification` and friends). These run only during a
+  deploy and write a handful of lines each time. Deliberately left alone: the
+  growth is negligible and they belong to constructs this repository does not
+  own.
+- **`/aws/amplify/<app-id>`, the Hosting build log.** This one does grow with
+  every deploy, and it is the only log group worth setting by hand.
+
+**CloudWatch → Log groups → tick the group → Actions → Edit retention setting.**
+One month is the suggestion, shorter than the functions get, for two reasons. A
+build log answers questions asked within days, not months — Amplify Hosting
+keeps its own copy of recent builds anyway. And a build log is the one place in
+CloudWatch a secret can appear: function logs are written by code in this
+repository, while build logs capture whatever the toolchain prints, including an
+environment variable echoed by a build step. Retention is the only lever on
+that.
+
+It is not managed by the CDK, so whatever is set there persists across deploys
+rather than being overwritten — and, being console state, **this file cannot
+tell you what it is currently set to.** Look at the Retention column.
+
 ### In the app, once
 
 `/global-admin → Report recipient` — where the monthly report goes.

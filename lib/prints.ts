@@ -9,8 +9,9 @@
  * SharePix must never be out of pocket on a print order, so the buyer price has
  * to cover three things, not two: Prodigi's bill, Stripe's **percentage** fee,
  * and Stripe's **fixed** fee. The last one was missed for a long time and is
- * the reason small orders lost money — $0.30 is trivial against a framed print
- * and a fifth of the margin on a 4×6.
+ * the reason small orders would have lost money — $0.30 is trivial against a
+ * framed print and a fifth of the margin on a 4×6. Caught before the first
+ * order rather than after it, which is the only reason it cost nothing.
  *
  * The percentage and the fixed fee behave differently, so they are recovered
  * differently:

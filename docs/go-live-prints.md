@@ -5,9 +5,13 @@
 real card and submits a real order to `api.prodigi.com`. Both halves are
 flipped, which is the state this document was written to reach.
 
-What is left is one **real order**, which has never been placed. The price
-sheet under it was also wrong — badly enough that small orders lost money — and
-that is now fixed; see below for what broke and what guards it.
+What is left is one **real order**. Not one has ever been placed — verified in
+Stripe, no payment has ever carried `metadata.kind = 'prints'` — so the whole
+print path past checkout is untested against live Prodigi, and the first paying
+customer would be the one testing it.
+
+That same fact is why the pricing being wrong cost nothing: it was fixed before
+anyone bought anything. See below for what was wrong and what guards it now.
 
 > This file said "Prints run against Prodigi sandbox and Stripe test mode
 > today" for months after that stopped being true, and so did the README. The
@@ -18,8 +22,10 @@ that is now fixed; see below for what broke and what guards it.
 
 Going live never re-checked Prodigi's prices. A quote on **14 September 2026**
 disagreed with `lib/prints.ts` on every line, shipping was under-charged by
-$1.80–$4.80 an order, and the three cheap sizes lost money on every sale. Three
-things were wrong at once, and they are worth keeping apart:
+$1.80–$4.80 an order, and the three cheap sizes would have lost money on every
+sale. *Would have*: no print order has ever been placed, so the loss was always
+prospective. It needed fixing before the first one, not after. Three things were
+wrong at once, and they are worth keeping apart:
 
 1. **The costs were stale.** Four of five base costs and all five shipping
    figures had moved.
@@ -116,13 +122,14 @@ two-copy check settled it:
   the order modal's "shipping is charged per order, not per print" nudge rests
   on, and it is now measured rather than assumed.
 - **The framed 12×16 charges $11.00 per extra, not the $12.00 in the code** —
-  so every additional framed print had been **overcharged by a dollar**.
+  which would have **overcharged a dollar** on every additional framed print.
+  Nobody paid it: no print order has ever been placed.
 
-Worth sitting with the direction. The whole pricing effort had been about not
-losing money, and the first drift the check caught was the opposite: a customer
-paying for a cost Prodigi does not have. Drift is not only a risk to SharePix,
-and the check's summary now says which way each one moved rather than assuming
-the expensive one.
+Worth sitting with the direction anyway. The whole pricing effort had been about
+not losing money, and the first drift the check caught was the opposite — a
+buyer charged for a cost Prodigi does not have. Drift is not only a risk to
+SharePix, and a check that only ever warned about one direction would have
+reported this one as a loss. The summary now says which way each price moved.
 
 ## What was switched, and what rollback reverses
 
