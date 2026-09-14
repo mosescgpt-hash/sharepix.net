@@ -55,6 +55,16 @@ resources it creates — do not set those by hand.
 | `ALERT_EMAIL` | Nobody is paged when a Lambda starts failing — see [alerting.md](alerting.md). |
 | `REPORT_TO_ADDRESS` | The monthly report is generated and sent nowhere. |
 
+### Frontend, and therefore baked in at build time
+
+| Variable | What happens without it |
+| --- | --- |
+| `NEXT_PUBLIC_CF_ANALYTICS_TOKEN` | No page views are counted anywhere. `pages/_app.tsx` renders nothing rather than a beacon with an empty token, so the site works fine and you are blind. |
+
+`NEXT_PUBLIC_*` is compiled into the JavaScript bundle, not read at run time.
+Setting it and **not redeploying** does nothing, which is a confusing half hour
+if you do not know it.
+
 ### Switches, all off by default
 
 These ship unset on purpose. Each one does something you want to have decided
@@ -98,31 +108,127 @@ Google Search Console.
 
 Nothing here can set these, and each one is silently wrong until it is done.
 
-**Stripe**
-- Webhook endpoint pointing at the `stripe-webhook` function URL, with
-  `STRIPE_WEBHOOK_SECRET` matching.
-- Tax registrations for the states SharePix has nexus in — see `lib/taxNexus.ts`
-  for what the code assumes.
-- Live mode, when prints go live. Both halves together — see
-  [go-live-prints.md](go-live-prints.md).
+### Stripe
 
-**SES**
+**The webhook.** Dashboard → Developers → Webhooks → add an endpoint pointing at
+the `stripe-webhook` function URL. `STRIPE_WEBHOOK_SECRET` must match the
+signing secret that endpoint shows. Without it a customer pays and their event
+is never activated, which is the single worst failure in the product.
+
+**Tax: almost certainly nothing to do yet.** `automatic_tax` is already switched
+on in `stripe-checkout`, and this is deliberately safe to run with no
+registrations at all — Stripe calculates **zero** for any jurisdiction you are
+not registered in, so it changes nothing today and starts working the moment a
+registration is added, rather than needing a code change at the point somebody
+notices a liability.
+
+What that leaves is one thing and one tripwire:
+
+- **Register in your home state.** Physical presence creates nexus regardless of
+  volume, so this one is not waiting for a threshold. Everything else is.
+- **Watch `/global-admin`.** `lib/taxNexus.ts` reads the sales already recorded
+  and says when a threshold is approaching — at 80% of the common $100,000 /
+  200-transaction economic-nexus line, because registering takes weeks and a
+  tripwire that fires on arrival fires too late. It also fires on the **first**
+  sale outside the US, with no threshold, because EU VAT on digital services has
+  none.
+
+It calculates and collects. It does not file or remit. When the tripwire goes,
+that is a conversation with an accountant and possibly a move to a merchant of
+record (about 2.4% of revenue), which is exactly why it is a trigger rather than
+something done up front.
+
+**Live mode**, when prints go live. Both halves together — see
+[go-live-prints.md](go-live-prints.md).
+
+### SES
+
 - Verify `ALERT_FROM_ADDRESS` as an identity.
-- Move out of the sandbox, or SES will only deliver to verified addresses and
-  every guest-facing email silently fails.
+- Move out of the sandbox, or SES delivers only to verified addresses and every
+  guest-facing email silently fails.
 - DKIM and a DMARC record, or reminders land in spam.
 
-**Cognito**
-- Add the first administrator to the `ADMINS` group:
-  `npm run admin:grant -- <email-prefix>`, or in the console. Group membership
-  rides in the token, so sign out and back in after.
+### Cognito
 
-**Cloudflare**
-- The R2 bucket and an access key with read/write/delete.
-- An analytics token, if the funnel numbers are wanted.
+Add the first administrator to the `ADMINS` group:
+`npm run admin:grant -- <email-prefix>`, or in the console. Group membership
+rides in the token, so sign out and back in after.
 
-**In the app, once**
-- `/global-admin → Report recipient` — where the monthly report goes.
+### Cloudflare R2
+
+The bucket, and an access key with read, write **and delete** — reclamation has
+to remove the R2 copy as well as the S3 one, or a "deleted" photo is still
+reachable from the host that actually serves reads.
+
+### Cloudflare Web Analytics
+
+Free, cookieless, and **does not require moving DNS to Cloudflare** — it is a
+JavaScript beacon that works on any host, which is why it suits a site served by
+Amplify.
+
+1. dash.cloudflare.com → **Analytics & Logs → Web Analytics** → **Add a site**.
+2. Enter `www.sharepix.net`. It hands back a snippet; the only part that matters
+   is the `token` value inside it.
+3. Amplify → **Hosting → Environment variables** → set
+   `NEXT_PUBLIC_CF_ANALYTICS_TOKEN` to that token.
+4. **Redeploy.** `NEXT_PUBLIC_*` is compiled into the bundle, so the variable
+   does nothing until a build picks it up.
+
+Data starts appearing within a few minutes of the first visit. It counts page
+views site-wide — it cannot attribute a view to an event, and the report and
+survey docs both say so where a reader might otherwise assume otherwise.
+
+`pages/_app.tsx` renders no script at all when the token is unset, rather than a
+beacon with an empty token that would 404 on every page load in development.
+
+### Google Search Console
+
+Free, and the only way to see what SharePix ranks for, what Google has actually
+indexed, and whether anything is erroring. **Do the apex redirect first** —
+submitting a sitemap of `www` URLs while the apex serves a parked page invites
+Google to decide for itself which host is canonical.
+
+1. search.google.com/search-console → **Add property**.
+2. Choose **Domain** (not URL prefix) and enter `sharepix.net`. That covers both
+   hosts and every subdomain, which is what you want given the redirect.
+3. It gives you a TXT record. Add it at the registrar — the same place the
+   Amplify DNS records went — then click Verify. DNS can take an hour.
+4. **Sitemaps** → submit `sitemap.xml`.
+5. Come back in a week or two. The things worth looking at first: **Pages** (how
+   many are indexed, and why the rest are not) and **Queries** (what people
+   searched before clicking).
+
+`public/sitemap.xml` is generated from `lib/seo.ts` and lists only the pages
+that are meant to be public — 52 URLs, mostly help articles. Nothing under
+`/event/` is in it, and `robots.txt` disallows those prefixes as well.
+
+### Storage reclamation
+
+The one job that destroys data. It runs weekly on its own schedule already, and
+does nothing at all until `STORAGE_RECLAIM_ENABLED` is exactly `true`.
+
+Turn it on in this order:
+
+1. **Dry run first.** `/global-admin → Scheduled jobs → Reclaim expired
+   storage`. With the flag off it walks the same events, decides the same
+   things, logs every key it would remove, and deletes nothing. The summary says
+   which mode it ran in.
+2. **Read the number.** On a young deployment it should be zero: an event has a
+   60-day upload window, then a 12-month gallery, then a 90-day archive, so
+   nothing is eligible until roughly 17 months after it was created. Zero is the
+   expected answer and is the best possible moment to switch on a destructive
+   job — you are turning it on while it has nothing to do.
+3. Set `STORAGE_RECLAIM_ENABLED` to `true` in Amplify, and redeploy.
+4. Run it by hand once more and confirm the summary now says it deleted what it
+   previously only listed.
+
+If you leave it off, expired events keep their bytes forever and "unlimited
+photos" on a one-time payment becomes an unbounded liability. That is the whole
+reason the job exists.
+
+### In the app, once
+
+`/global-admin → Report recipient` — where the monthly report goes.
 
 ## After a deploy
 
