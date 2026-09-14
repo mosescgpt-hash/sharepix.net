@@ -98,25 +98,24 @@ describe('no order loses money, at any size', () => {
     expect(net).toBeGreaterThanOrEqual(profitFor(product) * copies - 0.005);
   });
 
-  it('has almost no headroom on a single photo print, and that is the deal', () => {
+  it('absorbs a Prodigi price rise of the size they actually announce', () => {
     // How far Prodigi's costs can rise before an order goes negative:
     //
-    //   4×6    1.35% (one copy)   10.52% (ten)
-    //   5×7    1.25%               8.39%
-    //   8×10   1.03%               4.30%
-    //   11×14 27.19%              46.25%
-    //   12×16 15.44%              18.78%
+    //   4×6    9.03% (one copy)   16.23% (ten)
+    //   5×7    8.93%               14.43%
+    //   8×10   8.75%               11.22%
+    //   11×14 35.12%               54.16%
+    //   12×16 23.44%               26.77%
     //
-    // A photo print earns $0.10 on an ~$12 order, so ~1% is all the buffer
-    // there is. That is a deliberate choice — prints are a convenience and the
-    // profit was set to near zero on purpose — but it has a consequence worth
-    // stating plainly: Prodigi raised prices about 5% in July 2026, and a rise
-    // like that turns every single-copy photo order negative the day it lands.
+    // Before PRODIGI_SAFETY existed these were 1.35%, 1.25% and 1.03% — a photo
+    // print earns $0.10 on an ~$12 order, so the profit was never going to
+    // cover anything. Prodigi raised prices about 5% in July 2026, and a rise
+    // that size turned every single-copy photo order negative.
     //
-    // Nothing in this repository will notice. The only defence is running the
-    // admin print check, which compares these costs against a live quote. This
-    // test exists so that the thinness is a recorded fact rather than a
-    // surprise, and so that making it thinner fails here.
+    // The buffer covers Prodigi's whole bill rather than only its shipping. The
+    // first draft protected shipping alone, on the reasoning that a single 4×6
+    // is 98% shipping — true for that order, and wrong for fifty 8×10s, which
+    // are mostly print cost and were left at 7.26%.
     const headroomFor = (product: (typeof PRINT_PRODUCTS)[number], copies: number) => {
       const buyerPays = printOrderTotal(product, copies);
       const canPayProdigi = buyerPays - buyerPays * STRIPE_PCT - STRIPE_FIXED;
@@ -126,9 +125,9 @@ describe('no order loses money, at any size', () => {
 
     for (const product of PRINT_PRODUCTS) {
       for (const copies of sizes) {
-        // Every order absorbs at least a 1% cost rise. Below that the pricing
-        // is not covering rounding, let alone reality.
-        expect({ sku: product.sku, copies, thin: headroomFor(product, copies) < 0.01 }).toEqual({
+        // 7% clears a 5% increase with room for the lag before the weekly
+        // check notices it.
+        expect({ sku: product.sku, copies, thin: headroomFor(product, copies) < 0.07 }).toEqual({
           sku: product.sku,
           copies,
           thin: false,
@@ -136,9 +135,34 @@ describe('no order loses money, at any size', () => {
       }
     }
 
-    // And the premium prints, which do carry a margin, have real room.
     expect(headroomFor(fineArt, 1)).toBeGreaterThan(0.15);
     expect(headroomFor(framed, 1)).toBeGreaterThan(0.1);
+  });
+
+  it('charges the buffer in proportion to cost, not as a flat fee per print', () => {
+    // A flat per-print surcharge big enough to protect a $12 single order would
+    // add close to 50% to a 25-print order — a bulk penalty sitting next to a
+    // bulk discount. A percentage of Prodigi's bill cannot do that: it is the
+    // same fraction of cost whatever the order size.
+    const bufferShare = (product: (typeof PRINT_PRODUCTS)[number], n: number) => {
+      const cost = product.baseCost * n + prodigiShippingCost(product, n);
+      const withoutProfit = printOrderTotal(product, n) - profitFor(product) * n;
+      return withoutProfit / cost;
+    };
+    for (const n of [1, 10, 50]) {
+      expect(bufferShare(photo, n)).toBeGreaterThan(1);
+      expect(bufferShare(photo, n)).toBeLessThan(1.2);
+    }
+  });
+
+  it('does not round cheap prints up by a meaningful fraction', () => {
+    // Rounding the unit price up to the nearest nickel cost $0.04 on a $0.39
+    // print — 10% — and every copy paid it again. Cents only.
+    for (const product of PRINT_PRODUCTS.filter((p) => p.kind === 'photo')) {
+      const exact =
+        (product.baseCost * 1.08 + profitFor(product)) / (1 - STRIPE_PCT);
+      expect(printUnitPrice(product) - exact).toBeLessThan(0.01);
+    }
   });
 });
 

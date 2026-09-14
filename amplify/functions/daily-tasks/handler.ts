@@ -8,6 +8,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { randomBytes } from 'node:crypto';
 import { dueReminder, formatExpiryDate, lapsedReminders, reminderKey } from './eventReminders';
 import { mayReceive, preferenceKey } from './emailPreferences';
@@ -25,6 +26,19 @@ import { encodeRatingLink } from './ratingLink';
 
 const dynamo = new DynamoDBClient({});
 const ses = new SESv2Client({});
+const lambda = new LambdaClient({});
+
+const PRINT_CHECK_FUNCTION = process.env.PRINT_CHECK_FUNCTION_NAME ?? '';
+
+/**
+ * Day of the week the print price check runs (UTC; 1 = Monday).
+ *
+ * Weekly rather than daily because Prodigi's prices move on the scale of
+ * months, and a quote every day is ten needless API calls for the same answer.
+ * Weekly is also what bounds the size of PRODIGI_SAFETY: the buffer only has to
+ * cover a price rise for the few days before this notices it.
+ */
+const PRICE_CHECK_WEEKDAY = 1;
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const NOTIFICATION_TABLE = process.env.NOTIFICATION_TABLE_NAME as string;
@@ -693,6 +707,55 @@ async function send(to: string, subject: string, html: string, text: string): Pr
  * @param event AppSync passes the mutation's arguments; EventBridge passes a
  * scheduled-event shape with none. Optional chaining covers both callers.
  */
+/**
+ * Ask the print check whether Prodigi still charges what the catalog says.
+ *
+ * This is the half of the pricing defence that does not depend on anyone
+ * remembering. Prodigi's costs were wrong for months and nothing noticed,
+ * because the only thing that could tell was a button an admin had to choose to
+ * press. Every print order in that window lost money.
+ *
+ * It invokes print-provider-check rather than quoting Prodigi itself, so the
+ * comparison logic and the cost table stay in one place. Quotes create nothing
+ * and cost nothing.
+ *
+ * Failures here never fail the run: an unreachable Prodigi is not a reason to
+ * skip a host's expiry reminder. A drift is logged loudly enough for the
+ * `sharepix-print-price-drift` alarm to see it.
+ */
+async function checkPrintPrices(now: Date): Promise<string | null> {
+  if (now.getUTCDay() !== PRICE_CHECK_WEEKDAY) return null;
+  if (!PRINT_CHECK_FUNCTION) {
+    console.warn('Print price check skipped: PRINT_CHECK_FUNCTION_NAME is not set');
+    return null;
+  }
+
+  try {
+    const response = await lambda.send(
+      new InvokeCommand({
+        FunctionName: PRINT_CHECK_FUNCTION,
+        InvocationType: 'RequestResponse',
+        Payload: Buffer.from(JSON.stringify({ arguments: {} })),
+      }),
+    );
+    const raw = response.Payload ? Buffer.from(response.Payload).toString('utf8') : '';
+    const result = JSON.parse(raw || '{}') as { success?: boolean; message?: string };
+
+    if (result.success) {
+      console.log('Print price check passed', { at: now.toISOString() });
+      return 'Print prices still match Prodigi.';
+    }
+
+    // The literal string the metric filter watches for. Keep it and the filter
+    // in amplify/backend.ts identical.
+    console.error('PRINT PRICE DRIFT', result.message ?? '(no detail returned)');
+    return 'Print prices no longer match Prodigi — see the logs and re-run the print check.';
+  } catch (err) {
+    console.error('PRINT PRICE DRIFT could not be checked', err);
+    return 'Print price check could not run.';
+  }
+}
+
 export const handler = async (event?: { arguments?: { probe?: boolean | null } }) => {
   // A status check, not a run. Returns the same flag the job itself reads, so
   // the dashboard cannot show a state the job would disagree with.
@@ -1039,8 +1102,13 @@ export const handler = async (event?: { arguments?: { probe?: boolean | null } }
     }
   }
 
+  // Last, and deliberately after the host-facing work: nothing here should be
+  // able to delay a reminder somebody is waiting on.
+  const priceNote = await checkPrintPrices(now);
+
   const summary = {
     at: nowISO,
+    priceNote,
     considered,
     sent,
     lapsed,
@@ -1068,6 +1136,7 @@ export const handler = async (event?: { arguments?: { probe?: boolean | null } }
       prunedAnalytics > 0
         ? `${prunedAnalytics} funnel event${prunedAnalytics === 1 ? '' : 's'} older than ${ANALYTICS_RETENTION_DAYS} days removed.`
         : '',
+      priceNote ?? '',
       lapsed > 0
         ? `${lapsed} reminder milestone${lapsed === 1 ? '' : 's'} had already passed and were recorded rather than sent late.`
         : '',

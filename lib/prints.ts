@@ -21,12 +21,17 @@
  *   - **Fixed** is charged once per *charge*, not per print. So it is recovered
  *     once, on the shipping line, where the other per-order cost already lives.
  *
+ * Everything Prodigi bills also carries PRODIGI_SAFETY, a buffer against their
+ * prices moving between checks.
+ *
  * Put together, an order of `n` copies charges
  *
- *     (prodigiCost + profit × n + STRIPE_FIXED) / (1 - STRIPE_PCT)
+ *     (prodigiCost × (1 + PRODIGI_SAFETY) + profit × n + STRIPE_FIXED)
+ *       / (1 - STRIPE_PCT)
  *
- * which nets exactly `profit × n` after Stripe takes its cut. Rounding is
- * always **up**, so rounding can only ever help the margin.
+ * which nets `profit × n` plus the unused buffer after Stripe takes its cut.
+ * Rounding is always **up**, to the nearest cent — nickel rounding was a real
+ * surcharge on a 39¢ print and grew with every copy.
  *
  * ## Profit per print
  *
@@ -73,6 +78,34 @@ export const PRINT_MAX_PROFIT_HIGH = 20;
 export const STRIPE_PCT = 0.029;
 /** Stripe's fixed per-charge fee, recovered once per order. */
 export const STRIPE_FIXED = 0.3;
+
+/**
+ * Safety margin added to everything Prodigi bills, as a fraction.
+ *
+ * A buffer against Prodigi raising prices between checks, so an increase costs
+ * SharePix nothing before anyone notices. Not a margin — it is expected to go
+ * unused, and when it stops being unused the answer is to update the catalog,
+ * not to keep it.
+ *
+ * It applies to the **whole Prodigi bill**, base cost and shipping alike,
+ * because a price rise hits both and the exposure is simply proportional to
+ * what Prodigi charges. Which line dominates depends entirely on the order: a
+ * single 4×6 is 98% shipping, so its risk is all there; fifty 8×10s are mostly
+ * print cost, so theirs is not. A buffer on shipping alone left that second
+ * case with almost no cover.
+ *
+ * Proportional is also the fair shape. A flat per-print surcharge large enough
+ * to protect a $12 single order would add nearly 50% to a 25-print order —
+ * penalising exactly the buyers the modal encourages to order more. A
+ * percentage of cost charges each order in proportion to the risk it actually
+ * carries.
+ *
+ * The smaller the detection gap, the smaller this needs to be. The weekly check
+ * in `daily-tasks` is the better half of the pair, and the reason 8% is enough:
+ * it covers a Prodigi increase of the size they announced in July 2026, with
+ * room for the days before the check reports it.
+ */
+export const PRODIGI_SAFETY = 0.08;
 
 /**
  * Profit on a photo print. Near zero on purpose: prints are offered as a
@@ -143,14 +176,15 @@ export function profitFor(product: PrintProduct): number {
 }
 
 /**
- * Buyer price per copy in USD: (base + profit) grossed up for Stripe's
- * percentage fee, rounded **up** to the nearest $0.05.
+ * Buyer price per copy in USD: base plus its safety margin, plus profit,
+ * grossed up for Stripe's percentage fee and rounded **up** to the cent.
  *
  * Stripe's fixed fee is not here — it is a per-order cost and is recovered once,
  * on the shipping line.
  */
 export function printUnitPrice(product: PrintProduct): number {
-  return ceilTo((product.baseCost + profitFor(product)) / (1 - STRIPE_PCT), 0.05);
+  const cost = product.baseCost * (1 + PRODIGI_SAFETY);
+  return ceilTo((cost + profitFor(product)) / (1 - STRIPE_PCT), 0.01);
 }
 
 /** Buyer price per copy in whole cents, for Stripe line items. */
@@ -168,15 +202,18 @@ export function prodigiShippingCost(product: PrintProduct, totalCopies: number):
 }
 
 /**
- * What the buyer is charged for shipping, USD: Prodigi's real cost plus
- * Stripe's fixed fee, the pair grossed up for Stripe's percentage.
+ * What the buyer is charged for shipping and handling, USD: Prodigi's cost plus
+ * a safety margin, plus Stripe's fixed fee, the whole thing grossed up for
+ * Stripe's percentage.
  *
- * Not a pure pass-through any more, and deliberately so. Charging Prodigi's
- * cost exactly still lost money, because Stripe takes 2.9% of the shipping the
- * buyer paid and $0.30 of the order on top.
+ * Not a pass-through, and the UI must not call it one. Charging Prodigi's cost
+ * exactly still lost money — Stripe takes 2.9% of the shipping the buyer paid
+ * and $0.30 of the order on top — and charging it exactly would leave nothing
+ * for the day Prodigi's own shipping goes up.
  */
 export function printShipping(product: PrintProduct, totalCopies: number): number {
-  return ceilTo((prodigiShippingCost(product, totalCopies) + STRIPE_FIXED) / (1 - STRIPE_PCT), 0.01);
+  const prodigi = prodigiShippingCost(product, totalCopies) * (1 + PRODIGI_SAFETY);
+  return ceilTo((prodigi + STRIPE_FIXED) / (1 - STRIPE_PCT), 0.01);
 }
 
 /** Shipping in whole cents, for the Stripe shipping option. */

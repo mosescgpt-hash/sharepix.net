@@ -177,7 +177,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
                 <dd>{money(itemsTotal)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-charcoal/60">Shipping</dt>
+                <dt className="text-charcoal/60">Shipping &amp; handling</dt>
                 <dd>{money(shipping)}</dd>
               </div>
               <div className="flex justify-between pt-1 font-semibold">
@@ -192,7 +192,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
 
             {worthSuggesting ? (
               <p className="mt-3 border border-charcoal/10 border-l-2 border-l-pine bg-paper px-4 py-3 text-sm text-charcoal/75">
-                Most of that is shipping, and shipping is charged per order rather than per print.
+                Most of that is shipping, which is charged per order rather than per print.
                 A total of <strong>{nextStep} prints</strong> would work out at about{' '}
                 <strong>{money(nextPerPrint as number)}</strong> each.
               </p>

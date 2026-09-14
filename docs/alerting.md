@@ -11,6 +11,7 @@ Defined in `amplify/backend.ts`. Each alarm publishes to one SNS topic
 
 | Alarm | Fires when |
 | --- | --- |
+| `sharepix-print-price-drift` | The weekly print price check found Prodigi charging something other than `lib/prints.ts` says. Print orders are priced against costs that no longer hold; the 8% `PRODIGI_SAFETY` buffer is what stands between that and losing money, so this is urgent rather than an emergency. |
 | `sharepix-webhook-errors` | The Stripe webhook Lambda throws or times out |
 | `sharepix-webhook-handled-failures` | The webhook logs **two or more** `Failed to …` errors in five minutes (a payment/event side effect wasn't recorded — these return HTTP 500 rather than throwing, so they don't show on the Lambda error metric) |
 | `sharepix-checkout-errors` | The Stripe checkout Lambda throws (a host couldn't start payment) |

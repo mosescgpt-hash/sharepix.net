@@ -21,6 +21,7 @@ const PRINT_HIGH_BASE = 100;
 const PRINT_MAX_PROFIT_HIGH = 20;
 const STRIPE_PCT = 0.029;
 const STRIPE_FIXED = 0.3;
+const PRODIGI_SAFETY = 0.08;
 const PHOTO_PRINT_PROFIT = 0.1;
 type Prod = {
   name: string;
@@ -55,17 +56,20 @@ function profit(product: Prod): number {
 // Price grosses the net profit up by Stripe's percentage so it survives the fee.
 // Stripe's fixed fee is per order, not per print, and is recovered in shipping.
 function unitPriceCents(product: Prod): number {
-  return Math.round(ceilTo((product.baseCost + profit(product)) / (1 - STRIPE_PCT), 0.05) * 100);
+  const cost = product.baseCost * (1 + PRODIGI_SAFETY);
+  return Math.round(ceilTo((cost + profit(product)) / (1 - STRIPE_PCT), 0.01) * 100);
 }
 
-// Shipping: Prodigi's real cost plus Stripe's fixed fee, grossed up for Stripe's
-// percentage. Charging Prodigi's cost alone still lost money, because Stripe
-// takes 2.9% of the shipping the buyer paid and $0.30 of the order on top.
+// Shipping and handling: Prodigi's cost plus a safety margin, plus Stripe's
+// fixed fee, grossed up for Stripe's percentage. Charging Prodigi's cost alone
+// still lost money, because Stripe takes 2.9% of the shipping the buyer paid
+// and $0.30 of the order on top — and left nothing for the day Prodigi's own
+// shipping rises, which is where nearly all the exposure sits.
 // Uses the max first/plus-one across products so a mixed order is never
 // undercharged (single-product orders — what the UI sends — are exact).
 function shippingCents(maxShipFirst: number, maxShipAdd: number, totalCopies: number): number {
   const extras = Math.max(0, totalCopies - 1);
-  const prodigi = maxShipFirst + maxShipAdd * extras;
+  const prodigi = (maxShipFirst + maxShipAdd * extras) * (1 + PRODIGI_SAFETY);
   return Math.round(ceilTo((prodigi + STRIPE_FIXED) / (1 - STRIPE_PCT), 0.01) * 100);
 }
 
@@ -236,7 +240,7 @@ export const handler: Handler = async (event) => {
         {
           shipping_rate_data: {
             type: 'fixed_amount',
-            display_name: 'Standard shipping',
+            display_name: 'Standard shipping & handling',
             fixed_amount: { amount: shipCents, currency: 'usd' },
           },
         },

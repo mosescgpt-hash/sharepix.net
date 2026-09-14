@@ -33,34 +33,50 @@ things were wrong at once, and they are worth keeping apart:
 An order of `n` copies is charged
 
 ```
-(prodigiCost + profit × n + $0.30) / (1 - 2.9%)
+(prodigiCost × 1.08 + profit × n + $0.30) / (1 - 2.9%)
 ```
 
-which nets exactly `profit × n`. The percentage is grossed into every line
-including shipping; the fixed fee is recovered once, on the shipping line,
-because it is charged once per payment rather than per print. Rounding is
-always up.
+which nets `profit × n` plus whatever of the buffer went unused. The percentage
+is grossed into every line including shipping; the fixed fee is recovered once,
+on the shipping line, because it is charged once per payment rather than per
+print. Rounding is always up.
 
 **Photo prints earn a flat $0.10.** They are a convenience, not a margin line.
 Fine-art and framed prints keep the 50%-of-base rule.
 
-### The headroom this leaves
+`prodigiCost` carries **`PRODIGI_SAFETY`, an 8% buffer**, on base and shipping
+alike. It is not margin — it is expected to go unused, and when it stops going
+unused the answer is to update the catalog, not to keep it.
 
-$0.10 on a ~$12 order is almost nothing, and that is the deliberate trade:
+It is proportional to what Prodigi charges rather than a flat fee per print,
+for two reasons. Which line carries the risk depends on the order: a single 4×6
+is 98% shipping, while fifty 8×10s are mostly print cost — a buffer on shipping
+alone left that second case at 7% cover. And a flat per-print surcharge big
+enough to protect a $12 single order would add close to 50% to a 25-print
+order, which is a bulk penalty sitting next to a bulk discount.
+
+Unit prices round up to the **cent**, not the nickel. On a 39¢ print a nickel
+is a 10% surcharge, and every copy pays it again.
+
+### The headroom this leaves
 
 | | One copy | Ten copies |
 | --- | --- | --- |
-| 4×6 | 1.35% | 10.52% |
-| 5×7 | 1.25% | 8.39% |
-| 8×10 | 1.03% | 4.30% |
-| 11×14 | 27.19% | 46.25% |
-| 12×16 | 15.44% | 18.78% |
+| 4×6 | 9.03% | 16.23% |
+| 5×7 | 8.93% | 14.43% |
+| 8×10 | 8.75% | 11.22% |
+| 11×14 | 35.12% | 54.16% |
+| 12×16 | 23.44% | 26.77% |
 
 That is how far Prodigi's costs can rise before an order goes negative. Prodigi
-raised prices about 5% in July 2026. **A rise like that turns every
-single-copy photo order negative the day it lands**, and nothing in this
-repository will notice — so run the print check on a schedule, not on a hunch.
-Raising `PHOTO_PRINT_PROFIT` is the lever if that feels too tight.
+raised prices about 5% in July 2026; before the buffer existed these numbers
+were 1.35%, 1.25% and 1.03%, so a rise that size turned every single-copy photo
+order negative the day it landed.
+
+The buffer buys time, not safety. What makes it enough is the weekly check
+below: 8% only has to cover the few days between a price moving and the alarm
+saying so. Widening the gap means widening the buffer, and the buffer is the
+half the customer pays for.
 
 ### The check now compares prices
 
@@ -73,6 +89,22 @@ second copy reveals. A ✗ means a price moved, and the message says so.
 — `lib/prints.ts`, `print-checkout`, and the check itself — to each other. It
 cannot tell whether they are *right*; only Prodigi knows that. It can tell
 whether they are the *same*, which is the half a test can own.
+
+### It is checked every week, without anyone remembering
+
+`daily-tasks` invokes the print check every **Monday** and compares the answer.
+On a mismatch it logs `PRINT PRICE DRIFT`, which a CloudWatch metric filter in
+`backend.ts` turns into the **`sharepix-print-price-drift`** alarm on the usual
+SNS topic — see [alerting.md](alerting.md).
+
+It invokes the check rather than quoting Prodigi itself, so there is no fourth
+copy of the cost table. It runs last in the nightly job and swallows its own
+errors: an unreachable Prodigi must never delay a host's expiry reminder.
+
+Nothing at runtime ties the logged string to the metric filter, so
+`__tests__/print-price-watch.test.ts` pins them to each other from both ends. A
+reworded log line would otherwise leave the alarm silent and the dashboard
+green — the original failure again, with better scenery.
 
 > **`shipAdd` is still unverified.** Every plus-one shipping figure in the code
 > is a guess inherited from the old price sheet, because a one-copy quote cannot
