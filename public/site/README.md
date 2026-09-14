@@ -100,3 +100,20 @@ The way to collect that properly is already built: **Featured Events**, which a
 host reaches from their event's admin page. It records who agreed, to which
 wording, on which day, and gives them something back for it. Photos that arrive
 that way are safe to put in `gallery/`.
+
+## PROVENANCE
+
+One word, in `public/site/PROVENANCE`, saying where these images came from:
+
+    ai-generated     they were produced by an image model
+    photographed     a camera took them
+    mixed            some of each, or you are not sure
+
+**Update it when you change the images.** The site reads it and says so — in
+the notice on the demo pages and in a line in the footer — and several of these
+pictures show people apparently using SharePix at what looks like a real event.
+An image of somebody using the product is a claim about the product being used,
+so the sentence underneath it has to be true.
+
+A missing or unrecognised value reads as `mixed`, which makes the site say the
+weakest honest thing rather than assert something nobody wrote down.

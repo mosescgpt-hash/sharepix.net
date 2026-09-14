@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { ReactNode } from 'react';
 import Navbar from '@/components/Navbar';
 import { SUPPORT_EMAIL } from '@/lib/help';
+import { SITE_IMAGE_NOTICE } from '@/lib/demoEvent';
 import {
   OG_IMAGE_PATH,
   SITE_NAME,
@@ -193,6 +194,14 @@ export default function Layout({
               {SUPPORT_EMAIL}
             </a>
           </div>
+          {/* Site-wide, because the demo pages are not the only place these
+              images appear — the homepage hero, the occasion squares and the
+              card every shared link renders are the same set, and a visitor who
+              never opens /demo sees them anyway. Null when the folder holds
+              photographs and there is nothing to disclose. */}
+          {SITE_IMAGE_NOTICE ? (
+            <p className="mt-4 text-xs text-canvas/35">{SITE_IMAGE_NOTICE}</p>
+          ) : null}
         </div>
       </footer>
     </div>

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
-import { DEMO_GALLERIES, demoGallery } from '@/lib/demoEvent';
+import { DEMO_GALLERIES, demoGallery, sampleImageNotice } from '@/lib/demoEvent';
 
 /**
  * The sample gallery, for three different occasions.
@@ -74,13 +74,11 @@ export default function DemoGalleryPage() {
           <p className="mt-3 text-sm text-charcoal/70">{active.blurb}</p>
 
           <Notice label="This is a sample" className="mt-6">
-            {/* Which of the two it is depends on whether this event's folder
-                has files in it, so the sentence is chosen rather than written.
-                A standing claim that these are illustrations would quietly
-                become untrue the first time somebody dropped a photograph in. */}
-            {active.isPhotography
-              ? 'Nothing here is a real event — these are our own images, shown to give you a feel for the layout.'
-              : 'The images are illustrations, not photographs, and nothing here is a real event.'}{' '}
+            {/* One sentence, built in lib/demoEvent.ts from what is actually
+                in the folder. It used to be written out here and in two other
+                places, and the third copy spent a release telling visitors the
+                photographs above it were illustrations. */}
+            {sampleImageNotice(active.isPhotography)}{' '}
             <Link href="/demo" className="text-pine underline">
               See how it works
             </Link>{' '}

@@ -37,6 +37,33 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SLOTS_DIR = join(root, 'public', 'site', 'slots');
 const GALLERY_DIR = join(root, 'public', 'site', 'gallery');
 const OUTPUT = join(root, 'lib', 'siteImages.generated.ts');
+const PROVENANCE_FILE = join(root, 'public', 'site', 'PROVENANCE');
+
+/**
+ * Where the marketing images came from.
+ *
+ * A fact the folders cannot tell us and the site has to state. Several of the
+ * sample images show recognisable-looking people using SharePix at what looks
+ * like a real wedding, and one of them is the card every shared link renders —
+ * so "these are our own images" is true and dodges the question a viewer is
+ * actually asking.
+ *
+ * It is a file rather than a constant in the source because these folders are
+ * drop-in: somebody replaces the photographs and the claim in the code becomes
+ * a lie without a single line changing. Whoever swaps the files is standing in
+ * the folder this file lives in, with the README beside it telling them to
+ * update it.
+ *
+ * Missing or unrecognised reads as `mixed`, which makes the site say the
+ * weakest honest thing rather than assert something nobody wrote down.
+ */
+const PROVENANCES = ['ai-generated', 'photographed', 'mixed'];
+
+export function readProvenance() {
+  if (!existsSync(PROVENANCE_FILE)) return 'mixed';
+  const value = readFileSync(PROVENANCE_FILE, 'utf8').trim().toLowerCase();
+  return PROVENANCES.includes(value) ? value : 'mixed';
+}
 
 /**
  * What a browser will actually display. No SVG: these folders are for
@@ -141,10 +168,10 @@ export function buildManifest() {
     }));
   }
 
-  return { slotFiles, galleries };
+  return { slotFiles, galleries, provenance: readProvenance() };
 }
 
-export function render({ slotFiles, galleries }) {
+export function render({ slotFiles, galleries, provenance }) {
   const slotEntries = Object.keys(slotFiles)
     .sort()
     .map((slot) => `  '${slot}': '${slotFiles[slot]}',`)
@@ -192,6 +219,15 @@ export interface GalleryFile {
 export const GALLERY_SETS: Readonly<Record<string, readonly GalleryFile[]>> = {
 ${galleryEntries}
 };
+
+/**
+ * Where these images came from, read from public/site/PROVENANCE.
+ *
+ * lib/demoEvent.ts turns this into the sentence the demo pages and the footer
+ * show. Change the file, not this line.
+ */
+export type ImageProvenance = 'ai-generated' | 'photographed' | 'mixed';
+export const IMAGE_PROVENANCE: ImageProvenance = '${provenance}';
 `;
 }
 

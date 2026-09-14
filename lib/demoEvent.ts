@@ -30,7 +30,7 @@
  * says so where somebody about to add a file will read it.
  */
 
-import { GALLERY_SETS } from './siteImages.generated';
+import { GALLERY_SETS, IMAGE_PROVENANCE } from './siteImages.generated';
 import type { DisplayPhoto, GuestBookEntry, QREvent } from '@/lib/types';
 
 /**
@@ -327,6 +327,74 @@ export const DEMO_PHOTOS: DisplayPhoto[] = WEDDING.photos;
 export const DEMO_CAPTIONS: Readonly<Record<string, string>> = WEDDING.captions;
 export const DEMO_IS_PHOTOGRAPHY = WEDDING.isPhotography;
 export const DEMO_PHOTO_COUNT = WEDDING.photos.length;
+
+/**
+ * What the site says about where the sample images came from.
+ *
+ * ## Why it is one constant and not three sentences
+ *
+ * It was three. `/demo/gallery`, `/demo/try` and `/demo/live` each carried
+ * their own copy behind its own ternary, and when photographs replaced the
+ * generated tiles two of the three were updated and the third went on telling
+ * visitors "the sample photos are illustrations, not photographs" above twelve
+ * photographs. The sentence now exists once and the pages render it.
+ *
+ * ## Why it says AI-generated
+ *
+ * Not legally required in the United States: no rule obliges a business to
+ * label synthetic marketing imagery, and several of these would pass for stock
+ * photography without comment.
+ *
+ * But several of them show people apparently using SharePix — holding up
+ * phones at a wedding table, scanning a card — and one of them is the card
+ * every shared link renders. An image of somebody using the product is a claim
+ * about the product being used. "These are our own images" is true and answers
+ * a question nobody asked; the honest sentence names what they are, and costs
+ * nothing but a clause.
+ *
+ * ## Why it is derived rather than written
+ *
+ * `public/site/` is a drop-in folder. A hardcoded claim about what is in it
+ * stops being true the moment somebody drops something else in, which is
+ * exactly how the third copy went wrong. `IMAGE_PROVENANCE` is read from
+ * `public/site/PROVENANCE` at build time, so the sentence follows the folder.
+ */
+export const IMAGES_ARE_AI = IMAGE_PROVENANCE === 'ai-generated';
+
+/**
+ * The sample notice, chosen from two facts: whether the tiles are photographs
+ * at all, and where they came from.
+ *
+ * With the folders empty every tile is an SVG built in this file, and
+ * "AI-generated" would be the wrong word for a rectangle with a caption on it.
+ */
+export function sampleImageNotice(isPhotography: boolean): string {
+  if (!isPhotography) {
+    return 'The images are illustrations, not photographs, and nothing here is a real event.';
+  }
+  if (IMAGES_ARE_AI) {
+    return 'The images are AI-generated, and nothing here is a real event.';
+  }
+  return 'Nothing here is a real event — these are our own images, shown to give you a feel for the layout.';
+}
+
+/** The same fact where there is room for four words: a slideshow chrome bar. */
+export function sampleImageNoticeShort(isPhotography: boolean): string {
+  if (!isPhotography) return 'illustrations, not photographs';
+  return IMAGES_ARE_AI ? 'AI-generated images' : 'not a real event';
+}
+
+/**
+ * The site-wide line, for the footer.
+ *
+ * The demo pages are not the only place these images appear: the homepage hero,
+ * the six occasion squares and the link-preview card are all the same set, and
+ * a visitor who never opens /demo sees them anyway. Null when there is nothing
+ * to disclose.
+ */
+export const SITE_IMAGE_NOTICE = IMAGES_ARE_AI
+  ? 'Sample and marketing images are AI-generated.'
+  : null;
 
 /**
  * Notes for the worked example, written the way real ones read: short, warm,
