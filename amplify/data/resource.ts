@@ -36,6 +36,12 @@ import { monthlyReport as monthlyReportFn } from '../functions/monthly-report/re
  * - Photos carry `eventOwner` (the host's owner id) so the HOST can
  *   moderate/delete any photo in their event, not just their own uploads.
  */
+import { findEventByCode } from '../functions/find-event-by-code/resource';
+import { proUpload } from '../functions/pro-upload/resource';
+import { processProPhoto } from '../functions/process-pro-photo/resource';
+import { decideProPhoto } from '../functions/decide-pro-photo/resource';
+import { connectPhotographer } from '../functions/connect-photographer/resource';
+
 const schema = a.schema({
   Event: a
     .model({
@@ -266,7 +272,10 @@ const schema = a.schema({
     // Admins keep full model access. They can already comp any event, so
     // restricting them buys nothing, and the global-admin dashboard writes
     // extraPhotoCredits and uploadWindowEndsAt directly.
-    .secondaryIndexes((index) => [index('owner')])
+    // `owner` for a host's own list; `eventCode` so a guest who has the code
+    // but not the QR link can be sent to the right event. The lookup itself is
+    // a Lambda, not a model query — see findEventByCode in amplify/functions.
+    .secondaryIndexes((index) => [index('owner'), index('eventCode')])
     .authorization((allow) => [
       allow.ownerDefinedIn('owner').to(['get', 'list', 'delete']),
       allow.group('ADMINS'),
@@ -278,6 +287,13 @@ const schema = a.schema({
     .model({
       eventId: a.id().required(),
       event: a.belongsTo('Event', 'eventId'),
+      // The original object key. Named s3Key for history: S3 is the write path
+      // (the sanitize trigger fires on its ObjectCreated event) and R2 is the
+      // read path, mirrored from it — so one key addresses the object in both,
+      // and `storageProvider` below says where a reader should look first.
+      // Renaming this would touch ~15 Lambdas, byte accounting, reclaim,
+      // deletion and print fulfilment for no behaviour change, so it keeps its
+      // name and this comment explains it.
       s3Key: a.string().required(),
       previewS3Key: a.string(),
       // Small low-res image shown to guests during the post-window low-res phase.
@@ -305,6 +321,50 @@ const schema = a.schema({
       // trusted. A value pointing at a moment the host later deleted is also
       // valid; the gallery folds it back to "no moment". See lib/moments.ts.
       momentId: a.string(),
+
+      // --- SharePix Pro -------------------------------------------------
+      //
+      // All optional, all absent on every photo uploaded before Pro existed,
+      // and absent reads as 'guest' everywhere. There is no migration: a null
+      // sourceType is a guest photo, which is what it always was.
+      //
+      // The rules that read these live in lib/professionalMedia.ts and are
+      // enforced in the URL-signing path, not in the gallery.
+
+      // 'guest' | 'professional'. Null means guest.
+      sourceType: a.string(),
+      // Which storage a reader should try first: 'r2' | 's3'. Null keeps the
+      // existing behaviour, which is R2 with an S3 fallback.
+      storageProvider: a.string(),
+      // Professional media only. The original is PRIVATE: never signed for a
+      // guest, never mirrored to a readable prefix. See professionalKeys().
+      originalObjectKey: a.string(),
+      previewObjectKey: a.string(),
+      thumbnailObjectKey: a.string(),
+      // The photographer's Cognito sub. Null on guest media.
+      photographerId: a.string(),
+      // One of PUBLISH_STATUSES. Guests see 'published' and nothing else.
+      publishStatus: a.string(),
+      publishedAt: a.datetime(),
+      // Set by defaultsFor() and by nothing else: false, true, true. Null on
+      // guest media, where the event's own settings decide.
+      downloadAllowed: a.boolean(),
+      previewOnly: a.boolean(),
+      reducedResolutionEnabled: a.boolean(),
+      // Long edge of the generated preview, in pixels.
+      previewResolution: a.integer(),
+      watermarkEnabled: a.boolean(),
+      // Copied onto the media row when it is created, so the gallery can
+      // credit and link without reading a profile it has no access to — and so
+      // a photographer renaming their business later does not rewrite the
+      // credit on events that already happened.
+      photographerName: a.string(),
+      photographerWebsite: a.string(),
+      purchaseUrl: a.string(),
+      contactUrl: a.string(),
+      // Bytes of the generated preview, for the storage accounting that
+      // already tracks originals.
+      previewFileSize: a.integer(),
       // Likes and comments, maintained by the photo-engagement function in the
       // same atomic update as the row that causes them. Soft counts by design:
       // a like is keyed to a browser, not a person. See lib/photoEngagement.ts.
@@ -420,6 +480,100 @@ const schema = a.schema({
       displayName: a.string(),
     })
     .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
+
+  // ---------------------------------------------------------------------
+  // SharePix Pro
+  // ---------------------------------------------------------------------
+
+  // A photographer's own details. Self-serve: anyone signed in may make one,
+  // because having a profile grants nothing at all. What grants access is an
+  // EventPhotographer row a host created — see lib/photographerAccess.ts for
+  // why there is no PHOTOGRAPHERS group.
+  //
+  // `allow.owner()` so a photographer maintains their own; admins read for
+  // support. Hosts do NOT get blanket read here — a host sees the photographer
+  // details attached to their own event, which travel on the media row, rather
+  // than being able to enumerate every photographer on the platform.
+  PhotographerProfile: a
+    .model({
+      businessName: a.string(),
+      displayName: a.string(),
+      logoUrl: a.string(),
+      website: a.string(),
+      contactUrl: a.string(),
+      purchaseGalleryUrl: a.string(),
+      // Watermarking is off unless the photographer turns it on, and it is
+      // applied to generated previews only — never to a stored original.
+      watermarkEnabled: a.boolean(),
+      watermarkText: a.string(),
+      // One of PUBLISHING_MODES. Absent means DEFAULT_PUBLISHING_MODE, which
+      // is approve_first; nobody gets auto-publishing by not choosing.
+      defaultPublishingMode: a.string(),
+      // Long edge in pixels, clamped into range by previewLongEdge().
+      defaultPreviewResolution: a.integer(),
+    })
+    .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
+
+  // One photographer's connection to one event. THIS is the authorization
+  // record, and the security of the whole feature rests on how it is written.
+  //
+  // Note what is not granted: no create, no update, for anybody. Both actions
+  // go through Lambdas that check who is asking against what they are asking
+  // for (see actorMay in lib/photographerAccess.ts), the same pattern
+  // FreeEventClaim uses. If a photographer could write this row they could
+  // write `status: accepted` for any event id they could guess, which is the
+  // entire authorization model gone.
+  //
+  // Reads are granted to the two parties so each can see the state of their
+  // own connections; `owner` here is the photographer, and `eventOwner`
+  // carries the host so their dashboard can list who is on their event.
+  EventPhotographer: a
+    .model({
+      eventId: a.string().required(),
+      // The photographer's Cognito sub. Stamped server-side from the token.
+      photographerId: a.string().required(),
+      // Amplify owner string of the photographer, for their own read access.
+      owner: a.string(),
+      // Amplify owner string of the host, so they can read their own event's.
+      eventOwner: a.string(),
+      // One of CONNECTION_STATUSES.
+      status: a.string().required(),
+      invitedAt: a.datetime(),
+      acceptedAt: a.datetime(),
+      removedAt: a.datetime(),
+      // Go Live / Pause, per photographer per event. Lives here rather than on
+      // the profile because a photographer shooting two events on one weekend
+      // needs to pause one without touching the other. Absent means paused:
+      // nothing reaches a gallery because somebody forgot to decide.
+      livePublishing: a.boolean(),
+      // One of PUBLISHING_MODES. Absent means DEFAULT_PUBLISHING_MODE.
+      publishingMode: a.string(),
+      // Who ended it, when someone did. For support conversations.
+      removedBy: a.string(),
+    })
+    .secondaryIndexes((index) => [index('eventId'), index('photographerId')])
+    .authorization((allow) => [
+      allow.ownerDefinedIn('owner').to(['read']),
+      allow.ownerDefinedIn('eventOwner').to(['read']),
+      allow.group('ADMINS'),
+    ]),
+
+  // A single-use, short-lived code that attaches a photographer to an event.
+  //
+  // A bearer credential: whoever holds it can connect. Hence single-use
+  // (`usedAt`), short-lived (PAIRING_CODE_TTL_MINUTES), and readable by
+  // nobody — the host is shown the code by the mutation that creates it, and
+  // it is never listable afterwards. A code sitting in a query result is a
+  // code that leaked.
+  PhotographerPairingCode: a
+    .model({
+      eventId: a.string().required(),
+      eventOwner: a.string(),
+      expiresAt: a.datetime(),
+      usedAt: a.datetime(),
+      usedBy: a.string(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
 
   // One row per account that has taken its free event, written by create-event
   // and by nothing else. The row id IS the host's Cognito sub, so the claim is
@@ -540,6 +694,11 @@ const schema = a.schema({
       amountCents: a.integer(),
       /** What the host confirmed when claiming, if this came from a claim. */
       attestation: a.string(),
+      /**
+       * Which of PLANNED_USE_OPTIONS the host chose, if this came from a
+       * claim. Null on anything filed before v2 of the promise.
+       */
+      plannedUse: a.string(),
       /** Free text from the host: what they think went wrong. */
       hostNote: a.string(),
       /** Which admin decided, and when. */
@@ -1307,10 +1466,119 @@ const schema = a.schema({
   // claim window is open. The browser decides which button to show and nothing
   // else. The amount is never sent by the caller: it is computed from the
   // Payment rows for that event, capped by what has already been refunded.
+  /** What a code lookup returns. The id, and whether there was one. */
+  EventCodeLookup: a.customType({
+    found: a.boolean().required(),
+    eventId: a.string(),
+  }),
+
+  // A guest who has the code but not the QR link. Callable by guests, because
+  // that is exactly who needs it, and it returns one event id and nothing
+  // else. See the handler for the enumeration trade-off this accepts.
+  findEventByCode: a
+    .query()
+    .arguments({ code: a.string().required() })
+    .returns(a.ref('EventCodeLookup'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(findEventByCode)),
+
+  /** Where to PUT one professional original, and under what id. */
+  ProUploadSlot: a.customType({
+    uploadId: a.string().required(),
+    uploadUrl: a.string().required(),
+    expiresInSeconds: a.integer().required(),
+  }),
+
+  ProProcessResult: a.customType({
+    uploadId: a.string().required(),
+    publishStatus: a.string().required(),
+    message: a.string().required(),
+  }),
+
+  // The caller supplies the event and the content type; the key is built
+  // server-side from a fresh uuid, because a presigned URL is a capability and
+  // whatever it is signed for is what the holder can write.
+  requestProUploadSlot: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), contentType: a.string() })
+    .returns(a.ref('ProUploadSlot'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(proUpload)),
+
+  // Called after the PUT completes. Idempotent on uploadId, so the future
+  // Bridge can retry a queued upload without producing a second gallery tile.
+  processProPhoto: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), uploadId: a.string().required() })
+    .returns(a.ref('ProProcessResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(processProPhoto)),
+
+  ProDecisionResult: a.customType({
+    uploadId: a.string().required(),
+    publishStatus: a.string().required(),
+    message: a.string().required(),
+  }),
+
+  // approve | reject | publish | unpublish, on one of the photographer's own
+  // photos. The legal transitions are in lib/professionalMedia.ts and are
+  // re-checked server-side; the dashboard decides which buttons to draw and
+  // nothing else.
+  decideProPhoto: a
+    .mutation()
+    .arguments({
+      uploadId: a.string().required(),
+      decision: a.string().required(),
+    })
+    .returns(a.ref('ProDecisionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(decideProPhoto)),
+
+  // Go Live / Pause, and the publishing mode. Writes the connection row, which
+  // the photographer cannot write directly for the reasons on that model.
+  setProPublishing: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      livePublishing: a.boolean(),
+      publishingMode: a.string(),
+    })
+    .returns(a.ref('ProDecisionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(decideProPhoto)),
+
+  ProConnectResult: a.customType({
+    ok: a.boolean().required(),
+    /** The pairing code, returned once by `invite` and never readable again. */
+    code: a.string(),
+    message: a.string().required(),
+    eventId: a.string(),
+  }),
+
+  // invite | pair | remove. The only path that writes EventPhotographer, which
+  // grants create and update to nobody — see that model for why.
+  connectPhotographer: a
+    .mutation()
+    .arguments({
+      action: a.string().required(),
+      eventId: a.id(),
+      code: a.string(),
+      photographerId: a.string(),
+    })
+    .returns(a.ref('ProConnectResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(connectPhotographer)),
+
   claimGuestUploadPromise: a
     .mutation()
     .arguments({
       eventId: a.id().required(),
+      /**
+       * Which of PLANNED_USE_OPTIONS the host chose. Required, and never
+       * defaulted server-side: picking one for them invents the fact the
+       * question exists to establish. See lib/guestUploadPromise.ts.
+       */
+      plannedUse: a.string().required(),
       /** The host confirming they made the code available. See lib/guestUploadPromise.ts. */
       attested: a.boolean().required(),
       note: a.string(),

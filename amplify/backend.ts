@@ -51,7 +51,18 @@ import { submitMarketing } from './functions/submit-marketing/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 
+import { findEventByCode } from './functions/find-event-by-code/resource';
+import { proUpload } from './functions/pro-upload/resource';
+import { processProPhoto } from './functions/process-pro-photo/resource';
+import { decideProPhoto } from './functions/decide-pro-photo/resource';
+import { connectPhotographer } from './functions/connect-photographer/resource';
+
 const backend = defineBackend({
+  findEventByCode,
+  proUpload,
+  processProPhoto,
+  decideProPhoto,
+  connectPhotographer,
   auth,
   data,
   storage,
@@ -179,6 +190,56 @@ s3Bucket.addLifecycleRule({
 // bucket; the trigger wiring itself is set up by defineStorage.
 const sanitizeFn = backend.sanitizeUpload.resources.lambda as LambdaFunction;
 bucket.grantReadWrite(sanitizeFn);
+
+// --- SharePix Pro ------------------------------------------------------
+//
+// The pro/ prefix has no entry in amplify/storage/resource.ts, so no browser
+// role can reach it — not a guest's, not a signed-in host's. These two grants
+// are the only way in, which is what makes "a professional original is never
+// publicly exposed" a fact about IAM rather than a promise in the UI.
+const connectionTable = backend.data.resources.tables.EventPhotographer;
+const photographerProfileTable = backend.data.resources.tables.PhotographerProfile;
+
+// Issues one presigned PUT. Write-only, and it never reads an object: it does
+// not need to, and a signer that could read is a signer that could leak.
+const proUploadFn = backend.proUpload.resources.lambda as LambdaFunction;
+bucket.grantPut(proUploadFn);
+connectionTable.grantReadData(proUploadFn);
+proUploadFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+proUploadFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Reads the original, writes the derivatives, deletes the original. The one
+// component that holds all three, which is why it is also the only one that
+// decides whether the delete may happen — see discardDecision.
+const processProFn = backend.processProPhoto.resources.lambda as LambdaFunction;
+bucket.grantReadWrite(processProFn);
+bucket.grantDelete(processProFn);
+connectionTable.grantReadData(processProFn);
+photographerProfileTable.grantReadData(processProFn);
+photoTable.grantReadWriteData(processProFn);
+processProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+processProFn.addEnvironment('PROFILE_TABLE_NAME', photographerProfileTable.tableName);
+processProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+processProFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Approve, reject, publish, and the Go Live switch. No bucket access at all:
+// deciding what a guest sees never needs to touch an object.
+const decideProFn = backend.decideProPhoto.resources.lambda as LambdaFunction;
+connectionTable.grantReadWriteData(decideProFn);
+photoTable.grantReadWriteData(decideProFn);
+decideProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+decideProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// Host invites, photographer pairs, either side removes. The only writer of
+// EventPhotographer and PhotographerPairingCode.
+const pairingTable = backend.data.resources.tables.PhotographerPairingCode;
+const connectFn = backend.connectPhotographer.resources.lambda as LambdaFunction;
+eventTable.grantReadData(connectFn);
+connectionTable.grantReadWriteData(connectFn);
+pairingTable.grantReadWriteData(connectFn);
+connectFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+connectFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
+connectFn.addEnvironment('PAIRING_TABLE_NAME', pairingTable.tableName);
 bucket.grantDelete(sanitizeFn);
 // Cloudflare R2 mirror. Uploads are still vetted in S3; once the bytes are
 // final this copies them to R2, which is where reads get served from because
@@ -247,7 +308,17 @@ recordBytesFn.addEventSource(
 // with them unset it returns nothing and every caller falls back to S3.
 const mediaUrlFn = backend.mediaUrl.resources.lambda as LambdaFunction;
 eventTable.grantReadData(mediaUrlFn);
+// Read-only, and only the eventsByEventCode index in practice: this function
+// turns a typed code into one event id and must never be able to change one.
+const findEventFn = backend.findEventByCode.resources.lambda as LambdaFunction;
+eventTable.grantReadData(findEventFn);
+findEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+// Read-only on Photo, for one thing: whether a professional photo is
+// published. That fact lives on the row rather than in the key, so the signing
+// path cannot settle it from the key alone.
+photoTable.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 mediaUrlFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
 mediaUrlFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 mediaUrlFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');

@@ -80,7 +80,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'note',
-        text: 'No QR code handy? Ask the host for the event code and enter it on the sharepix.net home page.',
+        text: 'No QR code handy? Ask the host for the event code — three words joined by dashes — and enter it at sharepix.net/join.',
       },
     ],
     related: ['camera-opens-gallery', 'video-wont-upload', 'upload-failed'],
@@ -197,12 +197,12 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'How many photos can be added?',
     audience: 'guest',
     category: 'Adding photos and videos',
-    summary: 'It depends on the host’s plan — from 100 photos up to unlimited.',
+    summary: 'It depends on the host’s plan — from 50 photos up to unlimited.',
     keywords: ['limit', 'how many', 'maximum', 'full', 'capacity'],
     blocks: [
       {
         kind: 'text',
-        text: 'Each photo can be up to 25 MB, and the event holds between 100 photos and an unlimited number depending on the plan the host chose. Videos are counted separately.',
+        text: 'Each photo can be up to 25 MB. A free event holds 50 photos; a full event holds an unlimited number. Videos are counted separately.',
       },
       {
         kind: 'text',
@@ -218,7 +218,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'How do I get back to the gallery?',
     audience: 'guest',
     category: 'Finding and viewing photos',
-    summary: 'Scan the QR code again, or enter the event code on the home page.',
+    summary: 'Scan the QR code again, or enter the event code at sharepix.net/join.',
     keywords: ['find', 'gallery', 'link', 'event code', 'lost', 'back'],
     blocks: [
       {
@@ -385,7 +385,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Your dashboard has Show QR code, which you can display on a phone or download as an image for a sign. Event and Plus both let you restyle the code to match your event.',
+        text: 'Your dashboard has Show QR code, which you can display on a phone or download as an image for a sign. A paid event lets you restyle the code to match your event.',
       },
       {
         kind: 'text',
@@ -680,7 +680,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'How many videos does my plan include?',
     audience: 'host',
     category: 'Plans, billing and add-ons',
-    summary: 'Two on Starter, ten on Standard, thirty on Premium and Corporate.',
+    summary: 'One video on a free event, and a 10 GB budget on a full event.',
     keywords: ['video limit', 'how many videos', 'allowance', 'video slots', 'full'],
     blocks: [
       {
@@ -689,7 +689,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'text',
-        text: 'Photos can be unlimited on the higher plans, but video cannot: a photo is shrunk before it is ever shown, while a video is sent in full every time somebody plays it. The allowance is what keeps that predictable.',
+        text: 'A free event includes one video. Photos can be unlimited on a paid event, but video cannot: a photo is shrunk before it is ever shown, while a video is sent in full every time somebody plays it. The budget is what keeps that predictable.',
       },
       {
         kind: 'text',
@@ -712,7 +712,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Add-ons sit in one list on your dashboard: extend the upload window, and the live slideshow. Tick everything you want, apply a discount code if you have one, and pay with a single checkout.',
+        text: 'The $79 full event already includes the guest book and the live slideshow, so the only add-on is extending the upload window. It sits on your dashboard: tick it, apply a discount code if you have one, and pay with a single checkout.',
       },
       {
         kind: 'text',
@@ -759,7 +759,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       {
         kind: 'steps',
         steps: [
-          'Buy the Live slideshow add-on from your dashboard.',
+          'Nothing to buy — the slideshow is included on the $79 full event.',
           'On the machine driving the screen, sign in and open your event dashboard.',
           'Choose Live slideshow — it opens in its own tab.',
           'Put that tab full screen and leave it running.',
@@ -860,7 +860,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'note',
-        text: 'A pending event that never activated is not a charge. Check the card statement before paying again.',
+        text: 'A checkout you abandoned leaves a pending event but takes no money, so check the card statement before paying again. If the statement does show a charge and the event is still not active, email us — that one we fix at our end.',
       },
     ],
     related: ['event-not-active', 'corporate-plan'],

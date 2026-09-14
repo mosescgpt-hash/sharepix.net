@@ -123,8 +123,9 @@ export default function TermsPage() {
                 Card details are entered on Stripe and are never stored by SharePix.
               </li>
               <li>
-                Every event includes a <strong>60-day upload window</strong>{' '}(extendable in
-                30-day blocks for half the plan price). After it closes, the gallery stays
+                Every event includes a <strong>60-day upload window</strong>. On a paid event
+                this can be extended in 30-day blocks for half the plan price; a free event
+                cannot be extended. After it closes, the gallery stays
                 available for <strong>12 months</strong> — guests at reduced resolution, and the
                 host with full access and downloads throughout. A <strong>free event</strong> keeps
                 its gallery for 30 days rather than 12 months, and events on a retired plan keep
@@ -182,6 +183,20 @@ export default function TermsPage() {
               as-available basis and may modify, suspend, or discontinue features. We are not
               responsible for content that is lost because you did not download it before your
               event&rsquo;s retention period ended.
+            </p>
+            <p>
+              <strong>Things outside our control.</strong> Uploading needs a working internet
+              connection at your venue. We are not responsible for photos that fail to upload
+              because of a venue&rsquo;s wifi or mobile coverage, and we cannot fix a connection
+              we have no access to.
+            </p>
+            <p>
+              The Service also runs on infrastructure we buy from other companies, including
+              Amazon Web Services and Cloudflare. We do not control whether those providers stay
+              up. If one of them has an outage that stops your event working, we will do what we
+              reasonably can to put it right, and that may include a partial or full refund of
+              what you paid for that event. Any such refund is at our discretion and will never
+              exceed what you paid us for that event &mdash; see section 12.
             </p>
           </div>
 

@@ -1,4 +1,5 @@
 import { reviewEvent, type ReviewEventFacts } from '../lib/eventReview';
+import { COMMITTED_STATUSES, REFUND_STATUSES } from '../lib/refunds';
 import { CLAIM_OPENS_DAYS_AFTER } from '../lib/guestUploadPromise';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -121,12 +122,12 @@ describe('the counts it reports', () => {
 });
 
 describe('money already spoken for', () => {
-  it('totals refunds that are pending or paid', () => {
+  it('totals refunds that are approved or recorded', () => {
     const review = reviewEvent(
       anEvent(),
       [
-        { id: 'r1', amountCents: 7900, status: 'PAID' },
-        { id: 'r2', amountCents: 500, status: 'PENDING' },
+        { id: 'r1', amountCents: 7900, status: 'RECORDED' },
+        { id: 'r2', amountCents: 500, status: 'APPROVED' },
       ],
       IN_WINDOW,
     );
@@ -134,24 +135,84 @@ describe('money already spoken for', () => {
     expect(find(review, 'Already refunded')?.value).toContain('84');
   });
 
-  it('ignores a rejected row, which is not money', () => {
+  it('ignores a declined row, which is not money', () => {
     const review = reviewEvent(
       anEvent(),
-      [{ id: 'r1', amountCents: 7900, status: 'REJECTED' }],
+      [{ id: 'r1', amountCents: 7900, status: 'DECLINED' }],
       IN_WINDOW,
     );
     expect(review.alreadyRefundedCents).toBe(0);
     expect(find(review, 'Already refunded')).toBeUndefined();
   });
 
-  it('still lists a rejected row, so the history is visible', () => {
-    const rows = [{ id: 'r1', amountCents: 7900, status: 'REJECTED' }];
+  it('still lists a declined row, so the history is visible', () => {
+    const rows = [{ id: 'r1', amountCents: 7900, status: 'DECLINED' }];
     expect(reviewEvent(anEvent(), rows, IN_WINDOW).priorRefunds).toEqual(rows);
   });
 
   it('treats a missing amount as nothing rather than as NaN', () => {
-    const review = reviewEvent(anEvent(), [{ id: 'r1', status: 'PAID' }], IN_WINDOW);
+    const review = reviewEvent(anEvent(), [{ id: 'r1', status: 'RECORDED' }], IN_WINDOW);
     expect(review.alreadyRefundedCents).toBe(0);
+  });
+});
+
+describe('which statuses count as money already out', () => {
+  it('uses the ledger\u2019s own list, not a second one written here', () => {
+    // The first draft invented ['PENDING', 'APPROVED', 'PAID', 'REFUNDED'].
+    // Three of those are not statuses this system has, so RECORDED \u2014 the one
+    // meaning a person actually put the money back \u2014 went uncounted, which is
+    // the direction that lets a second refund through on top of a first.
+    for (const status of COMMITTED_STATUSES) {
+      const review = reviewEvent(anEvent(), [{ id: 'r', amountCents: 100, status }], IN_WINDOW);
+      expect(review.alreadyRefundedCents).toBe(100);
+    }
+  });
+
+  it('counts nothing under a status the ledger does not commit', () => {
+    const uncommitted = REFUND_STATUSES.filter((s) => !COMMITTED_STATUSES.includes(s));
+    expect(uncommitted.length).toBeGreaterThan(0);
+    for (const status of uncommitted) {
+      const review = reviewEvent(anEvent(), [{ id: 'r', amountCents: 100, status }], IN_WINDOW);
+      expect(review.alreadyRefundedCents).toBe(0);
+    }
+  });
+});
+
+describe('what the host said they planned', () => {
+  it('is shown once they have claimed, in the words they were shown', () => {
+    const review = reviewEvent(
+      anEvent(),
+      [{ id: 'r1', status: 'REQUESTED', plannedUse: 'guests-upload' }],
+      IN_WINDOW,
+    );
+    expect(find(review, 'The host said they planned')?.value).toBe(
+      'I wanted guests to add their own photos',
+    );
+  });
+
+  it('is absent on an event nobody has claimed against', () => {
+    // An empty row would read as an answer.
+    expect(find(reviewEvent(anEvent(), [], IN_WINDOW), 'The host said they planned')).toBeUndefined();
+  });
+
+  it('flags the shape a bad-faith claim takes', () => {
+    // "Guests were meant to upload" next to one uploader and a lot of host
+    // photos. Not an accusation \u2014 a prompt to look twice.
+    const review = reviewEvent(
+      anEvent({ photoCount: 200, guestUploadCount: 0, contributorCount: 1 }),
+      [{ id: 'r1', status: 'REQUESTED', plannedUse: 'guests-upload' }],
+      IN_WINDOW,
+    );
+    expect(find(review, 'The host said they planned')?.note).toMatch(/second look/i);
+  });
+
+  it('shows an unrecognised answer rather than dropping it', () => {
+    const review = reviewEvent(
+      anEvent(),
+      [{ id: 'r1', status: 'REQUESTED', plannedUse: 'something-older' }],
+      IN_WINDOW,
+    );
+    expect(find(review, 'The host said they planned')?.value).toBe('something-older');
   });
 });
 

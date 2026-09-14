@@ -44,6 +44,7 @@ import {
 } from '@/lib/analytics';
 import {
   browserExcluded,
+  countsFromBaseline,
   excludeThisBrowser,
   shouldCount,
   type Viewer,
@@ -565,10 +566,139 @@ function viewerForAnalytics(): Promise<Viewer> {
   return viewerPromise;
 }
 
+/**
+ * Turn an event code a guest typed into the event it belongs to.
+ *
+ * Guest auth, because a guest is exactly who needs this. Returns the id or
+ * nothing; the page decides what to say, and it says the same thing for a
+ * malformed code and a code nobody has.
+ */
+export async function findEventByCode(code: string): Promise<string | null> {
+  const { data, errors } = await client.queries.findEventByCode(
+    { code },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return data?.found ? (data.eventId ?? null) : null;
+}
+
+/**
+ * invite | pair | remove, on a photographer's connection to an event.
+ *
+ * `invite` returns the pairing code once. It is not readable afterwards by
+ * anybody, so a caller that loses it issues a new one.
+ */
+export async function connectPhotographer(input: {
+  action: 'invite' | 'pair' | 'remove';
+  eventId?: string;
+  code?: string;
+  photographerId?: string;
+}): Promise<{ ok: boolean; code: string | null; message: string; eventId: string | null }> {
+  const { data, errors } = await client.mutations.connectPhotographer(input, {
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return {
+    ok: data?.ok ?? false,
+    code: data?.code ?? null,
+    message: data?.message ?? '',
+    eventId: data?.eventId ?? null,
+  };
+}
+
+/** The photographers on one of the host's own events. */
+export async function fetchEventPhotographers(eventId: string) {
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.EventPhotographer.listEventPhotographerByEventId(
+        { eventId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'The photographers on this event could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    photographerId: String(row.photographerId ?? ''),
+    status: String(row.status ?? ''),
+    acceptedAt: (row.acceptedAt as string) ?? null,
+    livePublishing: row.livePublishing === true,
+  }));
+}
+
+/** Ask for somewhere to put one professional photograph. */
+export async function requestProUploadSlot(
+  eventId: string,
+  contentType: string,
+): Promise<{ uploadId: string; uploadUrl: string }> {
+  const { data, errors } = await client.mutations.requestProUploadSlot(
+    { eventId, contentType },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data) throw new Error('That upload could not be started.');
+  return { uploadId: data.uploadId, uploadUrl: data.uploadUrl };
+}
+
+/** Turn an uploaded original into a preview. Safe to call twice. */
+export async function processProPhoto(eventId: string, uploadId: string) {
+  const { data, errors } = await client.mutations.processProPhoto(
+    { eventId, uploadId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { publishStatus: data?.publishStatus ?? 'received', message: data?.message ?? '' };
+}
+
+/** approve | reject | publish | unpublish, on the photographer's own photo. */
+export async function decideProPhoto(uploadId: string, decision: string) {
+  const { data, errors } = await client.mutations.decideProPhoto(
+    { uploadId, decision },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { publishStatus: data?.publishStatus ?? '', message: data?.message ?? '' };
+}
+
+/** Go Live, Pause, and the publishing mode for one event. */
+export async function setProPublishing(input: {
+  eventId: string;
+  livePublishing?: boolean;
+  publishingMode?: string;
+}) {
+  const { data, errors } = await client.mutations.setProPublishing(input, {
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  return { message: data?.message ?? '' };
+}
+
+/** This photographer's connections, for the /pro event list. */
+export async function fetchMyProConnections() {
+  const user = await getCurrentUserInfo();
+  if (!user) return [];
+  const rows = await listAllPages(
+    (nextToken) =>
+      client.models.EventPhotographer.listEventPhotographerByPhotographerId(
+        { photographerId: user.userId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'Your events could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>).map((row) => ({
+    eventId: String(row.eventId ?? ''),
+    status: String(row.status ?? ''),
+    livePublishing: row.livePublishing === true,
+    publishingMode: (row.publishingMode as string) ?? null,
+  }));
+}
+
 /** Every recorded funnel event, for the product-health dashboard. */
 export async function listAnalyticsEvents(): Promise<
   Array<{ name: AnalyticsEventName; scopeId: string; occurredAt: string | null }>
 > {
+  // Read first: a baseline that failed to load must not silently widen the
+  // window back to everything, which would show the contaminated counts again
+  // with no sign anything had gone wrong.
+  const countFrom = await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => '');
   const rows = await listAllPages(
     (nextToken) =>
       client.models.AnalyticsEvent.list({
@@ -584,8 +714,10 @@ export async function listAnalyticsEvents(): Promise<
       scopeId: String(row.scopeId ?? ''),
       occurredAt: (row.occurredAt as string) ?? null,
     }))
-    .filter((row) => isAnalyticsEvent(row.name));
+    .filter((row) => isAnalyticsEvent(row.name))
+    .filter((row) => countsFromBaseline(row.occurredAt, countFrom));
 }
+
 
 /** The names something in this build actually fires. See NOT_MEASURED_FUNNEL. */
 export const WIRED_ANALYTICS_EVENTS: readonly AnalyticsEventName[] = ANALYTICS_EVENTS.filter(
@@ -963,11 +1095,12 @@ export async function runScheduledJob(
  */
 export async function claimGuestUploadPromise(
   eventId: string,
+  plannedUse: string,
   attested: boolean,
   note?: string,
 ): Promise<{ filed: boolean; message: string }> {
   const { data, errors } = await client.mutations.claimGuestUploadPromise(
-    { eventId, attested, note: note?.trim() || undefined },
+    { eventId, plannedUse, attested, note: note?.trim() || undefined },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -986,6 +1119,7 @@ function readRefund(row: Record<string, unknown>): RefundRow {
     decidedBy: (row.decidedBy as string) ?? null,
     recordedAt: (row.recordedAt as string) ?? null,
     createdAt: (row.createdAt as string) ?? null,
+    plannedUse: (row.plannedUse as string) ?? null,
   };
 }
 
@@ -1068,6 +1202,20 @@ export async function decideRefund(
  */
 export const SETTING_KEYS = {
   monthlyReportRecipient: 'monthly-report-recipient',
+  /**
+   * ISO timestamp. Funnel events before it are ignored by the dashboard.
+   *
+   * The counts from before the self-exclusion fix contain the operator's own
+   * visits mixed in with real prospects', and nothing can separate them
+   * retroactively. This gives a clean baseline without deleting anything: the
+   * rows stay, the dashboard reads from here forward, and the 90-day pruner
+   * clears the old ones on its own schedule.
+   *
+   * Non-destructive on purpose. "Reset the counts" and "destroy the evidence"
+   * should not be the same button, and a baseline can be moved back if it
+   * turns out to have been set in error.
+   */
+  analyticsCountFrom: 'analytics-count-from',
 } as const;
 
 export async function readSetting(key: string): Promise<string> {

@@ -1,6 +1,8 @@
+import { EVENT_CODE_WORDS } from '../amplify/functions/create-event/eventCodeWords';
+import { isEventCodeShaped } from '../lib/eventCodeFormat';
 import {
   CORPORATE_EVENT_PLAN,
-  EVENT_CODE_ALPHABET,
+  EVENT_CODE_WORD_COUNT,
   TIER_PLANS,
   activationFor,
   codeCovers,
@@ -428,25 +430,46 @@ describe('the row a new event starts as', () => {
 });
 
 describe('event codes', () => {
-  it('draws the right length from the unambiguous alphabet', () => {
+  it('draws one word per position from the whole list', () => {
     let calls = 0;
     const codeText = eventCodeFrom((max) => {
       calls += 1;
-      expect(max).toBe(EVENT_CODE_ALPHABET.length);
+      // Every draw must see the full list. A generator that narrowed the range
+      // on later positions would shrink the keyspace silently.
+      expect(max).toBe(EVENT_CODE_WORDS.length);
       return 0;
     });
-    expect(codeText).toBe('AAAAAA');
-    expect(calls).toBe(6);
+    expect(calls).toBe(EVENT_CODE_WORD_COUNT);
+    expect(codeText).toBe([EVENT_CODE_WORDS[0], EVENT_CODE_WORDS[0], EVENT_CODE_WORDS[0]].join('-'));
   });
 
-  it('has no characters that get misread aloud', () => {
-    // No 0/O and no 1/I/L: these are read off a table tent and typed by guests.
-    expect(EVENT_CODE_ALPHABET).not.toMatch(/[01OIL]/);
-  });
-
-  it('uses every index the alphabet offers', () => {
+  it('joins distinct words with the separator', () => {
     let i = 0;
     const codeText = eventCodeFrom(() => i++);
-    expect(codeText).toBe(EVENT_CODE_ALPHABET.slice(0, 6));
+    expect(codeText).toBe(EVENT_CODE_WORDS.slice(0, EVENT_CODE_WORD_COUNT).join('-'));
+    expect(codeText.split('-')).toHaveLength(EVENT_CODE_WORD_COUNT);
+  });
+
+  it('produces something the shared format module recognises', () => {
+    // The generator and the validator live in different bundles and cannot
+    // import each other. This is the only thing keeping them agreed.
+    let i = 0;
+    expect(isEventCodeShaped(eventCodeFrom(() => i++))).toBe(true);
+    expect(isEventCodeShaped(eventCodeFrom(() => 7771))).toBe(true);
+  });
+
+  it('draws from a list with no word that would break the separator', () => {
+    // drop-down, felt-tip, t-shirt and yo-yo are dropped from EFF's list for
+    // exactly this reason: a hyphen inside a word makes a code unsplittable.
+    for (const word of EVENT_CODE_WORDS) {
+      expect(word).toMatch(/^[a-z]{3,9}$/);
+    }
+  });
+
+  it('carries the full keyspace, so the security claim is checkable', () => {
+    // 7,772^3 is about 4.7e11. If somebody trims this list, the number in the
+    // comments stops being true and this fails.
+    expect(EVENT_CODE_WORDS.length).toBe(7772);
+    expect(new Set(EVENT_CODE_WORDS).size).toBe(EVENT_CODE_WORDS.length);
   });
 });

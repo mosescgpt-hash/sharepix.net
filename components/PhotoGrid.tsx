@@ -11,6 +11,7 @@ import { GallerySort, sortGalleryPhotos } from '@/lib/gallery';
 import { likeCountOf } from '@/lib/photoEngagement';
 import { guestKeyFor, guestLabelFor } from '@/lib/guestLabel';
 import { listMyPhotoLikes } from '@/lib/api';
+import { canDownload as proCanDownload } from '@/lib/professionalMedia';
 import { isVideoFilename } from '@/lib/validation';
 
 interface PhotoGridProps {
@@ -341,8 +342,13 @@ export default function PhotoGrid({
           <PhotoCard
             key={photo.id}
             photo={photo}
-            canDownload={canDownload}
-            selectable={canDownload}
+            // Per photo, not per gallery. A professional photograph is never
+            // downloadable whatever the event's own setting says, and
+            // canDownload in lib/professionalMedia.ts is the one place that
+            // decides — the same function the signing path uses, so the button
+            // and the endpoint cannot disagree.
+            canDownload={canDownload && proCanDownload(photo)}
+            selectable={canDownload && proCanDownload(photo)}
             selected={selected.has(photo.id)}
             failed={failedIds.has(photo.id)}
             eventName={eventName}

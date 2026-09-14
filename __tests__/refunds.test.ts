@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { codeOnly } from './sourceGuards';
 import { join } from 'node:path';
 import {
   COMMITTED_STATUSES,
@@ -16,6 +17,10 @@ import {
   ATTESTATION_QUESTION,
   CLAIM_CLOSES_DAYS_AFTER,
   CLAIM_OPENS_DAYS_AFTER,
+  PLANNED_SOLO_MESSAGE,
+  PLANNED_USES,
+  PLANNED_USE_OPTIONS,
+  PLANNED_USE_QUESTION,
   canFileClaim,
   promiseEligibility,
 } from '../lib/guestUploadPromise';
@@ -209,20 +214,83 @@ describe('who can claim the Guest Upload Promise', () => {
   });
 });
 
+/** A claim from a host who wanted guests uploading and ticked the statement. */
+const COLLECTING = { plannedUse: 'guests-upload' as const, attested: true };
+
 describe('the attestation', () => {
   it('is required, and is a question about the host putting the code out', () => {
     // SharePix cannot know whether a printed sign was displayed. Asking is the
     // honest answer; device fingerprinting to police it is not.
     expect(ATTESTATION_QUESTION).toMatch(/QR code or event link available/i);
-    expect(canFileClaim(abandoned, false, at(10)).ok).toBe(false);
-    expect(canFileClaim(abandoned, true, at(10)).ok).toBe(true);
+    expect(canFileClaim(abandoned, { ...COLLECTING, attested: false }, at(10)).ok).toBe(false);
+    expect(canFileClaim(abandoned, COLLECTING, at(10)).ok).toBe(true);
   });
 
   it('reports a missing attestation differently from being ineligible', () => {
     // "Not yet, claims open on the 8th" and "please confirm you put the code
     // out" are different conversations.
-    expect(canFileClaim(abandoned, false, at(10)).message).toMatch(/confirm you made/i);
-    expect(canFileClaim(abandoned, true, at(3)).message).toMatch(/claims open/i);
+    expect(
+      canFileClaim(abandoned, { ...COLLECTING, attested: false }, at(10)).message,
+    ).toMatch(/confirm you made/i);
+    expect(canFileClaim(abandoned, COLLECTING, at(3)).message).toMatch(/claims open/i);
+  });
+});
+
+describe('what the host planned', () => {
+  it('does not apply to a host who was always going to upload everything', () => {
+    // The church case: one person uploads, parents look. Nothing failed, and
+    // v1 would have offered them their money back for it.
+    const result = canFileClaim(abandoned, { plannedUse: 'i-upload', attested: true }, at(10));
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe(PLANNED_SOLO_MESSAGE);
+  });
+
+  it('answers rather than rejects, and asks what did go wrong', () => {
+    // A refusal that argues with a customer is worse than no promise at all.
+    expect(PLANNED_SOLO_MESSAGE).not.toMatch(/ineligible|denied|cannot claim|not entitled/i);
+    expect(PLANNED_SOLO_MESSAGE).toMatch(/tell us what happened/i);
+  });
+
+  it('refuses to guess when the question was not answered', () => {
+    for (const plannedUse of [undefined, null, '', 'other', 'GUESTS-UPLOAD']) {
+      const result = canFileClaim(abandoned, { plannedUse, attested: true }, at(10));
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain(PLANNED_USE_QUESTION);
+    }
+  });
+
+  it('asks intent before the attestation, so the leading question is never reached', () => {
+    // A host who planned to upload alone should be answered, not walked to a
+    // statement they have no reason to sign.
+    const result = canFileClaim(abandoned, { plannedUse: 'i-upload', attested: false }, at(10));
+    expect(result.message).toBe(PLANNED_SOLO_MESSAGE);
+  });
+
+  it('still puts eligibility first, so intent cannot revive a closed window', () => {
+    expect(canFileClaim(abandoned, COLLECTING, at(99)).message).toMatch(/closed/i);
+  });
+});
+
+describe('the two answers weigh the same', () => {
+  // The whole trick. A host who can tell which option pays is answering a
+  // different question from the one being asked.
+  it('offers exactly two, neither mentioning money or failure', () => {
+    expect(PLANNED_USE_OPTIONS).toHaveLength(2);
+    for (const option of PLANNED_USE_OPTIONS) {
+      expect(option.label).not.toMatch(/refund|money|back|fail|wrong|nobody|did not|didn/i);
+      // Both describe an ordinary plan, in the host's own terms.
+      expect(option.label.toLowerCase().startsWith('i ')).toBe(true);
+    }
+  });
+
+  it('covers both values the rules accept, and nothing else', () => {
+    expect(PLANNED_USE_OPTIONS.map((option) => option.value).sort()).toEqual(
+      [...PLANNED_USES].sort(),
+    );
+  });
+
+  it('asks what was planned, not what happened', () => {
+    expect(PLANNED_USE_QUESTION).toMatch(/planned/i);
   });
 });
 
@@ -270,19 +338,45 @@ describe('the claim function trusts nothing from the caller', () => {
 
 describe('what the host is shown', () => {
   const dashboard = read('pages/event/[eventId]/admin.tsx');
+  const code = codeOnly(dashboard);
 
-  it('offers the claim only when it applies', () => {
-    // Offering a refund to a host whose event worked is a strange thing to put
-    // on their dashboard.
-    expect(dashboard).toContain('{promise.eligible ? (');
+  it('never offers a refund unasked', () => {
+    // v1 rendered "No guests uploaded anything — that is not what you paid
+    // for" on any event that qualified, which told a church sharing photos
+    // with parents, exactly as planned, that their event had failed. The
+    // dashboard no longer decides that about anybody.
+    expect(code).not.toContain('promiseEligibility');
+    expect(code).not.toContain('promise.eligible');
+    expect(dashboard).not.toMatch(/No guests uploaded anything/);
   });
 
-  it('says the money goes back to the card they paid with', () => {
-    expect(dashboard).toMatch(/back to the card\s*\n?\s*you paid with/i);
+  it('keeps the door open on every event, whatever its counts', () => {
+    // Findable rather than pushed: one line, behind no condition about the
+    // event, so a host who wants it can always get to it.
+    expect(code).toContain('Something not right with this event?');
+    expect(code).toContain('setPromiseOpen(true)');
   });
 
-  it('requires the attestation before the button works', () => {
-    expect(dashboard).toContain('disabled={!attested || claiming}');
+  it('asks what they planned before anything else', () => {
+    expect(code).toContain('PLANNED_USE_QUESTION');
+    expect(code).toContain('PLANNED_USE_OPTIONS');
+  });
+
+  it('pre-selects neither answer', () => {
+    // A default would answer for them the one question the form exists to ask.
+    expect(code).toContain("useState('')");
+    expect(code).not.toMatch(/useState\('guests-upload'\)/);
+    expect(code).not.toMatch(/useState\('i-upload'\)/);
+  });
+
+  it('shows the leading attestation only on the path where it is relevant', () => {
+    // A host who planned to upload alone is answered by the server, never
+    // walked to a statement they have no reason to sign.
+    expect(code).toContain("{plannedUse === 'guests-upload' ? (");
+  });
+
+  it('cannot send without an answer to the neutral question', () => {
+    expect(code).toContain('disabled={!plannedUse || claiming}');
   });
 });
 

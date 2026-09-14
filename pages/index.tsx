@@ -58,8 +58,8 @@ function Hero() {
             <span className="spx-display-serif block">Everyone&rsquo;s perspective.</span>
           </h1>
           <p className="spx-body mt-5 max-w-md">
-            One QR code on the table. Every guest&rsquo;s camera. All your photos land in one
-            private gallery — no app to install, no account to make, and nobody to chase
+            One QR code on the table. Every guest&rsquo;s camera. All your photos land in
+            one gallery — no app to install, no account to make, and nobody to chase
             afterwards.
           </p>
           {/* The reassurance line, under the promise rather than instead of it.

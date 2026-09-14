@@ -1,11 +1,12 @@
-import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, BatchGetItemCommand } from '@aws-sdk/client-dynamodb';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Schema } from '../../data/resource';
-import { MAX_KEYS_PER_REQUEST, canSign, dedupeKeys } from './access';
+import { MAX_KEYS_PER_REQUEST, canSign, dedupeKeys, isProKey, proUploadIdOf } from './access';
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
+const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 
 /** How long a signed URL stays valid. Long enough to download a 250 MB video. */
 const URL_TTL_SECONDS = 15 * 60;
@@ -84,10 +85,26 @@ export const handler: Handler = async (event) => {
   };
   const caller = event.identity as { sub?: string | null; groups?: string[] | null } | undefined;
 
+  // Which professional photos in this batch a guest may actually see.
+  //
+  // canSign settles everything a key can answer on its own; publish status
+  // cannot be one of those, because it lives on the photo's row and changes
+  // after the key is minted. So the rows are read here — only for pro keys, so
+  // an all-guest gallery costs exactly what it did before — and an unpublished,
+  // rejected or still-in-review photo is dropped whatever its key says.
+  const publishedPro = await publishedProIds(keys);
+
   return Promise.all(
     keys.map(async (key) => {
       const decision = canSign({ eventId, key, event: eventState, caller });
       if (!decision.allowed) return { key, url: null };
+      // The host and admins reach their own event's professional previews the
+      // same way a guest does, and are gated the same way. A host looking at
+      // their gallery should see what their guests see; the photographer's own
+      // queue is served by the Pro dashboard, not by this function.
+      if (isProKey(key) && !publishedPro.has(proUploadIdOf(key))) {
+        return { key, url: null };
+      }
       try {
         const url = await getSignedUrl(
           client,
@@ -110,3 +127,40 @@ export const handler: Handler = async (event) => {
     }),
   );
 };
+
+/**
+ * The upload ids in this batch whose photo row says `published`.
+ *
+ * Batched because a gallery asks for hundreds of keys at once and a read per
+ * key would make the professional path quadratically slower than the guest
+ * one. DynamoDB caps a BatchGetItem at 100 items, hence the chunking.
+ *
+ * Fails closed: a read that errors contributes nothing to the set, so those
+ * photos are not signed. Showing a photographer's unreviewed work because a
+ * table read timed out is the one outcome worth being slow or blank over.
+ */
+async function publishedProIds(keys: string[]): Promise<Set<string>> {
+  const ids = [...new Set(keys.filter(isProKey).map(proUploadIdOf).filter(Boolean))];
+  const published = new Set<string>();
+  if (ids.length === 0 || !PHOTO_TABLE) return published;
+
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const result = await dynamo
+      .send(
+        new BatchGetItemCommand({
+          RequestItems: {
+            [PHOTO_TABLE]: {
+              Keys: chunk.map((id) => ({ id: { S: id } })),
+              ProjectionExpression: 'id, publishStatus',
+            },
+          },
+        }),
+      )
+      .catch(() => null);
+    for (const row of result?.Responses?.[PHOTO_TABLE] ?? []) {
+      if (row.publishStatus?.S === 'published' && row.id?.S) published.add(row.id.S);
+    }
+  }
+  return published;
+}

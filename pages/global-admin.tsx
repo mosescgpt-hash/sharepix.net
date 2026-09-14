@@ -257,6 +257,9 @@ function GlobalAdminPage() {
   const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
   // What the operator typed into the refund-review lookup.
   const [reviewQuery, setReviewQuery] = useState('');
+  // The analytics baseline: funnel counts read from here forward.
+  const [countFrom, setCountFrom] = useState('');
+  const [countFromWorking, setCountFromWorking] = useState(false);
   const [refundsError, setRefundsError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[] | null>(null);
   const [surveys, setSurveys] = useState<SurveyRow[] | null>(null);
@@ -445,6 +448,7 @@ function GlobalAdminPage() {
         const stored = await readSetting(SETTING_KEYS.monthlyReportRecipient);
         setReportTo(stored);
         setReportSaved(stored);
+        setCountFrom(await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => ''));
         setSettingsError(null);
       } catch (err) {
         setSettingsError(err instanceof Error ? err.message : 'Settings could not be loaded.');
@@ -729,6 +733,43 @@ function GlobalAdminPage() {
       );
     } finally {
       setWorking(null);
+    }
+  }
+
+  /**
+   * Zero the funnel by moving its baseline to now.
+   *
+   * Deletes nothing. The rows before this point stay where they are — they
+   * contain real prospects' visits alongside the operator's own, and nothing
+   * can separate them retroactively — and the 90-day pruner clears them on its
+   * own schedule. This just stops the dashboard counting them.
+   *
+   * Reversible for the same reason: clearing the baseline brings the history
+   * back, which a delete never could.
+   */
+  async function handleResetFunnel(next: string) {
+    const zeroing = next !== '';
+    if (
+      zeroing &&
+      !window.confirm(
+        'Start the funnel counts from now?\n\nEverything recorded before this moment stops being counted. Nothing is deleted, and you can undo it.',
+      )
+    ) {
+      return;
+    }
+    setCountFromWorking(true);
+    setSettingsError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      await writeSetting(SETTING_KEYS.analyticsCountFrom, next, me?.loginId ?? 'admin');
+      setCountFrom(next);
+      // Re-read through the new baseline so the numbers on screen match it
+      // immediately, rather than looking unchanged until the next page load.
+      setFunnel(await listAnalyticsEvents().catch(() => []));
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : 'That could not be saved.');
+    } finally {
+      setCountFromWorking(false);
     }
   }
 
@@ -1967,6 +2008,37 @@ function GlobalAdminPage() {
                 the console. Server-recorded events (purchases, events created, milestones)
                 are never filtered, so an event you create yourself does still appear.
               </p>
+              {/* Nothing is deleted. The rows before the baseline hold real
+                  prospects' visits mixed with the operator's own and cannot be
+                  separated retroactively, so the honest move is to stop
+                  counting them rather than to destroy them — and that is
+                  reversible, which a delete would not be. */}
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                {countFrom ? (
+                  <>
+                    <span className="text-xs text-charcoal/70">
+                      Counting from {new Date(countFrom).toLocaleString()}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={countFromWorking}
+                      onClick={() => void handleResetFunnel('')}
+                      className="text-xs text-pine underline disabled:opacity-50"
+                    >
+                      Count everything again
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={countFromWorking}
+                    onClick={() => void handleResetFunnel(new Date().toISOString())}
+                    className="border border-charcoal/25 px-3 py-1.5 text-xs font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                  >
+                    {countFromWorking ? 'Working…' : 'Start counting from now'}
+                  </button>
+                )}
+              </div>
 
               {funnelError ? (
                 <Notice tone="warn" className="mt-3">

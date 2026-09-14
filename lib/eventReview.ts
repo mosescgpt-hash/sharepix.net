@@ -17,10 +17,13 @@
  * it is explicitly not a judgement of a customer.
  *
  * So this module reports Successful Event as context and refuses to let it
- * decide anything. `refundOwed` is computed from the Guest Upload Promise
- * alone, which asks a question with an actual answer: did *anyone* other than
- * the host upload? One guest upload means the product did what it promised, and
- * one is the threshold.
+ * decide anything. The stance comes from the Guest Upload Promise alone, which
+ * asks two questions that have answers: did *anyone* other than the host
+ * upload, and were guests meant to be uploading at all? One guest upload means
+ * the product did what it promised. And a host who planned to add the photos
+ * themselves — a church sharing with parents, a photographer delivering a
+ * shoot — was never sold on guests uploading, so nothing was promised to them
+ * that could fail.
  *
  * ## Owed, and everything else
  *
@@ -36,8 +39,9 @@
  * Nothing here moves money, the same as the rest of the refund path. It reads.
  */
 
-import { formatCents } from './refunds';
+import { COMMITTED_STATUSES, formatCents } from './refunds';
 import {
+  PLANNED_USE_OPTIONS,
   promiseEligibility,
   type PromiseEventFacts,
   type PromiseBlocker,
@@ -58,6 +62,15 @@ export interface ReviewRefundRow {
   status?: string | null;
   reason?: string | null;
   createdAt?: string | null;
+  /**
+   * What the host said they planned, from PLANNED_USE_OPTIONS.
+   *
+   * The one claim on the row that nothing can check. Worth reading beside the
+   * counts: "I wanted guests to add their own photos" next to one uploader and
+   * two hundred host photos is the shape a bad-faith claim takes, and it is
+   * not subtle once both are on the same screen.
+   */
+  plannedUse?: string | null;
 }
 
 export type RefundStance = 'owed' | 'discretionary';
@@ -88,12 +101,30 @@ export interface EventReview {
   promiseBlocker: PromiseBlocker | null;
 }
 
-/** Statuses that mean money is spoken for. A rejected row is not. */
-const COMMITTED = new Set(['PENDING', 'APPROVED', 'PAID', 'REFUNDED']);
+/** The host's answer in the words they were shown, not the stored slug. */
+function labelForPlannedUse(value: string): string {
+  return (
+    PLANNED_USE_OPTIONS.find((option) => option.value === value)?.label ??
+    // A value from an older claim, or one we no longer offer. Shown as-is
+    // rather than dropped: an unrecognised answer is still what they said.
+    value
+  );
+}
 
+/**
+ * Money already spoken for.
+ *
+ * Uses lib/refunds.ts's own list rather than a second one written here. The
+ * first draft of this function invented ['PENDING', 'APPROVED', 'PAID',
+ * 'REFUNDED'] — three of which are not statuses this system has — so RECORDED,
+ * the one that means a person actually put the money back, was not counted.
+ * That undercounts what has already gone out, which is the exact direction
+ * that lets a second refund through on top of a first.
+ */
 function committedCents(refunds: ReviewRefundRow[]): number {
+  const committed = new Set<string>(COMMITTED_STATUSES);
   return refunds
-    .filter((row) => COMMITTED.has((row.status ?? '').toUpperCase()))
+    .filter((row) => committed.has((row.status ?? '').toUpperCase()))
     .reduce((sum, row) => sum + Math.max(0, row.amountCents ?? 0), 0);
 }
 
@@ -169,6 +200,20 @@ export function reviewEvent(
       note: null,
     },
   ];
+
+  // Only when they have actually claimed. On an event with no claim there is
+  // no answer, and an empty row here would read as one.
+  const claimed = refunds.find((row) => (row.plannedUse ?? '').trim());
+  if (claimed) {
+    findings.push({
+      label: 'The host said they planned',
+      value: labelForPlannedUse(claimed.plannedUse ?? ''),
+      note:
+        guestUploads === 0 && progress.contributors <= 1 && hostUploads > 20
+          ? 'Worth a second look: they say guests were meant to upload, and this gallery is one person with a lot of photos.'
+          : 'Their answer, which nothing verifies.',
+    });
+  }
 
   const alreadyRefundedCents = committedCents(refunds);
   if (alreadyRefundedCents > 0) {

@@ -120,6 +120,18 @@ export interface QRPhoto {
   moderationStatus?: string | null;
   /** What the screener detected, when flagged. */
   moderationReasons?: string | null;
+
+  // --- SharePix Pro. All absent on a guest photo, which is every photo
+  // uploaded before Pro existed; absent reads as 'guest' everywhere.
+  /** 'guest' | 'professional'. */
+  sourceType?: string | null;
+  /** One of PUBLISH_STATUSES. Guests only ever see 'published'. */
+  publishStatus?: string | null;
+  /** Credit and links, copied onto the row when the photo was made. */
+  photographerName?: string | null;
+  photographerWebsite?: string | null;
+  purchaseUrl?: string | null;
+  contactUrl?: string | null;
   // Soft counts — a like is keyed to a browser, not a person. Missing means
   // zero, which is correct for every photo uploaded before these existed.
   likeCount?: number | null;
@@ -211,6 +223,8 @@ export interface RefundRow {
   decidedBy: string | null;
   recordedAt: string | null;
   createdAt: string | null;
+  /** Which of PLANNED_USE_OPTIONS the host chose. Null on a pre-v2 claim. */
+  plannedUse: string | null;
 }
 
 export interface DiscountCode {

@@ -1,3 +1,8 @@
+import {
+  PROFESSIONAL_BADGE,
+  galleryLinksFor,
+  isProfessional,
+} from '@/lib/professionalMedia';
 import { useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { downloadPhoto } from '@/lib/api';
@@ -41,6 +46,16 @@ export default function PhotoCard({
       setDownloading(false);
     }
   }
+
+  // Only what the photographer actually configured, and only http(s) — these
+  // are profile fields rendered as anchors. See galleryLinksFor.
+  const proLinks = isProfessional(photo.sourceType)
+    ? galleryLinksFor({
+        website: photo.photographerWebsite,
+        contactUrl: photo.contactUrl,
+        purchaseGalleryUrl: photo.purchaseUrl,
+      })
+    : [];
 
   const uploadedAt = photo.createdAt ? new Date(photo.createdAt) : null;
   const isVideo = isVideoFilename(photo.s3Key);
@@ -120,7 +135,35 @@ export default function PhotoCard({
 
       <figcaption className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
         <div className="min-w-0">
-          <p className="truncate font-medium">Uploaded by: {photo.uploadedBy || 'Anonymous'}</p>
+          {isProfessional(photo.sourceType) ? (
+            <>
+              {/* Small, and it says what the guest is looking at rather than
+                  what they cannot have. A badge that reads as a restriction
+                  makes the photographer look mean for something they are
+                  giving away. */}
+              <p className="truncate font-medium text-pine">{PROFESSIONAL_BADGE}</p>
+              {photo.photographerName ? (
+                <p className="truncate text-charcoal/60">Photo by {photo.photographerName}</p>
+              ) : null}
+              {proLinks.length > 0 ? (
+                <p className="mt-0.5 flex flex-wrap gap-x-3">
+                  {proLinks.map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      className="text-pine underline"
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="truncate font-medium">Uploaded by: {photo.uploadedBy || 'Anonymous'}</p>
+          )}
           {uploadedAt ? (
             <p className="text-charcoal/60">
               {uploadedAt.toLocaleDateString()} ·{' '}
