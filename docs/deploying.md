@@ -229,11 +229,25 @@ Turn it on in this order:
    storage`. With the flag off it walks the same events, decides the same
    things, logs every key it would remove, and deletes nothing. The summary says
    which mode it ran in.
-2. **Read the number.** On a young deployment it should be zero: an event has a
-   60-day upload window, then a 12-month gallery, then a 90-day archive, so
-   nothing is eligible until roughly 17 months after it was created. Zero is the
-   expected answer and is the best possible moment to switch on a destructive
-   job — you are turning it on while it has nothing to do.
+2. **Read the number, and do not assume it is zero.** The summary says how many
+   events *would* have been removed. How long that takes depends on the plan,
+   and the spread is wide:
+
+   | Plan | Gallery retention | Media deleted after |
+   | --- | --- | --- |
+   | Free | 30 days | ~6.2 months from creation |
+   | Starter (retired) | 21 days | ~5.9 months |
+   | Standard (retired) | 90 days | ~8.1 months |
+   | Full Event / Premium / Corporate | 365 days | ~17.2 months |
+
+   The clock is the upload window's end plus the plan's retention plus the
+   90-day archive plus a 7-day grace margin — `lifespanDays()` in
+   `lib/storageReclaim.ts`.
+
+   So a paid event is safe for well over a year, but **free events age out in
+   about six months**, which on a young deployment usually means the early test
+   events. A non-zero number is therefore normal and not a sign of a bug. Check
+   what it is before switching on, because after that it is not recoverable.
 3. Set `STORAGE_RECLAIM_ENABLED` to `true` in Amplify, and redeploy.
 4. Run it by hand once more and confirm the summary now says it deleted what it
    previously only listed.
