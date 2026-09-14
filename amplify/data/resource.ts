@@ -1617,6 +1617,11 @@ const schema = a.schema({
   // the dashboard says so before it does anything.
   runDailyTasks: a
     .mutation()
+    // `probe: true` reports whether the switch is on and does nothing else.
+    // The dashboard used to have to RUN a job to find out, which is fine for
+    // the nightly one and unacceptable for reclamation — you cannot learn
+    // whether deletion is armed by deleting.
+    .arguments({ probe: a.boolean() })
     .returns(a.ref('JobRunResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(dailyTasksFn)),
@@ -1634,6 +1639,11 @@ const schema = a.schema({
   // is how it is meant to be observed before it is trusted.
   runStorageReclaim: a
     .mutation()
+    // `probe: true` reports whether the switch is on and does nothing else.
+    // The dashboard used to have to RUN a job to find out, which is fine for
+    // the nightly one and unacceptable for reclamation — you cannot learn
+    // whether deletion is armed by deleting.
+    .arguments({ probe: a.boolean() })
     .returns(a.ref('JobRunResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(reclaimStorageFn)),

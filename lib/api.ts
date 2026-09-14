@@ -1072,20 +1072,55 @@ export async function submitEventFeedback(
 export async function runScheduledJob(
   job: 'daily' | 'monthly' | 'reclaim',
 ): Promise<{ ok: boolean; dryRun: boolean; summary: string }> {
+  if (job === 'monthly') {
+    // The only one with no switch, and so no probe argument.
+    const { data, errors } = await client.mutations.runMonthlyReport({ authMode: 'userPool' });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    return {
+      ok: data?.ok ?? false,
+      dryRun: data?.dryRun ?? false,
+      summary: data?.summary ?? 'The job ran but reported nothing.',
+    };
+  }
   const call =
-    job === 'daily'
-      ? client.mutations.runDailyTasks
-      : job === 'monthly'
-        ? client.mutations.runMonthlyReport
-        : client.mutations.runStorageReclaim;
-  // No arguments, so the options object is the only parameter.
-  const { data, errors } = await call({ authMode: 'userPool' });
+    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runStorageReclaim;
+  const { data, errors } = await call({ probe: false }, { authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   return {
     ok: data?.ok ?? false,
     dryRun: data?.dryRun ?? false,
     summary: data?.summary ?? 'The job ran but reported nothing.',
   };
+}
+
+/**
+ * Whether a job's switch is on, without running it.
+ *
+ * The dashboard used to make an operator run a job and read the summary to
+ * learn this, which is fine for the nightly job — a dry run sends nothing — and
+ * unacceptable for reclamation, where the only "run" that proves the switch is
+ * on is the one that deletes somebody's photographs.
+ *
+ * It twice let a flag be believed on while it was off: both are read at synth
+ * time by amplify/backend.ts and baked into the Lambda, so setting the variable
+ * in Amplify does nothing until a backend deploy runs. That gap is invisible
+ * from the console, and this is what makes it visible.
+ *
+ * Returns null rather than throwing. A status line that cannot load must not
+ * take the page with it, and "unknown" is an honest thing for it to say.
+ */
+export async function probeScheduledJob(
+  job: 'daily' | 'reclaim',
+): Promise<{ enabled: boolean; summary: string } | null> {
+  const call =
+    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runStorageReclaim;
+  try {
+    const { data, errors } = await call({ probe: true }, { authMode: 'userPool' });
+    if (errors?.length || !data) return null;
+    return { enabled: data.dryRun === false, summary: data.summary ?? '' };
+  } catch {
+    return null;
+  }
 }
 
 /**
