@@ -66,7 +66,7 @@ is a 10% surcharge, and every copy pays it again.
 | 5×7 | 8.93% | 14.43% |
 | 8×10 | 8.75% | 11.22% |
 | 11×14 | 35.12% | 54.16% |
-| 12×16 | 23.44% | 26.77% |
+| 12×16 | 23.44% | 27.09% |
 
 That is how far Prodigi's costs can rise before an order goes negative. Prodigi
 raised prices about 5% in July 2026; before the buffer existed these numbers
@@ -106,11 +106,23 @@ Nothing at runtime ties the logged string to the metric filter, so
 reworded log line would otherwise leave the alarm silent and the dashboard
 green — the original failure again, with better scenery.
 
-> **`shipAdd` is still unverified.** Every plus-one shipping figure in the code
-> is a guess inherited from the old price sheet, because a one-copy quote cannot
-> see it. The two-copy quote above exists to measure it. Run the check after
-> this deploys and correct any ✗ — it matters more than it used to, because the
-> order modal now actively encourages larger orders.
+### What the two-copy quote found
+
+`shipAdd` had never been verified — every plus-one figure was inherited from
+the old price sheet, and a one-copy quote cannot see it. The first run of the
+two-copy check settled it:
+
+- **The four cheaper products ship extras free**, confirming `$0`. That is what
+  the order modal's "shipping is charged per order, not per print" nudge rests
+  on, and it is now measured rather than assumed.
+- **The framed 12×16 charges $11.00 per extra, not the $12.00 in the code** —
+  so every additional framed print had been **overcharged by a dollar**.
+
+Worth sitting with the direction. The whole pricing effort had been about not
+losing money, and the first drift the check caught was the opposite: a customer
+paying for a cost Prodigi does not have. Drift is not only a risk to SharePix,
+and the check's summary now says which way each one moved rather than assuming
+the expensive one.
 
 ## What was switched, and what rollback reverses
 

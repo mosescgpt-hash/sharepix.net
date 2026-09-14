@@ -40,7 +40,7 @@ const PRODUCTS: {
   { sku: 'GLOBAL-PHO-5X7', label: '5×7 photo print', attributes: { finish: 'lustre' }, baseCost: 0.5, shipFirst: 10.75, shipAdd: 0 },
   { sku: 'GLOBAL-PHO-8X10', label: '8×10 photo print', attributes: { finish: 'lustre' }, baseCost: 2.0, shipFirst: 11.85, shipAdd: 0 },
   { sku: 'GLOBAL-FAP-11X14', label: '11×14 fine-art print', attributes: {}, baseCost: 14.0, shipFirst: 11.85, shipAdd: 0 },
-  { sku: 'GLOBAL-CFP-12X16', label: '12×16 framed print', attributes: { color: 'black' }, baseCost: 40.0, shipFirst: 24.8, shipAdd: 12.0 },
+  { sku: 'GLOBAL-CFP-12X16', label: '12×16 framed print', attributes: { color: 'black' }, baseCost: 40.0, shipFirst: 24.8, shipAdd: 11.0 },
 ];
 
 /** Cents of disagreement tolerated before a price counts as drifted. */
@@ -76,6 +76,8 @@ interface CheckLine {
   ok: boolean;
   text: string;
   status?: number;
+  /** Which way a drifted price moved: see `comparison`. */
+  direction?: 'under' | 'over';
 }
 
 interface Quote {
@@ -163,11 +165,27 @@ async function quoteProduct(
   return { ok: true, quote: { items, shipping }, elapsed };
 }
 
-/** `$1.23` from a number, or `$1.23 (expected $4.56)` when the two disagree. */
-function comparison(actual: number, expected: number): { text: string; drifted: boolean } {
+/**
+ * `$1.23`, or `$1.23 (code says $4.56)` when the two disagree.
+ *
+ * `under` means the code charges against a cost lower than Prodigi's, so
+ * SharePix eats the difference. `over` means the opposite: the buyer is being
+ * charged for a cost Prodigi no longer has. Both are wrong and only one of them
+ * is expensive, which is exactly why the direction has to be reported — the
+ * first version of this said "losing money on every one" whatever had moved,
+ * and the first real drift it found was an overcharge.
+ */
+function comparison(
+  actual: number,
+  expected: number,
+): { text: string; drifted: boolean; direction: 'under' | 'over' | null } {
   const drifted = Math.abs(actual - expected) > PRICE_TOLERANCE;
   const shown = `$${actual.toFixed(2)}`;
-  return { drifted, text: drifted ? `${shown} (code says $${expected.toFixed(2)})` : shown };
+  return {
+    drifted,
+    direction: !drifted ? null : expected < actual ? 'under' : 'over',
+    text: drifted ? `${shown} (code says $${expected.toFixed(2)})` : shown,
+  };
 }
 
 /**
@@ -190,7 +208,8 @@ async function checkProduct(
   // Two copies cost first-item shipping plus exactly one plus-one charge.
   const plusOne = comparison(double.quote.shipping - single.quote.shipping, product.shipAdd);
 
-  const drifted = base.drifted || ship.drifted || plusOne.drifted;
+  const checks = [base, ship, plusOne];
+  const drifted = checks.some((check) => check.drifted);
   const parts = [
     `${base.text} print`,
     `${ship.text} shipping`,
@@ -200,6 +219,13 @@ async function checkProduct(
   return {
     ok: !drifted,
     status: 200,
+    // Undercharging is the more expensive mistake, so it wins when a product
+    // has drifted both ways at once.
+    direction: checks.some((c) => c.direction === 'under')
+      ? 'under'
+      : checks.some((c) => c.direction === 'over')
+        ? 'over'
+        : undefined,
     text: `${product.label} (${product.sku}) — ${parts} ${CURRENCY} (${single.elapsed}ms)`,
   };
 }
@@ -235,8 +261,20 @@ export const handler: Handler = async () => {
     );
   }
   if (drifted > 0) {
+    const under = lines.filter((line) => line.direction === 'under').length;
+    const over = lines.filter((line) => line.direction === 'over').length;
+    const consequence = [
+      under > 0
+        ? `${under} charge${under === 1 ? 's' : ''} against a cost lower than Prodigi's, so SharePix pays the difference — on the cheap sizes that is a loss on every order.`
+        : '',
+      over > 0
+        ? `${over} charge${over === 1 ? 's' : ''} the buyer for a cost Prodigi no longer has, so customers are being overcharged.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
     notes.push(
-      `${drifted} product${drifted === 1 ? "'s price has" : "s' prices have"} moved. Update PRINT_PRODUCTS in lib/prints.ts AND the copies in print-checkout and this function, then redeploy. Until then those orders are priced against costs Prodigi no longer charges — which, on the cheap sizes, means losing money on every one.`,
+      `${drifted} product${drifted === 1 ? "'s price has" : "s' prices have"} moved. ${consequence} Update PRINT_PRODUCTS in lib/prints.ts AND the copies in print-checkout and this function, then redeploy.`,
     );
   }
   if (passed === lines.length) {

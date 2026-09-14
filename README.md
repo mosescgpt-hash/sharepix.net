@@ -53,15 +53,22 @@ month's site map.
 ## Checks
 
 ```
-npm test                 # two Jest projects: node (pure) and jsdom (components)
 npm run typecheck:backend
 npm run validate:backend # synthesises the CDK app and checks for stack cycles
+npm test                 # two Jest projects: node (pure) and jsdom (components)
+npm run build            # needs an amplify_outputs.json; `{}` is enough
 ```
 
-CI (`.github/workflows/ci.yml`) runs all four in that order. `validate:backend`
-is not optional ceremony: CloudFormation nested-stack cycles do **not** fail
-synthesis, so `scripts/check-stack-cycles.mjs` is the only thing that catches
-them before a deploy hangs.
+CI (`.github/workflows/ci.yml`) runs all four in that order, and all four earn
+their place:
+
+- `validate:backend` is not optional ceremony: CloudFormation nested-stack
+  cycles do **not** fail synthesis, so `scripts/check-stack-cycles.mjs` is the
+  only thing that catches them before a deploy hangs.
+- `build` runs last because `prebuild` regenerates committed files, and running
+  it first would mask the drift check that catches a stale one. Merging to
+  `main` deploys, so without this a broken page has no signal until after it is
+  merged.
 
 ## Smoke test
 
@@ -120,7 +127,7 @@ two copies that quietly disagree about money.
 | [docs/moderation.md](docs/moderation.md) | Content screening, and what is deliberately never flagged |
 | [docs/media-limits.md](docs/media-limits.md) | Upload size limits and where each is enforced |
 | [docs/alerting.md](docs/alerting.md) | What pages an operator when a Lambda starts failing |
-| [docs/go-live-prints.md](docs/go-live-prints.md) | Prints are live: how they are priced, and what is still unverified |
+| [docs/go-live-prints.md](docs/go-live-prints.md) | Prints are live: how they are priced, and how a Prodigi price change is caught |
 | [docs/research-survey.md](docs/research-survey.md) | Why the post-event survey asks what it asks |
 | [docs/design-system.md](docs/design-system.md) | Palette, type, and the rules the pages follow |
 | [docs/business-records.md](docs/business-records.md) | Public records that name SharePix LLC and have to agree |
@@ -166,10 +173,6 @@ being updated.
   a real order. What has never run is the last hop: Prodigi creating the order
   and fetching the signed asset URL. Everything up to it is proven —
   see [docs/go-live-prints.md](docs/go-live-prints.md).
-- **Prodigi's plus-one shipping is unverified.** `shipAdd` in `lib/prints.ts`
-  was inherited from a price sheet whose every other number turned out stale.
-  The admin print check now quotes two copies to measure it; until it has been
-  run against live, larger orders are priced on a guess.
 - **No face recognition, and none planned.** Rekognition is used for explicit
   content only.
 
