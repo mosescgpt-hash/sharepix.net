@@ -122,10 +122,26 @@ not registered in, so it changes nothing today and starts working the moment a
 registration is added, rather than needing a code change at the point somebody
 notices a liability.
 
-What that leaves is one thing and one tripwire:
+What that leaves is one question and one tripwire:
 
-- **Register in your home state.** Physical presence creates nexus regardless of
-  volume, so this one is not waiting for a threshold. Everything else is.
+- **Settle the home state.** SharePix LLC is registered in Minnesota, and
+  physical presence creates nexus regardless of volume — so Minnesota is not
+  waiting for a threshold the way every other state is. But "register" here
+  means a **sales tax permit with the Minnesota Department of Revenue**, which
+  is a different thing from the LLC filing with the Secretary of State. Forming
+  the entity does not register you to collect tax.
+
+  The prior question is whether SharePix is taxable in Minnesota at all, and it
+  is genuinely not obvious: Minnesota taxes *specified digital products* but
+  generally does not tax software delivered as a service, and SharePix can be
+  argued into either bucket. That classification decides whether a permit is
+  needed at all, so it is worth a Minnesota CPA's time or written guidance from
+  the Department before anything is filed.
+
+  **Do not add a Minnesota registration in Stripe until that is settled.** The
+  moment one exists, Stripe starts charging Minnesota customers sales tax, and
+  over-collecting is its own problem — the money is owed to somebody and it is
+  not SharePix.
 - **Watch `/global-admin`.** `lib/taxNexus.ts` reads the sales already recorded
   and says when a threshold is approaching — at 80% of the common $100,000 /
   200-transaction economic-nexus line, because registering takes weeks and a
