@@ -123,6 +123,7 @@ two copies that quietly disagree about money.
 | [docs/research-survey.md](docs/research-survey.md) | Why the post-event survey asks what it asks |
 | [docs/design-system.md](docs/design-system.md) | Palette, type, and the rules the pages follow |
 | [docs/business-records.md](docs/business-records.md) | Public records that name SharePix LLC and have to agree |
+| [docs/mn-sales-tax-request.md](docs/mn-sales-tax-request.md) | Draft request asking Minnesota whether SharePix is taxable at all |
 | [docs/moments-verification.md](docs/moments-verification.md) | The walkthrough that proved Moments really writes to DynamoDB |
 | [docs/redesign-audit.md](docs/redesign-audit.md) | What existed before the redesign, and what it must not disturb |
 

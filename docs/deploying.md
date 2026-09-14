@@ -136,7 +136,9 @@ What that leaves is one question and one tripwire:
   generally does not tax software delivered as a service, and SharePix can be
   argued into either bucket. That classification decides whether a permit is
   needed at all, so it is worth a Minnesota CPA's time or written guidance from
-  the Department before anything is filed.
+  the Department before anything is filed. A draft of that request, with the
+  facts that decide the answer already assembled, is in
+  [mn-sales-tax-request.md](mn-sales-tax-request.md).
 
   **Do not add a Minnesota registration in Stripe until that is settled.** The
   moment one exists, Stripe starts charging Minnesota customers sales tax, and
