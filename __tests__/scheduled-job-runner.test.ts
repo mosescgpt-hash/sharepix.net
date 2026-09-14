@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { codeOnly } from './sourceGuards';
+
 /**
  * Running the scheduled jobs on demand.
  *
@@ -137,5 +139,43 @@ describe('the handlers still work unattended', () => {
     }
     // The monthly report has no switch and so never grew a probe.
     expect(monthly).toContain('export const handler = async () => {');
+  });
+});
+
+describe('the payments panel does not claim a Stripe mode', () => {
+  /**
+   * It read "Payments — test mode", and underneath "No real money moves.
+   * Events stay free during the pilot." Both were true when written. Neither
+   * was derived from anything, so neither changed when the key became
+   * `sk_live` — and the panel has buttons that open a real checkout.
+   *
+   * That is the same failure as the two job switches, with money attached: an
+   * admin told they will not be charged, reaching for a real card because the
+   * test card was declined. The page cannot read the key, so the rule is that
+   * it must not pretend to.
+   */
+  const payments = () =>
+    admin.slice(admin.indexOf('id="payments"'), admin.indexOf('id="users"'));
+
+  it('does not assert which mode Stripe is in', () => {
+    const code = codeOnly(payments());
+    expect(code).not.toContain('test mode');
+    expect(code).not.toContain('No real money moves');
+    expect(code).not.toContain('Events stay free');
+  });
+
+  it('warns that the checkout is real', () => {
+    expect(payments()).toMatch(/real Stripe checkout/);
+  });
+
+  it('names both keys, so neither reads as the assumed one', () => {
+    const section = payments();
+    expect(section).toContain('sk_live');
+    expect(section).toContain('sk_test');
+  });
+
+  it('does not call the button a test', () => {
+    // `handleTestCheckout` starting a live charge is the same lie in the code.
+    expect(admin).not.toContain('handleTestCheckout');
   });
 });
