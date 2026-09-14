@@ -104,17 +104,27 @@ indexed, what is erroring, what people searched before clicking. Verified by
 `public/google308a20708d47773e.html` — **do not delete that file**, Google
 re-checks it and removing it un-verifies the property.
 
-## Where the email actually goes
+## Outlook — where the email actually goes
 
 `info@`, `support@` and `seth@sharepix.net` appear on the site and in
 `lib/businessInfo.ts`. **SES sends** mail from the domain; it does not receive
-it. Whatever hosts those mailboxes — Google Workspace, a forwarder, something
-else — is a real dependency of the business and is not recorded anywhere in this
-repository.
+it. **The mailboxes are on Outlook** — sign in at outlook.com, or through the
+Microsoft 365 admin centre if a mailbox needs adding or a password resetting.
 
-> **Fill this in.** A customer replying to a refund email, a DMCA notice, a
-> Minnesota tax letter and a Stripe dispute all arrive at an address nobody has
-> written down the provider for.
+This is a bigger dependency than its size suggests. A customer replying to a
+refund email, a DMCA notice, a Minnesota tax letter and a Stripe dispute all
+land here — and so does every account-recovery message for the accounts above,
+which is why losing this mailbox is worse than losing any single one of them.
+
+Two things follow from the split between sending and receiving:
+
+- **Outbound problems are an SES problem, inbound problems are an Outlook
+  problem.** A host who never got their event email is SES and CloudWatch; a
+  reply that never reached you is Outlook. They share a domain and nothing else.
+- **The MX records point at Outlook**, wherever DNS for `sharepix.net` is
+  currently served from. Moving nameservers without carrying the MX records
+  across stops mail arriving, silently and with nothing bouncing back to the
+  sender for days.
 
 ## Legal and registration
 
@@ -137,6 +147,7 @@ Roughly, and only the fixed parts. Storage, bandwidth and Lambda scale with use.
 | AWS | Usage-based. DynamoDB, Lambda and SES are near-free at this volume; S3 and CloudFront are the ones that grow. |
 | Cloudflare R2 | Storage, with **zero egress** — which is the whole reason reads come from it |
 | Cloudflare Web Analytics | Free |
+| Outlook | Per mailbox, if the plan hosting `@sharepix.net` is a paid one |
 | Stripe | Per transaction |
 | Prodigi | Per print |
 | GitHub | Free at this size |
@@ -153,6 +164,7 @@ The failure mode of every one of these is silence.
 | Domain registration | Per the registrar | The site stops resolving. Auto-renew and a card that has not expired. |
 | TLS certificate | Automatic via Amplify | Nothing to do unless the domain moves |
 | Minnesota LLC renewal | Annually | Administrative dissolution |
+| Outlook subscription and its card | Per the plan | Mail stops arriving. Nothing bounces to the sender for days, so the first sign is a customer saying they never heard back. |
 | R2 and Stripe API keys | Only if rotated | Rotating one means a redeploy, not just a paste |
 
 ## Access, honestly
@@ -161,6 +173,11 @@ Every account above is on one person. That is normal for a business this size
 and it is worth naming rather than discovering: there is no second administrator
 on AWS, no shared Stripe login, and no recovery path that does not run through
 one email address and one phone.
+
+That email address is on Outlook, which makes it the root of the whole set
+rather than one account among them: anyone who can read it can reset AWS,
+Stripe and Cloudflare in turn. It deserves the strongest authentication of
+anything on this page.
 
 The cheap mitigations, in the order they pay off:
 
