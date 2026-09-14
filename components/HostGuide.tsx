@@ -8,15 +8,27 @@ import { hostGuideSections } from '@/lib/hostGuide';
  * print the brochure, how guests download (included on every plan), and — once
  * bought — how to run the live slideshow. Contextual to this event, so the links
  * actually work and the paid section only appears when the host owns it.
+ *
+ * `defaultOpen` is how the dashboard says "this host has never done this
+ * before". An event with no photos yet renders the guide expanded and above
+ * everything else; once photos exist it goes back to being a closed strip near
+ * the QR code. A host on day one needs the instructions and a host on their
+ * third event does not, and the photo count is the difference between them
+ * without asking anybody anything.
  */
 export default function HostGuide({
   event,
   onShowQR,
+  defaultOpen = false,
 }: {
   event: QREvent;
   onShowQR?: () => void;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // Initial state only. A host who closes the guide on an empty event has
+  // closed it, and re-opening it under them on the next render would be the
+  // page arguing with them.
+  const [open, setOpen] = useState(defaultOpen);
   const sections = hostGuideSections(event);
 
   return (
