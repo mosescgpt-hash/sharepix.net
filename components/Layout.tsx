@@ -24,6 +24,11 @@ const FOOTER_LINKS = [
   { href: '/help', label: 'Help' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'See an example' },
+  // Photographers, not hosts. In the footer rather than the header because a
+  // photographer arrives knowing what they are looking for — usually with a
+  // pairing code in hand — while a host arriving cold does not need a fourth
+  // thing competing with "Create an event".
+  { href: '/pro', label: 'For photographers' },
   { href: '/privacy', label: 'Privacy Policy' },
   { href: '/terms', label: 'Terms of Service' },
   // Safe harbour under 17 U.S.C. § 512(c) requires the designated agent's
