@@ -82,6 +82,8 @@ export interface SettingsRequest {
   city?: string | null;
   state?: string | null;
   moderationMode?: string | null;
+  /** 'guests' | 'host-only'. See lib/eventAudience.ts. */
+  uploadAudience?: string | null;
   alertEmail?: string | null;
   videoUploadsEnabled?: boolean | null;
   guestDownloadsBlocked?: boolean | null;
@@ -186,6 +188,16 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
       return { ok: false, reason: 'Choose one of the available screening settings.' };
     }
     set.moderationMode = mode;
+  }
+
+  // Who the signs are addressed to. Unlike the screening mode, an unrecognised
+  // value is not an error — it is dropped, and the event keeps whatever it had.
+  // This picks a sentence on a printed card; refusing the whole settings save
+  // over it would be out of all proportion.
+  if (provided(request.uploadAudience)) {
+    const audience = (request.uploadAudience ?? '').trim().toLowerCase();
+    if (audience === 'guests' || audience === 'host-only') set.uploadAudience = audience;
+    else if (!audience) remove.push('uploadAudience');
   }
 
   if (provided(request.alertEmail)) {

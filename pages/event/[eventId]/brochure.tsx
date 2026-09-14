@@ -8,6 +8,7 @@ import { withAuthenticator } from '@aws-amplify/ui-react';
 import { fetchEvent, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { QREvent } from '@/lib/types';
+import { invitesUploads, parseAudience, signHeadline, signMessage } from '@/lib/eventAudience';
 
 function formatDate(value?: string | null) {
   if (!value) return null;
@@ -133,7 +134,11 @@ function EventBrochurePage() {
           <>
             <p className="print:hidden mb-4 text-center text-sm text-charcoal/60">
               Print this and place it on tables, or share it digitally. Guests scan the
-              code to add their photos — no app or account needed.
+              code to{' '}
+              {invitesUploads(parseAudience(event.uploadAudience))
+                ? 'add their photos'
+                : 'see the photos'}{' '}
+              — no app or account needed.
             </p>
 
             {/* The printable flyer */}
@@ -152,11 +157,12 @@ function EventBrochurePage() {
                 <div ref={qrContainerRef} className="h-[320px] w-[320px]" aria-label="Upload QR code" />
               </div>
 
-              <p className="font-serif text-2xl italic">Scan to add your photos</p>
-              <p className="mt-2 max-w-sm text-charcoal/60">
-                Point your phone&apos;s camera at the code, tap the link, and upload the
-                pictures and videos you took. Everyone&apos;s memories, all in one gallery.
-              </p>
+              {/* Both lines follow what the host said at setup about who is
+                  adding the photos. A brochure on every table reading "Scan to
+                  add your photos" is an instruction nobody is meant to follow
+                  at an event where the host is the only uploader. */}
+              <p className="font-serif text-2xl italic">{signHeadline(parseAudience(event.uploadAudience))}</p>
+              <p className="mt-2 max-w-sm text-charcoal/60">{signMessage(parseAudience(event.uploadAudience))}</p>
 
               <div className="mt-6 bg-sand px-5 py-3">
                 <p className="text-xs uppercase tracking-wide text-charcoal/60">Or visit</p>

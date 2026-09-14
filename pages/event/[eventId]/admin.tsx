@@ -22,6 +22,7 @@ import {
   isCorporateActive,
   setEventAlertEmail,
   setEventModerationMode,
+  setEventUploadAudience,
   setEventUploadsClosed,
   setEventGuestDownloadsBlocked,
   setEventVideoUploads,
@@ -58,6 +59,13 @@ import { parseEventLocation } from '@/lib/eventLocation';
 import { DisplayPhoto, QREvent } from '@/lib/types';
 import { isGlobalAdmin } from '@/lib/admin';
 import { capacityRequestState } from '@/lib/fairUse';
+import {
+  AUDIENCE_HELP,
+  AUDIENCE_OPTIONS,
+  AUDIENCE_QUESTION,
+  parseAudience,
+  signHeadline,
+} from '@/lib/eventAudience';
 
 /**
  * The three bands the dashboard is laid out in, in the order a host meets them.
@@ -133,6 +141,7 @@ function AdminDashboardPage() {
   const [alertWorking, setAlertWorking] = useState(false);
   const [videoWorking, setVideoWorking] = useState(false);
   const [downloadsWorking, setDownloadsWorking] = useState(false);
+  const [audienceWorking, setAudienceWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension or slideshow add-on.
   const [discountCode, setDiscountCode] = useState('');
@@ -489,6 +498,36 @@ function AdminDashboardPage() {
     }
   }
 
+  /**
+   * Change who the signs are addressed to.
+   *
+   * Nothing about the event's behaviour changes — guests of a 'host-only' event
+   * can still upload if they reach the page — so the confirmation talks about
+   * the signs rather than about permissions a host has not been given.
+   */
+  async function handleAudience(audience: 'guests' | 'host-only') {
+    if (!event || parseAudience(event.uploadAudience) === audience) return;
+    setAudienceWorking(true);
+    setSettingsMsg(null);
+    try {
+      await setEventUploadAudience(event.id, audience);
+      setEvent({ ...event, uploadAudience: audience });
+      setSettingsMsg({
+        text: `Your signs will now say “${signHeadline(audience)}”. Reprint the table tent or brochure to pick it up.`,
+        ok: true,
+        where: 'guests',
+      });
+    } catch (err) {
+      setSettingsMsg({
+        text: err instanceof Error ? err.message : 'The setting could not be updated.',
+        ok: false,
+        where: 'guests',
+      });
+    } finally {
+      setAudienceWorking(false);
+    }
+  }
+
   async function handleModerationMode(mode: 'review' | 'allow_all') {
     if (!event || (event.moderationMode ?? 'review') === mode) return;
     setModerationWorking(true);
@@ -660,6 +699,7 @@ function AdminDashboardPage() {
                   eventName={event.name}
                   allowCustomization={tier?.customQrCode === true}
                   branding={event}
+                  uploadAudience={event.uploadAudience}
                   // Re-read the event so the saved style is what the moment
                   // codes and the print pages pick up straight away.
                   onBrandingSaved={load}
@@ -895,7 +935,42 @@ function AdminDashboardPage() {
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                   What guests can do
                 </h2>
+                {/* First in this card, because it decides what the printed
+                    signs say and a host is most likely to want it before the
+                    event rather than after. */}
                 <div className="mt-4">
+                  <p className="text-sm font-medium">{AUDIENCE_QUESTION}</p>
+                  <p className="text-xs text-charcoal/60">{AUDIENCE_HELP}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {AUDIENCE_OPTIONS.map((option) => {
+                      const active = parseAudience(event.uploadAudience) === option.value
+                        // An event created before the question keeps the guest
+                        // wording, so that is the button that reads as chosen.
+                        || (event.uploadAudience == null && option.value === 'guests');
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          disabled={audienceWorking}
+                          onClick={() => void handleAudience(option.value)}
+                          className={`border px-4 py-2 text-sm transition disabled:opacity-50 ${
+                            active
+                              ? 'border-ink bg-ink text-canvas'
+                              : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-charcoal/60">
+                    Your signs will say &ldquo;{signHeadline(parseAudience(event.uploadAudience))}
+                    &rdquo;. Reprint the table tent or brochure after changing this.
+                  </p>
+                </div>
+
+                <div className="mt-4 border-t border-ink/10 pt-4">
                   <p className="text-sm font-medium">Photo screening</p>
                   <p className="text-xs text-charcoal/60">
                     Uploads are checked for explicit content. Alcohol, smoking, and kissing are
