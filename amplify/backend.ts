@@ -56,6 +56,7 @@ import { proUpload } from './functions/pro-upload/resource';
 import { processProPhoto } from './functions/process-pro-photo/resource';
 import { decideProPhoto } from './functions/decide-pro-photo/resource';
 import { connectPhotographer } from './functions/connect-photographer/resource';
+import { attachWaf } from './waf';
 
 const backend = defineBackend({
   findEventByCode,
@@ -99,6 +100,13 @@ const backend = defineBackend({
   reclaimStorage,
   photoEngagement,
 });
+
+// Rate limiting in front of the API. A no-op unless WAF_ENABLED is set — see
+// amplify/waf.ts for what it costs and when it is worth turning on.
+attachWaf(
+  backend.data.resources.graphqlApi.stack,
+  backend.data.resources.graphqlApi.arn,
+);
 
 const eventTable = backend.data.resources.tables.Event;
 const photoTable = backend.data.resources.tables.Photo;
