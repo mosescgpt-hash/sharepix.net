@@ -8,9 +8,12 @@ import {
   decideProPhoto,
   fetchEventPhotos,
   fetchMyProConnections,
+  processProPhoto,
+  requestProUploadSlot,
   setProPublishing,
 } from '@/lib/api';
 import {
+  DEFAULT_PREVIEW_LONG_EDGE,
   DEFAULT_PUBLISHING_MODE,
   PUBLISHING_MODES,
   isPublishingMode,
@@ -49,6 +52,7 @@ export default function ProReviewPage() {
   const [queue, setQueue] = useState<Queue>('awaiting_review');
   const [phase, setPhase] = useState<'loading' | 'denied' | 'ready'>('loading');
   const [busy, setBusy] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(0);
   const [message, setMessage] = useState('');
 
   const load = useCallback(async () => {
@@ -86,6 +90,45 @@ export default function ProReviewPage() {
   const shown = mine.filter(
     (p) => ((p as { publishStatus?: string }).publishStatus ?? 'awaiting_review') === queue,
   );
+
+  /**
+   * Send photographs straight from this page.
+   *
+   * The real client for this is the desktop uploader that does not exist yet;
+   * this is the browser fallback, and it is also the only way to see the whole
+   * path work today. Each file is a slot, a PUT, and a process call, in that
+   * order — the same three steps the Bridge will make, so exercising this
+   * exercises that.
+   *
+   * Sequential rather than parallel: a photographer on venue wifi pushing
+   * thirty frames at once gets thirty stalled connections and no feedback. One
+   * at a time is slower and finishes.
+   */
+  async function upload(files: FileList | null) {
+    if (!files?.length) return;
+    setMessage('');
+    for (const file of Array.from(files)) {
+      setUploading((n) => n + 1);
+      try {
+        const slot = await requestProUploadSlot(eventId, file.type || 'image/jpeg');
+        const put = await fetch(slot.uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'image/jpeg' },
+        });
+        if (!put.ok) throw new Error(`Upload failed (${put.status}).`);
+        // Separate call on purpose: the upload is done and the original is
+        // safe at this point, so a processing failure is retryable rather than
+        // a lost photograph.
+        await processProPhoto(eventId, slot.uploadId);
+      } catch (err) {
+        setMessage(err instanceof Error ? err.message : `${file.name} did not upload.`);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+    await load();
+  }
 
   async function decide(uploadId: string, decision: string) {
     setBusy(uploadId);
@@ -186,6 +229,28 @@ export default function ProReviewPage() {
               {message}
             </Notice>
           ) : null}
+
+          <div className="mt-6 border border-dashed border-charcoal/25 p-4">
+            <label className="block">
+              <span className="text-sm font-medium">Add photos</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                multiple
+                onChange={(e) => {
+                  void upload(e.target.files);
+                  // Let the same file be chosen twice in a row.
+                  e.target.value = '';
+                }}
+                className="mt-2 block w-full text-sm"
+              />
+            </label>
+            <p className="mt-2 text-xs text-charcoal/55">
+              JPEG or PNG. We make a {DEFAULT_PREVIEW_LONG_EDGE}px preview and delete your
+              original unless you have asked us to keep it.
+              {uploading > 0 ? ` Uploading ${uploading}…` : ''}
+            </p>
+          </div>
 
           <nav className="mt-6 flex flex-wrap gap-2" aria-label="Queues">
             {QUEUES.map((entry) => (
