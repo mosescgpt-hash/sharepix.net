@@ -24,13 +24,27 @@ type Handler = Schema['checkPrintProvider']['functionHandler'];
 // in sync by hand so this function has no cross-bundle imports (same convention
 // as print-checkout's PRINT_PRODUCTS). If they drift, this check passes while
 // fulfilment fails — the one thing it exists to catch.
-const PRODUCTS: { sku: string; label: string; attributes: Record<string, string> }[] = [
-  { sku: 'GLOBAL-PHO-4X6', label: '4×6 photo print', attributes: { finish: 'lustre' } },
-  { sku: 'GLOBAL-PHO-5X7', label: '5×7 photo print', attributes: { finish: 'lustre' } },
-  { sku: 'GLOBAL-PHO-8X10', label: '8×10 photo print', attributes: { finish: 'lustre' } },
-  { sku: 'GLOBAL-FAP-11X14', label: '11×14 fine-art print', attributes: {} },
-  { sku: 'GLOBAL-CFP-12X16', label: '12×16 framed print', attributes: { color: 'black' } },
+//
+// `baseCost` and `shipFirst` are what lib/prints.ts charges against, so the
+// quote can be compared with them. `shipAdd` is the plus-one shipping, which a
+// one-copy quote cannot see at all: it is measured by quoting two copies.
+const PRODUCTS: {
+  sku: string;
+  label: string;
+  attributes: Record<string, string>;
+  baseCost: number;
+  shipFirst: number;
+  shipAdd: number;
+}[] = [
+  { sku: 'GLOBAL-PHO-4X6', label: '4×6 photo print', attributes: { finish: 'lustre' }, baseCost: 0.25, shipFirst: 10.75, shipAdd: 0 },
+  { sku: 'GLOBAL-PHO-5X7', label: '5×7 photo print', attributes: { finish: 'lustre' }, baseCost: 0.5, shipFirst: 10.75, shipAdd: 0 },
+  { sku: 'GLOBAL-PHO-8X10', label: '8×10 photo print', attributes: { finish: 'lustre' }, baseCost: 2.0, shipFirst: 11.85, shipAdd: 0 },
+  { sku: 'GLOBAL-FAP-11X14', label: '11×14 fine-art print', attributes: {}, baseCost: 14.0, shipFirst: 11.85, shipAdd: 0 },
+  { sku: 'GLOBAL-CFP-12X16', label: '12×16 framed print', attributes: { color: 'black' }, baseCost: 40.0, shipFirst: 24.8, shipAdd: 12.0 },
 ];
+
+/** Cents of disagreement tolerated before a price counts as drifted. */
+const PRICE_TOLERANCE = 0.005;
 
 // Same shipping method and destination the real orders use, so a quote exercises
 // the same product/shipping combination fulfilment will ask for.
@@ -58,21 +72,31 @@ function prodigiBaseUrl(): string {
     : 'https://api.sandbox.prodigi.com';
 }
 
-function money(value: Money | undefined): string {
-  if (!value?.amount) return '?';
-  return `$${value.amount}`;
-}
-
 interface CheckLine {
   ok: boolean;
   text: string;
   status?: number;
 }
 
+interface Quote {
+  /** Prodigi's total for the items in the quote (all copies), USD. */
+  items: number;
+  /** Prodigi's shipping for the whole quote, USD. */
+  shipping: number;
+}
+
+type QuoteResult = { ok: true; quote: Quote; elapsed: number } | { ok: false; line: CheckLine };
+
+function amount(value: Money | undefined): number | null {
+  const parsed = Number(value?.amount);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function quoteProduct(
   product: (typeof PRODUCTS)[number],
   apiKey: string,
-): Promise<CheckLine> {
+  copies: number,
+): Promise<QuoteResult> {
   const body = {
     shippingMethod: SHIPPING_METHOD,
     destinationCountryCode: DESTINATION_COUNTRY,
@@ -80,7 +104,7 @@ async function quoteProduct(
     items: [
       {
         sku: product.sku,
-        copies: 1,
+        copies,
         attributes: product.attributes,
         // A quote needs the print area but no asset URL — nothing is fetched.
         assets: [{ printArea: 'default' }],
@@ -101,7 +125,10 @@ async function quoteProduct(
     // A timeout here is the same failure fulfilment would hit: Lambda cannot
     // reach Prodigi at all.
     const reason = error instanceof Error ? error.message : String(error);
-    return { ok: false, text: `${product.label} (${product.sku}) — no response: ${reason}` };
+    return {
+      ok: false,
+      line: { ok: false, text: `${product.label} (${product.sku}) — no response: ${reason}` },
+    };
   }
 
   const elapsed = Date.now() - startedAt;
@@ -110,27 +137,70 @@ async function quoteProduct(
     const detail = (await response.text().catch(() => '')).slice(0, 300);
     return {
       ok: false,
-      status: response.status,
-      text: `${product.label} (${product.sku}) — HTTP ${response.status}: ${detail || '(no body)'}`,
+      line: {
+        ok: false,
+        status: response.status,
+        text: `${product.label} (${product.sku}) — HTTP ${response.status}: ${detail || '(no body)'}`,
+      },
     };
   }
 
   const data = (await response.json().catch(() => null)) as QuoteResponse | null;
   const quote = data?.quotes?.[0];
-  if (!quote) {
+  const items = amount(quote?.costSummary?.items);
+  const shipping = amount(quote?.costSummary?.shipping);
+  if (items === null || shipping === null) {
     return {
       ok: false,
-      status: response.status,
-      text: `${product.label} (${product.sku}) — no quote returned (outcome: ${data?.outcome ?? 'unknown'})`,
+      line: {
+        ok: false,
+        status: response.status,
+        text: `${product.label} (${product.sku}) — no usable quote (outcome: ${data?.outcome ?? 'unknown'})`,
+      },
     };
   }
 
-  const items = money(quote.costSummary?.items);
-  const shipping = money(quote.costSummary?.shipping);
+  return { ok: true, quote: { items, shipping }, elapsed };
+}
+
+/** `$1.23` from a number, or `$1.23 (expected $4.56)` when the two disagree. */
+function comparison(actual: number, expected: number): { text: string; drifted: boolean } {
+  const drifted = Math.abs(actual - expected) > PRICE_TOLERANCE;
+  const shown = `$${actual.toFixed(2)}`;
+  return { drifted, text: drifted ? `${shown} (code says $${expected.toFixed(2)})` : shown };
+}
+
+/**
+ * Quote one product at one copy and at two, and compare all three numbers the
+ * pricing depends on: base cost, first-item shipping, and the plus-one shipping
+ * that only a second copy reveals.
+ */
+async function checkProduct(
+  product: (typeof PRODUCTS)[number],
+  apiKey: string,
+): Promise<CheckLine> {
+  const single = await quoteProduct(product, apiKey, 1);
+  if (!single.ok) return single.line;
+
+  const double = await quoteProduct(product, apiKey, 2);
+  if (!double.ok) return double.line;
+
+  const base = comparison(single.quote.items, product.baseCost);
+  const ship = comparison(single.quote.shipping, product.shipFirst);
+  // Two copies cost first-item shipping plus exactly one plus-one charge.
+  const plusOne = comparison(double.quote.shipping - single.quote.shipping, product.shipAdd);
+
+  const drifted = base.drifted || ship.drifted || plusOne.drifted;
+  const parts = [
+    `${base.text} print`,
+    `${ship.text} shipping`,
+    `${plusOne.text} per extra`,
+  ].join(' + ');
+
   return {
-    ok: true,
-    status: response.status,
-    text: `${product.label} (${product.sku}) — ${items} + ${shipping} shipping ${CURRENCY} (${elapsed}ms)`,
+    ok: !drifted,
+    status: 200,
+    text: `${product.label} (${product.sku}) — ${parts} ${CURRENCY} (${single.elapsed}ms)`,
   };
 }
 
@@ -146,16 +216,17 @@ export const handler: Handler = async () => {
     };
   }
 
-  // Sequential on purpose: five parallel calls would report one shared failure
-  // five times and make a rate-limit response look like five broken SKUs.
+  // Sequential on purpose: ten parallel calls would report one shared failure
+  // ten times and make a rate-limit response look like five broken SKUs.
   const lines: CheckLine[] = [];
   for (const product of PRODUCTS) {
-    lines.push(await quoteProduct(product, apiKey));
+    lines.push(await checkProduct(product, apiKey));
   }
 
   const passed = lines.filter((line) => line.ok).length;
   const authFailed = lines.some((line) => line.status === 401 || line.status === 403);
-  const header = `Prodigi ${env} (${host}) — ${passed} of ${lines.length} products quoted.`;
+  const drifted = lines.filter((line) => !line.ok && line.status === 200).length;
+  const header = `Prodigi ${env} (${host}) — ${passed} of ${lines.length} products match the prices in the code.`;
 
   const notes: string[] = [];
   if (authFailed) {
@@ -163,15 +234,28 @@ export const handler: Handler = async () => {
       `The key was rejected. A sandbox key returns 401 against ${host} — check PRODIGI_API_KEY is the ${env} key.`,
     );
   }
+  if (drifted > 0) {
+    notes.push(
+      `${drifted} product${drifted === 1 ? "'s price has" : "s' prices have"} moved. Update PRINT_PRODUCTS in lib/prints.ts AND the copies in print-checkout and this function, then redeploy. Until then those orders are priced against costs Prodigi no longer charges — which, on the cheap sizes, means losing money on every one.`,
+    );
+  }
   if (passed === lines.length) {
-    notes.push('Credentials, network path and every SKU are good. Nothing was ordered or charged.');
+    notes.push(
+      'Credentials, network path, every SKU and every price are good. Nothing was ordered or charged.',
+    );
   }
 
   const message = [header, '', ...lines.map((l) => `${l.ok ? '✓' : '✗'} ${l.text}`), '', ...notes]
     .join('\n')
     .trim();
 
-  console.log('Print provider check', { at: new Date().toISOString(), env, passed, total: lines.length });
+  console.log('Print provider check', {
+    at: new Date().toISOString(),
+    env,
+    passed,
+    drifted,
+    total: lines.length,
+  });
 
   return { success: passed === lines.length, message };
 };

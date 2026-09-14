@@ -18,6 +18,37 @@ const fulfillSource = readFileSync(
   join(root, 'amplify/functions/print-fulfill/handler.ts'),
   'utf8',
 );
+const checkoutSource = readFileSync(
+  join(root, 'amplify/functions/print-checkout/handler.ts'),
+  'utf8',
+);
+
+/**
+ * Every place a Prodigi cost is written down.
+ *
+ * There are three, because Amplify functions cannot import from `lib/`: the
+ * catalog in lib/prints.ts, the copy print-checkout prices from, and the copy
+ * the provider check compares its quotes against. They must agree, and the
+ * consequence of disagreeing is not abstract — the storefront would quote one
+ * price, Stripe would charge another, and the check would call it all fine.
+ */
+function costsIn(source: string): Map<string, string> {
+  const found = new Map<string, string>();
+  const entry = /'?(GLOBAL-[A-Z0-9-]+)'?[^\n]*?baseCost:\s*([\d.]+),\s*shipFirst:\s*([\d.]+),\s*shipAdd:\s*([\d.]+)/g;
+  for (const m of source.matchAll(entry)) {
+    found.set(m[1], [Number(m[2]), Number(m[3]), Number(m[4])].map((n) => n.toFixed(2)).join('/'));
+  }
+  return found;
+}
+
+function catalogCosts(): Map<string, string> {
+  return new Map(
+    PRINT_PRODUCTS.map((p) => [
+      p.sku,
+      [p.baseCost, p.shipFirst, p.shipAdd].map((n) => n.toFixed(2)).join('/'),
+    ]),
+  );
+}
 
 /** `{ finish: 'lustre' }` and `{finish:"lustre"}` are the same table. */
 function normalizeAttributes(raw: string): string {
@@ -43,6 +74,31 @@ function fulfilledAttributes(): Map<string, string> {
   }
   return found;
 }
+
+describe('the three copies of Prodigi\'s prices agree', () => {
+  // This is the guard that did not exist when it was needed. Every base cost in
+  // the catalog was wrong against Prodigi for months, and the only test that
+  // looked at pricing compared the catalog to itself, so it stayed green while
+  // small orders lost money on every sale.
+  //
+  // This cannot check the prices are *right* — only Prodigi knows that, and only
+  // the admin print check asks. It checks they are the *same*, which is the half
+  // a test can actually own.
+  it('parsed a cost table out of both functions', () => {
+    expect(costsIn(checkoutSource).size).toBe(PRINT_PRODUCTS.length);
+    expect(costsIn(checkSource).size).toBe(PRINT_PRODUCTS.length);
+  });
+
+  it('matches lib/prints.ts in print-checkout, which is what the buyer is charged', () => {
+    expect(Object.fromEntries(costsIn(checkoutSource))).toEqual(
+      Object.fromEntries(catalogCosts()),
+    );
+  });
+
+  it('matches lib/prints.ts in the provider check, which is what raises the alarm', () => {
+    expect(Object.fromEntries(costsIn(checkSource))).toEqual(Object.fromEntries(catalogCosts()));
+  });
+});
 
 describe('print provider check stays in sync with what it is checking', () => {
   it('parsed both tables (the regexes still match the source)', () => {

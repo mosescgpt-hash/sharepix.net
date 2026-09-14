@@ -12,40 +12,61 @@ const PRINT_ORDER_TABLE = process.env.PRINT_ORDER_TABLE_NAME as string;
 
 // Mirrors lib/prints.ts. Kept in sync by hand so this function has no
 // cross-bundle imports (same convention as stripe-checkout's TIER_PRICING).
+// Base costs and shipFirst are Prodigi's live quoted prices (2026-09-14);
+// shipAdd is unverified — see lib/prints.ts.
 const PRINT_MARGIN_TARGET = 0.5;
 const PRINT_MIN_PROFIT = 1.5;
 const PRINT_MAX_PROFIT = 10;
 const PRINT_HIGH_BASE = 100;
 const PRINT_MAX_PROFIT_HIGH = 20;
 const STRIPE_PCT = 0.029;
-type Prod = { name: string; size: string; baseCost: number; shipFirst: number; shipAdd: number };
+const STRIPE_FIXED = 0.3;
+const PHOTO_PRINT_PROFIT = 0.1;
+type Prod = {
+  name: string;
+  size: string;
+  kind: 'photo' | 'premium';
+  baseCost: number;
+  shipFirst: number;
+  shipAdd: number;
+};
 const PRINT_PRODUCTS: Record<string, Prod> = {
-  'GLOBAL-PHO-4X6': { name: 'Photo print', size: '4×6 in', baseCost: 0.15, shipFirst: 8.95, shipAdd: 0 },
-  'GLOBAL-PHO-5X7': { name: 'Photo print', size: '5×7 in', baseCost: 0.65, shipFirst: 8.95, shipAdd: 0 },
-  'GLOBAL-PHO-8X10': { name: 'Photo print', size: '8×10 in', baseCost: 2.0, shipFirst: 9.95, shipAdd: 0 },
-  'GLOBAL-FAP-11X14': { name: 'Fine-art print', size: '11×14 in', baseCost: 12.0, shipFirst: 9.95, shipAdd: 0 },
-  'GLOBAL-CFP-12X16': { name: 'Framed print', size: '12×16 in', baseCost: 39.0, shipFirst: 20.0, shipAdd: 12.0 },
+  'GLOBAL-PHO-4X6': { name: 'Photo print', size: '4×6 in', kind: 'photo', baseCost: 0.25, shipFirst: 10.75, shipAdd: 0 },
+  'GLOBAL-PHO-5X7': { name: 'Photo print', size: '5×7 in', kind: 'photo', baseCost: 0.5, shipFirst: 10.75, shipAdd: 0 },
+  'GLOBAL-PHO-8X10': { name: 'Photo print', size: '8×10 in', kind: 'photo', baseCost: 2.0, shipFirst: 11.85, shipAdd: 0 },
+  'GLOBAL-FAP-11X14': { name: 'Fine-art print', size: '11×14 in', kind: 'premium', baseCost: 14.0, shipFirst: 11.85, shipAdd: 0 },
+  'GLOBAL-CFP-12X16': { name: 'Framed print', size: '12×16 in', kind: 'premium', baseCost: 40.0, shipFirst: 24.8, shipAdd: 12.0 },
 };
 
-// Net profit per print: 50% of base, clamped so a single cheap print never
-// loses money and profit never exceeds $10 ($20 for base over $100).
-function profit(baseCost: number): number {
-  const cap = baseCost > PRINT_HIGH_BASE ? PRINT_MAX_PROFIT_HIGH : PRINT_MAX_PROFIT;
-  return Math.min(cap, Math.max(PRINT_MIN_PROFIT, baseCost * PRINT_MARGIN_TARGET));
+// Round up to a multiple of `step`. Always up, so rounding can only help the
+// margin; the epsilon stops float noise pushing an exact multiple up a step.
+function ceilTo(usd: number, step: number): number {
+  return Math.round(Math.ceil(usd / step - 1e-9) * step * 100) / 100;
+}
+
+// Photo prints earn a flat few cents — they are a convenience, not a margin
+// line. Everything else follows the 50%-of-base rule, clamped.
+function profit(product: Prod): number {
+  if (product.kind === 'photo') return PHOTO_PRINT_PROFIT;
+  const cap = product.baseCost > PRINT_HIGH_BASE ? PRINT_MAX_PROFIT_HIGH : PRINT_MAX_PROFIT;
+  return Math.min(cap, Math.max(PRINT_MIN_PROFIT, product.baseCost * PRINT_MARGIN_TARGET));
 }
 
 // Price grosses the net profit up by Stripe's percentage so it survives the fee.
-function unitPriceCents(baseCost: number): number {
-  const grossed = (baseCost + profit(baseCost)) / (1 - STRIPE_PCT);
-  return Math.round((Math.round(grossed * 20) / 20) * 100);
+// Stripe's fixed fee is per order, not per print, and is recovered in shipping.
+function unitPriceCents(product: Prod): number {
+  return Math.round(ceilTo((product.baseCost + profit(product)) / (1 - STRIPE_PCT), 0.05) * 100);
 }
 
-// Order shipping at Prodigi's real cost: first-item + plus-one per extra item.
+// Shipping: Prodigi's real cost plus Stripe's fixed fee, grossed up for Stripe's
+// percentage. Charging Prodigi's cost alone still lost money, because Stripe
+// takes 2.9% of the shipping the buyer paid and $0.30 of the order on top.
 // Uses the max first/plus-one across products so a mixed order is never
 // undercharged (single-product orders — what the UI sends — are exact).
 function shippingCents(maxShipFirst: number, maxShipAdd: number, totalCopies: number): number {
   const extras = Math.max(0, totalCopies - 1);
-  return Math.round((maxShipFirst + maxShipAdd * extras) * 100);
+  const prodigi = maxShipFirst + maxShipAdd * extras;
+  return Math.round(ceilTo((prodigi + STRIPE_FIXED) / (1 - STRIPE_PCT), 0.01) * 100);
 }
 
 // Guardrails. These aren't about profit (bigger orders are more profitable —
@@ -133,7 +154,7 @@ export const handler: Handler = async (event) => {
     const printable = printableKey(s3Key, eventId);
     if (!printable.ok) throw new Error(printable.reason);
 
-    const priceCents = unitPriceCents(product.baseCost);
+    const priceCents = unitPriceCents(product);
     const group = bySku.get(item.sku) ?? { product, qty: 0, priceCents };
     group.qty += copies;
     bySku.set(item.sku, group);

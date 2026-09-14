@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import Notice from '@/components/Notice';
 import { startPrintCheckout } from '@/lib/api';
-import { PRINT_PRODUCTS, findPrintProduct, printShipping, printUnitPrice } from '@/lib/prints';
+import {
+  PRINT_PRODUCTS,
+  deliveredPricePerPrint,
+  findPrintProduct,
+  printShipping,
+  printUnitPrice,
+} from '@/lib/prints';
 import { isVideoFilename } from '@/lib/validation';
 
 interface PrintOrderModalProps {
@@ -27,11 +33,21 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
   const [error, setError] = useState<string | null>(null);
 
   const product = findPrintProduct(sku) ?? PRINT_PRODUCTS[0];
-  const unit = printUnitPrice(product.baseCost);
+  const unit = printUnitPrice(product);
   const totalCopies = copies * printable.length;
   const itemsTotal = unit * totalCopies;
   const shipping = printShipping(product, totalCopies);
   const total = itemsTotal + shipping;
+  const perPrint = deliveredPricePerPrint(product, totalCopies);
+
+  // Shipping is mostly charged per order, so it is the whole cost of a small
+  // order and almost none of a large one. Rather than assert that in copy that
+  // could go stale, show what one more batch would actually cost: both numbers
+  // come from the same pricing functions as the total above.
+  const nextStep = totalCopies < 5 ? 5 : totalCopies < 10 ? 10 : totalCopies < 25 ? 25 : null;
+  const nextPerPrint = nextStep === null ? null : deliveredPricePerPrint(product, nextStep);
+  const worthSuggesting =
+    nextPerPrint !== null && nextPerPrint < perPrint * 0.8 && printable.length > 0;
 
   async function handleContinue() {
     if (printable.length === 0) return;
@@ -131,7 +147,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
                       </span>
                     </span>
                     <span className="text-sm text-ink/70">
-                      {money(printUnitPrice(option.baseCost))} each
+                      {money(printUnitPrice(option))} each
                     </span>
                   </label>
                 ))}
@@ -169,6 +185,18 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
                 <dd>{money(total)}</dd>
               </div>
             </dl>
+
+            <p className="mt-2 text-xs text-charcoal/60">
+              {totalCopies} print{totalCopies === 1 ? '' : 's'} · {money(perPrint)} each, delivered
+            </p>
+
+            {worthSuggesting ? (
+              <p className="mt-3 border border-charcoal/10 border-l-2 border-l-pine bg-paper px-4 py-3 text-sm text-charcoal/75">
+                Most of that is shipping, and shipping is charged per order rather than per print.
+                A total of <strong>{nextStep} prints</strong> would work out at about{' '}
+                <strong>{money(nextPerPrint as number)}</strong> each.
+              </p>
+            ) : null}
 
             {error ? (
               <Notice tone="error" className="mt-4">
