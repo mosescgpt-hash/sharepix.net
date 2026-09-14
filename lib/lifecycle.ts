@@ -120,3 +120,50 @@ export function archiveWindowEnd(
   // than depending on clock skew between here and the next render.
   return new Date(now.getTime() - retentionDays * DAY_MS - 60_000).toISOString();
 }
+
+/**
+ * How long each sellable plan's media lives, as a sentence for the operator.
+ *
+ * `/global-admin` said "every event whose 12-month gallery and 90-day archive
+ * have both closed" until somebody checked. That is true of the paid plans and
+ * wrong about Free, whose media ages out in about six months — so an operator
+ * reading a non-zero dry run against that sentence would have taken it for a
+ * bug rather than for the early test events it actually was. On the screen that
+ * arms the only job in the product that destroys data, that is the wrong thing
+ * to be vague about.
+ *
+ * ## Why it lives here and not in lib/storageReclaim.ts
+ *
+ * That module is copied verbatim into the reclaim Lambda, with a test that
+ * compares the two byte for byte. This is a string builder for one admin
+ * screen: the Lambda has no use for it, and putting it there would ship dead
+ * code into the bundle and couple a sentence to the module that decides what
+ * gets deleted. The drift guard is worth more than the convenience.
+ *
+ * Months rather than days, because the reader is deciding whether to arm a
+ * destructive job, not computing a date.
+ */
+export function reclaimSpread(
+  plans: readonly { name: string; retentionDays?: number | null }[],
+  uploadWindowDays: number,
+  lifespanDays: (retentionDays: number) => number,
+): string {
+  const months = (plan: { retentionDays?: number | null }) =>
+    (uploadWindowDays + lifespanDays(plan.retentionDays ?? NaN)) / 30.4;
+
+  // One entry per distinct figure: three plans that all land on 17.2 months
+  // should read as one number, not as three repetitions of it.
+  const byFigure = new Map<string, string[]>();
+  for (const plan of plans) {
+    const key = months(plan).toFixed(1);
+    byFigure.set(key, [...(byFigure.get(key) ?? []), plan.name]);
+  }
+
+  return [...byFigure.entries()]
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    // No trailing "after the event is created" per entry — the page says it
+    // once. Repeating it three times is how a derived sentence ends up reading
+    // worse than the hardcoded one it replaced.
+    .map(([figure, names]) => `${names.join(' and ')} at about ${figure} months`)
+    .join('; ');
+}

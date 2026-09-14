@@ -10,8 +10,9 @@ import {
   reclaimVerdict,
   storedKeysOf,
 } from '../lib/storageReclaim';
-import { ARCHIVE_DAYS, getTier } from '../lib/pricing';
-import { codeOnly } from './sourceGuards';
+import { ARCHIVE_DAYS, CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '../lib/pricing';
+import { reclaimSpread } from '../lib/lifecycle';
+import { codeOnly, readSource } from './sourceGuards';
 
 const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -342,5 +343,43 @@ describe('the job itself', () => {
     const schema = read('amplify/data/resource.ts');
     const mutation = schema.slice(schema.indexOf('runStorageReclaim:'));
     expect(mutation.slice(0, 400)).toContain("allow.group('ADMINS')");
+  });
+});
+
+describe('what the operator screen says about timing', () => {
+  // The screen said "12-month gallery and 90-day archive" — true of the paid
+  // plans, wrong about Free, whose media ages out in about six months. An
+  // operator reading a non-zero dry run against that sentence would take it for
+  // a bug rather than for the early test events it actually is. This is the
+  // screen for the most destructive action in the product, so the sentence is
+  // derived from the plans and pinned here.
+  const PLANS = [...PRICING_TIERS, CORPORATE_PLAN];
+  const spread = reclaimSpread(PLANS, UPLOAD_WINDOW_DAYS, lifespanDays);
+
+  it('names every distinct retention, not just the longest', () => {
+    const figures = new Set(
+      PLANS.map((p) =>
+        ((UPLOAD_WINDOW_DAYS + lifespanDays((p as { retentionDays?: number }).retentionDays ?? NaN)) / 30.4).toFixed(1),
+      ),
+    );
+    for (const figure of figures) {
+      expect({ figure, mentioned: spread.includes(figure) }).toEqual({ figure, mentioned: true });
+    }
+  });
+
+  it('collapses plans that age out together into one figure', () => {
+    // Full Event and Corporate both land on 17.2 months. Saying it twice reads
+    // worse than the hardcoded sentence this replaced.
+    const seventeens = spread.split('17.2').length - 1;
+    expect(seventeens).toBe(1);
+  });
+
+  it('does not claim a single gallery length for every plan', () => {
+    const admin = codeOnly(readSource('pages/global-admin.tsx'));
+    expect(admin).not.toContain('12-month gallery');
+  });
+
+  it('is built from the plans rather than written on the page', () => {
+    expect(codeOnly(readSource('pages/global-admin.tsx'))).toContain('reclaimSpread(');
   });
 });
