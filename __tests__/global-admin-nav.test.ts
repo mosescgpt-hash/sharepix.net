@@ -105,7 +105,7 @@ describe('the three tabs', () => {
 
   it('leaves no tab empty', () => {
     const tabs = new Set(sectionTabs().map((s) => s.tab));
-    for (const tab of ['operate', 'metrics', 'checks']) {
+    for (const tab of ['events', 'discounts', 'metrics', 'tests']) {
       expect({ tab, hasSections: tabs.has(tab) }).toEqual({ tab, hasSections: true });
     }
   });
@@ -118,19 +118,33 @@ describe('the three tabs', () => {
     expect(byId['storage']).toBe('metrics');
   });
 
-  it('puts the things that prove something works on the checks tab', () => {
+  it('puts the things that prove something works on the tests tab', () => {
     const byId = Object.fromEntries(sectionTabs().map((s) => [s.id, s.tab]));
     for (const id of ['print-check', 'alert-check', 'jobs', 'r2-backfill']) {
-      expect({ id, tab: byId[id] }).toEqual({ id, tab: 'checks' });
+      expect({ id, tab: byId[id] }).toEqual({ id, tab: 'tests' });
     }
   });
 
+  it('opens on Events, which is the only tab with daily work on it', () => {
+    expect(source).toContain("useState<AdminTab>('events')");
+    expect(source.match(/id: '(\w+)', label:/)?.[1]).toBe('events');
+  });
+
+  it('gives Discounts its own tab rather than a column beside Events', () => {
+    // The two shared one two-column grid. On separate tabs only one is ever
+    // visible, and a grid would leave the survivor half-width with dead space
+    // beside it — so the flag moved onto each <section> and the grid went.
+    const byId = Object.fromEntries(sectionTabs().map((s) => [s.id, s.tab]));
+    expect(byId['discounts']).toBe('discounts');
+    expect(source).not.toContain('lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]');
+  });
+
   it('hides a section when its tab is not open', () => {
-    // Filing a section under a tab does nothing on its own — the wrapper has to
-    // act on it. Seventeen rather than eighteen because Events and Discount
-    // codes share one two-column grid.
+    // Filing a section under a tab does nothing on its own — the wrapper has
+    // to act on it. One per anchored section, now that Events and Discounts no
+    // longer share a wrapper.
     const hidden = source.match(/hidden=\{adminTab !== '\w+'\}/g) ?? [];
-    expect(hidden.length).toBe(17);
+    expect(hidden.length).toBe(anchoredIds().length);
   });
 
   it('does not link to a section the open tab is hiding', () => {

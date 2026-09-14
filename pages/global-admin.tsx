@@ -121,33 +121,35 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * scrolling — and a second array to keep in step would be the easiest way to
  * lose one.
  */
-export type AdminTab = 'operate' | 'metrics' | 'checks';
+export type AdminTab = 'events' | 'discounts' | 'metrics' | 'tests';
 
 export const ADMIN_TABS: Array<{ id: AdminTab; label: string; blurb: string }> = [
-  { id: 'operate', label: 'Run it', blurb: 'Money, people, events and the things that need a decision.' },
-  { id: 'metrics', label: 'Numbers', blurb: 'What is actually happening, and what it is costing.' },
-  { id: 'checks', label: 'Checks', blurb: 'Prove something works, without waiting for it to fail.' },
+  // Events opens first: it is the only one with something to do on a normal day.
+  { id: 'events', label: 'Events', blurb: 'Events, the people who host them, and the money that moves.' },
+  { id: 'discounts', label: 'Discounts', blurb: 'Codes that take a percentage off anything paid on the site.' },
+  { id: 'metrics', label: 'Metrics', blurb: 'What is actually happening, and what it is costing.' },
+  { id: 'tests', label: 'Tests', blurb: 'Prove something works, without waiting for it to fail.' },
 ];
 
 const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
-  { id: 'payments', label: 'Payments', tab: 'operate' },
-  { id: 'users', label: 'Users', tab: 'operate' },
-  { id: 'refunds', label: 'Refunds', tab: 'operate' },
-  { id: 'refund-review', label: 'Refund review', tab: 'operate' },
+  { id: 'payments', label: 'Payments', tab: 'events' },
+  { id: 'users', label: 'Users', tab: 'events' },
+  { id: 'refunds', label: 'Refunds', tab: 'events' },
+  { id: 'refund-review', label: 'Refund review', tab: 'events' },
   { id: 'storage', label: 'Storage and fair use', tab: 'metrics' },
-  { id: 'report-recipient', label: 'Report recipient', tab: 'operate' },
+  { id: 'report-recipient', label: 'Report recipient', tab: 'events' },
   { id: 'testimonials', label: 'Ratings', tab: 'metrics' },
   { id: 'surveys', label: 'Survey responses', tab: 'metrics' },
   { id: 'funnel', label: 'Product health', tab: 'metrics' },
-  { id: 'featured', label: 'Featured Events', tab: 'operate' },
-  { id: 'jobs', label: 'Scheduled jobs', tab: 'checks' },
-  { id: 'rewards', label: 'Research rewards', tab: 'operate' },
-  { id: 'free-claims', label: 'Free event claims', tab: 'operate' },
-  { id: 'print-check', label: 'Print check', tab: 'checks' },
-  { id: 'r2-backfill', label: 'Copy old photos', tab: 'checks' },
-  { id: 'alert-check', label: 'Alert email check', tab: 'checks' },
-  { id: 'events', label: 'Events', tab: 'operate' },
-  { id: 'discounts', label: 'Discount codes', tab: 'operate' },
+  { id: 'featured', label: 'Featured Events', tab: 'events' },
+  { id: 'jobs', label: 'Scheduled jobs', tab: 'tests' },
+  { id: 'rewards', label: 'Research rewards', tab: 'events' },
+  { id: 'free-claims', label: 'Free event claims', tab: 'events' },
+  { id: 'print-check', label: 'Print check', tab: 'tests' },
+  { id: 'r2-backfill', label: 'Copy old photos', tab: 'tests' },
+  { id: 'alert-check', label: 'Alert email check', tab: 'tests' },
+  { id: 'events', label: 'Events', tab: 'events' },
+  { id: 'discounts', label: 'Discount codes', tab: 'discounts' },
 ];
 
 /** Upload-window end date that lands an event in a chosen lifecycle phase (testing). */
@@ -277,7 +279,7 @@ function GlobalAdminPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
-  const [adminTab, setAdminTab] = useState<AdminTab>('operate');
+  const [adminTab, setAdminTab] = useState<AdminTab>('events');
   const [backfill, setBackfill] = useState<{ text: string; ok: boolean } | null>(null);
   // Held between presses so a run that stopped on its time budget can carry on
   // from where it got to rather than re-walking the bucket.
@@ -1330,7 +1332,7 @@ function GlobalAdminPage() {
               </p>
             </div>
 
-            <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5" hidden={adminTab !== 'operate'}>
+            <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5" hidden={adminTab !== 'events'}>
               <div className="flex flex-col gap-1">
                 <h2 id="payments" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Payments</h2>
                 {/* This said "Payments — test mode", and underneath it "No real
@@ -1376,7 +1378,7 @@ function GlobalAdminPage() {
               </div>
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="users" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">User management</h2>
               <p className="text-sm text-charcoal/70">
                 Reset a host&apos;s password (they get an email to set a new one — this also lets
@@ -1428,7 +1430,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="refund-review" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refund review</h2>
               <p className="text-sm text-charcoal/70">
                 Somebody got in touch unhappy. Find their event and see what actually
@@ -1533,7 +1535,7 @@ function GlobalAdminPage() {
               })()}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="refunds" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Refunds</h2>
               <p className="text-sm text-charcoal/70">
                 Guest Upload Promise claims and any other money going back.{' '}
@@ -1789,7 +1791,7 @@ function GlobalAdminPage() {
               </div>
             ) : null}
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="report-recipient" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Report recipient</h2>
               <p className="text-sm text-charcoal/70">
                 Where the monthly analytics report goes. Changing it here takes effect on
@@ -1994,7 +1996,7 @@ function GlobalAdminPage() {
                 moves money: accepting marks which specific photos may be used,
                 and marking a payment records that a person sent it.
             */}
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="featured" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Featured Events
               </h2>
@@ -2657,7 +2659,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'checks'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="jobs" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Scheduled jobs</h2>
               <p className="text-sm text-charcoal/70">
                 The nightly job runs at 14:00 UTC and the report on the 1st of the month.
@@ -2758,7 +2760,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="rewards" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Research rewards
               </h2>
@@ -2822,7 +2824,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'operate'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="free-claims" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
               <p className="text-sm text-charcoal/70">
                 One free event per account, and taking it is permanent — the claim is not
@@ -2882,7 +2884,7 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'checks'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="print-check" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Print provider check</h2>
               <p className="text-sm text-charcoal/70">
                 Asks Prodigi to price one of each print we sell. This only requests a{' '}
@@ -2909,7 +2911,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'checks'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="r2-backfill" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Copy old photos to Cloudflare
               </h2>
@@ -2978,7 +2980,7 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'checks'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
               <h2 id="alert-check" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Alert email check</h2>
               <p className="text-sm text-charcoal/70">
                 Sends you the real &ldquo;photo held for review&rdquo; alert — same message, same
@@ -3005,8 +3007,8 @@ function GlobalAdminPage() {
               ) : null}
             </div>
 
-            <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]" hidden={adminTab !== 'operate'}>
-              <section>
+            <div className="mt-10">
+              <section hidden={adminTab !== 'events'}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 id="events" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Events</h2>
@@ -3257,7 +3259,7 @@ function GlobalAdminPage() {
                 </div>
               </section>
 
-              <section>
+              <section hidden={adminTab !== 'discounts'}>
                 <h2 id="discounts" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Discount codes</h2>
                 <p className="text-sm text-charcoal/60">
                   Take a percentage off anything paid on the site. Default usage is one redemption.
