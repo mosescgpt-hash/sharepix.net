@@ -1,5 +1,9 @@
 import { ARCHIVE_DAYS, CORPORATE_PLAN, getTier } from './pricing';
 import type { QREvent } from './types';
+// Safe in this direction only: storageReclaim.ts has no imports of its own —
+// it is copied verbatim into the reclaim Lambda, which cannot resolve lib/ —
+// so nothing there can import back and make a cycle.
+import { daysUntilReclaim, lifespanDays } from './storageReclaim';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -34,6 +38,24 @@ export interface EventLifecycle {
  * Events created before this model (no uploadWindowEndsAt) are treated as fully
  * open with host access, for backward compatibility.
  */
+/**
+ * How long an event's gallery lasts, in days.
+ *
+ * Corporate events are not a tier in PRICING_TIERS — the subscription is, and
+ * the events under it carry `tier: 'corporate'` with no row to look up. So
+ * every reader of retention has to special-case it, and this was written out
+ * twice in this file before the reclaim countdown needed a third copy.
+ *
+ * The 90-day fallback is for a tier string that resolves to nothing: an event
+ * from a plan that no longer exists, or a typo. Erring short would delete
+ * somebody's photographs early, so it matches the shortest retired plan rather
+ * than zero.
+ */
+export function retentionDaysFor(event: Pick<QREvent, 'tier'>): number {
+  if (event.tier === 'corporate') return CORPORATE_PLAN.retentionDays;
+  return getTier(event.tier)?.retentionDays ?? 90;
+}
+
 export function eventLifecycle(
   event:
     | Pick<QREvent, 'tier' | 'uploadWindowEndsAt' | 'uploadsClosed'>
@@ -72,9 +94,7 @@ export function eventLifecycle(
   const lowResDays = isCorporate
     ? CORPORATE_PLAN.guestLowResDays
     : tier?.guestLowResDays ?? 30;
-  const retentionDays = isCorporate
-    ? CORPORATE_PLAN.retentionDays
-    : tier?.retentionDays ?? 90;
+  const retentionDays = retentionDaysFor(event);
   const guestNothingAt = new Date(windowEnd.getTime() + lowResDays * DAY_MS);
   const retentionEnd = new Date(windowEnd.getTime() + retentionDays * DAY_MS);
   const archiveEnd = new Date(retentionEnd.getTime() + ARCHIVE_DAYS * DAY_MS);
@@ -112,10 +132,7 @@ export function archiveWindowEnd(
   event: Pick<QREvent, 'tier'>,
   now: Date = new Date(),
 ): string {
-  const isCorporate = event.tier === 'corporate';
-  const retentionDays = isCorporate
-    ? CORPORATE_PLAN.retentionDays
-    : getTier(event.tier)?.retentionDays ?? 90;
+  const retentionDays = retentionDaysFor(event);
   // One minute past the boundary, so `archived` is true immediately rather
   // than depending on clock skew between here and the next render.
   return new Date(now.getTime() - retentionDays * DAY_MS - 60_000).toISOString();
@@ -146,7 +163,6 @@ export function archiveWindowEnd(
 export function reclaimSpread(
   plans: readonly { name: string; retentionDays?: number | null }[],
   uploadWindowDays: number,
-  lifespanDays: (retentionDays: number) => number,
 ): string {
   const months = (plan: { retentionDays?: number | null }) =>
     (uploadWindowDays + lifespanDays(plan.retentionDays ?? NaN)) / 30.4;
@@ -166,4 +182,38 @@ export function reclaimSpread(
     // worse than the hardcoded one it replaced.
     .map(([figure, names]) => `${names.join(' and ')} at about ${figure} months`)
     .join('; ');
+}
+
+/**
+ * When an event's media will be deleted, as a phrase for the operator.
+ *
+ * The reclaim job runs weekly and removes files permanently, and until now
+ * nothing anywhere showed which events it was about to take. The only way to
+ * find out was to run the job and read a count — which gives you a number and
+ * not a list, at the moment it is already too late to object.
+ *
+ * `daysUntilReclaim` has existed since reclamation shipped, with a comment
+ * saying it was there "so an admin screen can show 'in 12 days'". It was never
+ * called. This is that screen.
+ *
+ * Deliberately vague past a fortnight. "In 3 days" is a thing to act on; "in
+ * 287 days" is noise dressed as precision, and a dashboard that renders it for
+ * every row buries the two that matter.
+ */
+export function reclaimPhrase(
+  event: Pick<QREvent, 'tier' | 'uploadWindowEndsAt' | 'mediaReclaimedAt'>,
+  now: Date = new Date(),
+): { text: string; urgent: boolean } | null {
+  if (event.mediaReclaimedAt) return { text: 'Media already deleted', urgent: false };
+
+  const days = daysUntilReclaim(event, retentionDaysFor(event), now);
+  // No anchor date means the job will refuse to touch it, so there is nothing
+  // to count down to and saying "unknown" would imply a risk that is not there.
+  if (days === null) return null;
+
+  if (days <= 0) return { text: 'Due for deletion', urgent: true };
+  if (days === 1) return { text: 'Deletes tomorrow', urgent: true };
+  if (days <= 14) return { text: `Deletes in ${days} days`, urgent: true };
+  if (days <= 60) return { text: `Deletes in about ${Math.round(days / 7)} weeks`, urgent: false };
+  return { text: `Deletes in about ${Math.round(days / 30.4)} months`, urgent: false };
 }

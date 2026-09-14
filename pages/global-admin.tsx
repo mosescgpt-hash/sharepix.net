@@ -36,6 +36,7 @@ import {
   markIncentiveFulfilled,
   manageUser,
   restoreEventAccess,
+  probeScheduledJob,
   runScheduledJob,
   sendTestAlertEmail,
   setDiscountCodeActive,
@@ -46,7 +47,7 @@ import {
 } from '@/lib/api';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
-import { ARCHIVE_DAYS, GRACE_DAYS, lifespanDays } from '@/lib/storageReclaim';
+import { ARCHIVE_DAYS, GRACE_DAYS } from '@/lib/storageReclaim';
 import { entitledPhotoLimit, limitsAreStale } from '@/lib/planLimits';
 import {
   HOME_JURISDICTION_NOTE,
@@ -55,7 +56,7 @@ import {
   assessNexus,
   nexusMessages,
 } from '@/lib/taxNexus';
-import { archiveWindowEnd, eventLifecycle, reclaimSpread } from '@/lib/lifecycle';
+import { archiveWindowEnd, eventLifecycle, reclaimPhrase, reclaimSpread } from '@/lib/lifecycle';
 import { isSuccessfulEvent, successProgress, successRate } from '@/lib/successfulEvent';
 import { INCENTIVE_AMOUNT_USD, canTransition } from '@/lib/researchIncentive';
 import { SURVEY_QUESTIONS, questionById } from '@/lib/survey';
@@ -254,6 +255,12 @@ function GlobalAdminPage() {
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
+  // Whether each switch is actually on, asked of the functions themselves
+  // rather than assumed. `null` means the probe has not answered.
+  const [switches, setSwitches] = useState<{
+    daily: { enabled: boolean; summary: string } | null;
+    reclaim: { enabled: boolean; summary: string } | null;
+  }>({ daily: null, reclaim: null });
   const [jobResult, setJobResult] = useState<{ text: string; ok: boolean } | null>(null);
   const [refunds, setRefunds] = useState<RefundRow[] | null>(null);
   // What the operator typed into the refund-review lookup.
@@ -444,6 +451,13 @@ function GlobalAdminPage() {
       } catch {
         setNexus(null);
       }
+
+      // Two no-op calls that report the switches. Not fatal and not awaited
+      // together with the rest: a status line that cannot load must not delay
+      // or break the dashboard around it.
+      void Promise.all([probeScheduledJob('daily'), probeScheduledJob('reclaim')]).then(
+        ([daily, reclaim]) => setSwitches({ daily, reclaim }),
+      );
 
       try {
         const stored = await readSetting(SETTING_KEYS.monthlyReportRecipient);
@@ -1592,6 +1606,27 @@ function GlobalAdminPage() {
                                     ? ` · ${assessment.reasons.join(', ')}`
                                     : ''}
                                 </p>
+                                {/* When the weekly reclaim job will take this
+                                    event's files. Nothing showed this before,
+                                    so the only way to know what was about to be
+                                    deleted was to run the job and read a count
+                                    — a number, not a list, at the point it is
+                                    already too late to object. */}
+                                {(() => {
+                                  const due = reclaimPhrase(event);
+                                  if (!due) return null;
+                                  return (
+                                    <p
+                                      className={`truncate text-xs ${
+                                        due.urgent
+                                          ? 'font-medium text-red-700'
+                                          : 'text-charcoal/55'
+                                      }`}
+                                    >
+                                      {due.text}
+                                    </p>
+                                  );
+                                })()}
                               </div>
                               <div className="flex shrink-0 flex-wrap gap-2">
                                 {event.usageStatus ? (
@@ -2536,6 +2571,45 @@ function GlobalAdminPage() {
                 mail</strong> — it is the real job, not a rehearsal. Reminders it has already
                 sent are never sent twice.
               </p>
+              {/* The live state of both switches, asked of the functions
+                  themselves. Twice in one day a flag was believed on while it
+                  was off — both are read at synth time and baked into the
+                  Lambda, so setting the variable in Amplify does nothing until
+                  a backend deploy runs, and nothing on this page said so. */}
+              <dl className="mt-4 grid gap-2 sm:max-w-lg sm:grid-cols-2">
+                {([
+                  ['daily', 'Email sending'],
+                  ['reclaim', 'Storage reclamation'],
+                ] as const).map(([key, label]) => {
+                  const state = switches[key];
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-baseline justify-between gap-3 border border-charcoal/10 px-3 py-2"
+                    >
+                      <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                        {label}
+                      </dt>
+                      <dd
+                        className={`text-sm font-medium ${
+                          state === null
+                            ? 'text-charcoal/45'
+                            : state.enabled
+                              ? 'text-red-700'
+                              : 'text-charcoal/70'
+                        }`}
+                      >
+                        {/* "On" is the louder colour on purpose. Both of these
+                            do something irreversible to somebody else — mail a
+                            customer, delete their photographs — so the state
+                            worth catching your eye is armed, not idle. */}
+                        {state === null ? 'Checking…' : state.enabled ? 'ON' : 'Off'}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -2565,9 +2639,9 @@ function GlobalAdminPage() {
               <p className="mt-3 text-sm text-charcoal/70">
                 <strong>Reclamation deletes photos permanently</strong> — every event whose
                 gallery retention and {ARCHIVE_DAYS}-day archive have both closed, plus{' '}
-                {GRACE_DAYS} days of grace. It is switched off until{' '}
-                <code>STORAGE_RECLAIM_ENABLED</code> is set, and until then it reports what
-                it would have removed and removes nothing.
+                {GRACE_DAYS} days of grace. <code>STORAGE_RECLAIM_ENABLED</code> is the
+                switch and its state is above; with it off the job decides everything the
+                same way and removes nothing.
               </p>
               {/* Retention is per plan, and the spread is wide enough that
                   "12-month gallery" — which this said until somebody checked —
@@ -2575,7 +2649,7 @@ function GlobalAdminPage() {
                   Free events age out in about six months. */}
               <p className="mt-2 text-sm text-charcoal/70">
                 Retention is per plan, so events do not all age out together —{' '}
-                {reclaimSpread([...PRICING_TIERS, CORPORATE_PLAN], UPLOAD_WINDOW_DAYS, lifespanDays)} after the
+                {reclaimSpread([...PRICING_TIERS, CORPORATE_PLAN], UPLOAD_WINDOW_DAYS)} after the
                 event is created. The clock starts when the upload window closes.
               </p>
               {jobResult ? (

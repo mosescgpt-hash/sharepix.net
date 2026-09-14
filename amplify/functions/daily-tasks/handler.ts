@@ -689,7 +689,23 @@ async function send(to: string, subject: string, html: string, text: string): Pr
  * SES throttle must not stop the other ninety-nine hosts being told their
  * photos are about to be deleted.
  */
-export const handler = async () => {
+/**
+ * @param event AppSync passes the mutation's arguments; EventBridge passes a
+ * scheduled-event shape with none. Optional chaining covers both callers.
+ */
+export const handler = async (event?: { arguments?: { probe?: boolean | null } }) => {
+  // A status check, not a run. Returns the same flag the job itself reads, so
+  // the dashboard cannot show a state the job would disagree with.
+  if (event?.arguments?.probe) {
+    return {
+      ok: true,
+      dryRun: !SENDING_ENABLED,
+      summary: SENDING_ENABLED
+        ? 'Email sending is ON. The nightly job mails real hosts.'
+        : 'Email sending is OFF. The nightly job runs and sends nothing.',
+    };
+  }
+
   const now = new Date();
   const nowISO = now.toISOString();
   let considered = 0;

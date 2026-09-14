@@ -17,6 +17,7 @@ const schema = read('amplify/data/resource.ts');
 const admin = read('pages/global-admin.tsx');
 const daily = read('amplify/functions/daily-tasks/handler.ts');
 const monthly = read('amplify/functions/monthly-report/handler.ts');
+const reclaim = read('amplify/functions/reclaim-storage/handler.ts');
 
 describe('the admin trigger runs the real job', () => {
   it('points at the same functions the schedules invoke', () => {
@@ -36,14 +37,36 @@ describe('the admin trigger runs the real job', () => {
     expect(runners).not.toContain('allow.guest()');
   });
 
-  it('does not change what the job does when run by hand', () => {
-    // No "test mode" argument anywhere: the mutation takes no arguments, so
-    // there is nothing to pass that could make it behave differently.
+  it('takes no argument that could make a real run behave differently', () => {
+    // This used to assert the mutations took no arguments at all, which was a
+    // proxy for the property that actually matters: nothing a caller can pass
+    // may change what a run DOES. `probe` does not — it returns before any
+    // work, so the choice is "report the switch" or "run the real job", with
+    // no third behaviour in between.
+    //
+    // The proxy would now reject the probe, so it is replaced by the property.
     const runners = schema.slice(
       schema.indexOf('runDailyTasks: a'),
       schema.indexOf('.handler(a.handler.function(monthlyReportFn))') + 60,
     );
-    expect(runners).not.toContain('.arguments(');
+    const args = [...runners.matchAll(/\.arguments\(\{([^}]*)\}\)/g)].map((m) => m[1]);
+    for (const arg of args) {
+      // One argument, named probe, boolean. Anything else is a mode switch.
+      expect(arg.replace(/\s+/g, ' ').trim()).toBe('probe: a.boolean()');
+    }
+  });
+
+  it('answers a probe before doing anything', () => {
+    // The guarantee that makes the probe safe on the reclaim job, where a real
+    // run deletes: the branch has to come first. If work happened above it,
+    // "just checking the switch" would mean something else entirely.
+    for (const source of [daily, reclaim]) {
+      const body = source.slice(source.indexOf('export const handler = async ('));
+      const probeAt = body.indexOf('arguments?.probe');
+      const workAt = body.indexOf('const now = new Date();');
+      expect(probeAt).toBeGreaterThan(-1);
+      expect(probeAt).toBeLessThan(workAt);
+    }
   });
 });
 
@@ -84,6 +107,16 @@ describe('what the operator is told', () => {
     expect(section).toMatch(/never sent twice/i);
   });
 
+  it('shows each switch rather than describing its state in prose', () => {
+    // The panel carried "It is switched off until STORAGE_RECLAIM_ENABLED is
+    // set" — fine while nothing else said otherwise, and a flat contradiction
+    // once a live badge above it read ON. Two places asserting one fact is how
+    // they end up disagreeing; the badge is the one that can be right.
+    const section = jobsSection();
+    expect(section).toContain('switches[key]');
+    expect(section).not.toContain('It is switched off until');
+  });
+
   it('mentions when each job would have run on its own', () => {
     const section = jobsSection();
     expect(section).toContain('14:00 UTC');
@@ -92,9 +125,17 @@ describe('what the operator is told', () => {
 });
 
 describe('the handlers still work unattended', () => {
-  it('take no arguments, so a scheduled invocation is identical', () => {
-    // EventBridge passes an event object the handler must not depend on.
-    expect(daily).toContain('export const handler = async () => {');
+  it('does not depend on being called with arguments', () => {
+    // EventBridge passes a scheduled-event shape with no `arguments` at all.
+    // The parameter is optional and every read of it is optionally chained, so
+    // a scheduled invocation cannot fall into the probe branch and cannot throw
+    // on the way past it. Getting this wrong would stop the nightly job silently
+    // — the failure mode this whole file exists for.
+    for (const source of [daily, reclaim]) {
+      expect(source).toContain('export const handler = async (event?: {');
+      expect(source).toContain('event?.arguments?.probe');
+    }
+    // The monthly report has no switch and so never grew a probe.
     expect(monthly).toContain('export const handler = async () => {');
   });
 });

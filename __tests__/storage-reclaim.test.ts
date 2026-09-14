@@ -11,7 +11,7 @@ import {
   storedKeysOf,
 } from '../lib/storageReclaim';
 import { ARCHIVE_DAYS, CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '../lib/pricing';
-import { reclaimSpread } from '../lib/lifecycle';
+import { reclaimPhrase, reclaimSpread, retentionDaysFor } from '../lib/lifecycle';
 import { codeOnly, readSource } from './sourceGuards';
 
 const root = join(__dirname, '..');
@@ -341,8 +341,14 @@ describe('the job itself', () => {
 
   it('is admin-only from the dashboard', () => {
     const schema = read('amplify/data/resource.ts');
-    const mutation = schema.slice(schema.indexOf('runStorageReclaim:'));
-    expect(mutation.slice(0, 400)).toContain("allow.group('ADMINS')");
+    const start = schema.indexOf('runStorageReclaim:');
+    // To the end of the mutation, not a fixed 400 characters. The magic number
+    // broke the moment the mutation grew a comment and an argument, failing on
+    // a change that did not touch authorization at all.
+    const mutation = schema.slice(start, schema.indexOf('),', schema.indexOf('.handler(', start)));
+    expect(mutation).toContain("allow.group('ADMINS')");
+    expect(mutation).not.toContain('allow.authenticated()');
+    expect(mutation).not.toContain('allow.guest()');
   });
 });
 
@@ -354,7 +360,7 @@ describe('what the operator screen says about timing', () => {
   // screen for the most destructive action in the product, so the sentence is
   // derived from the plans and pinned here.
   const PLANS = [...PRICING_TIERS, CORPORATE_PLAN];
-  const spread = reclaimSpread(PLANS, UPLOAD_WINDOW_DAYS, lifespanDays);
+  const spread = reclaimSpread(PLANS, UPLOAD_WINDOW_DAYS);
 
   it('names every distinct retention, not just the longest', () => {
     const figures = new Set(
@@ -381,5 +387,87 @@ describe('what the operator screen says about timing', () => {
 
   it('is built from the plans rather than written on the page', () => {
     expect(codeOnly(readSource('pages/global-admin.tsx'))).toContain('reclaimSpread(');
+  });
+});
+
+describe('when an event will lose its photos', () => {
+  /**
+   * `daysUntilReclaim` shipped with a comment saying it existed "so an admin
+   * screen can show 'in 12 days'", and was then called from nowhere for its
+   * whole life. Reclamation is armed now — the job runs weekly and deletes
+   * permanently — so the only way to learn what it is about to take was to run
+   * it and read a count. A number, not a list, at the point it is too late.
+   */
+  const windowEndedDaysAgo = (days: number) =>
+    new Date(NOW.getTime() - days * DAY).toISOString();
+
+  // Paid retention, so the whole lifespan is 365 + 90 + 7 = 462 days.
+  const paid = (days: number) => ({
+    tier: 'plus',
+    uploadWindowEndsAt: windowEndedDaysAgo(days),
+  });
+
+  it('says nothing for an event with no anchor date', () => {
+    // The job refuses to touch one, so there is nothing to count down to and
+    // "unknown" would imply a risk that is not there.
+    expect(reclaimPhrase({ tier: 'plus', uploadWindowEndsAt: null }, NOW)).toBeNull();
+  });
+
+  it('reports an event whose media is already gone', () => {
+    const gone = reclaimPhrase(
+      { tier: 'plus', uploadWindowEndsAt: windowEndedDaysAgo(500), mediaReclaimedAt: NOW.toISOString() },
+      NOW,
+    );
+    expect(gone).toEqual({ text: 'Media already deleted', urgent: false });
+  });
+
+  it('marks an event the next run will take', () => {
+    const due = reclaimPhrase(paid(500), NOW);
+    expect(due).toEqual({ text: 'Due for deletion', urgent: true });
+  });
+
+  it('counts the last fortnight in days, and loudly', () => {
+    const soon = reclaimPhrase(paid(462 - 3), NOW);
+    expect(soon?.text).toBe('Deletes in 3 days');
+    expect(soon?.urgent).toBe(true);
+  });
+
+  it('says tomorrow rather than "in 1 days"', () => {
+    expect(reclaimPhrase(paid(461), NOW)?.text).toBe('Deletes tomorrow');
+  });
+
+  it('goes vague past a fortnight, and quiet', () => {
+    // "In 287 days" is noise dressed as precision, and rendering it on every
+    // row buries the two that matter.
+    const far = reclaimPhrase(paid(100), NOW);
+    expect(far?.text).toMatch(/Deletes in about \d+ months/);
+    expect(far?.urgent).toBe(false);
+  });
+
+  it('is the plan that decides, not a single number', () => {
+    // A free event and a paid one created the same day are months apart. This
+    // is the whole reason the operator screen needed the spread.
+    const sameDay = windowEndedDaysAgo(140);
+    const free = reclaimPhrase({ tier: 'free', uploadWindowEndsAt: sameDay }, NOW);
+    const full = reclaimPhrase({ tier: 'plus', uploadWindowEndsAt: sameDay }, NOW);
+    expect(free).toEqual({ text: 'Due for deletion', urgent: true });
+    expect(full?.urgent).toBe(false);
+  });
+
+  it('agrees with the job about which events are due', () => {
+    // The phrase and the deletion must not disagree: an operator reading
+    // "deletes in about 2 months" on a row the next run removes is worse than
+    // no label at all. Both read the same verdict.
+    for (const days of [100, 300, 461, 462, 500]) {
+      const event = paid(days);
+      const verdict = reclaimVerdict(event, retentionDaysFor(event), NOW);
+      const phrase = reclaimPhrase(event, NOW);
+      expect({ days, reclaim: verdict.reclaim, urgent: phrase?.urgent ?? false }).toEqual({
+        days,
+        reclaim: verdict.reclaim,
+        // Anything the job would take now must read as urgent.
+        urgent: verdict.reclaim ? true : phrase?.urgent ?? false,
+      });
+    }
   });
 });

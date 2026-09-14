@@ -249,7 +249,23 @@ async function deleteObject(key: string): Promise<void> {
   ]);
 }
 
-export const handler = async () => {
+/**
+ * @param event AppSync passes the mutation's arguments; EventBridge passes a
+ * scheduled-event shape with none. Optional chaining covers both callers.
+ */
+export const handler = async (event?: { arguments?: { probe?: boolean | null } }) => {
+  // A status check, not a run — and for this job that distinction is the whole
+  // point: you cannot find out whether deletion is armed by deleting.
+  if (event?.arguments?.probe) {
+    return {
+      ok: true,
+      dryRun: !RECLAIM_ENABLED,
+      summary: RECLAIM_ENABLED
+        ? 'Reclamation is ON. Expired events lose their photos permanently.'
+        : 'Reclamation is OFF. The job reports what it would remove and removes nothing.',
+    };
+  }
+
   const now = new Date();
   const nowISO = now.toISOString();
   const outcome: ReclaimOutcome = {
