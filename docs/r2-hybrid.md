@@ -157,6 +157,24 @@ gets a **404 from Cloudflare** — not a network error, a real HTTP 404 with a
 photo, doubled, on every view. And every one of those reads is billed S3 egress
 that R2 exists to serve free.
 
+### Fixing it
+
+**`/global-admin → Copy old photos`** is the way to do this. "Check what is
+missing" writes nothing; "Copy them across" writes. The five values it needs —
+the bucket and the four R2 variables — already exist in Lambda, which also
+removes the one way the script can silently do nothing: a local
+`amplify_outputs.json` points at a *sandbox* bucket, and a run against the wrong
+bucket reports "nothing to copy" and looks like success.
+
+A Lambda cannot run unbounded, so it works to a 12-minute budget inside a
+15-minute timeout and hands back where it stopped. Stopping early is normal on a
+large bucket, not a failure; the panel says so and the same button carries on.
+**`done` is what says the work finished**, not whether a token came back — a run
+can stop during the first page with no token to hand back, and treating that as
+complete is how a half-done backfill would look finished.
+
+The script still exists for the same job from a terminal:
+
 ```
 npm run backfill:r2                   # dry run: lists what it would copy
 npm run backfill:r2 -- --apply        # copies
@@ -184,4 +202,12 @@ re-encoded by the browser's canvas, which writes no EXIF at all — so they are
 always safe to copy and they are the half that fixes the latency.
 
 `__tests__/r2-backfill.test.ts` holds that decision, including the exact preview
-key that was 404ing in production.
+key that was 404ing in production, and pins the claims the admin panel makes:
+that only a literal `true` writes, that the mutation is ADMINS-only at the
+schema rather than merely hidden, and that nothing in the handler deletes or
+writes to S3.
+
+The Lambda keeps its own copy of the rule, since Amplify functions take no
+cross-bundle imports; `__tests__/r2-backfill-function-copy.test.ts` compares the
+two byte for byte. One door refusing where the other copies would mean EXIF
+reaching R2 through whichever one happened to be used.

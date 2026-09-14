@@ -1,3 +1,4 @@
+import { readSource } from './sourceGuards';
 import {
   backfillVerdict,
   isStrippableKey,
@@ -159,5 +160,45 @@ describe('the summary tells an operator what happened', () => {
     const text = summarise({ ...zero, 'derived-variant': 2, 'unstripped-original': 3 });
     expect(text).toContain('REFUSED');
     expect(text).toContain('3 originals');
+  });
+});
+
+describe('the admin button cannot write by accident', () => {
+  const handler = readSource('amplify/functions/backfill-r2/handler.ts');
+  const schema = readSource('amplify/data/resource.ts');
+  const page = readSource('pages/global-admin.tsx');
+
+  it('treats anything but an explicit true as a dry run', () => {
+    // `apply` arrives from a GraphQL argument, so it can be absent, null, or
+    // the string "false". Only the boolean true writes.
+    expect(handler).toContain('event.arguments.apply === true');
+  });
+
+  it('is limited to admins at the schema, not just hidden in the UI', () => {
+    const mutation = schema.slice(schema.indexOf('backfillR2: a'));
+    expect(mutation.slice(0, 600)).toContain("allow.group('ADMINS')");
+  });
+
+  it('never writes to S3 or deletes anything', () => {
+    // The whole safety claim in the UI copy: reads Amazon, writes Cloudflare.
+    // A DeleteObjectCommand here would make that text a lie.
+    expect(handler).not.toContain('DeleteObjectCommand');
+    // The only PutObject goes to the R2 client, never to `s3`.
+    expect(handler).not.toMatch(/s3\.send\(\s*new PutObjectCommand/);
+  });
+
+  it('decides "finished" on done, not on a missing token', () => {
+    // A run can stop on its time budget during the first page, where there is
+    // no token to hand back. Keying off the token would call that complete.
+    expect(page).toContain('result.done ? null : result.nextToken');
+  });
+
+  it('stops well inside its own timeout', () => {
+    // A timeout loses the token and sends the next run back to the start.
+    const resource = readSource('amplify/functions/backfill-r2/resource.ts');
+    const timeout = Number(/timeoutSeconds:\s*(\d+)/.exec(resource)?.[1]);
+    const budgetMinutes = Number(/TIME_BUDGET_MS = (\d+) \* 60/.exec(handler)?.[1]);
+    expect(timeout).toBeGreaterThan(0);
+    expect(budgetMinutes * 60).toBeLessThan(timeout - 120);
   });
 });
