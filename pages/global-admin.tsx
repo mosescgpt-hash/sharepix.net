@@ -1012,7 +1012,7 @@ function GlobalAdminPage() {
     }
   }
 
-  async function handleTestCheckout(tier: string) {
+  async function handleCheckout(tier: string) {
     setWorking(`checkout-${tier}`);
     setError(null);
     try {
@@ -1253,11 +1253,27 @@ function GlobalAdminPage() {
 
             <div className="mt-8 border border-dashed border-pine/50 bg-sage/40 p-5">
               <div className="flex flex-col gap-1">
-                <h2 id="payments" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Payments — test mode</h2>
+                <h2 id="payments" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Payments</h2>
+                {/* This said "Payments — test mode", and underneath it "No real
+                    money moves. Events stay free during the pilot." Both were
+                    written when they were true and neither was derived from
+                    anything, so neither changed when the key did.
+
+                    With a live key that is a trap with money in it: the buttons
+                    below open a real checkout, the test card is declined, and an
+                    admin reaching for a real one has been told they will not be
+                    charged. Nothing on this page can read the key, so it now
+                    says what is true either way rather than picking one. */}
                 <p className="text-sm text-charcoal/70">
-                  Run a real Stripe checkout with the test card <span className="font-mono">4242 4242 4242 4242</span>{' '}
-                  (any future date / any CVC). No real money moves. Events stay free during the pilot — this only
-                  confirms the payment flow works.
+                  These buttons open a <strong>real Stripe checkout</strong> at the listed price. Whether a
+                  card is actually charged depends on the secret key set in Amplify, which this page cannot
+                  read: a <span className="font-mono">sk_live</span> key charges the card you enter and
+                  declines test cards, a <span className="font-mono">sk_test</span> key charges nothing and
+                  accepts <span className="font-mono">4242 4242 4242 4242</span>.
+                </p>
+                <p className="text-sm text-charcoal/70">
+                  Paid events are created inactive and accept no uploads until the webhook confirms payment,
+                  so the count below is the one number that proves the whole path works end to end.
                 </p>
                 <p className="text-sm text-charcoal/70">
                   Payments recorded by the webhook:{' '}
@@ -1272,7 +1288,7 @@ function GlobalAdminPage() {
                     key={tier.id}
                     type="button"
                     disabled={working === `checkout-${tier.id}`}
-                    onClick={() => void handleTestCheckout(tier.id)}
+                    onClick={() => void handleCheckout(tier.id)}
                     className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
                   >
                     {working === `checkout-${tier.id}` ? 'Starting…' : `Test ${tier.name} · $${tier.price}`}
