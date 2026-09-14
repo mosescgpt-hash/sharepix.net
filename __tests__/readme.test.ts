@@ -34,12 +34,39 @@ const root = join(__dirname, '..');
 describe('the "what is not finished" list is still accurate', () => {
   it('is still gated on the flags it names', () => {
     // Each of these is only a real caveat while the feature is behind a flag.
-    // If a flag stops existing, the bullet describing it has to go too.
+    // If a flag stops existing, the row describing it has to go too.
     const backend = readSource('amplify/backend.ts');
     const waf = readSource('amplify/waf.ts');
     expect(backend).toContain('EMAIL_SENDING_ENABLED');
     expect(backend).toContain('STORAGE_RECLAIM_ENABLED');
     expect(codeOnly(waf)).toContain('WAF_ENABLED');
+  });
+
+  it('does not claim to know what is set in the Amplify console', () => {
+    // The first draft of this section asserted the production state of three
+    // flags and of the apex redirect. Within a day two of the four were wrong,
+    // because they describe a console somebody clicked in rather than a file
+    // anybody can read — and no test could catch it, which made a guarded list
+    // that had quietly stopped being true.
+    //
+    // So the section is now in two halves and this pins the seam. It cannot
+    // check prose, but it can check that the sentence admitting the limit is
+    // still there: rewriting the section back into assertions means deleting
+    // it, which is at least a deliberate act.
+    // Whitespace-normalised: the sentence wraps in the file, so a literal
+    // substring search would fail on the newline rather than on the meaning.
+    const flat = README.replace(/\s+/g, ' ');
+    expect(flat).toContain('the live value is not in this repository');
+  });
+
+  it('does not say a switch is on or off', () => {
+    // The exact shape the stale claims took: "Storage reclaim is off
+    // (STORAGE_RECLAIM_ENABLED unset)".
+    for (const flag of ['EMAIL_SENDING_ENABLED', 'STORAGE_RECLAIM_ENABLED', 'WAF_ENABLED']) {
+      for (const claim of [`${flag} unset`, `${flag}\` unset`]) {
+        expect({ claim, present: README.includes(claim) }).toEqual({ claim, present: false });
+      }
+    }
   });
 
   it('does not repeat the three claims that were false', () => {

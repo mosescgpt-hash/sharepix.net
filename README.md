@@ -151,24 +151,41 @@ two copies that quietly disagree about money.
 
 ## What is not finished
 
-Kept short and kept true. Everything here was checked against the code on
-2026-09-14, and `__tests__/readme.test.ts` fails if an item is fixed without
-this list being updated.
+Two kinds of thing, kept apart on purpose. The first kind this file can be
+right about; the second it cannot, and pretending otherwise is how a list like
+this goes stale within a day.
 
-- **Email sending is behind `EMAIL_SENDING_ENABLED`.** Unset, every send is a
-  dry run that logs what it would have sent. Nothing has run against SES in
-  anger yet, so the first production send should be watched.
+### In the code
+
+`__tests__/readme.test.ts` fails if one of these is fixed without this list
+being updated.
+
 - **Prints run against Prodigi sandbox and Stripe test mode.** Both flip
-  together or not at all — see `docs/go-live-prints.md`.
-- **API rate limiting is off** (`WAF_ENABLED` unset). The word codes are what
-  currently makes guessing infeasible; the throttle is the second lock.
-- **Storage reclaim is off** (`STORAGE_RECLAIM_ENABLED` unset). Expired events
-  keep their bytes until it is turned on.
-- **`sharepix.net` does not redirect to `www.sharepix.net`.** The apex is still
-  on the registrar's parking IPs. Every link the product mints — QR codes,
-  emails, the canonical tags — says `www`, so the redirect is the missing half.
+  together or not at all — see [docs/go-live-prints.md](docs/go-live-prints.md).
 - **No face recognition, and none planned.** Rekognition is used for explicit
   content only.
+
+### Switches that ship off
+
+These are environment variables set in the Amplify console, so **the live value
+is not in this repository and nothing here can check it.** What follows is what
+an unconfigured deployment does, not a claim about production — look in
+**Amplify → Hosting → Environment variables** for what is actually set, and see
+[docs/deploying.md](docs/deploying.md) for what each one costs and how to turn
+it on safely.
+
+| Variable | Unset behaviour |
+| --- | --- |
+| `EMAIL_SENDING_ENABLED` | Every send is a dry run that logs what it would have sent. |
+| `STORAGE_RECLAIM_ENABLED` | The reclaim job decides, logs every key it would remove, and deletes nothing. Expired events keep their bytes. |
+| `WAF_ENABLED` | No rate limiting in front of the API. The word codes are what makes guessing infeasible; the throttle is the second lock. |
+
+This section used to assert the production state of all three, plus that the
+apex did not redirect to `www`. Within a day of writing it two of those four
+were wrong, because they describe a console somebody clicked in rather than a
+file anybody can read. A guarded list that quietly stops being true is worse
+than no list, so the claims and the configuration are now separated: the part
+above is checkable and checked, and this part says only what the default is.
 
 ## Troubleshooting
 
