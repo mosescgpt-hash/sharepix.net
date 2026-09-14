@@ -102,6 +102,14 @@ docs/                  The notes below
 scripts/               Build-time generators and one-off operator scripts
 ```
 
+**The light pages do not import `lib/api.ts`.** It is one 3,200-line module and
+a bundler splits by module rather than by function, so importing a single symbol
+from it delivers all of it — `/` was paying 30 KB gzipped for one call to
+`trackEvent`. The few functions the logged-out pages need live in
+`lib/trackEvent.ts` and `lib/findEvent.ts`, sharing `lib/dataClient.ts` with
+`api.ts` without either importing the other. `__tests__/light-pages.test.ts`
+fails if that edge is ever pointed back the other way.
+
 **`lib/` is the important convention.** Rules live there as pure functions so
 they can be tested without a browser or an AWS account — who may see a
 professional's photo (`professionalMedia.ts`), when a refund is owed

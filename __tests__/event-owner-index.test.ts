@@ -79,8 +79,8 @@ describe('the read', () => {
   const fn = api.slice(api.indexOf('export async function listMyEvents'));
 
   it('queries the index rather than paging the whole table', () => {
-    expect(fn.slice(0, 1200)).toContain('client.models.Event.listEventByOwner(');
-    expect(fn.slice(0, 1200)).not.toContain('client.models.Event.list(');
+    expect(fn.slice(0, 1200)).toContain('.models.Event.listEventByOwner(');
+    expect(fn.slice(0, 1200)).not.toContain('.models.Event.list(');
   });
 
   it('still reads every page of the result', () => {

@@ -132,7 +132,10 @@ describe('lib/api.ts list calls', () => {
    */
   it('every model list call follows its token', () => {
     const callSites = source.split('\n').flatMap((line, index) => {
-      const match = /client\.models\.\w+\.(list|listPhotoByEventId|list\w+)\(/.exec(line);
+      // `getClient().models.…` since the client became lazy; the optional
+      // prefix keeps this matching either shape rather than silently finding
+      // nothing, which is the failure the count assertion below exists for.
+      const match = /(?:getClient\(\)|client)\.models\.\w+\.(list|listPhotoByEventId|list\w+)\(/.exec(line);
       return match ? [{ line: index + 1, text: line.trim() }] : [];
     });
 

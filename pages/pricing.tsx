@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
 import { VIDEO_GB_INCLUDED } from '@/lib/pricing';
-import { trackEvent } from '@/lib/api';
+import { trackEvent } from '@/lib/trackEvent';
 import { pricingJsonLd } from '@/lib/seo';
 
 const faqs = [

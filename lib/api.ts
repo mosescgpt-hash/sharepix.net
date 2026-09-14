@@ -1,7 +1,7 @@
 // All Amplify calls live here so pages/components stay simple.
 // Gen 2 / aws-amplify v6: typed data client + path-based storage.
-import { generateClient } from 'aws-amplify/data';
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
+import { authModeFor, getClient, type DataAuthMode } from '@/lib/dataClient';
 import { uploadData, getUrl, downloadData, getProperties } from 'aws-amplify/storage';
 import type { Schema } from '@/amplify/data/resource';
 import {
@@ -41,14 +41,11 @@ import {
   isAnalyticsEvent,
   type AnalyticsEventName,
 } from '@/lib/analytics';
-import {
-  browserExcluded,
-  countsFromBaseline,
-  excludeThisBrowser,
-  shouldCount,
-  type Viewer,
-} from '@/lib/analyticsAudience';
-import { isGlobalAdmin } from '@/lib/admin';
+import { countsFromBaseline } from '@/lib/analyticsAudience';
+// Re-exported so existing importers keep working; the light pages import it
+// straight from lib/findEvent.
+export { findEventByCode } from '@/lib/findEvent';
+export { trackEvent } from '@/lib/trackEvent';
 import { readSurveyRow, sortSurveys, type SurveyRow } from '@/lib/surveyAdmin';
 import {
   canTransition as canTransitionMarketing,
@@ -64,8 +61,7 @@ const SURVEY_ANSWER_IDS = SURVEY_QUESTIONS.flatMap((question) => [
     : []),
 ]);
 
-const client = generateClient<Schema>();
-type DataAuthMode = 'userPool' | 'identityPool';
+
 
 export interface CurrentUser {
   userId: string;
@@ -103,7 +99,7 @@ export async function getMyDisplayName(): Promise<string> {
   const user = await getCurrentUserInfo();
   if (!user) return '';
   try {
-    const { data } = await client.models.HostProfile.get(
+    const { data } = await getClient().models.HostProfile.get(
       { id: user.userId },
       { authMode: 'userPool' },
     );
@@ -121,22 +117,20 @@ export async function setMyDisplayName(name: string): Promise<string> {
   const user = await getCurrentUserInfo();
   if (!user) throw new Error('Sign in to update your account.');
   const clean = sanitizeDisplayName(name);
-  const existing = await client.models.HostProfile.get(
+  const existing = await getClient().models.HostProfile.get(
     { id: user.userId },
     { authMode: 'userPool' },
   );
   const input = { id: user.userId, displayName: clean };
   const { errors } = existing.data
-    ? await client.models.HostProfile.update(input, { authMode: 'userPool' })
-    : await client.models.HostProfile.create(input, { authMode: 'userPool' });
+    ? await getClient().models.HostProfile.update(input, { authMode: 'userPool' })
+    : await getClient().models.HostProfile.create(input, { authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   return clean;
 }
 
 /** Guests use the identity pool; signed-in users use the user pool. */
-async function authModeFor(): Promise<DataAuthMode> {
-  return (await getCurrentUserInfo()) ? 'userPool' : 'identityPool';
-}
+
 
 /**
  * Amplify's `getUrl` signs for 15 minutes. Reusing for 10 leaves five minutes of
@@ -146,13 +140,19 @@ async function authModeFor(): Promise<DataAuthMode> {
  */
 const SIGNED_URL_REUSE_MS = 10 * 60 * 1000;
 
-const signedUrls = createSignedUrlCache(
-  async (path: string) => (await getUrl({ path })).url.toString(),
-  SIGNED_URL_REUSE_MS,
-);
+/**
+ * Lazy for the same reason as the data client above: a top-level call here
+ * closes over `getUrl`, which pinned `aws-amplify/storage` into every page that
+ * imported anything from this file, whether or not it ever showed an image.
+ */
+let signedUrls: ReturnType<typeof createSignedUrlCache> | null = null;
 
 /** A signed display URL for a storage path, reused while it is still fresh. */
 async function signedUrlFor(path: string): Promise<string> {
+  signedUrls ??= createSignedUrlCache(
+    async (p: string) => (await getUrl({ path: p })).url.toString(),
+    SIGNED_URL_REUSE_MS,
+  );
   return signedUrls.get(path);
 }
 
@@ -213,7 +213,7 @@ export async function createNewEvent(input: {
   /** Where they came from. Normalised server-side; see lib/attribution.ts. */
   source?: string;
 }): Promise<QREvent> {
-  const { data: event, errors } = await client.mutations.createHostedEvent(
+  const { data: event, errors } = await getClient().mutations.createHostedEvent(
     {
       name: input.name,
       tier: input.tier.trim().toLowerCase(),
@@ -236,7 +236,7 @@ export async function createNewEvent(input: {
 
 /** Delete one of the current host's own events (used to cancel an unpaid one). */
 export async function deleteMyEvent(eventId: string): Promise<void> {
-  const { errors } = await client.models.Event.delete(
+  const { errors } = await getClient().models.Event.delete(
     { id: eventId },
     { authMode: 'userPool' },
   );
@@ -247,7 +247,7 @@ export async function validateDiscountCode(
   code: string,
   tier: string,
 ): Promise<DiscountRedemption> {
-  const { data, errors } = await client.queries.validateDiscountCode({
+  const { data, errors } = await getClient().queries.validateDiscountCode({
     code: code.trim().toUpperCase(),
     tier: tier.trim().toLowerCase(),
   });
@@ -260,7 +260,7 @@ export async function validateDiscountCode(
 export async function listAllEvents(): Promise<QREvent[]> {
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.Event.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
+      getClient().models.Event.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
     'Events could not be loaded.',
   );
   return rows as QREvent[];
@@ -312,7 +312,7 @@ export async function listMyEvents(): Promise<QREvent[]> {
   for (const owner of ownerCandidates(user)) {
     const rows = await listAllPages(
       (nextToken) =>
-        client.models.Event.listEventByOwner(
+        getClient().models.Event.listEventByOwner(
           { owner },
           { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
         ),
@@ -329,7 +329,7 @@ export async function listMyEvents(): Promise<QREvent[]> {
 export async function listDiscountCodes(): Promise<DiscountCode[]> {
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.DiscountCode.list({
+      getClient().models.DiscountCode.list({
         limit: LIST_PAGE_LIMIT,
         nextToken,
         authMode: 'userPool',
@@ -376,7 +376,7 @@ export async function createDiscountCode(input: {
     throw new Error('Choose at least one item the code applies to.');
   }
   const appliesToScopes = cleaned.join(',');
-  const { errors } = await client.models.DiscountCode.create(
+  const { errors } = await getClient().models.DiscountCode.create(
     {
       code: input.code.trim().toUpperCase(),
       assignedTo: input.assignedTo?.trim() || null,
@@ -401,7 +401,7 @@ export async function createDiscountCode(input: {
 }
 
 export async function setDiscountCodeActive(code: string, active: boolean): Promise<void> {
-  const { errors } = await client.models.DiscountCode.update(
+  const { errors } = await getClient().models.DiscountCode.update(
     { code, active },
     { authMode: 'userPool' },
   );
@@ -409,7 +409,7 @@ export async function setDiscountCodeActive(code: string, active: boolean): Prom
 }
 
 export async function deleteDiscountCode(code: string): Promise<void> {
-  const { errors } = await client.models.DiscountCode.delete(
+  const { errors } = await getClient().models.DiscountCode.delete(
     { code },
     { authMode: 'userPool' },
   );
@@ -426,7 +426,7 @@ export async function startCheckout(
   eventId?: string,
   discountCode?: string,
 ): Promise<string> {
-  const { data, errors } = await client.mutations.createCheckoutSession(
+  const { data, errors } = await getClient().mutations.createCheckoutSession(
     {
       tier: tier.trim().toLowerCase(),
       eventId: eventId || undefined,
@@ -476,7 +476,7 @@ export async function unsubscribeFromEmails(
   token: string,
 ): Promise<{ unsubscribed: boolean; message: string }> {
   try {
-    const { data, errors } = await client.mutations.unsubscribeEmail(
+    const { data, errors } = await getClient().mutations.unsubscribeEmail(
       { email, token },
       { authMode: await authModeFor() },
     );
@@ -508,28 +508,6 @@ export async function unsubscribeFromEmails(
  * measured half, and lib/analytics.ts marks which is which so a dashboard never
  * quietly adds them together.
  */
-export function trackEvent(
-  name: AnalyticsEventName,
-  scopeId = 'anon',
-  detail?: Record<string, unknown>,
-): void {
-  if (!isAnalyticsEvent(name)) return;
-  void (async () => {
-    try {
-      if (!shouldCount(await viewerForAnalytics())) return;
-      await client.mutations.recordAnalyticsEvent(
-        {
-          name,
-          scopeId,
-          detailJson: detail ? JSON.stringify(detail).slice(0, 500) : undefined,
-        },
-        { authMode: await authModeFor() },
-      );
-    } catch {
-      // Never surfaced. A funnel is not worth a broken page.
-    }
-  })();
-}
 
 /**
  * Is the current viewer one whose visits count? Resolved once per page load.
@@ -544,29 +522,6 @@ export function trackEvent(
  * signed in, whose remaining events still count. That is the right side to err
  * on and it is self-correcting on the next navigation.
  */
-let viewerPromise: Promise<Viewer> | null = null;
-
-function viewerForAnalytics(): Promise<Viewer> {
-  if (!viewerPromise) {
-    viewerPromise = (async (): Promise<Viewer> => {
-      const excluded = browserExcluded();
-      let admin: boolean | null = null;
-      try {
-        admin = await isGlobalAdmin();
-      } catch {
-        // Signed out throws here, which is the common case and not an error.
-        // Null means "could not tell", which counts. See lib/analyticsAudience.
-        admin = null;
-      }
-      // Recognised once, remembered after: most operator visits to the
-      // marketing site are from a logged-out tab, which the group check alone
-      // would never catch.
-      if (admin === true && !excluded) excludeThisBrowser();
-      return { isAdmin: admin, browserExcluded: excluded };
-    })();
-  }
-  return viewerPromise;
-}
 
 /**
  * Turn an event code a guest typed into the event it belongs to.
@@ -575,14 +530,6 @@ function viewerForAnalytics(): Promise<Viewer> {
  * nothing; the page decides what to say, and it says the same thing for a
  * malformed code and a code nobody has.
  */
-export async function findEventByCode(code: string): Promise<string | null> {
-  const { data, errors } = await client.queries.findEventByCode(
-    { code },
-    { authMode: await authModeFor() },
-  );
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
-  return data?.found ? (data.eventId ?? null) : null;
-}
 
 /**
  * invite | pair | remove, on a photographer's connection to an event.
@@ -596,7 +543,7 @@ export async function connectPhotographer(input: {
   code?: string;
   photographerId?: string;
 }): Promise<{ ok: boolean; code: string | null; message: string; eventId: string | null }> {
-  const { data, errors } = await client.mutations.connectPhotographer(input, {
+  const { data, errors } = await getClient().mutations.connectPhotographer(input, {
     authMode: 'userPool',
   });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -612,7 +559,7 @@ export async function connectPhotographer(input: {
 export async function fetchEventPhotographers(eventId: string) {
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.EventPhotographer.listEventPhotographerByEventId(
+      getClient().models.EventPhotographer.listEventPhotographerByEventId(
         { eventId },
         { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
       ),
@@ -631,7 +578,7 @@ export async function requestProUploadSlot(
   eventId: string,
   contentType: string,
 ): Promise<{ uploadId: string; uploadUrl: string }> {
-  const { data, errors } = await client.mutations.requestProUploadSlot(
+  const { data, errors } = await getClient().mutations.requestProUploadSlot(
     { eventId, contentType },
     { authMode: 'userPool' },
   );
@@ -642,7 +589,7 @@ export async function requestProUploadSlot(
 
 /** Turn an uploaded original into a preview. Safe to call twice. */
 export async function processProPhoto(eventId: string, uploadId: string) {
-  const { data, errors } = await client.mutations.processProPhoto(
+  const { data, errors } = await getClient().mutations.processProPhoto(
     { eventId, uploadId },
     { authMode: 'userPool' },
   );
@@ -652,7 +599,7 @@ export async function processProPhoto(eventId: string, uploadId: string) {
 
 /** approve | reject | publish | unpublish, on the photographer's own photo. */
 export async function decideProPhoto(uploadId: string, decision: string) {
-  const { data, errors } = await client.mutations.decideProPhoto(
+  const { data, errors } = await getClient().mutations.decideProPhoto(
     { uploadId, decision },
     { authMode: 'userPool' },
   );
@@ -666,7 +613,7 @@ export async function setProPublishing(input: {
   livePublishing?: boolean;
   publishingMode?: string;
 }) {
-  const { data, errors } = await client.mutations.setProPublishing(input, {
+  const { data, errors } = await getClient().mutations.setProPublishing(input, {
     authMode: 'userPool',
   });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
@@ -679,7 +626,7 @@ export async function fetchMyProConnections() {
   if (!user) return [];
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.EventPhotographer.listEventPhotographerByPhotographerId(
+      getClient().models.EventPhotographer.listEventPhotographerByPhotographerId(
         { photographerId: user.userId },
         { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
       ),
@@ -703,7 +650,7 @@ export async function listAnalyticsEvents(): Promise<
   const countFrom = await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => '');
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.AnalyticsEvent.list({
+      getClient().models.AnalyticsEvent.list({
         limit: LIST_PAGE_LIMIT,
         nextToken,
         authMode: 'userPool',
@@ -750,7 +697,7 @@ export async function submitMarketingOffer(input: {
   rightsConfirmed: boolean;
 }): Promise<{ recorded: boolean; message: string }> {
   try {
-    const { data, errors } = await client.mutations.submitMarketingOffer(
+    const { data, errors } = await getClient().mutations.submitMarketingOffer(
       {
         eventId: input.eventId,
         tierKey: input.tierKey,
@@ -779,7 +726,7 @@ export async function submitMarketingOffer(input: {
 export async function fetchMyMarketingSubmission(
   eventId: string,
 ): Promise<MarketingSubmissionRow | null> {
-  const { data } = await client.models.MarketingSubmission.get(
+  const { data } = await getClient().models.MarketingSubmission.get(
     { id: eventId },
     { authMode: 'userPool' },
   );
@@ -841,7 +788,7 @@ function readMarketingSubmission(raw: Record<string, unknown>): MarketingSubmiss
 export async function listMarketingSubmissions(): Promise<MarketingSubmissionRow[]> {
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.MarketingSubmission.list({
+      getClient().models.MarketingSubmission.list({
         limit: LIST_PAGE_LIMIT,
         nextToken,
         authMode: 'userPool',
@@ -882,7 +829,7 @@ export async function decideMarketingSubmission(
   const user = await getCurrentUserInfo();
   const now = new Date().toISOString();
 
-  const { errors } = await client.models.MarketingSubmission.update(
+  const { errors } = await getClient().models.MarketingSubmission.update(
     {
       id: row.id,
       ...(next.status ? { status: next.status, reviewedAt: now } : {}),
@@ -938,7 +885,7 @@ export async function surveyAction(
     eventType: null,
   };
   try {
-    const { data, errors } = await client.mutations.surveyAction(
+    const { data, errors } = await getClient().mutations.surveyAction(
       {
         link,
         action,
@@ -984,7 +931,7 @@ export async function completeResearchSurvey(
     message: 'That survey link is not valid. It may have expired.',
   };
   try {
-    const { data, errors } = await client.mutations.completeResearchSurvey(
+    const { data, errors } = await getClient().mutations.completeResearchSurvey(
       { link },
       { authMode: await authModeFor() },
     );
@@ -1031,7 +978,7 @@ export async function submitEventFeedback(
     eventName: '',
   };
   try {
-    const { data, errors } = await client.mutations.submitEventFeedback(
+    const { data, errors } = await getClient().mutations.submitEventFeedback(
       {
         link: submission.link,
         rating: submission.rating,
@@ -1073,7 +1020,7 @@ export async function runScheduledJob(
 ): Promise<{ ok: boolean; dryRun: boolean; summary: string }> {
   if (job === 'monthly') {
     // The only one with no switch, and so no probe argument.
-    const { data, errors } = await client.mutations.runMonthlyReport({ authMode: 'userPool' });
+    const { data, errors } = await getClient().mutations.runMonthlyReport({ authMode: 'userPool' });
     if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
     return {
       ok: data?.ok ?? false,
@@ -1082,7 +1029,7 @@ export async function runScheduledJob(
     };
   }
   const call =
-    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runStorageReclaim;
+    job === 'daily' ? getClient().mutations.runDailyTasks : getClient().mutations.runStorageReclaim;
   const { data, errors } = await call({ probe: false }, { authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   return {
@@ -1112,7 +1059,7 @@ export async function probeScheduledJob(
   job: 'daily' | 'reclaim',
 ): Promise<{ enabled: boolean; summary: string } | null> {
   const call =
-    job === 'daily' ? client.mutations.runDailyTasks : client.mutations.runStorageReclaim;
+    job === 'daily' ? getClient().mutations.runDailyTasks : getClient().mutations.runStorageReclaim;
   try {
     const { data, errors } = await call({ probe: true }, { authMode: 'userPool' });
     if (errors?.length || !data) return null;
@@ -1136,7 +1083,7 @@ export async function claimGuestUploadPromise(
   attested: boolean,
   note?: string,
 ): Promise<{ filed: boolean; message: string }> {
-  const { data, errors } = await client.mutations.claimGuestUploadPromise(
+  const { data, errors } = await getClient().mutations.claimGuestUploadPromise(
     { eventId, plannedUse, attested, note: note?.trim() || undefined },
     { authMode: 'userPool' },
   );
@@ -1172,7 +1119,7 @@ export async function listMyRefunds(): Promise<RefundRow[]> {
   try {
     const rows = await listAllPages(
       (nextToken) =>
-        client.models.Refund.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
+        getClient().models.Refund.list({ limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' }),
       'Refunds could not be loaded.',
     );
     return rows.map((row) => readRefund(row as Record<string, unknown>));
@@ -1188,7 +1135,7 @@ export async function listRefunds(): Promise<RefundRow[]> {
   const rows: RefundRow[] = [];
   let nextToken: string | null | undefined;
   do {
-    const { data, errors, nextToken: next } = await client.models.Refund.list({
+    const { data, errors, nextToken: next } = await getClient().models.Refund.list({
       authMode: 'userPool',
       nextToken,
       limit: 1000,
@@ -1217,7 +1164,7 @@ export async function decideRefund(
     throw new Error(`A ${row.status.toLowerCase()} refund cannot become ${next.toLowerCase()}.`);
   }
   const now = new Date().toISOString();
-  const { errors } = await client.models.Refund.update(
+  const { errors } = await getClient().models.Refund.update(
     {
       id: row.id,
       status: next,
@@ -1256,7 +1203,7 @@ export const SETTING_KEYS = {
 } as const;
 
 export async function readSetting(key: string): Promise<string> {
-  const { data, errors } = await client.models.AppSetting.get(
+  const { data, errors } = await getClient().models.AppSetting.get(
     { id: key },
     { authMode: 'userPool' },
   );
@@ -1277,12 +1224,12 @@ export async function writeSetting(
   value: string,
   updatedBy: string,
 ): Promise<void> {
-  const created = await client.models.AppSetting.create(
+  const created = await getClient().models.AppSetting.create(
     { id: key, value, updatedBy },
     { authMode: 'userPool' },
   );
   if (!created.errors?.length) return;
-  const updated = await client.models.AppSetting.update(
+  const updated = await getClient().models.AppSetting.update(
     { id: key, value, updatedBy },
     { authMode: 'userPool' },
   );
@@ -1304,7 +1251,7 @@ export async function setEventUsageStatus(
   status: '' | 'NORMAL' | 'RESTRICTED',
   note: string,
 ): Promise<void> {
-  const { errors } = await client.models.Event.update(
+  const { errors } = await getClient().models.Event.update(
     { id: eventId, usageStatus: status || null, usageNote: note || null },
     { authMode: 'userPool' },
   );
@@ -1360,7 +1307,7 @@ export async function listEventFeedback(): Promise<FeedbackRow[]> {
   const rows: FeedbackRow[] = [];
   let nextToken: string | null | undefined;
   do {
-    const { data, errors, nextToken: next } = await client.models.EventFeedback.list({
+    const { data, errors, nextToken: next } = await getClient().models.EventFeedback.list({
       authMode: 'userPool',
       nextToken,
       limit: 1000,
@@ -1389,7 +1336,7 @@ export async function listEventFeedback(): Promise<FeedbackRow[]> {
 export async function listSurveyResponses(): Promise<SurveyRow[]> {
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.SurveyResponse.list({
+      getClient().models.SurveyResponse.list({
         limit: LIST_PAGE_LIMIT,
         nextToken,
         authMode: 'userPool',
@@ -1419,7 +1366,7 @@ export async function reviewTestimonial(
   if ((next === 'APPROVED' || next === 'PUBLISHED') && !row.marketingPermission) {
     throw new Error('That host did not give permission to publish their words.');
   }
-  const { errors } = await client.models.EventFeedback.update(
+  const { errors } = await getClient().models.EventFeedback.update(
     {
       id: row.id,
       status: next,
@@ -1434,7 +1381,7 @@ export async function reviewTestimonial(
 
 /** Close a low-rating follow-up, once a person has actually answered it. */
 export async function closeSupportFollowUp(id: string): Promise<void> {
-  const { errors } = await client.models.EventFeedback.update(
+  const { errors } = await getClient().models.EventFeedback.update(
     { id, supportFollowUpNeeded: false },
     { authMode: 'userPool' },
   );
@@ -1445,7 +1392,7 @@ export async function listResearchIncentives(): Promise<ResearchIncentiveRow[]> 
   const rows: ResearchIncentiveRow[] = [];
   let nextToken: string | null | undefined;
   do {
-    const { data, errors, nextToken: next } = await client.models.ResearchIncentive.list({
+    const { data, errors, nextToken: next } = await getClient().models.ResearchIncentive.list({
       authMode: 'userPool',
       nextToken,
       limit: 1000,
@@ -1483,7 +1430,7 @@ export async function markIncentiveFulfilled(
   if (!canTransition(currentStatus, 'FULFILLED')) {
     throw new Error(`A ${currentStatus} reward cannot be marked fulfilled.`);
   }
-  const { errors } = await client.models.ResearchIncentive.update(
+  const { errors } = await getClient().models.ResearchIncentive.update(
     {
       id,
       status: 'FULFILLED',
@@ -1499,7 +1446,7 @@ export async function listFreeEventClaims(): Promise<FreeEventClaimRow[]> {
   const rows: FreeEventClaimRow[] = [];
   let nextToken: string | null | undefined;
   do {
-    const { data, errors, nextToken: next } = await client.models.FreeEventClaim.list({
+    const { data, errors, nextToken: next } = await getClient().models.FreeEventClaim.list({
       authMode: 'userPool',
       nextToken,
       limit: 1000,
@@ -1528,7 +1475,7 @@ export async function listFreeEventClaims(): Promise<FreeEventClaimRow[]> {
 export async function clearFreeEventClaim(hostSub: string): Promise<void> {
   const id = hostSub.trim();
   if (!id) throw new Error('Which account? A host id is required.');
-  const { errors } = await client.models.FreeEventClaim.delete(
+  const { errors } = await getClient().models.FreeEventClaim.delete(
     { id },
     { authMode: 'userPool' },
   );
@@ -1539,7 +1486,7 @@ export async function listPaymentsCount(): Promise<number> {
   let count = 0;
   let nextToken: string | null | undefined;
   do {
-    const { data, errors, nextToken: next } = await client.models.Payment.list({
+    const { data, errors, nextToken: next } = await getClient().models.Payment.list({
       authMode: 'userPool',
       nextToken,
       limit: 1000,
@@ -1564,7 +1511,7 @@ export async function listPaymentJurisdictions(): Promise<
   const rows: Array<{ country: string | null; region: string | null; amountCents: number | null }> = [];
   let nextToken: string | null | undefined;
   do {
-    const { data, errors, nextToken: next } = await client.models.Payment.list({
+    const { data, errors, nextToken: next } = await getClient().models.Payment.list({
       authMode: 'userPool',
       nextToken,
       limit: 1000,
@@ -1588,7 +1535,7 @@ export async function listPaymentJurisdictions(): Promise<
  * hosted Stripe URL. The webhook attaches the subscription to this account.
  */
 export async function startCorporateSubscription(discountCode?: string): Promise<string> {
-  const { data, errors } = await client.mutations.createCheckoutSession(
+  const { data, errors } = await getClient().mutations.createCheckoutSession(
     {
       tier: 'corporate',
       kind: 'corporate',
@@ -1614,7 +1561,7 @@ export async function startCorporateSubscription(discountCode?: string): Promise
 export async function getMyCorporateSubscription(): Promise<CorporateSubscription | null> {
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.CorporateSubscription.list({
+      getClient().models.CorporateSubscription.list({
         limit: LIST_PAGE_LIMIT,
         nextToken,
         authMode: 'userPool',
@@ -1647,7 +1594,7 @@ export async function startAddOnCheckout(
   discountCode?: string,
 ): Promise<string> {
   if (addons.length === 0) throw new Error('Choose at least one add-on.');
-  const { data, errors } = await client.mutations.createCheckoutSession(
+  const { data, errors } = await getClient().mutations.createCheckoutSession(
     {
       tier: 'addon',
       kind: 'addons',
@@ -1680,7 +1627,7 @@ export async function startPrintCheckout(
   eventId: string,
   items: PrintOrderItemInput[],
 ): Promise<string> {
-  const { data, errors } = await client.mutations.createPrintCheckout(
+  const { data, errors } = await getClient().mutations.createPrintCheckout(
     { eventId, itemsJson: JSON.stringify(items) },
     { authMode: await authModeFor() },
   );
@@ -1691,7 +1638,7 @@ export async function startPrintCheckout(
 
 /** Opens the Stripe billing portal so a corporate host can manage/cancel. */
 export async function openBillingPortal(): Promise<string> {
-  const { data, errors } = await client.mutations.openBillingPortal(
+  const { data, errors } = await getClient().mutations.openBillingPortal(
     {},
     { authMode: 'userPool' },
   );
@@ -1705,7 +1652,7 @@ export async function manageUser(
   email: string,
   action: 'resetPassword' | 'enable' | 'disable',
 ): Promise<string> {
-  const { data, errors } = await client.mutations.manageUser(
+  const { data, errors } = await getClient().mutations.manageUser(
     { email: email.trim().toLowerCase(), action },
     { authMode: 'userPool' },
   );
@@ -1720,7 +1667,7 @@ export async function manageUser(
  * whole point of running it, so both outcomes come back to the caller.
  */
 export async function checkPrintProvider(): Promise<{ ok: boolean; message: string }> {
-  const { data, errors } = await client.mutations.checkPrintProvider({}, { authMode: 'userPool' });
+  const { data, errors } = await getClient().mutations.checkPrintProvider({}, { authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   return {
     ok: Boolean(data?.success),
@@ -1734,7 +1681,7 @@ export async function checkPrintProvider(): Promise<{ ok: boolean; message: stri
  * the point of running it, so this reports rather than throws.
  */
 export async function sendTestAlertEmail(): Promise<{ ok: boolean; message: string }> {
-  const { data, errors } = await client.mutations.sendTestAlertEmail({}, { authMode: 'userPool' });
+  const { data, errors } = await getClient().mutations.sendTestAlertEmail({}, { authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   return {
     ok: Boolean(data?.success),
@@ -1756,14 +1703,14 @@ export async function addEventPhotoCredits(
   eventId: string,
   additionalCredits: number,
 ): Promise<number> {
-  const { data: existing, errors: readErrors } = await client.models.Event.get(
+  const { data: existing, errors: readErrors } = await getClient().models.Event.get(
     { id: eventId },
     { authMode: 'userPool' },
   );
   if (readErrors?.length || !existing) throw new Error('The event could not be loaded.');
 
   const nextCredits = Math.max(0, (existing.extraPhotoCredits ?? 0) + additionalCredits);
-  const { errors } = await client.models.Event.update(
+  const { errors } = await getClient().models.Event.update(
     { id: eventId, extraPhotoCredits: nextCredits },
     { authMode: 'userPool' },
   );
@@ -1795,7 +1742,7 @@ export async function requestEventCapacity(
   eventId: string,
 ): Promise<{ ok: boolean; message: string }> {
   try {
-    const { data, errors } = await client.mutations.requestEventCapacity({ eventId });
+    const { data, errors } = await getClient().mutations.requestEventCapacity({ eventId });
     if (errors?.length || !data?.success) {
       return {
         ok: false,
@@ -1834,7 +1781,7 @@ async function updateEventSettings(
   },
   failureMessage: string,
 ): Promise<void> {
-  const { data, errors } = await client.mutations.updateEventSettings(
+  const { data, errors } = await getClient().mutations.updateEventSettings(
     {
       eventId,
       // `undefined` is dropped on the way out, which is what tells the function
@@ -1982,7 +1929,7 @@ export async function togglePhotoLike(
   photoId: string,
   guestKey: string,
 ): Promise<boolean> {
-  const { data, errors } = await client.mutations.togglePhotoLike(
+  const { data, errors } = await getClient().mutations.togglePhotoLike(
     { photoId, guestKey },
     { authMode: await authModeFor() },
   );
@@ -1997,7 +1944,7 @@ export async function addPhotoComment(input: {
   body: string;
   author?: string;
 }): Promise<void> {
-  const { errors } = await client.mutations.addPhotoComment(
+  const { errors } = await getClient().mutations.addPhotoComment(
     {
       photoId: input.photoId,
       guestKey: input.guestKey,
@@ -2029,7 +1976,7 @@ export async function listMyPhotoLikes(
   try {
     const rows = await listAllPages(
       (nextToken) =>
-        client.models.PhotoReaction.list({
+        getClient().models.PhotoReaction.list({
           filter: { eventId: { eq: eventId }, guestKey: { eq: guestKey } },
           limit: LIST_PAGE_LIMIT,
           nextToken,
@@ -2053,7 +2000,7 @@ export async function listPhotoComments(eventId: string): Promise<PhotoCommentRo
   try {
     data = await listAllPages(
       (nextToken) =>
-        client.models.PhotoComment.list({
+        getClient().models.PhotoComment.list({
           filter: { eventId: { eq: eventId } },
           limit: LIST_PAGE_LIMIT,
           nextToken,
@@ -2087,7 +2034,7 @@ export async function setPhotoCommentHidden(
   hidden: boolean,
   hiddenBy: string,
 ): Promise<void> {
-  const { errors } = await client.models.PhotoComment.update(
+  const { errors } = await getClient().models.PhotoComment.update(
     { id: commentId, hidden, hiddenBy },
     { authMode: 'userPool' },
   );
@@ -2140,7 +2087,7 @@ export async function deleteEventWithPhotos(eventId: string): Promise<void> {
   // plan, which puts that within reach of one busy wedding.
   const photos = await listAllPages(
     (nextToken) =>
-      client.models.Photo.listPhotoByEventId(
+      getClient().models.Photo.listPhotoByEventId(
         { eventId },
         { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
       ),
@@ -2150,14 +2097,14 @@ export async function deleteEventWithPhotos(eventId: string): Promise<void> {
   for (const photo of photos) {
     // The function removes both the S3 objects and the record after an
     // ownership/admin check — clients can no longer delete S3 objects directly.
-    const { data, errors } = await client.mutations.deleteEventPhoto(
+    const { data, errors } = await getClient().mutations.deleteEventPhoto(
       { photoId: photo.id },
       { authMode: 'userPool' },
     );
     if (errors?.length || !data?.success) throw new Error('A photo record could not be removed.');
   }
 
-  const { errors } = await client.models.Event.delete(
+  const { errors } = await getClient().models.Event.delete(
     { id: eventId },
     { authMode: 'userPool' },
   );
@@ -2196,7 +2143,7 @@ export async function setEventTheme(
   // Reject anything that isn't a theme we ship rather than storing a value the
   // gallery will silently ignore later.
   if (clean && !isEventThemeKey(clean)) throw new Error('That is not an available theme.');
-  const { errors } = await client.models.Event.update(
+  const { errors } = await getClient().models.Event.update(
     { id: eventId, themeKey: clean || null },
     { authMode: 'userPool' },
   );
@@ -2213,7 +2160,7 @@ export async function setEventTheme(
  * extension. `updateEventSettings` deliberately does not carry it.
  */
 export async function setEventUploadWindowEnd(eventId: string, iso: string): Promise<void> {
-  const { errors } = await client.models.Event.update(
+  const { errors } = await getClient().models.Event.update(
     { id: eventId, uploadWindowEndsAt: iso },
     { authMode: 'userPool' },
   );
@@ -2237,7 +2184,7 @@ export async function setResearchIncentiveOffered(
   eventId: string,
   offered: boolean,
 ): Promise<void> {
-  const { errors } = await client.models.Event.update(
+  const { errors } = await getClient().models.Event.update(
     { id: eventId, researchIncentiveOffered: offered },
     { authMode: 'userPool' },
   );
@@ -2245,7 +2192,7 @@ export async function setResearchIncentiveOffered(
 }
 
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {
-  const { data } = await client.models.Event.get(
+  const { data } = await getClient().models.Event.get(
     { id: eventId },
     { authMode: await authModeFor() }
   );
@@ -2282,7 +2229,7 @@ export async function prepareEventUpload(
   await fetchAuthSession({ forceRefresh: authMode === 'identityPool' }).catch(() => undefined);
 
   const loadEvent = async (mode: DataAuthMode) => {
-    const result = await client.models.Event.get({ id: eventId }, { authMode: mode });
+    const result = await getClient().models.Event.get({ id: eventId }, { authMode: mode });
     if (result.errors?.length) {
       throw new Error(result.errors.map((error) => error.message).join(' · '));
     }
@@ -2386,7 +2333,7 @@ export async function computeContentHash(file: File): Promise<string | null> {
  */
 export async function fetchEventPhotoHashes(eventId: string): Promise<Set<string>> {
   try {
-    const { data, errors } = await client.queries.listEventPhotos(
+    const { data, errors } = await getClient().queries.listEventPhotos(
       { eventId },
       { authMode: await authModeFor() },
     );
@@ -2474,7 +2421,7 @@ export async function uploadEventPhotoWithContext(
   // and the photo limit is enforced server-side — the client can no longer set
   // ownership/approval or exceed the limit.
   const { data: photo } = await retryTransient(async () => {
-    const result = await client.mutations.createEventPhoto(
+    const result = await getClient().mutations.createEventPhoto(
       {
         eventId,
         s3Key: key,
@@ -2512,7 +2459,7 @@ export async function uploadEventPhotoWithContext(
  * enumerate every note left at every event on the platform.
  */
 export async function fetchGuestBook(eventId: string): Promise<GuestBookEntry[]> {
-  const { data, errors } = await client.queries.eventGuestBook(
+  const { data, errors } = await getClient().queries.eventGuestBook(
     { eventId },
     { authMode: await authModeFor() },
   );
@@ -2541,7 +2488,7 @@ export async function fetchGuestBookForHost(eventId: string): Promise<HostGuestB
   // view as the shared table grew.
   const data = await listAllPages(
     (nextToken) =>
-      client.models.GuestBookEntry.list({
+      getClient().models.GuestBookEntry.list({
         filter: { eventId: { eq: eventId } },
         authMode: 'userPool',
         limit: LIST_PAGE_LIMIT,
@@ -2574,7 +2521,7 @@ export async function signGuestBook(input: {
   message?: string;
   photoId?: string | null;
 }): Promise<{ id: string; pending: boolean }> {
-  const { data, errors } = await client.mutations.signGuestBook(
+  const { data, errors } = await getClient().mutations.signGuestBook(
     {
       eventId: input.eventId,
       name: input.name,
@@ -2593,7 +2540,7 @@ export async function setGuestBookEntryHidden(
   entryId: string,
   hidden: boolean,
 ): Promise<void> {
-  const { errors } = await client.models.GuestBookEntry.update(
+  const { errors } = await getClient().models.GuestBookEntry.update(
     {
       id: entryId,
       hidden,
@@ -2618,7 +2565,7 @@ async function listEventPhotosViaModel(eventId: string): Promise<QRPhoto[]> {
   const authMode = await authModeFor();
   const rows = await listAllPages(
     (nextToken) =>
-      client.models.Photo.listPhotoByEventId(
+      getClient().models.Photo.listPhotoByEventId(
         { eventId },
         { limit: LIST_PAGE_LIMIT, nextToken, authMode },
       ),
@@ -2640,7 +2587,7 @@ export async function fetchEventPhotos(
   } else {
     // Public gallery: scoped query that only returns this event's approved
     // photos, so photos can't be enumerated across events.
-    const { data, errors } = await client.queries.listEventPhotos(
+    const { data, errors } = await getClient().queries.listEventPhotos(
       { eventId },
       { authMode: await authModeFor() },
     );
@@ -2699,7 +2646,7 @@ export interface ModerationReviewView {
 export async function fetchModerationReview(
   token: string,
 ): Promise<ModerationReviewView | null> {
-  const { data, errors } = await client.models.ModerationReview.get(
+  const { data, errors } = await getClient().models.ModerationReview.get(
     { token },
     { authMode: await authModeFor() },
   );
@@ -2733,7 +2680,7 @@ export async function reviewFlaggedPhoto(
   token: string,
   action: 'release' | 'dismiss',
 ): Promise<string> {
-  const { data, errors } = await client.mutations.reviewFlaggedPhoto(
+  const { data, errors } = await getClient().mutations.reviewFlaggedPhoto(
     { token, action },
     { authMode: await authModeFor() },
   );
@@ -2748,7 +2695,7 @@ export async function reviewFlaggedPhoto(
  * auth). Denying is just deleting the photo, which already has its own flow.
  */
 export async function releaseFlaggedPhoto(photoId: string): Promise<void> {
-  const { errors } = await client.models.Photo.update(
+  const { errors } = await getClient().models.Photo.update(
     { id: photoId, moderationStatus: 'released' },
     { authMode: 'userPool' },
   );
@@ -2756,13 +2703,13 @@ export async function releaseFlaggedPhoto(photoId: string): Promise<void> {
 }
 
 export async function setPhotoApproval(photoId: string, approved: boolean): Promise<void> {
-  const { errors } = await client.models.Photo.update({ id: photoId, approved });
+  const { errors } = await getClient().models.Photo.update({ id: photoId, approved });
   if (errors?.length) throw new Error('Could not update the photo.');
 }
 
 /** Deletes the S3 objects and the metadata record via an ownership-checked function. */
 export async function deleteEventPhoto(photo: QRPhoto): Promise<void> {
-  const { data, errors } = await client.mutations.deleteEventPhoto(
+  const { data, errors } = await getClient().mutations.deleteEventPhoto(
     { photoId: photo.id },
     { authMode: 'userPool' },
   );
@@ -2783,7 +2730,7 @@ export async function createDownloadShare(
   // share anything past it.
   const eventPhotos = await listAllPages(
     (nextToken) =>
-      client.models.Photo.listPhotoByEventId(
+      getClient().models.Photo.listPhotoByEventId(
         { eventId: event.id },
         { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
       ),
@@ -2796,7 +2743,7 @@ export async function createDownloadShare(
   const photoIds = [...new Set(requestedPhotoIds)].filter((id) => allowedIds.has(id));
   if (photoIds.length === 0) throw new Error('Select at least one approved photo or video.');
 
-  const { data, errors } = await client.models.DownloadShare.create(
+  const { data, errors } = await getClient().models.DownloadShare.create(
     {
       eventId: event.id,
       eventName: event.name,
@@ -2820,7 +2767,7 @@ export async function createDownloadShare(
 }
 
 export async function fetchDownloadShare(shareId: string): Promise<DownloadShare | null> {
-  const { data, errors } = await client.models.DownloadShare.get(
+  const { data, errors } = await getClient().models.DownloadShare.get(
     { id: shareId },
     { authMode: await authModeFor() },
   );
@@ -2866,7 +2813,7 @@ export async function getOriginalMediaSource(photo: QRPhoto): Promise<MediaSourc
  * on every poll.
  */
 export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]> {
-  const { data, errors } = await client.queries.listEventPhotos(
+  const { data, errors } = await getClient().queries.listEventPhotos(
     { eventId },
     { authMode: await authModeFor() },
   );
@@ -2917,7 +2864,7 @@ async function r2UrlsFor(
   const urls = new Map<string, string>();
   if (!eventId || keys.length === 0) return urls;
   try {
-    const { data } = await client.queries.mediaUrls(
+    const { data } = await getClient().queries.mediaUrls(
       { eventId, keys },
       { authMode: await authModeFor() },
     );
@@ -3133,7 +3080,7 @@ export async function downloadEventsAsZip(
  * structure of every event on the platform.
  */
 export async function fetchEventMoments(eventId: string): Promise<EventMoment[]> {
-  const { data, errors } = await client.queries.eventMoments(
+  const { data, errors } = await getClient().queries.eventMoments(
     { eventId },
     { authMode: await authModeFor() },
   );
@@ -3164,7 +3111,7 @@ export async function saveEventMoment(input: {
   description?: string | null;
   sortOrder?: number | null;
 }): Promise<EventMoment> {
-  const { data, errors } = await client.mutations.saveMoment(
+  const { data, errors } = await getClient().mutations.saveMoment(
     {
       eventId: input.eventId,
       momentId: input.momentId || undefined,
@@ -3196,7 +3143,7 @@ export async function saveEventMoment(input: {
  * someone's photos because a label was renamed would be indefensible.
  */
 export async function deleteEventMoment(momentId: string): Promise<void> {
-  const { errors } = await client.models.Moment.delete(
+  const { errors } = await getClient().models.Moment.delete(
     { id: momentId },
     { authMode: 'userPool' },
   );

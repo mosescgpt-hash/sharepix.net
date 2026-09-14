@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import Artwork from '@/components/Artwork';
 import Layout from '@/components/Layout';
-import { trackEvent } from '@/lib/api';
+import { trackEvent } from '@/lib/trackEvent';
 import { PRICING_TIERS } from '@/lib/pricing';
 import { organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
 
