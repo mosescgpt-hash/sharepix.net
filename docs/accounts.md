@@ -94,10 +94,11 @@ charges a real card and submits a real order. `/global-admin → Print check`
 quotes all five sizes against the live catalogue for free, and is also the only
 thing that will tell you Prodigi's prices have moved.
 
-They had, badly enough that small orders lost money on every sale. The catalog
-now matches a live quote and carries an 8% buffer, and `daily-tasks` re-checks
-it every Monday — a mismatch raises `sharepix-print-price-drift` rather than
-waiting to be noticed. See [go-live-prints.md](go-live-prints.md).
+They had, badly enough that small orders would have lost money on every sale —
+prospectively, since no print order has ever been placed. The catalog now
+matches a live quote and carries an 8% buffer, and `daily-tasks` re-checks it
+every Monday: a mismatch raises `sharepix-print-price-drift` rather than waiting
+to be noticed. See [go-live-prints.md](go-live-prints.md).
 
 ## GitHub
 
