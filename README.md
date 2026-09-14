@@ -111,6 +111,7 @@ two copies that quietly disagree about money.
 
 | | |
 | --- | --- |
+| [docs/accounts.md](docs/accounts.md) | Every account SharePix runs on, what each is for, and what lapses |
 | [docs/deploying.md](docs/deploying.md) | Deploying, every environment variable, and the manual steps |
 | [docs/pro-uploader.md](docs/pro-uploader.md) | The API a DSLR/bridge uploader speaks, for SharePix Pro |
 | [docs/decisions.md](docs/decisions.md) | Product decisions, each naming what it supersedes |
