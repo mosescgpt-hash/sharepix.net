@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
-import { findEventByCode } from '@/lib/api';
+import { findEventByCode } from '@/lib/findEvent';
 import {
   EVENT_CODE_MAX_LENGTH,
   EVENT_CODE_NOT_FOUND,
