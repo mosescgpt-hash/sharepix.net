@@ -36,7 +36,7 @@ const PRINT_PRODUCTS: Record<string, Prod> = {
   'GLOBAL-PHO-5X7': { name: 'Photo print', size: '5×7 in', kind: 'photo', baseCost: 0.5, shipFirst: 10.75, shipAdd: 0 },
   'GLOBAL-PHO-8X10': { name: 'Photo print', size: '8×10 in', kind: 'photo', baseCost: 2.0, shipFirst: 11.85, shipAdd: 0 },
   'GLOBAL-FAP-11X14': { name: 'Fine-art print', size: '11×14 in', kind: 'premium', baseCost: 14.0, shipFirst: 11.85, shipAdd: 0 },
-  'GLOBAL-CFP-12X16': { name: 'Framed print', size: '12×16 in', kind: 'premium', baseCost: 40.0, shipFirst: 24.8, shipAdd: 12.0 },
+  'GLOBAL-CFP-12X16': { name: 'Framed print', size: '12×16 in', kind: 'premium', baseCost: 40.0, shipFirst: 24.8, shipAdd: 11.0 },
 };
 
 // Round up to a multiple of `step`. Always up, so rounding can only help the

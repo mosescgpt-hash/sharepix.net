@@ -2,6 +2,7 @@ import {
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
+  QueryCommand,
   ScanCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
@@ -14,6 +15,12 @@ const dynamo = new DynamoDBClient({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const MOMENT_TABLE = process.env.MOMENT_TABLE_NAME as string;
+
+// The by-event index Amplify generates for `Moment.secondaryIndexes([index('eventId')])`.
+// The comment below used to say this name could not be known without a deploy.
+// It can: `npm run validate:backend` synthesises the CloudFormation locally and
+// the index name is in it. Confirmed there, not guessed.
+const MOMENTS_BY_EVENT_INDEX = 'momentsByEventId';
 
 type Handler = Schema['saveMoment']['functionHandler'];
 
@@ -140,27 +147,54 @@ export const handler: Handler = async (event) => {
   // one — past a dozen the guest's picker stops being a choice and becomes a
   // form.
   //
-  // Scan + filter, matching listEventPhotos and eventGuestBook. The by-event
-  // index exists and this should use it, but no function in this codebase
-  // queries a GSI yet and its generated name cannot be confirmed without a
-  // deploy; guessing wrong fails at runtime, in production, on a path a host
-  // hits. Same known debt as the other two, tracked in docs/redesign-audit.md.
+  // Counted off the index. A filtered Scan counted every row in the table to
+  // answer a question about one event, on a path a host hits every time they
+  // add a moment.
+  //
+  // The Scan remains as a fallback for a missing or renamed index. Note the
+  // direction of the failure: falling back keeps the cap enforced, where
+  // treating the error as zero would quietly let the limit be exceeded.
   let existing = 0;
-  let countKey: Record<string, AttributeValue> | undefined;
-  do {
-    const page = await dynamo.send(
-      new ScanCommand({
-        TableName: MOMENT_TABLE,
-        FilterExpression: '#eventId = :eventId',
-        ExpressionAttributeNames: { '#eventId': 'eventId' },
-        ExpressionAttributeValues: { ':eventId': { S: eventId } },
-        Select: 'COUNT',
-        ExclusiveStartKey: countKey,
-      }),
-    );
-    existing += page.Count ?? 0;
-    countKey = page.LastEvaluatedKey;
-  } while (countKey);
+  try {
+    let countKey: Record<string, AttributeValue> | undefined;
+    do {
+      const page = await dynamo.send(
+        new QueryCommand({
+          TableName: MOMENT_TABLE,
+          IndexName: MOMENTS_BY_EVENT_INDEX,
+          KeyConditionExpression: '#eventId = :eventId',
+          ExpressionAttributeNames: { '#eventId': 'eventId' },
+          ExpressionAttributeValues: { ':eventId': { S: eventId } },
+          Select: 'COUNT',
+          ExclusiveStartKey: countKey,
+        }),
+      );
+      existing += page.Count ?? 0;
+      countKey = page.LastEvaluatedKey;
+    } while (countKey);
+  } catch (error) {
+    console.error('Falling back to a full table scan; the eventId index did not answer', {
+      at: new Date().toISOString(),
+      index: MOMENTS_BY_EVENT_INDEX,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    existing = 0;
+    let countKey: Record<string, AttributeValue> | undefined;
+    do {
+      const page = await dynamo.send(
+        new ScanCommand({
+          TableName: MOMENT_TABLE,
+          FilterExpression: '#eventId = :eventId',
+          ExpressionAttributeNames: { '#eventId': 'eventId' },
+          ExpressionAttributeValues: { ':eventId': { S: eventId } },
+          Select: 'COUNT',
+          ExclusiveStartKey: countKey,
+        }),
+      );
+      existing += page.Count ?? 0;
+      countKey = page.LastEvaluatedKey;
+    } while (countKey);
+  }
 
   if (existing >= MAX_MOMENTS_PER_EVENT) {
     throw new Error(`An event can have up to ${MAX_MOMENTS_PER_EVENT} moments.`);

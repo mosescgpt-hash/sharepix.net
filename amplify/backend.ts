@@ -14,7 +14,13 @@ import {
   TreatMissingData,
 } from 'aws-cdk-lib/aws-cloudwatch';
 import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
-import { LogGroup, MetricFilter, FilterPattern } from 'aws-cdk-lib/aws-logs';
+import {
+  FilterPattern,
+  LogGroup,
+  LogRetention,
+  MetricFilter,
+  RetentionDays,
+} from 'aws-cdk-lib/aws-logs';
 import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
@@ -1051,3 +1057,70 @@ surveyTable.grantReadWriteData(surveyResponseFn);
 eventTable.grantReadData(surveyResponseFn);
 surveyResponseFn.addEnvironment('SURVEY_TABLE_NAME', surveyTable.tableName);
 surveyResponseFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+
+// ---------------------------------------------------------------------------
+// Log retention.
+// ---------------------------------------------------------------------------
+
+/**
+ * How long each Lambda's logs are kept.
+ *
+ * Lambda creates its own log group on first invocation, and the service default
+ * is **Never Expire**. Nothing here had ever said otherwise, so every one of
+ * these functions had been accumulating logs forever — a bill with no ceiling
+ * that grows with the customer base and that nobody would think to look at.
+ *
+ * Retention does not change what ingestion costs; it bounds what storage costs.
+ * Three months is long enough to investigate "what happened at that wedding",
+ * which is the question these logs actually get asked.
+ *
+ * `LogRetention` rather than declaring `LogGroup` resources: production's log
+ * groups already exist, and CloudFormation fails on a group it did not create.
+ * This calls PutRetentionPolicy on whatever is there instead.
+ */
+const DEFAULT_LOG_RETENTION = RetentionDays.THREE_MONTHS;
+
+/**
+ * Functions whose logs are a record rather than a diagnostic, and are kept for
+ * a year.
+ *
+ * Each of these is the only account of something a customer might dispute long
+ * after the fact: which media was deleted and when, which host was mailed, and
+ * what Stripe said about a payment. Three months is shorter than the gallery
+ * retention a paid customer buys, which would be an odd place to lose the
+ * record of what happened to their photos.
+ */
+const AUDIT_LOG_RETENTION: Record<string, RetentionDays> = {
+  reclaimStorage: RetentionDays.ONE_YEAR,
+  dailyTasks: RetentionDays.ONE_YEAR,
+  stripeWebhook: RetentionDays.ONE_YEAR,
+  printFulfill: RetentionDays.ONE_YEAR,
+  claimRefund: RetentionDays.ONE_YEAR,
+};
+
+// Iterated rather than listed, so a function added later gets a retention
+// policy without anyone remembering to add it here — which is how the default
+// went unnoticed in the first place.
+let logGroupsWithRetention = 0;
+for (const [name, resource] of Object.entries(backend)) {
+  const lambda = (resource as { resources?: { lambda?: unknown } })?.resources?.lambda;
+  if (!(lambda instanceof LambdaFunction)) continue;
+  new LogRetention(backend.stack, `${name}LogRetention`, {
+    logGroupName: `/aws/lambda/${lambda.functionName}`,
+    retention: AUDIT_LOG_RETENTION[name] ?? DEFAULT_LOG_RETENTION,
+  });
+  logGroupsWithRetention += 1;
+}
+// A loop that silently matches nothing is exactly the failure this block exists
+// to end: the stack would synthesise, deploy, and quietly keep Never Expire. If
+// Amplify ever changes the shape of `resources.lambda`, fail the synth — which
+// `npm run validate:backend` runs in CI, so it is caught on the PR rather than
+// discovered on a bill years later.
+if (logGroupsWithRetention < 20) {
+  throw new Error(
+    `Expected log retention on every function, but only matched ${logGroupsWithRetention}. ` +
+      'The backend resource shape has probably changed — without this, log groups ' +
+      'silently fall back to Never Expire.',
+  );
+}
+console.log(`Log retention configured on ${logGroupsWithRetention} functions`);

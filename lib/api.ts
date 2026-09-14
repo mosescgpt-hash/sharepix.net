@@ -3,7 +3,6 @@
 import { generateClient } from 'aws-amplify/data';
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { uploadData, getUrl, downloadData, getProperties } from 'aws-amplify/storage';
-import JSZip from 'jszip';
 import type { Schema } from '@/amplify/data/resource';
 import {
   CorporateSubscription,
@@ -2985,6 +2984,23 @@ export async function downloadPhoto(
  * fetched (e.g. a missing S3 object) are skipped so one bad file doesn't fail
  * the whole download; the number skipped is returned.
  */
+/**
+ * Load JSZip only when somebody actually starts a download.
+ *
+ * It used to be a static import at the top of this file. This module is
+ * imported by 37 components and pages, so the zip library — 95 KB minified —
+ * ended up in a chunk every route loads: the homepage, the pricing page, and
+ * the gallery a guest opens on venue wifi before seeing a single photo. Almost
+ * none of them will ever zip anything.
+ *
+ * The dynamic import moves it to its own chunk, fetched on the click that needs
+ * it. The browser caches it across both download paths below.
+ */
+async function loadZip() {
+  const { default: JSZip } = await import('jszip');
+  return new JSZip();
+}
+
 export async function downloadPhotosAsZip(
   photos: QRPhoto[],
   archiveName: string,
@@ -2992,7 +3008,7 @@ export async function downloadPhotosAsZip(
 ): Promise<{ skipped: number; failedIds: string[] }> {
   if (photos.length === 0) throw new Error('Select at least one photo or video.');
 
-  const zip = new JSZip();
+  const zip = await loadZip();
   let added = 0;
   const failedIds: string[] = [];
   for (let index = 0; index < photos.length; index += 1) {
@@ -3051,7 +3067,7 @@ export async function downloadEventsAsZip(
   const total = groups.reduce((sum, group) => sum + group.photos.length, 0);
   if (total === 0) throw new Error('The selected events have no photos to download.');
 
-  const zip = new JSZip();
+  const zip = await loadZip();
   const usedFolders = new Set<string>();
   let completed = 0;
   let added = 0;

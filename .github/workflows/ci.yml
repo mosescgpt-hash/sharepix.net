@@ -6,8 +6,15 @@ name: CI
 #     does, INCLUDING Lambda handlers (the root tsconfig excludes those, which is
 #     how a handler type error once slipped through to a failed deploy).
 #   - test — the Jest unit suite.
-# It does NOT run `next build` or the root typecheck, which need the deploy-time
-# amplify_outputs.json that only exists during an Amplify build.
+#   - build — the real `next build`, against a stub amplify_outputs.json.
+#
+# That last one used to be skipped, on the grounds that it needed the
+# deploy-time amplify_outputs.json. It does not: pages/_app.tsx wraps the
+# require in try/catch and renders a "not configured" notice when the file is
+# missing or empty, so `{}` is enough to compile every page. The reason it
+# matters is that merging to main IS deploying here — without it, a broken
+# import or a bad component only fails in the Amplify build, after merge, with
+# no signal on the PR.
 
 on:
   pull_request:
@@ -45,3 +52,13 @@ jobs:
         run: npm run validate:backend
       - name: Unit tests
         run: npm test
+      # Last, because `prebuild` regenerates lib/siteImages.generated.ts and the
+      # SEO files. Running it before the tests would mask the drift check that
+      # fails when a committed generated file is stale.
+      - name: Build the site
+        run: |
+          # Stands in for the file Amplify Hosting generates at deploy time.
+          # Not committed: it is gitignored, and a real one carries environment
+          # identifiers that do not belong in the repository.
+          [ -f amplify_outputs.json ] || echo '{}' > amplify_outputs.json
+          npm run build

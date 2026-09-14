@@ -133,19 +133,21 @@ export interface PrintProduct {
   shipAdd: number;
 }
 
-// Base costs and shipFirst are Prodigi's live quoted prices as of
-// PRICES_VERIFIED_ON.
+// Every number here is a Prodigi live quote as of PRICES_VERIFIED_ON,
+// shipAdd included — the print check quotes two copies to measure it, since a
+// one-copy quote cannot see it at all.
 //
-// shipAdd is NOT verified. The print check quotes two copies precisely to
-// measure it, because a quote for one copy cannot see it — and a wrong shipAdd
-// is the one error that gets worse the more the buyer orders, which is the
-// direction the modal now nudges them.
+// That measurement found the framed print's plus-one at $11.00 where this file
+// had inherited $12.00, so every extra framed print had been overcharged by a
+// dollar. Worth noting the direction: drift is not always in SharePix's favour
+// to ignore. The four cheaper products' $0 plus-one was confirmed, which is
+// what the order modal's "shipping is charged per order" nudge rests on.
 export const PRINT_PRODUCTS: PrintProduct[] = [
   { sku: 'GLOBAL-PHO-4X6', name: 'Photo print', size: '4×6 in', kind: 'photo', baseCost: 0.25, shipFirst: 10.75, shipAdd: 0 },
   { sku: 'GLOBAL-PHO-5X7', name: 'Photo print', size: '5×7 in', kind: 'photo', baseCost: 0.5, shipFirst: 10.75, shipAdd: 0 },
   { sku: 'GLOBAL-PHO-8X10', name: 'Photo print', size: '8×10 in', kind: 'photo', baseCost: 2.0, shipFirst: 11.85, shipAdd: 0 },
   { sku: 'GLOBAL-FAP-11X14', name: 'Fine-art print', size: '11×14 in', kind: 'premium', baseCost: 14.0, shipFirst: 11.85, shipAdd: 0 },
-  { sku: 'GLOBAL-CFP-12X16', name: 'Framed print', size: '12×16 in', kind: 'premium', baseCost: 40.0, shipFirst: 24.8, shipAdd: 12.0 },
+  { sku: 'GLOBAL-CFP-12X16', name: 'Framed print', size: '12×16 in', kind: 'premium', baseCost: 40.0, shipFirst: 24.8, shipAdd: 11.0 },
 ];
 
 /**
