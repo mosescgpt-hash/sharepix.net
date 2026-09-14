@@ -4,6 +4,7 @@ import Artwork from '@/components/Artwork';
 import Layout from '@/components/Layout';
 import { trackEvent } from '@/lib/api';
 import { PRICING_TIERS } from '@/lib/pricing';
+import { organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
 
 /**
  * The homepage, on the redesign system (docs/design-system.md).
@@ -24,7 +25,12 @@ export default function HomePage() {
   }, []);
 
   return (
-    <Layout width="bleed">
+    <Layout
+      width="bleed"
+      // Both belong on the homepage and nowhere else — a crawler wants one
+      // statement of who this is, not one per page.
+      structuredData={[organizationJsonLd(), webSiteJsonLd()]}
+    >
       <div className="bg-canvas font-sans">
         <Hero />
         <HowItWorks />

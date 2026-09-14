@@ -3,6 +3,7 @@ import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
 import { VIDEO_GB_INCLUDED } from '@/lib/pricing';
 import { trackEvent } from '@/lib/api';
+import { pricingJsonLd } from '@/lib/seo';
 
 const faqs = [
   {
@@ -47,7 +48,7 @@ export default function PricingPage() {
   }, []);
 
   return (
-    <Layout title="Pricing" width="bleed">
+    <Layout title="Pricing" width="bleed" structuredData={pricingJsonLd()}>
       <section className="spx-section-canvas">
         <div className="mx-auto w-full max-w-6xl">
           <p className="spx-eyebrow">Simple pricing</p>

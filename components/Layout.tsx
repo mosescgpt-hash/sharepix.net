@@ -1,8 +1,17 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { ReactNode } from 'react';
 import Navbar from '@/components/Navbar';
 import { SUPPORT_EMAIL } from '@/lib/help';
+import {
+  OG_IMAGE_PATH,
+  SITE_NAME,
+  SITE_ORIGIN,
+  canonicalUrl,
+  describeRoute,
+  isIndexable,
+} from '@/lib/seo';
 
 interface LayoutProps {
   title?: string;
@@ -17,6 +26,25 @@ interface LayoutProps {
    * supply their own horizontal padding, normally via `.spx-section`.
    */
   width?: 'default' | 'wide' | 'bleed';
+  /**
+   * Overrides the description `lib/seo.ts` holds for this route.
+   *
+   * For pages whose subject is not fixed by the route — a help article, a demo
+   * gallery the visitor switched. Most pages should leave this alone and put
+   * their description in `ROUTE_DESCRIPTIONS`, where it sits next to every
+   * other page's and can be read as a set.
+   */
+  description?: string;
+  /**
+   * Force this page out of search regardless of the allowlist.
+   *
+   * An escape hatch for a page that is public but shows something specific to
+   * one person. It can only ever add `noindex`, never remove it — a page the
+   * allowlist calls private stays private whatever is passed here.
+   */
+  noindex?: boolean;
+  /** JSON-LD for this page, already an object. Emitted as a script tag. */
+  structuredData?: Record<string, unknown> | Record<string, unknown>[];
   children: ReactNode;
 }
 
@@ -37,19 +65,82 @@ const FOOTER_LINKS = [
   { href: '/dmca', label: 'Copyright / DMCA' },
 ];
 
-export default function Layout({ title, width = 'default', children }: LayoutProps) {
+export default function Layout({
+  title,
+  width = 'default',
+  description,
+  noindex = false,
+  structuredData,
+  children,
+}: LayoutProps) {
+  const router = useRouter();
+  // `route` is the pattern ("/help/[slug]"); `asPath` is what the visitor is
+  // actually on. The allowlist is keyed by the pattern, the canonical by the
+  // real path.
+  const route = router?.route ?? '/';
+  const asPath = router?.asPath ?? '/';
+
   const pageTitle = title
     ? `${title} — sharepix.net`
     : 'sharepix.net — Capture. Connect. Celebrate.';
+  const pageDescription = description ?? describeRoute(route, router?.query ?? {});
+  // `noindex` can only ever tighten this. A page the allowlist says is private
+  // cannot be opened up by a prop somebody passed without thinking about it.
+  const indexable = isIndexable(route) && !noindex;
+  const canonical = canonicalUrl(asPath);
+  const ogImage = `${SITE_ORIGIN}${OG_IMAGE_PATH}`;
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas font-sans text-charcoal">
       <Head>
         <title>{pageTitle}</title>
+        <meta name="description" content={pageDescription} />
         <meta
-          name="description"
-          content="Every guest is a photographer. Create an event, print a QR code, and collect everyone's photos in one gallery."
+          name="robots"
+          content={
+            indexable
+              ? 'index, follow, max-image-preview:large'
+              : // `nofollow` as well, so a crawler that reaches a gallery does
+                // not walk from it to every photo and share link inside it.
+                'noindex, nofollow'
+          }
         />
+        {/* Only on pages that may be indexed. A canonical on a noindex page is
+            at best ignored and at worst read as a request to index the target
+            in its place. */}
+        {indexable ? <link rel="canonical" href={canonical} /> : null}
+
+        {/* Open Graph. This is what a link pasted into a group chat becomes,
+            which for this product is most of how anyone first sees it. */}
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={SITE_NAME} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:url" content={canonical} />
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta
+          property="og:image:alt"
+          content="sharepix.net — Every moment. Everyone’s perspective. Guests at a wedding table photographing the couple on their phones."
+        />
+
+        {/* Twitter/X reads its own names and falls back to og: for the rest. */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={pageDescription} />
+        <meta name="twitter:image" content={ogImage} />
+
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+        {structuredData ? (
+          <script
+            type="application/ld+json"
+            // The object is built in our own code from our own constants, never
+            // from anything a visitor typed.
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+          />
+        ) : null}
       </Head>
       <Navbar />
       <main

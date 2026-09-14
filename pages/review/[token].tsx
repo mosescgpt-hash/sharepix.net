@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import Head from 'next/head';
 import Layout from '@/components/Layout';
 import {
   fetchModerationReview,
@@ -71,10 +70,11 @@ export default function ModerationReviewPage() {
   const actionable = Boolean(review) && !expired && !alreadyDecided && !outcome?.ok;
 
   return (
+    // No robots tag of its own any more. Layout emits `noindex, nofollow` for
+    // every route lib/seo.ts does not name as indexable, and the local tag won
+    // the dedupe with the weaker `noindex` — leaving a crawler free to follow
+    // links out of a page reached with a single-use token.
     <Layout title="Review a photo">
-      <Head>
-        <meta name="robots" content="noindex" />
-      </Head>
       <section className="mx-auto max-w-lg py-10">
         {loading ? (
           <p className="text-center text-charcoal/60">Loading the photo…</p>
