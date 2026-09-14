@@ -120,7 +120,7 @@ describe('the three tabs', () => {
 
   it('puts the things that prove something works on the tests tab', () => {
     const byId = Object.fromEntries(sectionTabs().map((s) => [s.id, s.tab]));
-    for (const id of ['print-check', 'alert-check', 'jobs', 'r2-backfill']) {
+    for (const id of ['print-check', 'alert-check', 'jobs']) {
       expect({ id, tab: byId[id] }).toEqual({ id, tab: 'tests' });
     }
   });

@@ -1666,45 +1666,6 @@ export async function manageUser(
  * actions this does NOT throw when it fails — a failing check's message is the
  * whole point of running it, so both outcomes come back to the caller.
  */
-export interface BackfillRun {
-  ok: boolean;
-  message: string;
-  /** True only when the whole listing was walked to the end. */
-  done: boolean;
-  /** Where to resume, when a run stopped on its time budget. */
-  nextToken: string | null;
-}
-
-/**
- * Copy pre-mirroring uploads into R2. Global-admin only.
- *
- * Dry run unless `apply`. A run stops on a time budget rather than at the end
- * of the bucket, so `done` is what says the work is finished — `nextToken` can
- * be null on an unfinished run, because a run can stop during the very first
- * page with no token to hand back.
- */
-export async function backfillR2(options: {
-  apply?: boolean;
-  eventId?: string;
-  nextToken?: string | null;
-} = {}): Promise<BackfillRun> {
-  const { data, errors } = await getClient().mutations.backfillR2(
-    {
-      apply: options.apply ?? false,
-      eventId: options.eventId || undefined,
-      nextToken: options.nextToken || undefined,
-    },
-    { authMode: 'userPool' },
-  );
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
-  return {
-    ok: Boolean(data?.success),
-    message: data?.message ?? 'The backfill returned no result.',
-    done: Boolean(data?.done),
-    nextToken: data?.nextToken ?? null,
-  };
-}
-
 export async function checkPrintProvider(): Promise<{ ok: boolean; message: string }> {
   const { data, errors } = await getClient().mutations.checkPrintProvider({}, { authMode: 'userPool' });
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

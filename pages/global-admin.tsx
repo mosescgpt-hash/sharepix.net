@@ -44,7 +44,6 @@ import {
   setResearchIncentiveOffered,
   setEventTheme,
   startCheckout,
-  backfillR2,
 } from '@/lib/api';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
@@ -146,7 +145,6 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'rewards', label: 'Research rewards', tab: 'events' },
   { id: 'free-claims', label: 'Free event claims', tab: 'events' },
   { id: 'print-check', label: 'Print check', tab: 'tests' },
-  { id: 'r2-backfill', label: 'Copy old photos', tab: 'tests' },
   { id: 'alert-check', label: 'Alert email check', tab: 'tests' },
   { id: 'events', label: 'Events', tab: 'events' },
   { id: 'discounts', label: 'Discount codes', tab: 'discounts' },
@@ -280,11 +278,6 @@ function GlobalAdminPage() {
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
   const [adminTab, setAdminTab] = useState<AdminTab>('events');
-  const [backfill, setBackfill] = useState<{ text: string; ok: boolean } | null>(null);
-  // Held between presses so a run that stopped on its time budget can carry on
-  // from where it got to rather than re-walking the bucket.
-  const [backfillToken, setBackfillToken] = useState<string | null>(null);
-  const [backfillEventId, setBackfillEventId] = useState('');
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
   // Whether each switch is actually on, asked of the functions themselves
   // rather than assumed. `null` means the probe has not answered.
@@ -654,31 +647,6 @@ function GlobalAdminPage() {
     } catch (err) {
       setUserMessage({
         text: err instanceof Error ? err.message : 'The action could not be completed.',
-        ok: false,
-      });
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleBackfill(apply: boolean) {
-    setWorking(apply ? 'backfill-apply' : 'backfill-dry');
-    setBackfill(null);
-    try {
-      const result = await backfillR2({
-        apply,
-        eventId: backfillEventId.trim() || undefined,
-        nextToken: backfillToken,
-      });
-      setBackfill({ text: result.message, ok: result.ok });
-      // Only a finished run clears the token. `done` rather than a null token:
-      // a run can stop on the budget during the first page with nothing to hand
-      // back, and treating that as complete is how a half-done backfill would
-      // look finished.
-      setBackfillToken(result.done ? null : result.nextToken);
-    } catch (err) {
-      setBackfill({
-        text: err instanceof Error ? err.message : 'The backfill could not be run.',
         ok: false,
       });
     } finally {
@@ -2907,75 +2875,6 @@ function GlobalAdminPage() {
                   }`}
                 >
                   {printCheck.text}
-                </pre>
-              ) : null}
-            </div>
-
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>
-              <h2 id="r2-backfill" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
-                Copy old photos to Cloudflare
-              </h2>
-              <p className="text-sm text-charcoal/70">
-                Photos uploaded before <strong>1 September 2026</strong> were never copied to
-                Cloudflare, because the copying did not exist yet. Their galleries still work —
-                every image is fetched from Cloudflare, fails, and is fetched again from
-                Amazon — but each photo is loaded twice, which is slow for the guest and
-                billed to us.
-              </p>
-              <p className="mt-2 text-sm text-charcoal/70">
-                This copies the missing ones across. It only ever <strong>reads</strong> from
-                Amazon and <strong>writes</strong> to Cloudflare — nothing is deleted, and a
-                photo already copied is skipped, so running it twice is harmless.
-              </p>
-
-              <label className="mt-4 block text-sm">
-                <span className="font-medium">One event only (optional)</span>
-                <input
-                  type="text"
-                  value={backfillEventId}
-                  onChange={(event) => setBackfillEventId(event.target.value)}
-                  placeholder="Event ID — leave blank for every event"
-                  className="mt-1 w-full border border-charcoal/20 bg-paper px-3 py-2 focus:border-ink focus:outline-none"
-                />
-              </label>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={working === 'backfill-dry' || working === 'backfill-apply'}
-                  onClick={() => void handleBackfill(false)}
-                  className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
-                >
-                  {working === 'backfill-dry' ? 'Checking…' : 'Check what is missing'}
-                </button>
-                <button
-                  type="button"
-                  disabled={working === 'backfill-dry' || working === 'backfill-apply'}
-                  onClick={() => void handleBackfill(true)}
-                  className="border border-charcoal/20 bg-paper px-4 py-3 text-sm font-medium transition hover:border-charcoal/40 disabled:opacity-50"
-                >
-                  {working === 'backfill-apply' ? 'Copying…' : 'Copy them across'}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-charcoal/60">
-                &ldquo;Check&rdquo; writes nothing — run it first and read what it found.
-              </p>
-
-              {backfillToken !== null ? (
-                <p className="mt-3 border border-charcoal/10 border-l-2 border-l-pine bg-paper px-4 py-3 text-sm text-charcoal/75">
-                  There is more to do — the last run stopped at its time limit, which is normal
-                  on a big bucket. Press the same button again to carry on from where it
-                  stopped.
-                </p>
-              ) : null}
-
-              {backfill ? (
-                <pre
-                  className={`mt-3 overflow-x-auto whitespace-pre-wrap border border-charcoal/10 px-3 py-2 text-sm ${
-                    backfill.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'
-                  }`}
-                >
-                  {backfill.text}
                 </pre>
               ) : null}
             </div>
