@@ -44,7 +44,7 @@ cannot set, and for the environment variables.
 | **SES** | Outbound email | Sandbox status, verified identities, bounce rate |
 | **SQS** | The byte-counting queue | Only if the storage numbers stop moving |
 | **Rekognition** | Explicit-content screening | Never directly; it has no console worth visiting |
-| **CloudWatch** | Logs and the alarms | Every investigation ends up here — see [alerting.md](alerting.md) |
+| **CloudWatch** | Logs and the alarms | Every investigation ends up here — see [alerting.md](alerting.md). Logs expire after 90 days, or a year for the five functions whose logs are a record rather than a diagnostic. |
 | **WAF** | API rate limiting, off unless `WAF_ENABLED` | Only when turning it on |
 | **Route 53** | Believed to be where `sharepix.net` is registered and resolved | DNS records, and the apex → `www` redirect |
 
@@ -82,8 +82,9 @@ Payments for events, add-ons and prints.
 - **Tax** — `automatic_tax` is on in code and calculates zero everywhere there
   is no registration, which is why it was safe to enable before any existed. See
   [mn-sales-tax-request.md](mn-sales-tax-request.md).
-- **Test mode** — prints are still on it. Live mode flips together with Prodigi,
-  never alone: [go-live-prints.md](go-live-prints.md).
+- **Live mode, everywhere.** `STRIPE_SECRET_KEY` is an `sk_live_…` key, so every
+  checkout — events, add-ons and prints alike — charges a real card. There is no
+  longer a test-mode half: [go-live-prints.md](go-live-prints.md).
 - The business address on receipts comes from here, not from the repository.
 
 ## Prodigi
@@ -93,9 +94,10 @@ charges a real card and submits a real order. `/global-admin → Print check`
 quotes all five sizes against the live catalogue for free, and is also the only
 thing that will tell you Prodigi's prices have moved.
 
-They have. The base costs and shipping in `lib/prints.ts` are below what
-Prodigi now charges, enough that small orders lose money — see
-[go-live-prints.md](go-live-prints.md).
+They had, badly enough that small orders lost money on every sale. The catalog
+now matches a live quote and carries an 8% buffer, and `daily-tasks` re-checks
+it every Monday — a mismatch raises `sharepix-print-price-drift` rather than
+waiting to be noticed. See [go-live-prints.md](go-live-prints.md).
 
 ## GitHub
 
@@ -150,7 +152,7 @@ Roughly, and only the fixed parts. Storage, bandwidth and Lambda scale with use.
 
 | | |
 | --- | --- |
-| AWS | Usage-based. DynamoDB, Lambda and SES are near-free at this volume; S3 and CloudFront are the ones that grow. |
+| AWS | Usage-based. DynamoDB, Lambda and SES are near-free at this volume; S3 and CloudFront are the ones that grow. CloudWatch logs used to be a third, growing forever because nothing set a retention — they now expire. |
 | Cloudflare R2 | Storage, with **zero egress** — which is the whole reason reads come from it |
 | Cloudflare Web Analytics | Free |
 | Outlook | Per mailbox, if the plan hosting `@sharepix.net` is a paid one |

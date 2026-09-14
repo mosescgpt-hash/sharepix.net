@@ -133,8 +133,13 @@ classifier; there is no per-IP throttle beyond AppSync defaults.
    that changes.
 3. **Duplicated pricing constants.** `TIER_PRICING` in the Stripe function
    mirrors `lib/pricing.ts` by hand, with a comment as the only link.
-4. **`listEventPhotos` and `eventGuestBook` scan and filter** rather than
-   using the secondary index. Fine now, not at scale.
+4. ~~**`listEventPhotos` and `eventGuestBook` scan and filter** rather than
+   using the secondary index.~~ **Fixed.** All four per-event readers
+   (`list-event-photos`, `list-moments`, `list-guest-book-entries`,
+   `save-moment`) now query `…ByEventId`, with the Scan kept only as a logged
+   fallback. What had blocked it was a belief that the generated index name
+   could not be known without a deploy; `npm run validate:backend` synthesises
+   it locally. Pinned by `__tests__/event-id-index.test.ts`.
 5. **Tier strings are load-bearing in five places** — pricing, checkout,
    discount scopes, the guest book gate, and `tier` stamped onto every
    existing event row.
