@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { codeOnly, readSource } from './sourceGuards';
+import { codeOnly, readCode, readSource } from './sourceGuards';
 
 /**
  * The README says true things about the code.
@@ -77,13 +77,27 @@ describe('the "what is not finished" list is still accurate', () => {
   });
 
   it('says prints are on sandbox only while they are', () => {
-    const claimed = README.includes('Prodigi sandbox and Stripe test mode');
-    // The go-live doc is the thing that has to change first. If it is gone,
-    // prints went live and the README bullet is stale.
-    expect({ claimed, guideExists: existsSync(join(root, 'docs/go-live-prints.md')) }).toEqual({
-      claimed,
-      guideExists: claimed,
-    });
+    // This guard was pinned to the wrong fact for months. It read "the README
+    // claims sandbox" and checked that docs/go-live-prints.md still existed —
+    // but going live does not delete that document, it turns it into the record
+    // of what was done. So the toggle flipped to 'live', the doc stayed, the
+    // guard stayed green, and the README went on telling every newcomer that
+    // prints could not take real money while they could.
+    //
+    // The fact that actually decides it is one line of code, so read that.
+    const live = /PRODIGI_ENV:\s*'live'/.test(readCode('amplify/functions/print-fulfill/resource.ts'));
+    const claimsSandbox = README.includes('Prodigi sandbox and Stripe test mode');
+    expect({ claimsSandbox }).toEqual({ claimsSandbox: !live });
+  });
+
+  it('keeps the two print functions in the same environment', () => {
+    // print-provider-check exists to prove fulfilment will work. Pointed at a
+    // different Prodigi than print-fulfill uses, a green check proves nothing
+    // and is worse than no check, because it is trusted.
+    const fulfill = readCode('amplify/functions/print-fulfill/resource.ts');
+    const check = readCode('amplify/functions/print-provider-check/resource.ts');
+    const envOf = (src: string) => src.match(/PRODIGI_ENV:\s*'(\w+)'/)?.[1];
+    expect({ check: envOf(check) }).toEqual({ check: envOf(fulfill) });
   });
 });
 

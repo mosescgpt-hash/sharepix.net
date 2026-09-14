@@ -775,6 +775,57 @@ dailyTasksFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 dailyTasksFn.addEnvironment('NOTIFICATION_TABLE_NAME', notificationTable.tableName);
 dailyTasksFn.addEnvironment('PREFERENCE_TABLE_NAME', emailPreferenceTable.tableName);
 dailyTasksFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+// Weekly, the job asks the print check whether Prodigi still charges what the
+// print catalog says. Invoke rather than quoting Prodigi here: the cost table
+// and the comparison stay in one place, and a quote costs nothing. This is the
+// half of the pricing defence that does not rely on somebody choosing to press
+// a button — the costs were wrong for months because nothing ever asked.
+const printCheckFn = backend.printProviderCheck.resources.lambda as LambdaFunction;
+printCheckFn.grantInvoke(dailyTasksFn);
+dailyTasksFn.addEnvironment('PRINT_CHECK_FUNCTION_NAME', printCheckFn.functionName);
+
+// The weekly print price check reports drift by logging, not by throwing — the
+// daily job must not fail a run of host reminders because Prodigi changed a
+// price. So the log line is turned into a metric and alarmed on.
+//
+// This is the alarm that would have caught the original failure. Every base
+// cost in the print catalog was wrong for months; the only thing that could
+// have noticed was an admin choosing to press a button, and nobody did, so
+// small print orders lost money on every sale until it was found by accident.
+const dailyTasksLogGroup = LogGroup.fromLogGroupName(
+  backend.stack,
+  'DailyTasksLogGroupRef',
+  `/aws/lambda/${dailyTasksFn.functionName}`,
+);
+new MetricFilter(backend.stack, 'PrintPriceDriftFilter', {
+  logGroup: dailyTasksLogGroup,
+  metricNamespace: 'SharePix/Prints',
+  metricName: 'PriceDrift',
+  // Must match the literal logged by checkPrintPrices in daily-tasks.
+  filterPattern: FilterPattern.literal('"PRINT PRICE DRIFT"'),
+  metricValue: '1',
+  defaultValue: 0,
+});
+const printPriceDriftAlarm = new Alarm(backend.stack, 'print-price-drift', {
+  alarmName: 'sharepix-print-price-drift',
+  alarmDescription:
+    "Prodigi no longer charges what lib/prints.ts says. Run /global-admin -> Print check to see which prices moved, then update PRINT_PRODUCTS in lib/prints.ts and both hand-copied mirrors. Until that is done, print orders are priced against costs Prodigi does not charge; PRODIGI_SAFETY covers roughly 8%, so this is urgent rather than an emergency.",
+  metric: new Metric({
+    namespace: 'SharePix/Prints',
+    metricName: 'PriceDrift',
+    // The check runs weekly, so the window has to be wider than the gap
+    // between runs or the alarm would clear itself before anyone saw it.
+    period: Duration.days(1),
+    statistic: 'Sum',
+  }),
+  // One is enough. Unlike a network blip, a price does not drift transiently.
+  threshold: 1,
+  evaluationPeriods: 1,
+  comparisonOperator: ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+  treatMissingData: TreatMissingData.NOT_BREACHING,
+});
+printPriceDriftAlarm.addAlarmAction(new SnsAction(alertsTopic));
+
 dailyTasksFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
 dailyTasksFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
 // The master switch on sending. Unset means the job runs, decides, logs every

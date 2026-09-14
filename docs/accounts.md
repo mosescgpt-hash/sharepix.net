@@ -88,8 +88,14 @@ Payments for events, add-ons and prints.
 
 ## Prodigi
 
-Print fulfilment. **Sandbox today.** `PRODIGI_ENV` chooses which API the
-functions talk to, and `/global-admin → Print check` confirms they answer.
+Print fulfilment, and **live** — `PRODIGI_ENV` is `'live'`, so a print checkout
+charges a real card and submits a real order. `/global-admin → Print check`
+quotes all five sizes against the live catalogue for free, and is also the only
+thing that will tell you Prodigi's prices have moved.
+
+They have. The base costs and shipping in `lib/prints.ts` are below what
+Prodigi now charges, enough that small orders lose money — see
+[go-live-prints.md](go-live-prints.md).
 
 ## GitHub
 
