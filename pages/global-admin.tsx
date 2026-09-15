@@ -96,7 +96,6 @@ import {
   ResearchIncentiveRow,
 } from '@/lib/types';
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * The section index at the top of the page.
@@ -149,27 +148,6 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'events', label: 'Events', tab: 'events' },
   { id: 'discounts', label: 'Discount codes', tab: 'discounts' },
 ];
-
-/** Upload-window end date that lands an event in a chosen lifecycle phase (testing). */
-function simulateWindowEnd(event: QREvent, phase: string): string | null {
-  const now = Date.now();
-  const isCorp = event.tier === 'corporate';
-  const tier = getTier(event.tier);
-  const lowRes = isCorp ? CORPORATE_PLAN.guestLowResDays : tier?.guestLowResDays ?? 30;
-  const retention = isCorp ? CORPORATE_PLAN.retentionDays : tier?.retentionDays ?? 90;
-  switch (phase) {
-    case 'open':
-      return new Date(now + 30 * DAY_MS).toISOString();
-    case 'lowres':
-      return new Date(now - 2 * DAY_MS).toISOString();
-    case 'gone':
-      return new Date(now - (lowRes + 2) * DAY_MS).toISOString();
-    case 'archived':
-      return new Date(now - (retention + 2) * DAY_MS).toISOString();
-    default:
-      return null;
-  }
-}
 
 /** Which bucket the lifecycle filter puts an event in. */
 type PhaseGroup = 'live' | 'archived' | 'expired';
@@ -1104,21 +1082,6 @@ function GlobalAdminPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The event could not be removed.');
-    } finally {
-      setWorking(null);
-    }
-  }
-
-  async function handleSimulatePhase(event: QREvent, phase: string) {
-    const iso = simulateWindowEnd(event, phase);
-    if (!iso) return;
-    setWorking(`sim-${event.id}`);
-    setError(null);
-    try {
-      await setEventUploadWindowEnd(event.id, iso);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'The event window could not be updated.');
     } finally {
       setWorking(null);
     }
@@ -3123,25 +3086,6 @@ function GlobalAdminPage() {
                                 {theme.label}
                               </option>
                             ))}
-                          </select>
-                          <select
-                            aria-label="Simulate lifecycle phase (testing)"
-                            disabled={working === `sim-${event.id}`}
-                            value=""
-                            onChange={(e) => {
-                              const phase = e.target.value;
-                              e.target.value = '';
-                              if (phase) void handleSimulatePhase(event, phase);
-                            }}
-                            className="border border-dashed border-charcoal/30 px-2 py-1.5 text-charcoal/60 disabled:opacity-50"
-                          >
-                            <option value="">Simulate…</option>
-                            <option value="open">Open (uploads)</option>
-                            <option value="lowres">Guests low-res</option>
-                            <option value="gone">Guests gone</option>
-                            {/* No "archived" here on purpose — Archive above is
-                                the real action, and two ways to do the same
-                                thing is how one of them gets missed. */}
                           </select>
                           <button
                             type="button"
