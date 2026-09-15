@@ -144,70 +144,35 @@ of this.
   stored keys at submission time. Worth confirming Prodigi can fetch a
   presigned R2 URL with one real print order before moving it.
 
-## Anything uploaded before 1 September 2026 is not in R2
+## Anything uploaded before 1 September 2026 had to be copied by hand
 
 Mirroring shipped in #92 on 1 September 2026. Photos uploaded before that were
-written to S3 and never copied, and nothing went back for them.
+written to S3 and never copied, because there was nothing to copy them.
 
 Nothing was broken, which is why nothing caught it. `sharepix-r2-mirror-failures`
 watches for a mirror that *fails*; these uploads happened before there was a
-mirror to fail. The symptom only shows in a browser: the gallery asks R2 first,
-gets a **404 from Cloudflare** — not a network error, a real HTTP 404 with a
-`Cf-Ray` header — waits 200–400 ms, then falls back to S3 and succeeds. Every
-photo, doubled, on every view. And every one of those reads is billed S3 egress
-that R2 exists to serve free.
+mirror to fail. It showed only in a browser: the gallery asked R2 first, got a
+**404 from Cloudflare** — a real HTTP 404 with a `Cf-Ray` header, not a network
+error — waited 200–400 ms, then fell back to S3. Every photo, doubled, on every
+view, with S3 egress billed for reads R2 exists to serve free.
 
-### Fixing it
+**This has been done.** A one-off backfill (#142) copied the missing objects
+across, and the tooling was removed once it had (#143) rather than left as a
+button nobody would press again but everybody would have to reason about.
 
-**`/global-admin → Copy old photos`** is the way to do this. "Check what is
-missing" writes nothing; "Copy them across" writes. The five values it needs —
-the bucket and the four R2 variables — already exist in Lambda, which also
-removes the one way the script can silently do nothing: a local
-`amplify_outputs.json` points at a *sandbox* bucket, and a run against the wrong
-bucket reports "nothing to copy" and looks like success.
+It is recoverable from git history if a gap like this ever appears again — but
+it should not. Every upload since 1 September mirrors as it lands, and that
+path is the one to check first if these symptoms return: a doubled request per
+image, and a 404 from Cloudflare rather than a failure to reach it.
 
-A Lambda cannot run unbounded, so it works to a 12-minute budget inside a
-15-minute timeout and hands back where it stopped. Stopping early is normal on a
-large bucket, not a failure; the panel says so and the same button carries on.
-**`done` is what says the work finished**, not whether a token came back — a run
-can stop during the first page with no token to hand back, and treating that as
-complete is how a half-done backfill would look finished.
+### What it deliberately did not copy
 
-The script still exists for the same job from a terminal:
-
-```
-npm run backfill:r2                   # dry run: lists what it would copy
-npm run backfill:r2 -- --apply        # copies
-npm run backfill:r2 -- --event <id>   # one event
-```
-
-It reads S3 and writes R2. It never deletes and never writes to S3. Every object
-is HEADed in R2 first, so a second run copies nothing and an interrupted run
-resumes where it stopped.
-
-### What it refuses to copy, and why
-
-**An original with no `sanitized: 'true'` metadata is left in S3.** The sanitizer
-strips EXIF — including where a photo was taken — before anything reaches the
-store reads are served from. An original without that marker never went through
-it, and copying it would put a guest's location data into R2 permanently in the
+**Originals with no `sanitized` metadata were left in S3.** The sanitizer strips
+EXIF — including where a photo was taken — before anything reaches the store
+reads are served from. An original without that marker never went through it,
+and copying it would have put a guest's location data into R2 permanently in the
 name of making a gallery load faster.
 
-The run prints those keys rather than skipping them quietly: an unstripped
-original in S3 means the sanitizer never ran on that upload, which is worth
-knowing for its own sake.
-
-This costs nothing in practice. The gallery serves **previews**, and previews are
-re-encoded by the browser's canvas, which writes no EXIF at all — so they are
-always safe to copy and they are the half that fixes the latency.
-
-`__tests__/r2-backfill.test.ts` holds that decision, including the exact preview
-key that was 404ing in production, and pins the claims the admin panel makes:
-that only a literal `true` writes, that the mutation is ADMINS-only at the
-schema rather than merely hidden, and that nothing in the handler deletes or
-writes to S3.
-
-The Lambda keeps its own copy of the rule, since Amplify functions take no
-cross-bundle imports; `__tests__/r2-backfill-function-copy.test.ts` compares the
-two byte for byte. One door refusing where the other copies would mean EXIF
-reaching R2 through whichever one happened to be used.
+That costs nothing: galleries serve **previews**, which are re-encoded by the
+browser's canvas and carry no EXIF at all. An original still only in S3 is
+slower to download once, and correct.

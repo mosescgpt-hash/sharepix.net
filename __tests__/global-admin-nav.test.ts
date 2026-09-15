@@ -120,7 +120,7 @@ describe('the three tabs', () => {
 
   it('puts the things that prove something works on the tests tab', () => {
     const byId = Object.fromEntries(sectionTabs().map((s) => [s.id, s.tab]));
-    for (const id of ['print-check', 'alert-check', 'jobs', 'r2-backfill']) {
+    for (const id of ['print-check', 'alert-check', 'jobs']) {
       expect({ id, tab: byId[id] }).toEqual({ id, tab: 'tests' });
     }
   });
@@ -151,5 +151,30 @@ describe('the three tabs', () => {
     // A link that jumps to a hidden anchor goes nowhere, which is worse than
     // not offering it.
     expect(source).toContain('ADMIN_SECTIONS.filter((section) => section.tab === adminTab)');
+  });
+});
+
+describe('no tool rewrites a real event to test a phase', () => {
+  /**
+   * The `Simulate…` dropdown is gone.
+   *
+   * It set an event's `uploadWindowEndsAt` to a date that pushed it into the
+   * low-res or expired phase — a testing shortcut from the pilot, sitting as an
+   * unconfirmed dropdown on a live list of real events. With paying customers
+   * on that list, a mis-click expired somebody's gallery, and the only undo was
+   * to know the original date.
+   *
+   * What replaces it is patience: make an event of your own and let it age, or
+   * read the rules in `lib/lifecycle.ts`, which is where the phases are decided
+   * and which is covered by tests that need no event at all.
+   */
+  it('has no lifecycle simulator', () => {
+    expect(page).not.toContain('Simulate');
+    expect(page).not.toContain('simulateWindowEnd');
+  });
+
+  it('still lets an operator archive, which is a real action and says so', () => {
+    // Removing the shortcut must not remove the deliberate one beside it.
+    expect(page).toContain('archiveWindowEnd');
   });
 });

@@ -32,7 +32,6 @@ import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { printCheckout } from './functions/print-checkout/resource';
 import { printFulfill } from './functions/print-fulfill/resource';
 import { printProviderCheck } from './functions/print-provider-check/resource';
-import { backfillR2 } from './functions/backfill-r2/resource';
 import { sendTestAlert } from './functions/send-test-alert/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { createGuestBookEntry } from './functions/create-guest-book-entry/resource';
@@ -82,7 +81,6 @@ const backend = defineBackend({
   printCheckout,
   printFulfill,
   printProviderCheck,
-  backfillR2,
   sendTestAlert,
   listEventPhotos,
   createGuestBookEntry,
@@ -339,20 +337,6 @@ mediaUrlFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT
 mediaUrlFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 mediaUrlFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
 mediaUrlFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
-
-// Backfill: copies anything uploaded before R2 mirroring existed into R2, from
-// /global-admin. Reads S3 and writes R2 — it never writes to S3 and never
-// deletes, so the worst a bad run can do is copy something twice, which is a
-// no-op. The four R2 values are the same ones the mirror and media-url use;
-// like every other Amplify variable they are read when the backend is BUILT, so
-// changing one needs a redeploy before this function sees it.
-const backfillFn = backend.backfillR2.resources.lambda as LambdaFunction;
-bucket.grantRead(backfillFn);
-backfillFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
-backfillFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
-backfillFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
-backfillFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
-backfillFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.

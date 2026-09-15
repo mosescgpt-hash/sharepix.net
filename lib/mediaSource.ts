@@ -2,10 +2,10 @@
  * Which URL to show a photo or video from, and what to do when it fails.
  *
  * Gallery media is served from Cloudflare R2 where egress is free, and from S3
- * where it isn't in R2. There are several ordinary reasons a given object won't
- * be: nothing was backfilled, so anything uploaded before the mirror went live
- * is S3-only; the mirror is best-effort and may have skipped a newer file; and
- * R2 may not be configured at all.
+ * where it isn't in R2. There are ordinary reasons a given object won't be: the
+ * mirror is best-effort and may have skipped a file, and R2 may not be
+ * configured at all. Uploads from before the mirror existed were another, until
+ * they were copied across in #142.
  *
  * Rather than have the server check each object exists — a network round trip
  * per photo, which is exactly the thing that doesn't scale to a gallery — both

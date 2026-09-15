@@ -10,7 +10,6 @@ import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
-import { backfillR2 as backfillR2Fn } from '../functions/backfill-r2/resource';
 import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/resource';
 import { mediaUrl as mediaUrlFn } from '../functions/media-url/resource';
 import { createGuestBookEntry as createGuestBookEntryFn } from '../functions/create-guest-book-entry/resource';
@@ -1395,16 +1394,6 @@ const schema = a.schema({
     message: a.string(),
   }),
 
-  // Like UserActionResult, plus the two fields a resumable job needs.
-  // `done` rather than "is nextToken null": a run can stop on its time budget
-  // during the first page, where there is no token to hand back, and calling
-  // that finished is how a half-done backfill would look complete.
-  BackfillResult: a.customType({
-    success: a.boolean().required(),
-    message: a.string(),
-    done: a.boolean(),
-    nextToken: a.string(),
-  }),
 
   UnsubscribeResult: a.customType({
     unsubscribed: a.boolean().required(),
@@ -1816,19 +1805,6 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(printProviderCheckFn)),
 
-  // Global-admin only: copy into R2 anything uploaded before R2 mirroring
-  // existed. A dry run unless `apply` is true, so the word that writes is the
-  // one an operator opts into rather than out of.
-  backfillR2: a
-    .mutation()
-    .arguments({
-      apply: a.boolean(),
-      eventId: a.string(),
-      nextToken: a.string(),
-    })
-    .returns(a.ref('BackfillResult'))
-    .authorization((allow) => [allow.group('ADMINS')])
-    .handler(a.handler.function(backfillR2Fn)),
 
   // Global-admin only: send the real "photo held for review" alert to the
   // signed-in admin, so delivery and rendering can be checked without waiting
