@@ -140,6 +140,7 @@ two copies that quietly disagree about money.
 | [docs/design-system.md](docs/design-system.md) | Palette, type, and the rules the pages follow |
 | [docs/business-records.md](docs/business-records.md) | Public records that name SharePix LLC and have to agree |
 | [docs/mn-sales-tax-request.md](docs/mn-sales-tax-request.md) | The request asking Minnesota whether SharePix is taxable at all, and what each answer means |
+| [docs/mn-print-tax-request.md](docs/mn-print-tax-request.md) | The follow-up asking about physical prints, which the service answer does not cover |
 | [docs/moments-verification.md](docs/moments-verification.md) | The walkthrough that proved Moments really writes to DynamoDB |
 | [docs/redesign-audit.md](docs/redesign-audit.md) | What existed before the redesign, and what it must not disturb |
 

@@ -146,8 +146,10 @@ So a print sells today with no tax calculation of any kind. Nothing has been
 charged wrong yet, because no print order has ever been placed — which makes
 this a question to settle before the first one rather than after.
 
-It is a question for the Department or a CPA. The cheap first step is the same
-as last time: ask, with the facts written out.
+The letter is drafted in
+[mn-print-tax-request.md](mn-print-tax-request.md). The hard part is not whether
+a print is taxable — it is who collects, given Prodigi ships direct and SharePix
+never holds the goods.
 
 ## What was switched, and what rollback reverses
 

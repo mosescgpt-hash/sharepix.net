@@ -172,9 +172,11 @@ supplies, however the file got there. Prints went live after this question was
 drafted, which is exactly how a scope gap opens without anyone deciding to open
 one.
 
-That is a question for the Department or a CPA, not for this file to answer, and
-`amplify/functions/print-checkout/handler.ts` sets no `automatic_tax` at all —
-so today prints are sold with no tax calculation of any kind. See
+That is a question for the Department, not for this file to answer, and it is
+asked in [mn-print-tax-request.md](mn-print-tax-request.md). Meanwhile
+`amplify/functions/print-checkout/handler.ts` sets no `automatic_tax` at all, so
+prints are sold with no tax calculation of any kind — correct while
+unregistered, wrong the moment that changes. See
 [go-live-prints.md](go-live-prints.md).
 
 **Ask again if** SharePix starts selling content of its own, delivers anything
