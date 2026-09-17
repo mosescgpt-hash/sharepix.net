@@ -143,7 +143,10 @@ carry and what happens if they lapse. Named here only so this list is complete:
 - **U.S. Copyright Office** — DMCA designated agent. Renew by 2 September 2029;
   lapsed means no safe harbour.
 - **Minnesota Secretary of State** — the LLC.
-- **Minnesota Department of Revenue** — sales tax, if it turns out to apply.
+- **Minnesota Department of Revenue** — sales tax, if it turns out to apply. A
+  request for written guidance went out on 16 September 2026; until it is
+  answered SharePix is not registered and collects nothing, which is the correct
+  posture for a business that has asked.
 
 ---
 

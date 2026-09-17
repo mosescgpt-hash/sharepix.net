@@ -1,7 +1,14 @@
 # Asking Minnesota whether SharePix is taxable
 
-A draft request for written guidance from the Minnesota Department of Revenue,
-and the reasoning behind what it does and does not say.
+**Sent 16 September 2026.** Awaiting a determination; nothing else is needed
+until one arrives — see "After the answer" at the end for what each outcome
+means.
+
+The request for written guidance from the Minnesota Department of Revenue, kept
+here with the reasoning behind what it does and does not say. Keep it: if the
+answer is slow, or arrives ambiguous, or the service changes and the question
+has to be asked again, the argument is the expensive part and it is already
+made.
 
 **Why ask at all.** SharePix LLC is registered in Minnesota, so physical
 presence creates nexus here regardless of sales volume — Minnesota is the one
@@ -11,10 +18,9 @@ SharePix sells is taxable, and that is genuinely unsettled: Minnesota taxes
 service, and SharePix can be argued into either bucket. Getting it wrong in
 either direction costs money, so it is worth asking rather than deciding.
 
-**Before sending.** Confirm the current submission address on
-revenue.state.mn.us — look for the Sales and Use Tax Division's guidance or
-"contact us" page. Addresses and intake forms change, and this file should not
-be trusted for one. It is the *content* that took thought.
+**While it is outstanding**, the position is unchanged and safe: SharePix is not
+registered to collect Minnesota sales tax and is not collecting any. That is the
+correct posture for a business that has asked whether it should be.
 
 **Nothing needs to happen in Stripe first.** `automatic_tax` is already on and
 calculates zero for every jurisdiction without a registration, so no liability
@@ -102,11 +108,18 @@ Minnesota customers, and over-collecting is its own problem.
 
 ---
 
-## What to fill in before sending
+## What was filled in
 
-- **Secretary of State file number** and **EIN**. Both identify the taxpayer;
-  a request without them is slower to answer.
-- **Signature and date.**
+The **Secretary of State file number**, plus the signature and date.
+
+The **EIN** was the other identifier the draft asked for. Both name the
+taxpayer, and a request carrying them is answered faster — so if the EIN did not
+go on, expect the Department to ask for it before they rule, and have it ready
+rather than treating the question as a setback.
+
+Neither number is recorded in this repository, deliberately: they belong in
+[business-records.md](business-records.md) with the rest of the filings rather
+than in a letter.
 
 ## What was deliberately left out
 
