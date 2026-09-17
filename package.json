@@ -16,6 +16,7 @@
     "validate:backend": "rm -rf .amplify/cycle-check && CDK_OUTDIR=.amplify/cycle-check CDK_CONTEXT_JSON='{\"amplify-backend-namespace\":\"ci\",\"amplify-backend-name\":\"validate\",\"amplify-backend-type\":\"branch\"}' tsx amplify/backend.ts && node scripts/check-stack-cycles.mjs .amplify/cycle-check",
     "sandbox": "ampx sandbox",
     "admin:grant": "tsx scripts/grant-global-admin.ts",
+    "letter:docx": "node scripts/build-letter-docx.mjs",
     "seo": "tsx scripts/build-seo-files.ts"
   },
   "dependencies": {
@@ -51,6 +52,7 @@
     "autoprefixer": "^10.4.16",
     "aws-cdk-lib": "^2.158.0",
     "constructs": "^10.3.0",
+    "docx": "^9.7.1",
     "esbuild": "^0.28.1",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.2.10",

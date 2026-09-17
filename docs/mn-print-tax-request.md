@@ -30,13 +30,27 @@ worth asking rather than assuming.
 
 ## The draft
 
+The block quote below is the letter, and it is the **only** copy of it. To get a
+Word document to attach or post:
+
+```
+npm run letter:docx -- docs/mn-print-tax-request.md "SharePix print tax request.docx"
+```
+
+Edit the markdown and re-run; do not edit the `.docx`. The generator reads the
+quote rather than carrying its own transcript of it, because the first Word
+document in this project did carry one and the two drifted the first time
+somebody changed only one. The signed-and-posted copy is a bad one to have to
+diff. `__tests__/mn-print-tax-letter.test.ts` additionally fails if the price
+table here stops matching `lib/prints.ts`.
+
 > **Request for written guidance — sales and use tax on photographic prints
 > sold online and shipped by a third-party fulfiller**
 >
-> SharePix LLC
-> 617 Locust Street #1001
-> Monticello, MN 55362
-> Minnesota Secretary of State: 1665522500020
+> SharePix LLC\
+> 617 Locust Street #1001\
+> Monticello, MN 55362\
+> Minnesota Secretary of State: 1665522500020\
 > Contact: Seth Calvin — seth@sharepix.net — (320) 295-2850
 >
 > We received written guidance from your office on 16 September 2026 (email
@@ -117,6 +131,7 @@ worth asking rather than assuming.
 > sample order.
 >
 > [Signature]
+>
 > Seth Calvin, SharePix LLC
 
 ---
@@ -128,9 +143,11 @@ worth asking rather than assuming.
   change, and this file should not be trusted for one.
 - Add the **EIN** if it was not on the first letter. Both identifiers make a
   request faster to answer.
-- Re-check the prices in the table against `lib/prints.ts` before sending. They
-  moved once already, and a letter quoting stale figures invites an answer to
-  the wrong question.
+- **Regenerate the `.docx`** so the attachment matches the markdown. The prices
+  no longer need re-checking by hand — `__tests__/mn-print-tax-letter.test.ts`
+  pins the table, the shipping figure and the one-print total to `lib/prints.ts`,
+  because they moved once already and a letter quoting stale figures invites an
+  answer to the wrong question.
 
 ## After the answer
 
