@@ -79,9 +79,11 @@ Payments for events, add-ons and prints.
 - **Webhook** → the `stripe-webhook` function URL, with `STRIPE_WEBHOOK_SECRET`
   matching. If this breaks, customers pay and their event never activates. It is
   the single worst failure in the product.
-- **Tax** — `automatic_tax` is on in code and calculates zero everywhere there
-  is no registration, which is why it was safe to enable before any existed. See
-  [mn-sales-tax-request.md](mn-sales-tax-request.md).
+- **Tax** — `automatic_tax` is on in `stripe-checkout` and calculates zero
+  everywhere there is no registration, which is why it was safe to enable before
+  any existed. Minnesota has since confirmed the service is **not taxable**. It
+  is **not** set in `print-checkout`, and prints are a physical good the
+  determination never covered: [mn-sales-tax-request.md](mn-sales-tax-request.md).
 - **Live mode, everywhere.** `STRIPE_SECRET_KEY` is an `sk_live_…` key, so every
   checkout — events, add-ons and prints alike — charges a real card. There is no
   longer a test-mode half: [go-live-prints.md](go-live-prints.md).
@@ -143,7 +145,12 @@ carry and what happens if they lapse. Named here only so this list is complete:
 - **U.S. Copyright Office** — DMCA designated agent. Renew by 2 September 2029;
   lapsed means no safe harbour.
 - **Minnesota Secretary of State** — the LLC.
-- **Minnesota Department of Revenue** — sales tax, if it turns out to apply.
+- **Minnesota Department of Revenue** — asked in writing on 16 September 2026
+  whether the service is taxable and told **no**, on both the $79 plan and the
+  $149/month subscription. Not registered, collecting nothing, and that is now a
+  determination rather than a default. It covers the *service*; physical prints
+  were never asked about — see
+  [mn-sales-tax-request.md](mn-sales-tax-request.md).
 
 ---
 

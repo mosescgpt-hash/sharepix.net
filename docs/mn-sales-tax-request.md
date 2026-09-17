@@ -1,7 +1,30 @@
 # Asking Minnesota whether SharePix is taxable
 
-A draft request for written guidance from the Minnesota Department of Revenue,
-and the reasoning behind what it does and does not say.
+**Answered 16 September 2026: not taxable.** The Minnesota Department of
+Revenue's Sales & Use Tax Division, Policy Services, in writing:
+
+> Since you don't supply any content of your own and customers only access or
+> download their existing photos, your service does not include taxable digital
+> products.
+>
+> If your service is online-hosted software or a digital access service and not
+> prewritten software or specified digital product, charges for accessing or
+> hosting customer content in a browser-based environment are nontaxable under
+> Minnesota Department of Revenue rules.
+>
+> [On whether the $79 event plan and the $149/month subscription differ] No.
+> Both models are nontaxable because the nature of the service remains the same
+> in each scenario.
+
+Email routing code **348_100855**. Keep the original mail: the Department's own
+notice says the answer is advisory, rests on the facts as they were described,
+and holds only under the law in effect at the time.
+
+The request for written guidance from the Minnesota Department of Revenue, kept
+here with the reasoning behind what it does and does not say. Keep it: if the
+answer is slow, or arrives ambiguous, or the service changes and the question
+has to be asked again, the argument is the expensive part and it is already
+made.
 
 **Why ask at all.** SharePix LLC is registered in Minnesota, so physical
 presence creates nexus here regardless of sales volume — Minnesota is the one
@@ -11,10 +34,8 @@ SharePix sells is taxable, and that is genuinely unsettled: Minnesota taxes
 service, and SharePix can be argued into either bucket. Getting it wrong in
 either direction costs money, so it is worth asking rather than deciding.
 
-**Before sending.** Confirm the current submission address on
-revenue.state.mn.us — look for the Sales and Use Tax Division's guidance or
-"contact us" page. Addresses and intake forms change, and this file should not
-be trusted for one. It is the *content* that took thought.
+**So: stay unregistered, collect nothing, change nothing.** That is now a
+determination rather than a default.
 
 **Nothing needs to happen in Stripe first.** `automatic_tax` is already on and
 calculates zero for every jurisdiction without a registration, so no liability
@@ -102,11 +123,18 @@ Minnesota customers, and over-collecting is its own problem.
 
 ---
 
-## What to fill in before sending
+## What was filled in
 
-- **Secretary of State file number** and **EIN**. Both identify the taxpayer;
-  a request without them is slower to answer.
-- **Signature and date.**
+The **Secretary of State file number**, plus the signature and date.
+
+The **EIN** was the other identifier the draft asked for. Both name the
+taxpayer, and a request carrying them is answered faster — so if the EIN did not
+go on, expect the Department to ask for it before they rule, and have it ready
+rather than treating the question as a setback.
+
+Neither number is recorded in this repository, deliberately: they belong in
+[business-records.md](business-records.md) with the rest of the filings rather
+than in a letter.
 
 ## What was deliberately left out
 
@@ -127,7 +155,30 @@ calculating from that point. Nothing in this repository needs to change:
 `automatic_tax` is already enabled in `stripe-checkout`, which is exactly why
 it was switched on before any registration existed.
 
-**If not taxable:** record the answer somewhere it will be found again — this
-file is a reasonable home — and change nothing. Revisit if the service changes
-materially, particularly if SharePix ever begins selling content of its own
-rather than hosting the customer's.
+**Not taxable, as it turned out.** Nothing changed, and nothing needs to.
+
+### What the answer does not cover
+
+Read the Department's reasoning rather than only its conclusion. It turns on two
+facts about the *service*: SharePix supplies no content of its own, and what
+moves is the customer's own photographs in a browser. Anything that stops being
+true of a thing SharePix sells is outside this answer.
+
+**Prints are the live example.** A physical photograph, manufactured and shipped
+to a buyer, is tangible personal property — not "online-hosted software or a
+digital access service", and not something the letter asked about. The
+Department's reasoning does not carry across: a print *is* a good SharePix
+supplies, however the file got there. Prints went live after this question was
+drafted, which is exactly how a scope gap opens without anyone deciding to open
+one.
+
+That is a question for the Department, not for this file to answer, and it is
+asked in [mn-print-tax-request.md](mn-print-tax-request.md). Meanwhile
+`amplify/functions/print-checkout/handler.ts` sets no `automatic_tax` at all, so
+prints are sold with no tax calculation of any kind — correct while
+unregistered, wrong the moment that changes. See
+[go-live-prints.md](go-live-prints.md).
+
+**Ask again if** SharePix starts selling content of its own, delivers anything
+downloadable that originates here rather than with the customer, or adds another
+physical good. The argument above is reusable; only the facts would change.

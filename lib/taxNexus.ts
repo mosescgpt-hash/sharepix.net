@@ -51,9 +51,15 @@ export const US_NEXUS_TRANSACTIONS = 200;
  */
 export const NEXUS_WARN_FRACTION = 0.8;
 
-/** Where the business is registered. Nexus there exists regardless of volume. */
+/**
+ * Where the business is registered. Nexus there exists regardless of volume —
+ * but nexus is only half the question, and Minnesota answered the other half in
+ * writing on 16 September 2026: the service is not taxable there, so nexus at
+ * home obliges nothing. See docs/mn-sales-tax-request.md, including what that
+ * answer does not cover.
+ */
 export const HOME_JURISDICTION_NOTE =
-  'Physical presence creates nexus on its own, so your home state needs a registration whatever these numbers say.';
+  'Physical presence creates nexus on its own — but Minnesota has confirmed in writing that this service is not taxable there, so nexus at home does not by itself mean a registration.';
 
 /** One completed sale, reduced to what nexus depends on. */
 export interface NexusSale {

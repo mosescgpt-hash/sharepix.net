@@ -131,6 +131,26 @@ buyer charged for a cost Prodigi does not have. Drift is not only a risk to
 SharePix, and a check that only ever warned about one direction would have
 reported this one as a loss. The summary now says which way each price moved.
 
+## Sales tax on a print is an open question
+
+Minnesota told SharePix in writing on 16 September 2026 that the *service* is
+not taxable — see [mn-sales-tax-request.md](mn-sales-tax-request.md). That
+answer turns on SharePix supplying no content of its own, and it does not reach
+a print: a physical photograph manufactured and shipped to a buyer is tangible
+personal property, and it *is* a good SharePix supplies, however the file got
+there. The letter never asked about prints, because prints went live after it
+was drafted.
+
+`print-checkout` sets no `automatic_tax` at all, where `stripe-checkout` does.
+So a print sells today with no tax calculation of any kind. Nothing has been
+charged wrong yet, because no print order has ever been placed — which makes
+this a question to settle before the first one rather than after.
+
+The letter is drafted in
+[mn-print-tax-request.md](mn-print-tax-request.md). The hard part is not whether
+a print is taxable — it is who collects, given Prodigi ships direct and SharePix
+never holds the goods.
+
 ## What was switched, and what rollback reverses
 
 ### 1. Prodigi → live
