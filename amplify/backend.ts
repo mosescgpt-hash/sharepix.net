@@ -32,6 +32,7 @@ import { stripeCheckout } from './functions/stripe-checkout/resource';
 import { printCheckout } from './functions/print-checkout/resource';
 import { printFulfill } from './functions/print-fulfill/resource';
 import { printProviderCheck } from './functions/print-provider-check/resource';
+import { costSummary } from './functions/cost-summary/resource';
 import { sendTestAlert } from './functions/send-test-alert/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { createGuestBookEntry } from './functions/create-guest-book-entry/resource';
@@ -81,6 +82,7 @@ const backend = defineBackend({
   printCheckout,
   printFulfill,
   printProviderCheck,
+  costSummary,
   sendTestAlert,
   listEventPhotos,
   createGuestBookEntry,
@@ -927,6 +929,48 @@ monthlyReportFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
 monthlyReportFn.addToRolePolicy(
   new PolicyStatement({
     actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+    resources: ['*'],
+  }),
+);
+
+// What the month costs and what it earned. Reads four tables and three
+// providers; writes nothing but its own cached answer into AppSetting.
+//
+// The IAM below is the whole reason the AWS figure is a bill rather than a
+// guess. `ce:GetCostAndUsage` and `ce:GetCostForecast` are read-only — neither
+// can change a budget, a resource or a charge — and they are the only two
+// granted. Cost Explorer bills **$0.01 per request**, which is why the handler
+// caches: this is a page somebody leaves open.
+const costSummaryFn = backend.costSummary.resources.lambda as LambdaFunction;
+paymentTable.grantReadData(costSummaryFn);
+printOrderTable.grantReadData(costSummaryFn);
+refundTable.grantReadData(costSummaryFn);
+// Read for the declared costs, write for the cache. The only write it has.
+settingTable.grantReadWriteData(costSummaryFn);
+costSummaryFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
+costSummaryFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
+costSummaryFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
+costSummaryFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
+// Filing a report for a period that has ended. Write only: nothing in this
+// function reads a past report, and a report is a record — the one operation it
+// must never have is a way to quietly rewrite one it did not just generate.
+const financialReportTable = backend.data.resources.tables.FinancialReport;
+financialReportTable.grantWriteData(costSummaryFn);
+costSummaryFn.addEnvironment('REPORT_TABLE_NAME', financialReportTable.tableName);
+
+// The monthly email already runs at 15:00 on the 1st, reporting the month that
+// just ended. It files the cost report for the same period rather than a second
+// schedule existing to do it: one job, one definition of "last month".
+const monthlyReportForCosts = backend.monthlyReport.resources.lambda as LambdaFunction;
+costSummaryFn.grantInvoke(monthlyReportForCosts);
+monthlyReportForCosts.addEnvironment('COST_SUMMARY_FUNCTION_NAME', costSummaryFn.functionName);
+
+costSummaryFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['ce:GetCostAndUsage', 'ce:GetCostForecast'],
+    // Cost Explorer has no resource-level permissions: the API accepts only
+    // `*`, because the thing being read is the account's own bill. Narrowing
+    // this is not available to narrow.
     resources: ['*'],
   }),
 );

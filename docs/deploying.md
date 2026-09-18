@@ -76,6 +76,27 @@ deliberately rather than inherited.
 | `STORAGE_RECLAIM_ENABLED` | `true` | Lets the reclaim job delete expired events' bytes. Unset, it decides, logs every key it would remove, and deletes nothing. The only job that destroys data, and its own switch for that reason. |
 | `WAF_ENABLED` | anything | Rate limiting in front of the API. About $7/month before traffic, whether or not anyone attacks — see `amplify/waf.ts` for when it is worth paying. |
 
+### The Costs tab, if you want the R2 line filled in
+
+| Variable | Set to | Effect |
+| --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | a read-only API token | Lets `cost-summary` read R2 storage and operation counts. Unset, the R2 line says so rather than reporting zero. |
+| `CLOUDFLARE_ACCOUNT_ID` | your account id | The account the token queries. Both are needed; one alone does nothing. |
+
+Make the token in **Cloudflare → My Profile → API Tokens** with
+**Account Analytics: Read** and nothing else. It never needs write access to
+anything — the function only counts bytes and requests.
+
+Both are read at **synth** time like every other variable here, so setting them
+in the console and not redeploying leaves the R2 line dark. That trap has caused
+two false "it's on" readings in this project; the Costs tab names the missing
+variables rather than showing a blank, so you can tell the two apart.
+
+AWS needs nothing set. `cost-summary` carries an IAM policy for
+`ce:GetCostAndUsage` and `ce:GetCostForecast`, granted in `backend.ts`. Cost
+Explorer bills **$0.01 per request**, which is why the tab reads a six-hour
+cache and only the Refresh button spends one.
+
 ### Tuning, with sensible defaults
 
 | Variable | Default |

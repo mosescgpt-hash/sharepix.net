@@ -9,6 +9,7 @@ import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-ph
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
+import { costSummary as costSummaryFn } from '../functions/cost-summary/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
 import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/resource';
 import { mediaUrl as mediaUrlFn } from '../functions/media-url/resource';
@@ -1147,6 +1148,40 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // A cost-and-revenue report for a period that has ended, kept so it can be
+  // looked up later. Written by the cost-summary function via a table grant in
+  // backend.ts; admins read them.
+  //
+  // The id is the period — '2026-09' or '2026' — so regenerating a month
+  // replaces its report rather than adding a second one. That matters: two
+  // rows for September, disagreeing, and no way to tell which is the record.
+  //
+  // The whole summary is kept as JSON alongside the few figures worth querying.
+  // A report is a record of what was believed at the time, including which
+  // providers could not be reached, and summing it down to four numbers would
+  // throw away the part that says how much to trust them.
+  FinancialReport: a
+    .model({
+      /** 'month' or 'year'. */
+      period: a.string(),
+      /** 'September 2026' or '2026', for display. */
+      label: a.string(),
+      /** Inclusive ISO date. */
+      start: a.string(),
+      /** Exclusive ISO date. */
+      end: a.string(),
+      /** The full CostSummaryResult, as stored at generation time. */
+      json: a.string(),
+      /** Denormalised for the list view, so it need not parse every row. */
+      ownCostUsd: a.float(),
+      grossRevenueUsd: a.float(),
+      netUsd: a.float(),
+      /** False when a provider could not be reached when this was generated. */
+      complete: a.boolean(),
+      generatedAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   // A host's Corporate subscription state, keyed by their Cognito user id.
   // The Stripe webhook writes this directly (owner is stamped from the checkout
   // metadata); the host reads their own row via owner auth to see their status.
@@ -1805,6 +1840,26 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(printProviderCheckFn)),
 
+  // Global-admin only: what the month costs and what it earned, from every
+  // provider that will say. Read-only everywhere it reaches; the one thing it
+  // writes is its own cache.
+  //
+  // `refresh` is the only argument that does anything expensive — Cost Explorer
+  // bills per request, so the default answer is a cached one and a caller has
+  // to ask for a fresh one on purpose. Dates are optional and only used by the
+  // saved reports, which need a period that is not the current month.
+  costSummary: a
+    .mutation()
+    .arguments({
+      start: a.string(),
+      end: a.string(),
+      refresh: a.boolean(),
+      /** Also file the answer as a FinancialReport. Needs an explicit period. */
+      save: a.boolean(),
+    })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(costSummaryFn)),
 
   // Global-admin only: send the real "photo held for review" alert to the
   // signed-in admin, so delivery and rendering can be checked without waiting

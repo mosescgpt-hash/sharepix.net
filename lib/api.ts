@@ -25,6 +25,7 @@ import {
   buildPreviewKey,
   buildThumbKey,
 } from '@/lib/validation';
+import type { CostSummaryResult } from '@/lib/costs';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import { guestLabelFor } from '@/lib/guestLabel';
 import { canTransition, type IncentiveStatus } from '@/lib/researchIncentive';
@@ -1673,6 +1674,87 @@ export async function checkPrintProvider(): Promise<{ ok: boolean; message: stri
     ok: Boolean(data?.success),
     message: data?.message ?? 'The check returned no result.',
   };
+}
+
+/**
+ * What the period cost and earned, from the providers themselves.
+ *
+ * `refresh` skips the function's cache and costs a Cost Explorer request — a
+ * cent, which is nothing once and not nothing behind a page left open. The
+ * default answer is the cached one, and the result carries `generatedAt` so the
+ * page can say how old it is instead of implying it is live.
+ *
+ * Returns the shape in `lib/costs.ts` plus the summary the function computed.
+ * The arithmetic is deliberately not redone here: two implementations of a
+ * money figure disagree eventually, and this one would disagree with the saved
+ * report.
+ */
+export async function fetchCostSummary(options?: {
+  start?: string;
+  end?: string;
+  refresh?: boolean;
+  save?: boolean;
+}): Promise<CostSummaryResult> {
+  const { data, errors } = await getClient().mutations.costSummary(
+    {
+      start: options?.start ?? null,
+      end: options?.end ?? null,
+      refresh: options?.refresh ?? false,
+      save: options?.save ?? false,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data) throw new Error('The cost summary returned nothing.');
+  return JSON.parse(data) as CostSummaryResult;
+}
+
+export interface SavedFinancialReport {
+  id: string;
+  period: string;
+  label: string;
+  start: string;
+  end: string;
+  json: string;
+  ownCostUsd: number;
+  grossRevenueUsd: number;
+  netUsd: number;
+  complete: boolean;
+  generatedAt: string;
+}
+
+/**
+ * Every filed report, newest first.
+ *
+ * Sorted here rather than by the database: the id is the period, so a plain
+ * string sort puts '2026' next to '2026-01' in a way that reads oddly, and the
+ * list is small enough that doing it properly costs nothing.
+ */
+export async function listFinancialReports(): Promise<SavedFinancialReport[]> {
+  const data = await listAllPages(
+    (nextToken) =>
+      getClient().models.FinancialReport.list({
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'The saved reports could not be loaded.',
+  );
+  return (data as SavedFinancialReport[])
+    .map((row) => ({
+      id: String(row.id),
+      period: row.period ?? 'month',
+      label: row.label ?? String(row.id),
+      start: row.start ?? '',
+      end: row.end ?? '',
+      json: row.json ?? '',
+      ownCostUsd: row.ownCostUsd ?? 0,
+      grossRevenueUsd: row.grossRevenueUsd ?? 0,
+      netUsd: row.netUsd ?? 0,
+      complete: row.complete !== false,
+      generatedAt: row.generatedAt ?? '',
+    }))
+    .sort((a, b) => b.start.localeCompare(a.start) || a.period.localeCompare(b.period));
 }
 
 /**

@@ -93,7 +93,7 @@ amplify/
   data/resource.ts     Models, auth rules, and the custom mutations
   storage/resource.ts  S3 — read/write for everyone, delete for nobody
   waf.ts               API rate limiting, off unless WAF_ENABLED is set
-  functions/           37 Lambdas; each has resource.ts (config) + handler.ts
+  functions/           38 Lambdas; each has resource.ts (config) + handler.ts
 pages/                 Routes. lib/seo.ts says which are public
 components/            Shared UI
 lib/                   Rules, as pure functions. This is where behaviour lives
@@ -135,6 +135,7 @@ two copies that quietly disagree about money.
 | [docs/moderation.md](docs/moderation.md) | Content screening, and what is deliberately never flagged |
 | [docs/media-limits.md](docs/media-limits.md) | Upload size limits and where each is enforced |
 | [docs/alerting.md](docs/alerting.md) | What pages an operator when a Lambda starts failing |
+| [docs/costs.md](docs/costs.md) | What the month costs, where each figure comes from, and how far to trust it |
 | [docs/go-live-prints.md](docs/go-live-prints.md) | Prints are live: how they are priced, and how a Prodigi price change is caught |
 | [docs/research-survey.md](docs/research-survey.md) | Why the post-event survey asks what it asks |
 | [docs/design-system.md](docs/design-system.md) | Palette, type, and the rules the pages follow |

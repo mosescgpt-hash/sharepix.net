@@ -7,6 +7,9 @@ import { isGlobalAdmin } from '@/lib/admin';
 import {
   addEventPhotoCredits,
   checkPrintProvider,
+  fetchCostSummary,
+  listFinancialReports,
+  type SavedFinancialReport,
   clearFreeEventClaim,
   createDiscountCode,
   deleteDiscountCode,
@@ -45,6 +48,18 @@ import {
   setEventTheme,
   startCheckout,
 } from '@/lib/api';
+import {
+  COSTS_NOT_COVERED,
+  COST_ACCOUNTS,
+  DECLARED_COSTS_SETTING_KEY,
+  R2_RATES_VERIFIED_ON,
+  type CostLine,
+  type CostSummaryResult,
+  accountFor,
+  daysSince,
+  isStale,
+  reportToCsv,
+} from '@/lib/costs';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
 import { ARCHIVE_DAYS, GRACE_DAYS } from '@/lib/storageReclaim';
@@ -119,13 +134,18 @@ import {
  * scrolling — and a second array to keep in step would be the easiest way to
  * lose one.
  */
-export type AdminTab = 'events' | 'discounts' | 'metrics' | 'tests';
+export type AdminTab = 'events' | 'discounts' | 'metrics' | 'costs' | 'tests';
 
 export const ADMIN_TABS: Array<{ id: AdminTab; label: string; blurb: string }> = [
   // Events opens first: it is the only one with something to do on a normal day.
   { id: 'events', label: 'Events', blurb: 'Events, the people who host them, and the money that moves.' },
   { id: 'discounts', label: 'Discounts', blurb: 'Codes that take a percentage off anything paid on the site.' },
   { id: 'metrics', label: 'Metrics', blurb: 'What is actually happening, and what it is costing.' },
+  {
+    id: 'costs',
+    label: 'Costs',
+    blurb: 'What to have ready this month, what came in, and how far each figure can be trusted.',
+  },
   { id: 'tests', label: 'Tests', blurb: 'Prove something works, without waiting for it to fail.' },
 ];
 
@@ -147,6 +167,9 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'alert-check', label: 'Alert email check', tab: 'tests' },
   { id: 'events', label: 'Events', tab: 'events' },
   { id: 'discounts', label: 'Discount codes', tab: 'discounts' },
+  { id: 'costs', label: 'This month', tab: 'costs' },
+  { id: 'declared-costs', label: 'Costs you enter', tab: 'costs' },
+  { id: 'cost-reports', label: 'Saved reports', tab: 'costs' },
 ];
 
 /** Which bucket the lifecycle filter puts an event in. */
@@ -256,6 +279,13 @@ function GlobalAdminPage() {
   const [userMessage, setUserMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [printCheck, setPrintCheck] = useState<{ text: string; ok: boolean } | null>(null);
   const [adminTab, setAdminTab] = useState<AdminTab>('events');
+  const [costs, setCosts] = useState<CostSummaryResult | null>(null);
+  const [costsError, setCostsError] = useState<string | null>(null);
+  /** Draft values for the declared costs, keyed by account. '' means untouched. */
+  const [declaredDraft, setDeclaredDraft] = useState<Record<string, string>>({});
+  const [declaredSaved, setDeclaredSaved] = useState<string | null>(null);
+  const [reports, setReports] = useState<SavedFinancialReport[] | null>(null);
+  const [reportsError, setReportsError] = useState<string | null>(null);
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
   // Whether each switch is actually on, asked of the functions themselves
   // rather than assumed. `null` means the probe has not answered.
@@ -477,6 +507,25 @@ function GlobalAdminPage() {
     }
   }, []);
 
+  /**
+   * Load the costs the first time the tab is opened, and not before.
+   *
+   * Deliberately not on mount: most visits to this page are about an event, and
+   * the summary reaches four providers. Deliberately not `refresh` either — the
+   * cached answer is free, and a fresh one is a Cost Explorer request. So
+   * opening the tab costs a cent at most once every six hours, and only if
+   * somebody actually looks.
+   */
+  useEffect(() => {
+    if (adminTab !== 'costs') return;
+    if (!reports && !reportsError) void handleLoadReports();
+    if (costs || costsError || working === 'costs') return;
+    void handleLoadCosts(false);
+    // handleLoadCosts is redefined every render; depending on it would refetch
+    // on every keystroke elsewhere on the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminTab, costs, costsError, reports, reportsError, working]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -629,6 +678,122 @@ function GlobalAdminPage() {
       });
     } finally {
       setWorking(null);
+    }
+  }
+
+  /**
+   * Load the cost summary.
+   *
+   * `refresh` costs a Cost Explorer request — a cent — so it happens only when
+   * somebody presses Refresh. Opening the tab reads the cached answer, and the
+   * panel shows how old that answer is rather than implying it is live.
+   */
+  async function handleLoadCosts(refresh = false) {
+    setWorking(refresh ? 'costs-refresh' : 'costs');
+    setCostsError(null);
+    try {
+      const result = await fetchCostSummary(refresh ? { refresh: true } : undefined);
+      setCosts(result);
+    } catch (err) {
+      setCostsError(err instanceof Error ? err.message : 'The costs could not be loaded.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /**
+   * Save the costs nobody can look up automatically.
+   *
+   * Stamps `asOf` with today for every value the admin actually changed, and
+   * leaves the others alone. That date is the whole value of the panel: it is
+   * what lets the page say a figure is eight months old instead of presenting
+   * it as current.
+   */
+  async function handleSaveDeclaredCosts() {
+    setWorking('declared-costs');
+    setDeclaredSaved(null);
+    try {
+      const existingRaw = await readSetting(DECLARED_COSTS_SETTING_KEY);
+      const existing: Record<string, { amountUsd: number; asOf: string }> = existingRaw
+        ? (JSON.parse(existingRaw) as Record<string, { amountUsd: number; asOf: string }>)
+        : {};
+      const today = new Date().toISOString();
+      const next = { ...existing };
+      for (const [accountId, raw] of Object.entries(declaredDraft)) {
+        const trimmed = raw.trim();
+        if (trimmed === '') continue;
+        const amountUsd = Number(trimmed);
+        if (!Number.isFinite(amountUsd) || amountUsd < 0) {
+          throw new Error(`"${raw}" is not an amount. Use a number like 6 or 6.00.`);
+        }
+        next[accountId] = { amountUsd: Math.round(amountUsd * 100) / 100, asOf: today };
+      }
+      const me = await getCurrentUserInfo();
+      await writeSetting(
+        DECLARED_COSTS_SETTING_KEY,
+        JSON.stringify(next),
+        me?.loginId ?? 'admin',
+      );
+      setDeclaredDraft({});
+      setDeclaredSaved('Saved. Refresh the figures above to see them counted.');
+    } catch (err) {
+      setDeclaredSaved(err instanceof Error ? err.message : 'That could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleLoadReports() {
+    setReportsError(null);
+    try {
+      setReports(await listFinancialReports());
+    } catch (err) {
+      setReportsError(err instanceof Error ? err.message : 'The reports could not be loaded.');
+    }
+  }
+
+  /**
+   * File a report for a month that has ended.
+   *
+   * The scheduled job does this on the 1st. This is for the months that ended
+   * before the feature existed, and for a rerun after a provider was down —
+   * filing the same period twice replaces the row rather than adding a second
+   * one, so pressing it again is safe.
+   */
+  async function handleFileReport(monthsBack: number) {
+    setWorking(`file-report-${monthsBack}`);
+    setReportsError(null);
+    try {
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack, 1));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack + 1, 1));
+      await fetchCostSummary({
+        start: start.toISOString().slice(0, 10),
+        end: end.toISOString().slice(0, 10),
+        refresh: true,
+        save: true,
+      });
+      await handleLoadReports();
+    } catch (err) {
+      setReportsError(err instanceof Error ? err.message : 'The report could not be filed.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /** Hand the browser a CSV of a filed report. Nothing leaves the page. */
+  function handleDownloadReport(report: SavedFinancialReport) {
+    try {
+      const parsed = JSON.parse(report.json) as CostSummaryResult;
+      const blob = new Blob([reportToCsv(parsed)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sharepix-${report.id}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setReportsError('That report could not be read. Re-file it to replace it.');
     }
   }
 
@@ -2812,6 +2977,369 @@ function GlobalAdminPage() {
                     );
                   })}
                 </ul>
+              )}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'costs'}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 id="costs" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">This month</h2>
+                  <p className="text-sm text-charcoal/70">
+                    What has to come out of your pocket, and what came in. Prodigi and
+                    Stripe are listed but left out of the first number — a print order
+                    arrives already paid for by the buyer, so it is not money to find.
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    disabled={working === 'costs' || working === 'costs-refresh'}
+                    onClick={() => void handleLoadCosts(false)}
+                    className="bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+                  >
+                    {working === 'costs' ? 'Loading…' : costs ? 'Reload' : 'Load costs'}
+                  </button>
+                  {costs ? (
+                    <button
+                      type="button"
+                      disabled={working === 'costs' || working === 'costs-refresh'}
+                      onClick={() => void handleLoadCosts(true)}
+                      title="Asks the providers again. Costs one cent in Cost Explorer charges."
+                      className="border border-charcoal/20 px-4 py-3 text-sm font-medium transition hover:bg-sage/40 disabled:opacity-50"
+                    >
+                      {working === 'costs-refresh' ? 'Refreshing…' : 'Refresh (1¢)'}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {costsError ? (
+                <p className="mt-3 border border-charcoal/10 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {costsError}
+                </p>
+              ) : null}
+
+              {costs ? (
+                <div className="mt-5">
+                  <p className="font-sans text-lg font-bold tracking-[-0.01em]">
+                    {costs.cashHeadline}
+                  </p>
+                  <p className="text-sm text-charcoal/70">{costs.netHeadline}</p>
+                  <p className="mt-1 text-xs text-charcoal/50">
+                    {costs.start} to {costs.end} ·{' '}
+                    {costs.cached ? 'Cached figure from ' : 'Fetched '}
+                    {new Date(costs.generatedAt).toLocaleString()}
+                    {costs.cached ? ' — press Refresh for a live one' : ''}
+                  </p>
+
+                  <table className="mt-5 w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/50">
+                        <th className="py-2">Account</th>
+                        <th className="py-2">How it is known</th>
+                        <th className="py-2 text-right">This month</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costs.lines.map((costLine: CostLine) => {
+                        const account = accountFor(costLine.accountId);
+                        if (!account) return null;
+                        const stale = isStale(costLine, new Date());
+                        const age = daysSince(costLine.asOf, new Date());
+                        return (
+                          <tr key={costLine.accountId} className="border-b border-charcoal/10 align-top">
+                            <td className="py-2 pr-3">
+                              <span className="font-medium">{account.label}</span>
+                              {account.passThrough ? (
+                                <span className="ml-2 bg-sage/60 px-1.5 py-0.5 text-[11px] text-pine">
+                                  buyer pays
+                                </span>
+                              ) : null}
+                              <span className="block text-xs text-charcoal/60">{account.covers}</span>
+                              {costLine.detail ? (
+                                <span className="block text-xs text-charcoal/50">{costLine.detail}</span>
+                              ) : null}
+                            </td>
+                            <td className="py-2 pr-3 text-xs text-charcoal/60">
+                              <span className="font-medium capitalize">{account.provenance}</span>
+                              {account.provenance === 'declared' && age !== null ? (
+                                <span className={stale ? 'ml-1 text-red-700' : 'ml-1'}>
+                                  · you entered this {age === 0 ? 'today' : `${age} days ago`}
+                                </span>
+                              ) : null}
+                              <span className="block">{account.basis}</span>
+                              {account.id === 'cloudflare-r2' ? (
+                                <span className="block text-charcoal/40">
+                                  Rates last checked {R2_RATES_VERIFIED_ON}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="py-2 text-right tabular-nums">
+                              {costLine.amountUsd === null ? (
+                                <span className="text-red-700">
+                                  unknown
+                                  <span className="block text-xs font-normal text-charcoal/60">
+                                    {costLine.unavailableReason}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className={stale ? 'text-red-700' : ''}>
+                                  ${costLine.amountUsd.toFixed(2)}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-charcoal/20 font-medium">
+                        <td className="py-2" colSpan={2}>
+                          To have ready
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${costs.summary.ownCostUsd.toFixed(2)}
+                        </td>
+                      </tr>
+                      <tr className="text-charcoal/60">
+                        <td className="py-1" colSpan={2}>
+                          Covered by buyers
+                        </td>
+                        <td className="py-1 text-right tabular-nums">
+                          ${costs.summary.passThroughUsd.toFixed(2)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <div className="border border-charcoal/10 p-4">
+                      <h3 className="font-sans text-sm font-bold">Money in</h3>
+                      <dl className="mt-2 space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <dt className="text-charcoal/70">Events and add-ons</dt>
+                          <dd className="tabular-nums">${costs.revenue.eventsUsd.toFixed(2)}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-charcoal/70">Prints</dt>
+                          <dd className="tabular-nums">${costs.revenue.printsUsd.toFixed(2)}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                          <dt className="text-charcoal/70">Refunded</dt>
+                          <dd className="tabular-nums">−${costs.revenue.refundedUsd.toFixed(2)}</dd>
+                        </div>
+                        <div className="flex justify-between border-t border-charcoal/15 pt-1 font-medium">
+                          <dt>Net</dt>
+                          <dd className="tabular-nums">
+                            ${costs.profitAndLoss.netUsd.toFixed(2)}
+                          </dd>
+                        </div>
+                      </dl>
+                      <p className="mt-2 text-xs text-charcoal/50">
+                        Prints are kept separate on purpose: a $12.66 print is about ten
+                        cents earned, and adding it to event revenue would read as $12.66.
+                      </p>
+                    </div>
+
+                    <div className="border border-charcoal/10 p-4">
+                      <h3 className="font-sans text-sm font-bold">AWS, by service</h3>
+                      {costs.awsByService.length === 0 ? (
+                        <p className="mt-2 text-sm text-charcoal/60">
+                          Cost Explorer did not answer, so there is no breakdown. The
+                          total above is short by whatever AWS charged.
+                        </p>
+                      ) : (
+                        <dl className="mt-2 space-y-1 text-sm">
+                          {costs.awsByService.slice(0, 8).map((row) => (
+                            <div key={row.service} className="flex justify-between gap-3">
+                              <dt className="truncate text-charcoal/70">{row.service}</dt>
+                              <dd className="tabular-nums">${row.amountUsd.toFixed(2)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                      {costs.awsForecastUsd !== null ? (
+                        <p className="mt-2 text-xs text-charcoal/50">
+                          AWS forecasts ${costs.awsForecastUsd.toFixed(2)} more before the
+                          month ends.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <details className="mt-5">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      What this does not cover
+                    </summary>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-charcoal/70">
+                      {COSTS_NOT_COVERED.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'costs'}>
+              <h2 id="declared-costs" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Costs you enter</h2>
+              <p className="text-sm text-charcoal/70">
+                Accounts with no API worth wiring. Whatever you type is stamped with
+                today&rsquo;s date, and the table above shows how old it has got — a figure
+                nobody has confirmed in three months is marked rather than quietly counted.
+              </p>
+              <div className="mt-4 space-y-4">
+                {COST_ACCOUNTS.filter((account) => account.provenance === 'declared').map(
+                  (account) => {
+                    const current = costs?.lines.find((l) => l.accountId === account.id);
+                    return (
+                      <div key={account.id}>
+                        <label
+                          htmlFor={`declared-${account.id}`}
+                          className="block text-sm font-medium"
+                        >
+                          {account.label} — monthly, in dollars
+                        </label>
+                        <p className="text-xs text-charcoal/60">{account.basis}</p>
+                        {account.mayDuplicate ? (
+                          <p className="text-xs text-red-700">
+                            If this is billed through{' '}
+                            {accountFor(account.mayDuplicate)?.label}, enter 0 — otherwise it
+                            is counted twice.
+                          </p>
+                        ) : null}
+                        <input
+                          id={`declared-${account.id}`}
+                          type="text"
+                          inputMode="decimal"
+                          value={declaredDraft[account.id] ?? ''}
+                          placeholder={
+                            current && current.amountUsd !== null
+                              ? current.amountUsd.toFixed(2)
+                              : 'not set'
+                          }
+                          onChange={(e) =>
+                            setDeclaredDraft((prev) => ({ ...prev, [account.id]: e.target.value }))
+                          }
+                          className="mt-1 w-40 border border-charcoal/20 px-3 py-2 text-sm"
+                        />
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={working === 'declared-costs' || Object.keys(declaredDraft).length === 0}
+                onClick={() => void handleSaveDeclaredCosts()}
+                className="mt-4 bg-ink px-4 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+              >
+                {working === 'declared-costs' ? 'Saving…' : 'Save what I entered'}
+              </button>
+              {declaredSaved ? (
+                <p className="mt-3 border border-charcoal/10 bg-sage/30 px-3 py-2 text-sm">
+                  {declaredSaved}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'costs'}>
+              <h2 id="cost-reports" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Saved reports</h2>
+              <p className="text-sm text-charcoal/70">
+                A report is filed automatically on the 1st for the month that just
+                ended, and on 1 January for the year. They are kept here rather than
+                only emailed, because a record that lives in a mailbox is one mailbox
+                problem away from gone. Download gives you a CSV with the provenance
+                column intact.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={working === 'file-report-1'}
+                  onClick={() => void handleFileReport(1)}
+                  className="border border-charcoal/20 px-4 py-3 text-sm font-medium transition hover:bg-sage/40 disabled:opacity-50"
+                >
+                  {working === 'file-report-1' ? 'Filing…' : 'File last month'}
+                </button>
+                <button
+                  type="button"
+                  disabled={working === 'file-report-2'}
+                  onClick={() => void handleFileReport(2)}
+                  className="border border-charcoal/20 px-4 py-3 text-sm font-medium transition hover:bg-sage/40 disabled:opacity-50"
+                >
+                  {working === 'file-report-2' ? 'Filing…' : 'File the month before'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-charcoal/50">
+                Filing the same period again replaces its report rather than adding a
+                second one, so pressing these twice is safe. Each costs a Cost Explorer
+                request.
+              </p>
+
+              {reportsError ? (
+                <p className="mt-3 border border-charcoal/10 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {reportsError}
+                </p>
+              ) : null}
+
+              {reports && reports.length > 0 ? (
+                <table className="mt-4 w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/50">
+                      <th className="py-2">Period</th>
+                      <th className="py-2 text-right">Cost</th>
+                      <th className="py-2 text-right">In</th>
+                      <th className="py-2 text-right">Net</th>
+                      <th className="py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reports.map((report) => (
+                      <tr key={report.id} className="border-b border-charcoal/10">
+                        <td className="py-2">
+                          <span className="font-medium">{report.label}</span>
+                          {report.period === 'year' ? (
+                            <span className="ml-2 bg-sage/60 px-1.5 py-0.5 text-[11px] text-pine">
+                              year
+                            </span>
+                          ) : null}
+                          {!report.complete ? (
+                            <span
+                              className="block text-xs text-red-700"
+                              title="A provider could not be reached when this was filed."
+                            >
+                              incomplete — a cost is missing
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${report.ownCostUsd.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${report.grossRevenueUsd.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${report.netUsd.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadReport(report)}
+                            className="text-sm underline underline-offset-2"
+                          >
+                            CSV
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-4 text-sm text-charcoal/60">
+                  {reports
+                    ? 'Nothing filed yet. The first one lands on the 1st, or file last month now.'
+                    : 'Loading…'}
+                </p>
               )}
             </div>
 
