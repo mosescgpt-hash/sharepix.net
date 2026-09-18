@@ -951,6 +951,20 @@ costSummaryFn.addEnvironment('PAYMENT_TABLE_NAME', paymentTable.tableName);
 costSummaryFn.addEnvironment('PRINT_ORDER_TABLE_NAME', printOrderTable.tableName);
 costSummaryFn.addEnvironment('REFUND_TABLE_NAME', refundTable.tableName);
 costSummaryFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
+// Filing a report for a period that has ended. Write only: nothing in this
+// function reads a past report, and a report is a record — the one operation it
+// must never have is a way to quietly rewrite one it did not just generate.
+const financialReportTable = backend.data.resources.tables.FinancialReport;
+financialReportTable.grantWriteData(costSummaryFn);
+costSummaryFn.addEnvironment('REPORT_TABLE_NAME', financialReportTable.tableName);
+
+// The monthly email already runs at 15:00 on the 1st, reporting the month that
+// just ended. It files the cost report for the same period rather than a second
+// schedule existing to do it: one job, one definition of "last month".
+const monthlyReportForCosts = backend.monthlyReport.resources.lambda as LambdaFunction;
+costSummaryFn.grantInvoke(monthlyReportForCosts);
+monthlyReportForCosts.addEnvironment('COST_SUMMARY_FUNCTION_NAME', costSummaryFn.functionName);
+
 costSummaryFn.addToRolePolicy(
   new PolicyStatement({
     actions: ['ce:GetCostAndUsage', 'ce:GetCostForecast'],

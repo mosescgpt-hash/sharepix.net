@@ -156,6 +156,11 @@ carry and what happens if they lapse. Named here only so this list is complete:
 
 ## What this costs
 
+**For the actual figures, use `/global-admin → Costs`** — it reads the AWS bill
+from Cost Explorer, the Stripe fees from balance transactions, and R2 usage from
+Cloudflare, and says which of them it could not reach. See
+[costs.md](costs.md). What follows is the shape of the bill, not its size.
+
 Roughly, and only the fixed parts. Storage, bandwidth and Lambda scale with use.
 
 | | |

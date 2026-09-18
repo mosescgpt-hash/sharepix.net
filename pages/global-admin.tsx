@@ -8,6 +8,8 @@ import {
   addEventPhotoCredits,
   checkPrintProvider,
   fetchCostSummary,
+  listFinancialReports,
+  type SavedFinancialReport,
   clearFreeEventClaim,
   createDiscountCode,
   deleteDiscountCode,
@@ -56,6 +58,7 @@ import {
   accountFor,
   daysSince,
   isStale,
+  reportToCsv,
 } from '@/lib/costs';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
@@ -166,6 +169,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'discounts', label: 'Discount codes', tab: 'discounts' },
   { id: 'costs', label: 'This month', tab: 'costs' },
   { id: 'declared-costs', label: 'Costs you enter', tab: 'costs' },
+  { id: 'cost-reports', label: 'Saved reports', tab: 'costs' },
 ];
 
 /** Which bucket the lifecycle filter puts an event in. */
@@ -280,6 +284,8 @@ function GlobalAdminPage() {
   /** Draft values for the declared costs, keyed by account. '' means untouched. */
   const [declaredDraft, setDeclaredDraft] = useState<Record<string, string>>({});
   const [declaredSaved, setDeclaredSaved] = useState<string | null>(null);
+  const [reports, setReports] = useState<SavedFinancialReport[] | null>(null);
+  const [reportsError, setReportsError] = useState<string | null>(null);
   const [alertTest, setAlertTest] = useState<{ text: string; ok: boolean } | null>(null);
   // Whether each switch is actually on, asked of the functions themselves
   // rather than assumed. `null` means the probe has not answered.
@@ -511,12 +517,14 @@ function GlobalAdminPage() {
    * somebody actually looks.
    */
   useEffect(() => {
-    if (adminTab !== 'costs' || costs || costsError || working === 'costs') return;
+    if (adminTab !== 'costs') return;
+    if (!reports && !reportsError) void handleLoadReports();
+    if (costs || costsError || working === 'costs') return;
     void handleLoadCosts(false);
     // handleLoadCosts is redefined every render; depending on it would refetch
     // on every keystroke elsewhere on the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminTab, costs, costsError, working]);
+  }, [adminTab, costs, costsError, reports, reportsError, working]);
 
   useEffect(() => {
     void load();
@@ -732,6 +740,60 @@ function GlobalAdminPage() {
       setDeclaredSaved(err instanceof Error ? err.message : 'That could not be saved.');
     } finally {
       setWorking(null);
+    }
+  }
+
+  async function handleLoadReports() {
+    setReportsError(null);
+    try {
+      setReports(await listFinancialReports());
+    } catch (err) {
+      setReportsError(err instanceof Error ? err.message : 'The reports could not be loaded.');
+    }
+  }
+
+  /**
+   * File a report for a month that has ended.
+   *
+   * The scheduled job does this on the 1st. This is for the months that ended
+   * before the feature existed, and for a rerun after a provider was down —
+   * filing the same period twice replaces the row rather than adding a second
+   * one, so pressing it again is safe.
+   */
+  async function handleFileReport(monthsBack: number) {
+    setWorking(`file-report-${monthsBack}`);
+    setReportsError(null);
+    try {
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack, 1));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - monthsBack + 1, 1));
+      await fetchCostSummary({
+        start: start.toISOString().slice(0, 10),
+        end: end.toISOString().slice(0, 10),
+        refresh: true,
+        save: true,
+      });
+      await handleLoadReports();
+    } catch (err) {
+      setReportsError(err instanceof Error ? err.message : 'The report could not be filed.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /** Hand the browser a CSV of a filed report. Nothing leaves the page. */
+  function handleDownloadReport(report: SavedFinancialReport) {
+    try {
+      const parsed = JSON.parse(report.json) as CostSummaryResult;
+      const blob = new Blob([reportToCsv(parsed)], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sharepix-${report.id}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setReportsError('That report could not be read. Re-file it to replace it.');
     }
   }
 
@@ -3179,6 +3241,106 @@ function GlobalAdminPage() {
                   {declaredSaved}
                 </p>
               ) : null}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'costs'}>
+              <h2 id="cost-reports" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Saved reports</h2>
+              <p className="text-sm text-charcoal/70">
+                A report is filed automatically on the 1st for the month that just
+                ended, and on 1 January for the year. They are kept here rather than
+                only emailed, because a record that lives in a mailbox is one mailbox
+                problem away from gone. Download gives you a CSV with the provenance
+                column intact.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={working === 'file-report-1'}
+                  onClick={() => void handleFileReport(1)}
+                  className="border border-charcoal/20 px-4 py-3 text-sm font-medium transition hover:bg-sage/40 disabled:opacity-50"
+                >
+                  {working === 'file-report-1' ? 'Filing…' : 'File last month'}
+                </button>
+                <button
+                  type="button"
+                  disabled={working === 'file-report-2'}
+                  onClick={() => void handleFileReport(2)}
+                  className="border border-charcoal/20 px-4 py-3 text-sm font-medium transition hover:bg-sage/40 disabled:opacity-50"
+                >
+                  {working === 'file-report-2' ? 'Filing…' : 'File the month before'}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-charcoal/50">
+                Filing the same period again replaces its report rather than adding a
+                second one, so pressing these twice is safe. Each costs a Cost Explorer
+                request.
+              </p>
+
+              {reportsError ? (
+                <p className="mt-3 border border-charcoal/10 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {reportsError}
+                </p>
+              ) : null}
+
+              {reports && reports.length > 0 ? (
+                <table className="mt-4 w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/50">
+                      <th className="py-2">Period</th>
+                      <th className="py-2 text-right">Cost</th>
+                      <th className="py-2 text-right">In</th>
+                      <th className="py-2 text-right">Net</th>
+                      <th className="py-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reports.map((report) => (
+                      <tr key={report.id} className="border-b border-charcoal/10">
+                        <td className="py-2">
+                          <span className="font-medium">{report.label}</span>
+                          {report.period === 'year' ? (
+                            <span className="ml-2 bg-sage/60 px-1.5 py-0.5 text-[11px] text-pine">
+                              year
+                            </span>
+                          ) : null}
+                          {!report.complete ? (
+                            <span
+                              className="block text-xs text-red-700"
+                              title="A provider could not be reached when this was filed."
+                            >
+                              incomplete — a cost is missing
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${report.ownCostUsd.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${report.grossRevenueUsd.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right tabular-nums">
+                          ${report.netUsd.toFixed(2)}
+                        </td>
+                        <td className="py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadReport(report)}
+                            className="text-sm underline underline-offset-2"
+                          >
+                            CSV
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-4 text-sm text-charcoal/60">
+                  {reports
+                    ? 'Nothing filed yet. The first one lands on the 1st, or file last month now.'
+                    : 'Loading…'}
+                </p>
+              )}
             </div>
 
             <div className="spx-card mt-8 p-5" hidden={adminTab !== 'tests'}>

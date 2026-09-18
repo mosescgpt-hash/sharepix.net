@@ -499,6 +499,79 @@ export const COSTS_NOT_COVERED: readonly string[] = [
   'This is a cash view, not accounting. Nothing here is depreciated, accrued, or fit to file as-is',
 ];
 
+/**
+ * A filed report as CSV, for a spreadsheet or an accountant.
+ *
+ * Carries the provenance column, which is the part a bare list of numbers
+ * loses: a row saying $41.20 and a row saying $41.20 mean different things when
+ * one came from Cost Explorer and the other was typed in eight months ago. The
+ * "unknown" rows are included too — a report that silently drops the costs it
+ * could not reach is one that reconciles to the wrong figure.
+ */
+export function reportToCsv(result: CostSummaryResult): string {
+  const rows: string[][] = [
+    ['SharePix cost and revenue report'],
+    ['Period', result.start, 'to', result.end],
+    ['Generated', result.generatedAt],
+    [],
+    ['Account', 'How it is known', 'Buyer pays it', 'Amount USD', 'Note'],
+  ];
+
+  for (const line of result.lines) {
+    const account = accountFor(line.accountId);
+    if (!account) continue;
+    rows.push([
+      account.label,
+      account.provenance,
+      account.passThrough ? 'yes' : 'no',
+      line.amountUsd === null ? '' : line.amountUsd.toFixed(2),
+      line.amountUsd === null ? (line.unavailableReason ?? 'not available') : (line.detail ?? ''),
+    ]);
+  }
+
+  rows.push(
+    [],
+    ['To have ready', '', '', result.summary.ownCostUsd.toFixed(2)],
+    ['Covered by buyers', '', '', result.summary.passThroughUsd.toFixed(2)],
+    [],
+    ['Events and add-ons', '', '', result.revenue.eventsUsd.toFixed(2)],
+    ['Prints', '', '', result.revenue.printsUsd.toFixed(2)],
+    ['Refunded', '', '', `-${result.revenue.refundedUsd.toFixed(2)}`],
+    ['Net', '', '', result.profitAndLoss.netUsd.toFixed(2)],
+  );
+
+  if (!result.profitAndLoss.complete) {
+    rows.push(
+      [],
+      ['INCOMPLETE — a provider could not be reached, so the net above is optimistic'],
+      ...result.summary.unavailable.map((id) => ['Missing', accountFor(id)?.label ?? id]),
+    );
+  }
+
+  if (result.awsByService.length > 0) {
+    rows.push([], ['AWS by service']);
+    for (const service of result.awsByService) {
+      rows.push([service.service, '', '', service.amountUsd.toFixed(2)]);
+    }
+  }
+
+  rows.push([], ['What this does not cover'], ...COSTS_NOT_COVERED.map((item) => [item]));
+
+  return rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
+}
+
+/**
+ * One CSV cell.
+ *
+ * Quotes anything containing a comma, a quote or a newline, and doubles inner
+ * quotes — RFC 4180. The account notes are prose written by people, and one
+ * unescaped comma shifts every column after it without any error appearing.
+ */
+function csvCell(value: string): string {
+  if (!/[",\r\n]/.test(value)) return value;
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 function round2(usd: number): number {
   return Math.round(usd * 100) / 100;
 }

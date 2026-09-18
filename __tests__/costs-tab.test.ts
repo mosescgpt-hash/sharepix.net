@@ -29,7 +29,7 @@ describe('what it costs to look at', () => {
   it('loads only when the Costs tab is open', () => {
     // Not on mount: most visits here are about an event, and this reaches four
     // providers.
-    expect(page).toContain("if (adminTab !== 'costs' || costs || costsError");
+    expect(page).toContain("if (adminTab !== 'costs') return;");
   });
 
   it('auto-loads from the cache, never with refresh', () => {
@@ -46,9 +46,10 @@ describe('what it costs to look at', () => {
 
   it('does not refetch when the summary is already loaded', () => {
     // `costs` in the guard is what stops the effect looping: setCosts triggers
-    // a render, which runs the effect again.
-    const effect = page.slice(page.indexOf("if (adminTab !== 'costs'"));
-    expect(effect.slice(0, 200)).toContain('|| costs ||');
+    // a render, which runs the effect again. Same for the reports list.
+    const effect = page.slice(page.indexOf("if (adminTab !== 'costs') return;"));
+    expect(effect.slice(0, 300)).toContain('if (costs || costsError');
+    expect(effect.slice(0, 300)).toContain('if (!reports && !reportsError)');
   });
 });
 

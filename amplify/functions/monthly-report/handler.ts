@@ -1,5 +1,6 @@
 import { DynamoDBClient, GetItemCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
+import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import {
   NOT_MEASURED,
@@ -9,11 +10,13 @@ import {
   reportMonths,
   type ReportEvent,
   type ReportIncentive,
+  type MonthRange,
   type ReportRefund,
 } from './monthlyReport';
 
 const dynamo = new DynamoDBClient({});
 const ses = new SESv2Client({});
+const lambda = new LambdaClient({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const INCENTIVE_TABLE = process.env.INCENTIVE_TABLE_NAME as string;
@@ -21,6 +24,7 @@ const REFUND_TABLE = process.env.REFUND_TABLE_NAME as string;
 const APP_URL = (process.env.APP_URL ?? 'https://www.sharepix.net').replace(/\/+$/, '');
 const FROM_ADDRESS = process.env.ALERT_FROM_ADDRESS ?? '';
 const SETTING_TABLE = process.env.SETTING_TABLE_NAME as string;
+const COST_SUMMARY_FUNCTION = process.env.COST_SUMMARY_FUNCTION_NAME ?? '';
 /**
  * Fallback recipient, for a deployment that wants to pin one.
  *
@@ -54,6 +58,58 @@ async function recipient(): Promise<string> {
     return stored || TO_FALLBACK;
   } catch {
     return TO_FALLBACK;
+  }
+}
+
+/**
+ * Ask the cost function to file a report for a period that has ended.
+ *
+ * Invoked rather than recomputed here so there is one definition of what a
+ * month cost. The same reason the daily job invokes the print check instead of
+ * quoting Prodigi itself: a second implementation of a money figure is a second
+ * answer, and the filed one would be the one nobody re-read.
+ *
+ * Every failure is swallowed. This runs at the top of a job whose real purpose
+ * is telling a host their gallery is about to expire, and a cost report that
+ * did not file is a gap in the records, not an emergency.
+ */
+async function fileCostReports(current: MonthRange): Promise<void> {
+  if (!COST_SUMMARY_FUNCTION) return;
+  const iso = (date: Date) => date.toISOString().slice(0, 10);
+
+  const periods: Array<{ start: string; end: string; what: string }> = [
+    { start: iso(current.start), end: iso(current.end), what: current.label },
+  ];
+  // On 1 January the month that just ended is December, so the year that just
+  // ended is the one December belonged to.
+  if (current.start.getUTCMonth() === 11) {
+    const year = current.start.getUTCFullYear();
+    periods.push({
+      start: `${year}-01-01`,
+      end: `${year + 1}-01-01`,
+      what: String(year),
+    });
+  }
+
+  for (const period of periods) {
+    try {
+      await lambda.send(
+        new InvokeCommand({
+          FunctionName: COST_SUMMARY_FUNCTION,
+          Payload: Buffer.from(
+            JSON.stringify({
+              arguments: { start: period.start, end: period.end, save: true, refresh: true },
+            }),
+          ),
+        }),
+      );
+      console.log('Cost report filed', { period: period.what });
+    } catch (error) {
+      console.error('COST REPORT NOT FILED', {
+        period: period.what,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 }
 
@@ -95,6 +151,11 @@ export const handler = async () => {
   const now = new Date();
   const TO_ADDRESS = await recipient();
   const { current, previous } = reportMonths(now);
+
+  // File the cost report for the same month, and on 1 January the year that
+  // just ended. It swallows every failure of its own, so a slow Cost Explorer
+  // cannot become the reason this month's summary went unsent.
+  await fileCostReports(current);
 
   const events = await scanAll<ReportEvent>(
     EVENT_TABLE,

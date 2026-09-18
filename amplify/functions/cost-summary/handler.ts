@@ -71,6 +71,86 @@ interface Arguments {
   end?: string | null;
   /** Skip the cache. Costs a Cost Explorer request. */
   refresh?: boolean | null;
+  /** Also file the answer as a FinancialReport row. */
+  save?: boolean | null;
+}
+
+const REPORT_TABLE = process.env.REPORT_TABLE_NAME as string;
+
+/**
+ * The id and label for a filed report.
+ *
+ * A period that is exactly one calendar month becomes `2026-09`; one that is
+ * exactly a calendar year becomes `2026`. Anything else is not a report, and
+ * returning null is what stops an arbitrary date range being filed as though it
+ * were one — a row labelled "12 Aug to 3 Sep" sitting between the months is a
+ * record nobody can reconcile.
+ */
+export function reportIdFor(
+  start: Date,
+  end: Date,
+): { id: string; period: 'month' | 'year'; label: string } | null {
+  const sameDayOfMonth = start.getUTCDate() === 1 && end.getUTCDate() === 1;
+  if (!sameDayOfMonth) return null;
+
+  const isYear =
+    start.getUTCMonth() === 0 &&
+    end.getUTCMonth() === 0 &&
+    end.getUTCFullYear() === start.getUTCFullYear() + 1;
+  if (isYear) {
+    return { id: String(start.getUTCFullYear()), period: 'year', label: String(start.getUTCFullYear()) };
+  }
+
+  const monthsApart =
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth());
+  if (monthsApart !== 1) return null;
+
+  const month = String(start.getUTCMonth() + 1).padStart(2, '0');
+  return {
+    id: `${start.getUTCFullYear()}-${month}`,
+    period: 'month',
+    label: new Intl.DateTimeFormat('en-GB', {
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'UTC',
+    }).format(start),
+  };
+}
+
+/**
+ * File a report for a closed period.
+ *
+ * Keyed by the period, so regenerating September replaces September's report
+ * rather than filing a second one next to it. Two rows for the same month,
+ * disagreeing, with no way to tell which is the record, is worse than no
+ * record at all.
+ */
+async function saveReport(result: CostSummaryResult, start: Date, end: Date): Promise<void> {
+  if (!REPORT_TABLE) return;
+  const naming = reportIdFor(start, end);
+  if (!naming) return;
+  const now = new Date().toISOString();
+  await dynamo.send(
+    new PutItemCommand({
+      TableName: REPORT_TABLE,
+      Item: {
+        __typename: { S: 'FinancialReport' },
+        id: { S: naming.id },
+        period: { S: naming.period },
+        label: { S: naming.label },
+        start: { S: result.start },
+        end: { S: result.end },
+        json: { S: JSON.stringify(result) },
+        ownCostUsd: { N: String(result.summary.ownCostUsd) },
+        grossRevenueUsd: { N: String(result.profitAndLoss.grossUsd) },
+        netUsd: { N: String(result.profitAndLoss.netUsd) },
+        complete: { BOOL: result.profitAndLoss.complete },
+        generatedAt: { S: result.generatedAt },
+        createdAt: { S: now },
+        updatedAt: { S: now },
+      },
+    }),
+  );
 }
 
 function startOfMonth(now: Date): Date {
@@ -524,6 +604,17 @@ export const handler = async (event: { arguments?: Arguments }): Promise<string>
   };
 
   if (isCurrentMonth) await writeCache(result);
+  if (args.save && !isCurrentMonth) {
+    // A failed file must not lose the answer the caller asked for: the summary
+    // is already computed, and returning it beats throwing it away because a
+    // table was slow. The scheduled job retries next month; an admin can press
+    // the button again.
+    try {
+      await saveReport(result, start, end);
+    } catch (error) {
+      console.error('COST REPORT NOT SAVED', describe(error));
+    }
+  }
   return JSON.stringify(result);
 };
 

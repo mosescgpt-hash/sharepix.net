@@ -16,6 +16,7 @@ import {
   profitAndLoss,
   projectMonthEnd,
   r2CostUsd,
+  reportToCsv,
   summarize,
 } from '../lib/costs';
 
@@ -277,5 +278,77 @@ describe('what it does not cover', () => {
   it('names the gaps, including that this is not accounting', () => {
     expect(COSTS_NOT_COVERED.length).toBeGreaterThanOrEqual(5);
     expect(COSTS_NOT_COVERED.join(' ')).toContain('not accounting');
+  });
+});
+
+describe('the CSV a saved report downloads as', () => {
+  const result = {
+    start: '2026-09-01',
+    end: '2026-10-01',
+    lines: [
+      { accountId: 'aws' as const, amountUsd: 41.2, asOf: NOW.toISOString(), detail: 'S3 $12.00' },
+      {
+        accountId: 'cloudflare-r2' as const,
+        amountUsd: null,
+        asOf: null,
+        unavailableReason: 'no token, and the note has a comma',
+      },
+      { accountId: 'prodigi' as const, amountUsd: 25, asOf: NOW.toISOString() },
+    ],
+    revenue: { eventsUsd: 316, printsUsd: 38, refundedUsd: 79 },
+    awsByService: [{ service: 'Amazon S3', amountUsd: 12 }],
+    awsForecastUsd: null,
+    summary: summarize(
+      [
+        line({ accountId: 'aws', amountUsd: 41.2 }),
+        line({ accountId: 'cloudflare-r2', amountUsd: null, unavailableReason: 'no token' }),
+        line({ accountId: 'prodigi', amountUsd: 25 }),
+      ],
+      NOW,
+    ),
+    profitAndLoss: profitAndLoss(
+      { eventsUsd: 316, printsUsd: 38, refundedUsd: 79 },
+      summarize(
+        [
+          line({ accountId: 'aws', amountUsd: 41.2 }),
+          line({ accountId: 'cloudflare-r2', amountUsd: null, unavailableReason: 'no token' }),
+          line({ accountId: 'prodigi', amountUsd: 25 }),
+        ],
+        NOW,
+      ),
+    ),
+    projectedOwnCostUsd: 70,
+    cashHeadline: 'x',
+    netHeadline: 'y',
+    generatedAt: NOW.toISOString(),
+    cached: false,
+  };
+
+  it('carries the provenance column', () => {
+    // $41.20 measured and $41.20 typed in eight months ago are different facts,
+    // and a bare list of numbers loses the difference.
+    const csv = reportToCsv(result);
+    expect(csv).toContain('Account,How it is known,Buyer pays it,Amount USD,Note');
+    expect(csv).toContain('AWS,measured,no,41.20');
+  });
+
+  it('includes the costs it could not reach, rather than dropping them', () => {
+    const csv = reportToCsv(result);
+    expect(csv).toContain('Cloudflare R2,computed,no,');
+    expect(csv).toContain('INCOMPLETE');
+  });
+
+  it('quotes a cell containing a comma, so the columns do not shift', () => {
+    // The notes are prose. One unescaped comma moves every column after it and
+    // nothing reports an error.
+    expect(reportToCsv(result)).toContain('"no token, and the note has a comma"');
+  });
+
+  it('marks which costs the buyer covered', () => {
+    expect(reportToCsv(result)).toContain('Prodigi,computed,yes,25.00');
+  });
+
+  it('ends with what the report cannot see', () => {
+    expect(reportToCsv(result)).toContain('What this does not cover');
   });
 });
