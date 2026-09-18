@@ -9,6 +9,7 @@ import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-ph
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
+import { costSummary as costSummaryFn } from '../functions/cost-summary/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
 import { sendTestAlert as sendTestAlertFn } from '../functions/send-test-alert/resource';
 import { mediaUrl as mediaUrlFn } from '../functions/media-url/resource';
@@ -1805,6 +1806,20 @@ const schema = a.schema({
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(printProviderCheckFn)),
 
+  // Global-admin only: what the month costs and what it earned, from every
+  // provider that will say. Read-only everywhere it reaches; the one thing it
+  // writes is its own cache.
+  //
+  // `refresh` is the only argument that does anything expensive — Cost Explorer
+  // bills per request, so the default answer is a cached one and a caller has
+  // to ask for a fresh one on purpose. Dates are optional and only used by the
+  // saved reports, which need a period that is not the current month.
+  costSummary: a
+    .mutation()
+    .arguments({ start: a.string(), end: a.string(), refresh: a.boolean() })
+    .returns(a.string())
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(costSummaryFn)),
 
   // Global-admin only: send the real "photo held for review" alert to the
   // signed-in admin, so delivery and rendering can be checked without waiting
