@@ -201,6 +201,15 @@ export function r2CostUsd(usage: R2Usage): number {
 /** A declared figure older than this is shown as stale rather than as fact. */
 export const DECLARED_STALE_AFTER_DAYS = 90;
 
+/**
+ * The AppSetting row holding the costs an admin typed in.
+ *
+ * Shared so the page that writes it and the function that reads it cannot
+ * disagree about the key — a mismatch there is silent, and looks exactly like
+ * nobody having entered anything.
+ */
+export const DECLARED_COSTS_SETTING_KEY = 'declared-costs';
+
 /** One account's cost for a period. */
 export interface CostLine {
   accountId: CostAccountId;
@@ -408,6 +417,43 @@ export function netHeadline(pl: ProfitAndLoss): string {
   if (pl.grossUsd === 0 && pl.ownCostUsd === 0) return 'Nothing in, nothing out.';
   if (!pl.complete) return `${direction}, but at least one cost is missing — the real figure is worse.`;
   return `${direction} on $${pl.grossUsd.toFixed(2)} in.`;
+}
+
+/** One service's share of the AWS bill. */
+export interface AwsServiceCost {
+  service: string;
+  amountUsd: number;
+}
+
+/**
+ * Everything the cost function returns, for one period.
+ *
+ * Lives here rather than in the function so the page and the Lambda cannot
+ * disagree about the shape, and so the arithmetic is done once. The page
+ * deliberately does not recompute the totals from `lines`: two implementations
+ * of a money figure diverge eventually, and the saved report would be the one
+ * that was wrong.
+ */
+export interface CostSummaryResult {
+  /** Inclusive ISO date the period starts. */
+  start: string;
+  /** Exclusive ISO date the period ends. */
+  end: string;
+  lines: CostLine[];
+  revenue: PeriodRevenue;
+  /** Largest first, anything under a cent dropped. Empty if Cost Explorer failed. */
+  awsByService: AwsServiceCost[];
+  /** Cost Explorer's own month-end forecast, when it will give one. */
+  awsForecastUsd: number | null;
+  summary: CostSummary;
+  profitAndLoss: ProfitAndLoss;
+  projectedOwnCostUsd: number | null;
+  cashHeadline: string;
+  netHeadline: string;
+  /** When this was computed, not when it was asked for. */
+  generatedAt: string;
+  /** True when it came from the cache rather than from the providers. */
+  cached: boolean;
 }
 
 /**

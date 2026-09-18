@@ -10,7 +10,9 @@ import Stripe from 'stripe';
 import {
   type CostAccountId,
   type CostLine,
+  type CostSummaryResult,
   type PeriodRevenue,
+  DECLARED_COSTS_SETTING_KEY,
   cashHeadline,
   netHeadline,
   profitAndLoss,
@@ -61,30 +63,6 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** AppSetting row holding the cached answer. */
 const CACHE_KEY = 'cost-summary-cache';
-/** AppSetting row holding the declared costs, as JSON. Edited from the dashboard. */
-export const DECLARED_COSTS_KEY = 'declared-costs';
-
-export interface CostSummaryResult {
-  /** Inclusive ISO date the period starts. */
-  start: string;
-  /** Exclusive ISO date the period ends. */
-  end: string;
-  lines: CostLine[];
-  revenue: PeriodRevenue;
-  /** AWS spend by service, largest first. Empty when Cost Explorer failed. */
-  awsByService: Array<{ service: string; amountUsd: number }>;
-  /** Cost Explorer's own month-end forecast, when it will give one. */
-  awsForecastUsd: number | null;
-  summary: ReturnType<typeof summarize>;
-  profitAndLoss: ReturnType<typeof profitAndLoss>;
-  projectedOwnCostUsd: number | null;
-  cashHeadline: string;
-  netHeadline: string;
-  /** When this was computed. Not when it was asked for. */
-  generatedAt: string;
-  /** True when it came from the cache rather than the providers. */
-  cached: boolean;
-}
 
 interface Arguments {
   /** Inclusive ISO date. Defaults to the start of the current month. */
@@ -360,7 +338,7 @@ async function declaredCosts(): Promise<Record<string, { amountUsd: number; asOf
   if (!SETTING_TABLE) return {};
   try {
     const found = await dynamo.send(
-      new GetItemCommand({ TableName: SETTING_TABLE, Key: { id: { S: DECLARED_COSTS_KEY } } }),
+      new GetItemCommand({ TableName: SETTING_TABLE, Key: { id: { S: DECLARED_COSTS_SETTING_KEY } } }),
     );
     const raw = found.Item?.value?.S;
     if (!raw) return {};
