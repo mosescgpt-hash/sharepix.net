@@ -12,6 +12,7 @@ import { sniffMediaKind, maxBytesForKind } from './safety';
 import { usableSize } from './accounting';
 import { isJpeg, isHeic, stripJpegMetadata, stripHeicGps } from './exif';
 import { findMoov, isMp4, locationRangesInMoov, patchChunk } from './video';
+import { DEMO_MAX_BYTES, isDemoKey } from './demoUpload';
 import { mirrorConfigured, mirrorDecision, r2KeyFor } from './mirror';
 
 const s3 = new S3Client({});
@@ -186,10 +187,17 @@ async function processRecord(record: S3EventRecord) {
   // S3 URL-encodes keys in event notifications (spaces as '+', etc.).
   const key = decodeURIComponent(String(rawKey).replace(/\+/g, ' '));
 
+  // The homepage demo lets an anonymous visitor upload a photo, so it is the
+  // one unauthenticated write target in the product. It gets the SAME vetting
+  // as a real upload — sniffed, size-capped, location stripped — because "we
+  // delete it within the hour" is not a reason to host arbitrary bytes in the
+  // meantime. It is never mirrored and never counted; see below.
+  const demo = isDemoKey(key);
+
   // Previews and thumbs are re-encoded by the browser from the original, so
   // they carry no metadata and need no vetting — but they are what the gallery
   // serves, so they are exactly what we want in R2.
-  if (!ORIGINAL_KEY.test(key)) {
+  if (!demo && !ORIGINAL_KEY.test(key)) {
     const derived = mirrorDecision({ key });
     if (derived.mirror) {
       await mirrorToR2(bucket, key);
@@ -217,6 +225,13 @@ async function processRecord(record: S3EventRecord) {
     return;
   }
 
+  // Photos only in the demo. Video is not screened at all, so a public target
+  // that accepted it would be hosting unreviewed footage from strangers.
+  if (demo && kind !== 'image') {
+    await reject(bucket, key, 'demo-video-not-allowed', { kind });
+    return;
+  }
+
   // Server-side size ceiling. The client checks this too, but a crafted upload
   // can bypass the UI, and S3 itself imposes no such limit. The event carries
   // the object size; fall back to a HEAD if it's ever absent.
@@ -227,12 +242,22 @@ async function processRecord(record: S3EventRecord) {
       .catch(() => null);
     size = head?.ContentLength ?? 0;
   }
-  if (size > maxBytesForKind(kind)) {
-    await reject(bucket, key, 'oversize', { size, kind });
+  // The demo's ceiling is deliberately lower than a real upload's: the file is
+  // deleted within the hour, so there is nothing to protect by accepting 25 MB
+  // from an anonymous stranger.
+  const ceiling = demo ? DEMO_MAX_BYTES : maxBytesForKind(kind);
+  if (size > ceiling) {
+    await reject(bucket, key, 'oversize', { size, kind, demo });
     return;
   }
 
   const rewrote = await stripMetadata(bucket, key, header, headerObj.Metadata);
+
+  // A demo upload stops here. Nothing serves it — there is no page, no query
+  // and no signed URL that reads the demo prefix — so mirroring it to the CDN
+  // would copy a stranger's photo to a second store for no reader at all. It is
+  // not counted either: it belongs to no event and is gone within the hour.
+  if (demo) return;
 
   // Mirror only once the bytes are final. A JPEG or HEIC is rewritten by
   // stripMetadata, and that rewrite fires its own event carrying

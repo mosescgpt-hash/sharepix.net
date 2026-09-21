@@ -33,6 +33,7 @@ import { printCheckout } from './functions/print-checkout/resource';
 import { printFulfill } from './functions/print-fulfill/resource';
 import { printProviderCheck } from './functions/print-provider-check/resource';
 import { costSummary } from './functions/cost-summary/resource';
+import { demoCleanup } from './functions/demo-cleanup/resource';
 import { sendTestAlert } from './functions/send-test-alert/resource';
 import { listEventPhotos } from './functions/list-event-photos/resource';
 import { createGuestBookEntry } from './functions/create-guest-book-entry/resource';
@@ -83,6 +84,7 @@ const backend = defineBackend({
   printFulfill,
   printProviderCheck,
   costSummary,
+  demoCleanup,
   sendTestAlert,
   listEventPhotos,
   createGuestBookEntry,
@@ -257,6 +259,34 @@ connectFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 connectFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
 connectFn.addEnvironment('PAIRING_TABLE_NAME', pairingTable.tableName);
 bucket.grantDelete(sanitizeFn);
+
+// The homepage demo's sweep. The only scheduled delete in the product, and the
+// narrowest permission in this file: list the bucket, and delete objects whose
+// key begins `demo/`.
+//
+// `grantDelete` would hand it every photograph SharePix stores. The resource
+// ARN below is what stops a bug in the sweep from reaching an event's gallery,
+// and the handler checks the prefix again before it deletes anything. Two
+// independent guards, because this is the one job that removes somebody's
+// photograph without being asked to.
+const demoCleanupFn = backend.demoCleanup.resources.lambda as LambdaFunction;
+demoCleanupFn.addEnvironment('PHOTOS_BUCKET_NAME', bucket.bucketName);
+demoCleanupFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['s3:DeleteObject'],
+    resources: [bucket.arnForObjects('demo/*')],
+  }),
+);
+demoCleanupFn.addToRolePolicy(
+  new PolicyStatement({
+    // Listing cannot be scoped to a prefix by resource — the permission is on
+    // the bucket — so the Prefix in the request is what narrows it. That is why
+    // the delete above is scoped and this one cannot be.
+    actions: ['s3:ListBucket'],
+    resources: [bucket.bucketArn],
+  }),
+);
+
 // Cloudflare R2 mirror. Uploads are still vetted in S3; once the bytes are
 // final this copies them to R2, which is where reads get served from because
 // its egress is free. Every value is optional: with any of them unset the

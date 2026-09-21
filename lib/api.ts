@@ -26,6 +26,8 @@ import {
   buildThumbKey,
 } from '@/lib/validation';
 import type { CostSummaryResult } from '@/lib/costs';
+import { isGlobalAdmin } from '@/lib/admin';
+import { ownerCandidatesFor, ownerIsSubject } from '@/lib/eventOwner';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
 import { guestLabelFor } from '@/lib/guestLabel';
 import { canTransition, type IncentiveStatus } from '@/lib/researchIncentive';
@@ -277,19 +279,18 @@ export async function listAllEvents(): Promise<QREvent[]> {
 /**
  * Every owner string this account's events could have been stored under.
  *
- * ownerStringFor writes "<sub>::<username>", or the bare sub when the identity
- * carried no username. Both shapes exist, so both are asked for.
+ * Derived by calling the same function that writes it — see lib/eventOwner.ts
+ * for why guessing here was a bug rather than a shortcut.
  *
  * For an ordinary host this is belt and braces: AppSync's own authorization
  * step overwrites the owner argument with the caller's claims before the query
  * runs, so whatever is passed is replaced. It matters for a global admin, whose
  * ADMINS group authorizes them first — the substitution is skipped and the
- * value sent is the value used. Asking for only the usual shape would show such
- * an admin none of their own events.
+ * value sent is the value used. Asking for a shape nothing writes showed such
+ * an admin none of their own events, with no error, for months.
  */
 function ownerCandidates(user: CurrentUser): string[] {
-  const sub = user.userId;
-  return user.username && user.username !== sub ? [`${sub}::${user.username}`, sub] : [sub];
+  return ownerCandidatesFor(user.userId, user.username);
 }
 
 /**
@@ -322,9 +323,43 @@ export async function listMyEvents(): Promise<QREvent[]> {
     for (const row of rows as QREvent[]) byId.set(row.id, row);
   }
 
+  // Last resort, and only for an administrator who appears to own nothing.
+  //
+  // The index above is keyed on an exact owner string, so a row written under
+  // any shape this build does not produce is invisible to it — which is how an
+  // admin came to see an empty page while their events sat in the table. An
+  // ordinary host cannot hit this: AppSync rewrites their owner argument, so
+  // the query cannot have asked for the wrong key in the first place.
+  //
+  // It costs a full list, which is why it is behind "found nothing" rather than
+  // running every time, and why it is not the primary path.
+  if (byId.size === 0) {
+    const everything = await listAllEventsIfAdmin();
+    for (const row of everything) {
+      if (ownerIsSubject(row.owner, user.userId)) byId.set(row.id, row);
+    }
+  }
+
   return [...byId.values()]
-    .filter((event) => event.owner?.includes(user.userId))
+    .filter((event) => ownerIsSubject(event.owner, user.userId))
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
+}
+
+/**
+ * Every event, but only if the caller is a global admin; otherwise nothing.
+ *
+ * The model grants admins full read, so this succeeds for them and is refused
+ * for everybody else. A refusal is not an error worth surfacing here — it means
+ * the caller is an ordinary host with no events, which is a perfectly ordinary
+ * thing to be.
+ */
+async function listAllEventsIfAdmin(): Promise<QREvent[]> {
+  try {
+    if (!(await isGlobalAdmin())) return [];
+    return await listAllEvents();
+  } catch {
+    return [];
+  }
 }
 
 export async function listDiscountCodes(): Promise<DiscountCode[]> {
@@ -2803,7 +2838,11 @@ export async function createDownloadShare(
   requestedPhotoIds: string[],
 ): Promise<DownloadShare> {
   const user = await getCurrentUserInfo();
-  if (!user || !event.owner?.includes(user.userId)) {
+  // Anchored rather than a substring test, for the same reason as my-events:
+  // `includes` would accept a row whose username half happened to contain the
+  // caller's subject. The server checks ownership too — this is the message
+  // that explains the refusal rather than the thing enforcing it.
+  if (!user || !ownerIsSubject(event.owner, user.userId)) {
     throw new Error('Only the signed-in event host can create a download-sharing QR code.');
   }
 
