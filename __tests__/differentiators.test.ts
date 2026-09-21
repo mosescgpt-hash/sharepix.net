@@ -187,6 +187,67 @@ describe('the event plans really are one-time', () => {
   });
 });
 
+/**
+ * Claims checked against **each other**, not against the code.
+ *
+ * Every other guard in this file asks "is this claim true of the
+ * implementation?", and each of these two passed that question on its own:
+ * location really was stripped, and the upload path really did contain no
+ * resize or re-encode.
+ *
+ * Put side by side on the same page they could not both be true.
+ * `location-stripped` said we rewrite the file; `full-resolution` said "the
+ * bytes are stored exactly as sent and handed back the same way". A reader
+ * comparing two cards in one grid finds that in a second, and the one who finds
+ * it is the one deciding whether to believe the privacy claim.
+ *
+ * So: no claim may promise the bytes are untouched, because one of them is
+ * about touching the bytes. Resolution, quality and dimensions are the honest
+ * version — those genuinely do survive.
+ */
+describe('the claims agree with each other', () => {
+  const stripping = differentiatorFor('location-stripped');
+  const quality = differentiatorFor('full-resolution');
+
+  it('still has both halves of the contradiction to check', () => {
+    // If either id is renamed away, this guard silently stops guarding.
+    expect(stripping).toBeDefined();
+    expect(quality).toBeDefined();
+  });
+
+  it('says we edit the file somewhere, which is the premise', () => {
+    const text = `${stripping?.claim} ${stripping?.boundary}`.toLowerCase();
+    expect(text).toMatch(/remov|strip/);
+  });
+
+  it('promises resolution rather than byte-identity', () => {
+    // The exact phrases that made the pair contradictory, plus the obvious
+    // rewordings of them. None can appear anywhere in the claim set.
+    const all = DIFFERENTIATORS.map((d) => `${d.title} ${d.claim} ${d.boundary}`)
+      .join(' ')
+      .toLowerCase();
+    for (const phrase of [
+      'exactly as sent',
+      'the bytes',
+      'byte for byte',
+      'byte-for-byte',
+      'unmodified',
+      'untouched',
+      'identical file',
+      'the same file',
+      'the file the camera wrote',
+    ]) {
+      expect(all).not.toContain(phrase);
+    }
+  });
+
+  it('keeps the thing that is actually preserved', () => {
+    // Deleting the overclaim and leaving nothing would be a different failure:
+    // full resolution is real and is a reason somebody chooses this.
+    expect(quality?.claim.toLowerCase()).toContain('resolution');
+  });
+});
+
 describe('nothing here is about anybody else', () => {
   /**
    * A product decision, kept by the repository rather than by memory.
@@ -272,6 +333,28 @@ describe('the homepage says these things', () => {
     expect(page).toContain('Or just tap here');
   });
 
+  it('does not promise to host anything forever', () => {
+    // The closing line read "Keep the photos forever." SharePix keeps a gallery
+    // for twelve months and the archive after it ends too. What is permanent is
+    // the copy a host downloads, which is what the line promises now.
+    //
+    // codeOnly, because the comment above the heading explains what it replaced
+    // and necessarily says the word.
+    const rendered = codeOnly(page).toLowerCase();
+    expect(rendered).not.toContain('forever');
+    expect(rendered).not.toContain('for life');
+    expect(page).toContain('Download the originals and keep them.');
+  });
+
+  it('sets the fine print at body size', () => {
+    // The fair-use line — the only sentence on the page that names a limit on
+    // what you get — was 11px at under half opacity. Terms are set small when
+    // somebody would rather they were not read.
+    const rendered = codeOnly(page);
+    expect(rendered).not.toContain('text-[0.7rem] text-charcoal/45');
+    expect(rendered).toContain('see fair use');
+  });
+
   it('keeps the illustrative stat row off the page', () => {
     // Three invented figures dressed as platform metrics, on a page whose
     // argument is now that our specific claims are checkable.
@@ -342,6 +425,17 @@ describe('the help articles agree with the product', () => {
     // otherwise would be relying on something that does not exist.
     expect(allText.toLowerCase()).not.toContain('every video is checked');
     expect(allText.toLowerCase()).not.toContain('videos are screened');
+  });
+
+  it('does not promise guests the file their camera produced', () => {
+    // The same contradiction as the homepage pair, in the article a guest
+    // actually reads before downloading. Every upload is rewritten to take the
+    // location out, so "the same file the camera produced" cannot be true —
+    // and it sat in the same article that explains we remove metadata.
+    const text = articleText('guest-download').toLowerCase();
+    expect(text).not.toContain('the same file the camera');
+    expect(text).toContain('full resolution');
+    expect(allText.toLowerCase()).not.toContain('exactly as sent');
   });
 
   it('carries no comparative or disparaging framing', () => {

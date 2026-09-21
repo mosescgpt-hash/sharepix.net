@@ -68,7 +68,7 @@ function Hero() {
               when somebody has four tabs open comparing them. The promise now
               names the two things a guest actually experiences (nothing to
               install, nothing to join) and the thing a host finds out later
-              (the file is the one the camera wrote). */}
+              (the file comes back at the resolution the camera recorded). */}
           <h1 className="mt-3">
             <span className="spx-display block">Nothing to install.</span>
             <span className="spx-display-serif block">Nothing to sign up for.</span>
@@ -101,7 +101,12 @@ function Hero() {
               View a live demo gallery
             </Link>
           </div>
-          <p className="mt-4 text-[0.7rem] text-charcoal/45">
+          {/* Was text-[0.7rem] text-charcoal/45 — about 11px at under half
+              opacity, for the one line on the page that names a limit on what
+              you get. Small grey type is where terms go when somebody would
+              rather they were not read; these are ours, so they are body size
+              and readable. */}
+          <p className="mt-4 text-sm text-charcoal/70">
             Free to try, one event per account. Photo and video allowances are for normal
             event use —{' '}
             <Link href="/fair-use" className="underline">
@@ -171,7 +176,7 @@ function TryItLive() {
                 (badge) => (
                   <span
                     key={badge}
-                    className="bg-sage/60 px-2 py-1 text-[0.7rem] font-medium tracking-wide text-pine"
+                    className="bg-sage/60 px-2 py-1 text-xs font-medium tracking-wide text-pine"
                   >
                     {badge}
                   </span>
@@ -285,12 +290,17 @@ function OurStandard() {
         <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
           {DIFFERENTIATORS.map((item) => (
             <div key={item.id} className="flex flex-col bg-canvas p-7">
-              <span className="self-start bg-sage/60 px-2 py-1 text-[0.7rem] font-medium tracking-wide text-pine">
+              <span className="self-start bg-sage/60 px-2 py-1 text-xs font-medium tracking-wide text-pine">
                 {item.badge}
               </span>
               <h3 className="mt-4 text-lg font-semibold">{item.title}</h3>
               <p className="spx-body mt-2 text-sm">{item.claim}</p>
-              <p className="mt-3 border-l-2 border-charcoal/15 pl-3 text-xs leading-relaxed text-charcoal/55">
+              {/* The boundary is the limit on the claim above it, and this
+                  module's own documentation says it is "not a disclaimer to
+                  bury". It was set two steps smaller than the claim at just
+                  over half opacity, which is burying it. Same size as the
+                  claim now; the left rule is what separates them. */}
+              <p className="mt-3 border-l-2 border-charcoal/15 pl-3 text-sm leading-relaxed text-charcoal/70">
                 {item.boundary}
               </p>
             </div>
@@ -417,7 +427,11 @@ function ClosingCta() {
         <p className="spx-eyebrow">Ready when you are</p>
         <h2 className="mt-3">
           <span className="spx-display block">Set it up in five minutes.</span>
-          <span className="spx-display-serif block">Keep the photos forever.</span>
+          {/* Was "Keep the photos forever." SharePix does not host anything
+              forever — the gallery has a window and the archive after it has an
+              end. What is actually permanent is the copy a host downloads, and
+              that is what this now promises. */}
+          <span className="spx-display-serif block">Download the originals and keep them.</span>
         </h2>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link href="/create-event" className="spx-btn-canvas">

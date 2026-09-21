@@ -265,7 +265,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the full-resolution original, the same file the camera produced — good enough to print.',
+        // "The same file the camera produced" was not true and could not be:
+        // every upload has its location data removed on the way in, which
+        // rewrites the file. What survives is the picture — full resolution,
+        // no resize, no re-encode, no second compression pass.
+        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the photo at full resolution, exactly as the camera recorded it — nothing is resized or re-compressed, so it is good enough to print. The only thing taken out is the embedded metadata, including the location.',
       },
       {
         kind: 'text',
