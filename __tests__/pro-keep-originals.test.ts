@@ -92,10 +92,13 @@ describe('the copy says what is actually configured', () => {
     expect(page).toContain('and delete your original.');
   });
 
-  it('the landing page promise is now keepable', () => {
-    // Left as it is, because as of this change it is true: there is a control,
-    // and this guard fails if the control is removed while the promise stays.
-    expect(landing).toContain('unless you ask us to keep them');
+  it('the landing page promise is now keepable, and says where', () => {
+    // Pinned as a property rather than a sentence: the page may reword the
+    // promise, but it must not make it while the control does not exist. It
+    // also now points at where the switch is, which the original did not.
+    const prose = landing.replace(/\s+/g, ' ');
+    expect(prose).toContain('unless you ask us to keep it');
+    expect(prose).toContain('that switch is on the review page');
     expect(codeOnly(readSource('pages/pro/events/[eventId]/review.tsx'))).toContain(
       'Keep my original files',
     );

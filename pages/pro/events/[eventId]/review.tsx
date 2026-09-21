@@ -21,6 +21,7 @@ import {
   isPublishingMode,
   type PublishStatus,
 } from '@/lib/professionalMedia';
+import { PRO_QUEUES, liveState } from '@/lib/proStatus';
 import type { DisplayPhoto } from '@/lib/types';
 
 /**
@@ -37,12 +38,11 @@ import type { DisplayPhoto } from '@/lib/types';
 
 type Queue = 'awaiting_review' | 'approved' | 'published' | 'rejected';
 
-const QUEUES: Array<{ key: Queue; label: string }> = [
-  { key: 'awaiting_review', label: 'To review' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'published', label: 'Live' },
-  { key: 'rejected', label: 'Rejected' },
-];
+/**
+ * The queues, named and explained in lib/proStatus.ts so the review page and
+ * the event list cannot describe the same state differently.
+ */
+const QUEUES = PRO_QUEUES as ReadonlyArray<{ key: Queue; label: string; empty: string }>;
 
 export default function ProReviewPage() {
   const router = useRouter();
@@ -206,32 +206,45 @@ export default function ProReviewPage() {
     <Layout title="Review" width="bleed">
       <section className="spx-section-canvas py-8">
         <div className="spx-inner">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="spx-eyebrow">SharePix Pro</p>
-              <h1 className="spx-display mt-2 text-3xl sm:text-4xl">Review</h1>
+          <p className="spx-eyebrow">SharePix Pro</p>
+          <h1 className="spx-display mt-2 text-3xl sm:text-4xl">Review</h1>
+
+          {/* One banner instead of a button whose label was also the status.
+              "Paused — go live" had to be read as both at once, and the thing
+              it did not say is the thing that matters: whether anybody can see
+              your work yet. */}
+          <div
+            className={`mt-5 flex flex-wrap items-center justify-between gap-4 border p-4 ${
+              live ? 'border-pine/40 bg-pine/10' : 'border-charcoal/20 bg-charcoal/[0.04]'
+            }`}
+          >
+            <div className="min-w-0">
+              <p className="font-sans font-semibold">
+                <span
+                  aria-hidden
+                  className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                    live ? 'bg-pine' : 'bg-charcoal/40'
+                  }`}
+                />
+                {liveState(live).badge}
+              </p>
+              <p className="mt-1 max-w-xl text-sm text-charcoal/70">{liveState(live).meaning}</p>
             </div>
-            {/* The control a photographer reaches for mid-ceremony, so it is
-                the largest thing on the page after the photographs. */}
+            {/* The control a photographer reaches for mid-ceremony, so it says
+                what it will do rather than what is currently true. */}
             <button
               type="button"
               onClick={() => void toggleLive()}
               disabled={busy === 'live'}
-              className={`border px-5 py-3 text-sm font-semibold transition disabled:opacity-50 ${
+              className={`shrink-0 border px-5 py-3 text-sm font-semibold transition disabled:opacity-50 ${
                 live
-                  ? 'border-pine bg-pine text-white'
-                  : 'border-charcoal/30 text-charcoal hover:border-charcoal/60'
+                  ? 'border-charcoal/30 text-charcoal hover:border-charcoal/60'
+                  : 'border-pine bg-pine text-white'
               }`}
             >
-              {live ? '● Live — publishing' : 'Paused — go live'}
+              {liveState(live).action}
             </button>
           </div>
-
-          <p className="mt-3 max-w-xl text-sm text-charcoal/70">
-            {live
-              ? 'Photos you approve appear in the gallery straight away.'
-              : 'Approve as much as you like — nothing reaches the gallery until you go live.'}
-          </p>
 
           {message ? (
             <Notice tone="info" className="mt-4">
@@ -276,14 +289,15 @@ export default function ProReviewPage() {
                     : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                 }`}
               >
-                {entry.label} ({counts[entry.key] ?? 0})
+                {entry.label}
+                {counts[entry.key] ? ` (${counts[entry.key]})` : ''}
               </button>
             ))}
           </nav>
 
           {shown.length === 0 ? (
             <p className="mt-10 border border-dashed border-charcoal/25 p-10 text-center text-sm text-charcoal/60">
-              Nothing here.
+              {QUEUES.find((entry) => entry.key === queue)?.empty ?? 'Nothing here.'}
             </p>
           ) : (
             <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

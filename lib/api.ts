@@ -721,12 +721,37 @@ export async function fetchMyProConnections() {
       ),
     'Your events could not be loaded.',
   );
-  return (rows as Array<Record<string, unknown>>).map((row) => ({
+  const connections = (rows as Array<Record<string, unknown>>).map((row) => ({
     eventId: String(row.eventId ?? ''),
     status: String(row.status ?? ''),
     livePublishing: row.livePublishing === true,
     publishingMode: (row.publishingMode as string) ?? null,
   }));
+
+  // The connection row carries an event id and no name, so the list showed a
+  // photographer a column of UUIDs and asked them to know which wedding was
+  // which. Event grants `allow.authenticated().to(['get'])`, so the name was
+  // always readable — nothing had ever asked for it.
+  //
+  // One `get` per connection. A photographer has a handful of events, not a
+  // table of them, and this runs once when the page opens.
+  const named = await Promise.all(
+    connections.map(async (connection) => {
+      const event = await getClient()
+        .models.Event.get({ id: connection.eventId }, { authMode: 'userPool' })
+        .catch(() => null);
+      return {
+        ...connection,
+        // Null rather than the id: an event can be deleted while a connection
+        // to it survives, and a bare id on screen says nothing. The page turns
+        // this into words.
+        eventName: (event?.data?.name as string | undefined) ?? null,
+        eventDate: (event?.data?.date as string | undefined) ?? null,
+      };
+    }),
+  );
+
+  return named;
 }
 
 /** Every recorded funnel event, for the product-health dashboard. */
