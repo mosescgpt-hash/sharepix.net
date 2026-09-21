@@ -93,7 +93,7 @@ amplify/
   data/resource.ts     Models, auth rules, and the custom mutations
   storage/resource.ts  S3 — read/write for everyone, delete for nobody
   waf.ts               API rate limiting, off unless WAF_ENABLED is set
-  functions/           38 Lambdas; each has resource.ts (config) + handler.ts
+  functions/           39 Lambdas; each has resource.ts (config) + handler.ts
 pages/                 Routes. lib/seo.ts says which are public
 components/            Shared UI
 lib/                   Rules, as pure functions. This is where behaviour lives

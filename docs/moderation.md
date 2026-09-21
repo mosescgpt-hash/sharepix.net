@@ -47,6 +47,31 @@ Rekognition image moderation covers stills only. Videos are recorded as
 which is a different, asynchronous, more expensive API — a deliberate later
 decision, not an oversight.
 
+## The homepage demo is the one anonymous upload target
+
+`/demo/try-upload` lets a visitor add a photo to a sample gallery without an
+account, from a QR code on the front page. That is the riskiest surface in the
+product, and three things contain it:
+
+- **Nothing reads it back.** There is no page, no query and no signed URL that
+  serves the `demo/` prefix, and `storage/resource.ts` grants **write only** on
+  it — to guests, to signed-in users, and to admins alike. The photo a visitor
+  sees is their own file rendered locally in their own browser. "Nobody else can
+  see it" is therefore a property of there being nowhere to look, not a rule
+  somebody has to keep enforcing.
+- **Photos only, and vetted like any upload.** `sanitize-upload` sniffs the real
+  bytes, applies a lower size ceiling, refuses video outright, and strips
+  location. Video is refused precisely because it is not screened.
+- **It is gone within the hour.** `demo-cleanup` sweeps the prefix every fifteen
+  minutes. It is deliberately not part of `reclaim-storage`, which is gated
+  behind `STORAGE_RECLAIM_ENABLED` and ships off — hanging a retention promise
+  off a switch nobody has set is not a promise.
+
+The page does not say "deleted when you leave", although that is what a visitor
+would expect. It cannot be delivered: these are phones, where tabs are discarded
+and `beforeunload` never fires. The sweep is the guarantee and the copy states
+what the sweep delivers.
+
 ## If screening is unavailable
 
 A Rekognition failure does **not** block the upload. The photo is recorded as

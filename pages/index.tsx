@@ -135,25 +135,30 @@ function TryItLive() {
       <div className="spx-inner">
         <div className="spx-card flex flex-col gap-8 p-6 sm:p-8 md:flex-row md:items-center">
           <div className="mx-auto shrink-0 bg-canvas p-3 md:mx-0">
-            <StyledQrCode data={`${SITE_ORIGIN}/demo/try`} size={168} label="Try the demo" />
+            <StyledQrCode
+              data={`${SITE_ORIGIN}/demo/try-upload`}
+              size={168}
+              label="Try an upload"
+            />
           </div>
 
           <div className="min-w-0">
             <p className="spx-eyebrow">Try it right now</p>
             <p className="mt-3 font-sans text-xl font-semibold leading-snug">
-              Point your phone at that code. It is the whole guest experience.
+              Point your phone at that code and add a photo yourself.
             </p>
             <p className="spx-body mt-2 max-w-xl text-sm">
-              It opens in whatever browser your phone already has — no install, no
-              sign-up, nothing to undo afterwards. Exactly what your guests get, before
-              you have paid for anything.
+              It opens a sample gallery in whatever browser your phone already has, and
+              you can put one of your own photos into it — no install, no sign-up,
+              nothing to undo afterwards. Your photo is deleted within the hour, and
+              there is no page anywhere that shows it to anyone else.
             </p>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
               {/* Reading this on a phone, the code is useless — you cannot scan
                   the screen you are holding. The link is not a fallback behind
                   a breakpoint; it is there for everybody. */}
-              <Link href="/demo/try" className="spx-btn-ink">
+              <Link href="/demo/try-upload" className="spx-btn-ink">
                 Or just tap here
               </Link>
               <span className="text-xs text-charcoal/55">

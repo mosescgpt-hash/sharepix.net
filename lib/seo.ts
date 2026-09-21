@@ -96,6 +96,7 @@ export const INDEXABLE_ROUTES = [
   '/demo/guestbook',
   '/demo/live',
   '/demo/try',
+  '/demo/try-upload',
   '/dmca',
   '/fair-use',
   '/help',
@@ -170,6 +171,8 @@ export const ROUTE_DESCRIPTIONS: Record<string, string> = {
     'The digital guest book: guests leave a signed note, a photo, or a short video message alongside the gallery.',
   '/demo/live': 'The live slideshow, as it runs on a venue screen. New photos appear on their own, moments after a guest uploads them.',
   '/demo/try': 'Walk through setting up a SharePix event, step by step, without creating an account or paying anything.',
+  '/demo/try-upload':
+    'Add a photo to a sample gallery from your own phone, the way a guest at your event would. No app and no account, and your photo is deleted within the hour.',
   '/dmca': 'How to report copyrighted material on sharepix.net, and the designated agent for notices under 17 U.S.C. § 512(c).',
   '/fair-use': 'What “unlimited” means on SharePix, in plain numbers — the limits that exist, when they apply, and what happens if you reach one.',
   '/help': 'Answers for guests adding photos and for hosts running an event — uploads, QR codes, downloads, video, and how long a gallery lasts.',

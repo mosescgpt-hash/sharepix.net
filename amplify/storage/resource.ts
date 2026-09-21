@@ -24,5 +24,19 @@ export const storage = defineStorage({
       // couldn't load photos. Grant it explicitly.
       allow.groups(['ADMINS']).to(['read', 'write']),
     ],
+    // The homepage "try an upload" demo. Write and nothing else, for anybody.
+    //
+    // **No read, for any principal, including admins.** That is not an
+    // oversight to tidy up later — it is the entire safety model. A visitor's
+    // demo photo is displayed to them from their own device, never fetched
+    // back, so "nobody else can see it" is a property of there being nowhere to
+    // see it from rather than a rule somebody has to keep enforcing. Granting
+    // read here, even to one role, would quietly turn an unauthenticated upload
+    // box on the front page into a place a stranger's photo can be looked at.
+    //
+    // No delete either: `demo-cleanup` holds that as a scoped IAM policy in
+    // backend.ts, so the "nobody gets S3 delete" rule in the README still holds
+    // for every human principal.
+    'demo/*': [allow.guest.to(['write']), allow.authenticated.to(['write'])],
   }),
 });
