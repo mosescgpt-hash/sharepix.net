@@ -3,6 +3,7 @@ import { codeOnly, proseOf, readSource } from './sourceGuards';
 import {
   COMPARATIVE_PHRASES,
   DIFFERENTIATORS,
+  comparativePhrasesIn,
   differentiatorFor,
 } from '../lib/differentiators';
 
@@ -200,8 +201,8 @@ describe('nothing here is about anybody else', () => {
     .join(' ')
     .toLowerCase();
 
-  it.each(COMPARATIVE_PHRASES)('says nothing about %s', (phrase) => {
-    expect(claimText).not.toContain(phrase);
+  it('uses none of the comparative phrases', () => {
+    expect(comparativePhrasesIn(claimText)).toEqual([]);
   });
 
   it('names no competitor', () => {
@@ -223,10 +224,7 @@ describe('nothing here is about anybody else', () => {
     //
     // codeOnly, because the comments in these files discuss the decision and
     // necessarily contain the words it bans.
-    const rendered = codeOnly(readSource('pages/index.tsx')).toLowerCase();
-    for (const phrase of COMPARATIVE_PHRASES) {
-      expect(rendered).not.toContain(phrase);
-    }
+    expect(comparativePhrasesIn(codeOnly(readSource('pages/index.tsx')))).toEqual([]);
   });
 });
 
@@ -279,5 +277,131 @@ describe('the homepage says these things', () => {
     // argument is now that our specific claims are checkable.
     expect(page).not.toContain('Photos shared');
     expect(page).not.toContain('figure="847"');
+  });
+});
+
+/**
+ * The help articles make the same promises the homepage does, to the same
+ * customers, and until now nothing checked them.
+ *
+ * Two were wrong when this was written. `photo-location-data` told guests
+ * "every upload here has that location data removed" while video carried its
+ * coordinates untouched — a privacy guarantee somebody read and relied on.
+ * `guest-download` promised "the same file the photographer's phone produced",
+ * which contradicts the deliberate rule that a professional's originals are
+ * never served to guests.
+ *
+ * Neither was caught by the homepage guards, because the homepage is not where
+ * they were written.
+ */
+describe('the help articles agree with the product', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { HELP_ARTICLES } = require('../lib/help') as {
+    HELP_ARTICLES: Array<{
+      slug: string;
+      summary: string;
+      blocks: Array<{ kind: string; text?: string }>;
+    }>;
+  };
+
+  const articleText = (slug: string) => {
+    const article = HELP_ARTICLES.find((item) => item.slug === slug);
+    if (!article) throw new Error(`No help article "${slug}"`);
+    return [article.summary, ...article.blocks.map((block) => block.text ?? '')].join(' ');
+  };
+
+  const allText = HELP_ARTICLES.map((article) => articleText(article.slug)).join(' ');
+
+  it('covers video where it claims location is removed', () => {
+    // The claim is now true for video. Before it was true only for photos,
+    // and said "every upload".
+    const text = articleText('photo-location-data').toLowerCase();
+    expect(text).toContain('video');
+  });
+
+  it('says what each format keeps, rather than implying parity', () => {
+    // A JPEG loses everything; HEIC and video lose only the coordinates. A
+    // guest deciding whether to upload deserves the real answer.
+    const text = articleText('photo-location-data').toLowerCase();
+    expect(text).toContain('jpeg');
+    expect(text).toContain('heic');
+  });
+
+  it('does not promise a professional photographer’s original to guests', () => {
+    // professionalMedia.ts has no access rule that reaches it and no code path
+    // that mints a URL for it. A help article promising it is a contradiction
+    // the product cannot honour.
+    const text = articleText('guest-download');
+    expect(text).not.toContain('the same file the photographer');
+    expect(text.toLowerCase()).toContain('sharepix pro');
+    expect(text.toLowerCase()).toContain('reduced-resolution previews');
+  });
+
+  it('never tells a guest their video is screened', () => {
+    // It is not. Rekognition covers stills only, and a guest who believed
+    // otherwise would be relying on something that does not exist.
+    expect(allText.toLowerCase()).not.toContain('every video is checked');
+    expect(allText.toLowerCase()).not.toContain('videos are screened');
+  });
+
+  it('carries no comparative or disparaging framing', () => {
+    // The same rule as the homepage, applied where the words actually are.
+    // Word boundaries, not substrings: "rivals" is inside "arrivals", and the
+    // slideshow copy says "new arrivals jump the queue".
+    expect(comparativePhrasesIn(allText)).toEqual([]);
+  });
+});
+
+describe('every customer-facing page follows the no-bashing rule', () => {
+  // The homepage guard only ever read the homepage. These are the other pages
+  // a prospect actually lands on.
+  const PAGES = [
+    'pages/index.tsx',
+    'pages/pricing.tsx',
+    'pages/join.tsx',
+    'pages/fair-use.tsx',
+    'pages/demo/index.tsx',
+    'pages/demo/gallery.tsx',
+    'pages/demo/try.tsx',
+    'pages/demo/try-upload.tsx',
+  ];
+
+  it.each(PAGES)('%s says nothing about anybody else', (path) => {
+    // codeOnly, because these files discuss the decision in their comments and
+    // necessarily contain the words it bans.
+    expect(comparativePhrasesIn(codeOnly(readSource(path)))).toEqual([]);
+  });
+});
+
+describe('the phrase check itself', () => {
+  it('matches whole words, not fragments of innocent ones', () => {
+    // The bug this replaced: a substring test on "rivals" fired on the live
+    // slideshow copy, "new arrivals jump the queue". A guard that cries wolf
+    // on ordinary prose is a guard somebody switches off.
+    expect(comparativePhrasesIn('new arrivals jump the queue')).toEqual([]);
+    // "unlikely" is not "unlike", and this is why the match allows a plural
+    // and nothing else.
+    expect(comparativePhrasesIn('an unlikely outcome')).toEqual([]);
+  });
+
+  it('catches a plural, which the obvious spelling misses', () => {
+    // A trailing \b cannot sit between "competitor" and its own plural, so a
+    // both-ends boundary has a hole exactly where the word usually appears.
+    // An earlier version of this test asserted that hole as correct.
+    expect(comparativePhrasesIn('our competitors are worse')).toContain('competitor');
+  });
+
+  it('still catches the real thing', () => {
+    expect(comparativePhrasesIn('Unlike the other apps, we do not')).toEqual(
+      expect.arrayContaining(['unlike', 'other apps']),
+    );
+    expect(comparativePhrasesIn('no sneaky fees here')).toContain('sneaky');
+  });
+
+  it('keeps every listed phrase reachable', () => {
+    // A phrase nothing can ever match is a rule that is not being kept.
+    for (const phrase of COMPARATIVE_PHRASES) {
+      expect(comparativePhrasesIn(`before ${phrase} after`)).toContain(phrase);
+    }
   });
 });

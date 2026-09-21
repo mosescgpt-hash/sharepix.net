@@ -11,6 +11,8 @@ import {
   processProPhoto,
   requestProUploadSlot,
   setProPublishing,
+  getMyPhotographerProfile,
+  setKeepOriginals as setKeepOriginalsSetting,
 } from '@/lib/api';
 import {
   DEFAULT_PREVIEW_LONG_EDGE,
@@ -19,6 +21,7 @@ import {
   isPublishingMode,
   type PublishStatus,
 } from '@/lib/professionalMedia';
+import { PRO_QUEUES, liveState } from '@/lib/proStatus';
 import type { DisplayPhoto } from '@/lib/types';
 
 /**
@@ -35,12 +38,11 @@ import type { DisplayPhoto } from '@/lib/types';
 
 type Queue = 'awaiting_review' | 'approved' | 'published' | 'rejected';
 
-const QUEUES: Array<{ key: Queue; label: string }> = [
-  { key: 'awaiting_review', label: 'To review' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'published', label: 'Live' },
-  { key: 'rejected', label: 'Rejected' },
-];
+/**
+ * The queues, named and explained in lib/proStatus.ts so the review page and
+ * the event list cannot describe the same state differently.
+ */
+const QUEUES = PRO_QUEUES as ReadonlyArray<{ key: Queue; label: string; empty: string }>;
 
 export default function ProReviewPage() {
   const router = useRouter();
@@ -54,6 +56,9 @@ export default function ProReviewPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
   const [message, setMessage] = useState('');
+  // null until the profile has been read, so the checkbox does not flicker from
+  // unchecked to checked and imply a change nobody made.
+  const [keepOriginals, setKeepOriginals] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -66,6 +71,10 @@ export default function ProReviewPage() {
     setLive(mine.livePublishing);
     setMode(isPublishingMode(mine.publishingMode) ? mine.publishingMode : DEFAULT_PUBLISHING_MODE);
     setPhotos(await fetchEventPhotos(eventId, { useThumbs: true }).catch(() => []));
+    // A photographer who has never changed a setting has no profile row, and
+    // that reads as "discard" — which is the default and what the copy says.
+    const profile = await getMyPhotographerProfile().catch(() => null);
+    setKeepOriginals(profile?.keepOriginals === true);
     setPhase('ready');
   }, [eventId]);
 
@@ -197,32 +206,45 @@ export default function ProReviewPage() {
     <Layout title="Review" width="bleed">
       <section className="spx-section-canvas py-8">
         <div className="spx-inner">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="spx-eyebrow">SharePix Pro</p>
-              <h1 className="spx-display mt-2 text-3xl sm:text-4xl">Review</h1>
+          <p className="spx-eyebrow">SharePix Pro</p>
+          <h1 className="spx-display mt-2 text-3xl sm:text-4xl">Review</h1>
+
+          {/* One banner instead of a button whose label was also the status.
+              "Paused — go live" had to be read as both at once, and the thing
+              it did not say is the thing that matters: whether anybody can see
+              your work yet. */}
+          <div
+            className={`mt-5 flex flex-wrap items-center justify-between gap-4 border p-4 ${
+              live ? 'border-pine/40 bg-pine/10' : 'border-charcoal/20 bg-charcoal/[0.04]'
+            }`}
+          >
+            <div className="min-w-0">
+              <p className="font-sans font-semibold">
+                <span
+                  aria-hidden
+                  className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                    live ? 'bg-pine' : 'bg-charcoal/40'
+                  }`}
+                />
+                {liveState(live).badge}
+              </p>
+              <p className="mt-1 max-w-xl text-sm text-charcoal/70">{liveState(live).meaning}</p>
             </div>
-            {/* The control a photographer reaches for mid-ceremony, so it is
-                the largest thing on the page after the photographs. */}
+            {/* The control a photographer reaches for mid-ceremony, so it says
+                what it will do rather than what is currently true. */}
             <button
               type="button"
               onClick={() => void toggleLive()}
               disabled={busy === 'live'}
-              className={`border px-5 py-3 text-sm font-semibold transition disabled:opacity-50 ${
+              className={`shrink-0 border px-5 py-3 text-sm font-semibold transition disabled:opacity-50 ${
                 live
-                  ? 'border-pine bg-pine text-white'
-                  : 'border-charcoal/30 text-charcoal hover:border-charcoal/60'
+                  ? 'border-charcoal/30 text-charcoal hover:border-charcoal/60'
+                  : 'border-pine bg-pine text-white'
               }`}
             >
-              {live ? '● Live — publishing' : 'Paused — go live'}
+              {liveState(live).action}
             </button>
           </div>
-
-          <p className="mt-3 max-w-xl text-sm text-charcoal/70">
-            {live
-              ? 'Photos you approve appear in the gallery straight away.'
-              : 'Approve as much as you like — nothing reaches the gallery until you go live.'}
-          </p>
 
           {message ? (
             <Notice tone="info" className="mt-4">
@@ -246,8 +268,10 @@ export default function ProReviewPage() {
               />
             </label>
             <p className="mt-2 text-xs text-charcoal/55">
-              JPEG or PNG. We make a {DEFAULT_PREVIEW_LONG_EDGE}px preview and delete your
-              original unless you have asked us to keep it.
+              JPEG or PNG. We make a {DEFAULT_PREVIEW_LONG_EDGE}px preview
+              {keepOriginals
+                ? ' and keep your original, because you asked us to.'
+                : ' and delete your original.'}
               {uploading > 0 ? ` Uploading ${uploading}…` : ''}
             </p>
           </div>
@@ -265,14 +289,15 @@ export default function ProReviewPage() {
                     : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
                 }`}
               >
-                {entry.label} ({counts[entry.key] ?? 0})
+                {entry.label}
+                {counts[entry.key] ? ` (${counts[entry.key]})` : ''}
               </button>
             ))}
           </nav>
 
           {shown.length === 0 ? (
             <p className="mt-10 border border-dashed border-charcoal/25 p-10 text-center text-sm text-charcoal/60">
-              Nothing here.
+              {QUEUES.find((entry) => entry.key === queue)?.empty ?? 'Nothing here.'}
             </p>
           ) : (
             <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -344,7 +369,46 @@ export default function ProReviewPage() {
           )}
 
           <div className="mt-10 border-t border-charcoal/15 pt-6">
-            <label className="block max-w-sm">
+            {/* The promise above this used to say "unless you have asked us to
+                keep it", and there was nowhere to ask: the field was not in the
+                schema, so the pipeline's read always came back undefined and
+                the answer was always discard. This is where you ask. */}
+            <label className="flex max-w-lg items-start gap-3">
+              <input
+                type="checkbox"
+                checked={keepOriginals === true}
+                disabled={keepOriginals === null}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setKeepOriginals(next);
+                  void setKeepOriginalsSetting(next)
+                    .then(() =>
+                      setMessage(
+                        next
+                          ? 'We will keep your originals from now on.'
+                          : 'We will delete your originals once the preview is made.',
+                      ),
+                    )
+                    .catch(() => {
+                      // Put the box back rather than leaving it showing a
+                      // setting that did not save. This one decides whether
+                      // somebody's originals survive.
+                      setKeepOriginals(!next);
+                      setMessage('That could not be saved. Your originals are unchanged.');
+                    });
+                }}
+                className="mt-1"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Keep my original files</span>
+                <span className="mt-1 block text-charcoal/65">
+                  Off by default: we make the preview and delete the original. This applies
+                  to photos you upload from now on, not to ones already processed.
+                </span>
+              </span>
+            </label>
+
+            <label className="mt-8 block max-w-sm">
               <span className="text-sm font-medium">When you approve a photo</span>
               <select
                 value={mode}

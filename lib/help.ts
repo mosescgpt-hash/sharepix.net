@@ -265,11 +265,15 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the full-resolution original, the same file the photographer\u2019s phone produced — good enough to print.',
+        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the full-resolution original, the same file the camera produced — good enough to print.',
       },
       {
         kind: 'text',
         text: 'You do not need an account, and there is nothing to buy. Downloads are included on every event.',
+      },
+      {
+        kind: 'text',
+        text: 'One exception: if a professional photographer is covering the event through SharePix Pro, their shots appear as reduced-resolution previews and the full files stay with them. That is deliberate \u2014 selling prints is how they are paid. Everything guests upload is unaffected.',
       },
       {
         kind: 'text',
@@ -609,16 +613,16 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Do photos share where they were taken?',
     audience: 'guest',
     category: 'Privacy and safety',
-    summary: 'No. GPS coordinates are stripped from uploads automatically.',
-    keywords: ['gps', 'location', 'exif', 'metadata', 'privacy', 'tracking'],
+    summary: 'No. Coordinates are removed from photos and video on upload.',
+    keywords: ['gps', 'location', 'exif', 'metadata', 'privacy', 'tracking', 'video'],
     blocks: [
       {
         kind: 'text',
-        text: 'Phone photos usually record the exact coordinates where they were taken. Every upload here has that location data removed automatically, so it is not in the file even if someone downloads the original.',
+        text: 'Phone cameras usually record the exact coordinates where a photo or video was taken. SharePix removes that on upload, before the file is stored or shared, so it is not in the file even if somebody downloads the original.',
       },
       {
         kind: 'text',
-        text: 'Photos keep the orientation information they need to display the right way up, and JPEGs additionally lose camera details, timestamps and any embedded thumbnail.',
+        text: 'What else is removed depends on the format. A JPEG loses everything: camera and lens details, timestamps, embedded thumbnails. An iPhone HEIC photo and a video lose their coordinates and keep the rest, because taking more out would mean rebuilding the file and that risks the file itself. Photos keep the orientation they need to display the right way up.',
       },
     ],
     related: ['who-can-see', 'iphone-heic'],

@@ -656,6 +656,59 @@ export async function setProPublishing(input: {
   return { message: data?.message ?? '' };
 }
 
+/**
+ * This photographer's own profile row, or null if they have never saved one.
+ *
+ * **Keyed by the Cognito subject, not by an auto-generated id.**
+ * `process-pro-photo` fetches it with `Key: { id: sub }`, so a row created with
+ * Amplify's default id would never be found and every setting on it would be
+ * silently ignored. That is the same shape of bug as the owner string in
+ * listMyEvents: a writer and a reader agreeing about a value's meaning but not
+ * about its spelling, failing quietly, with no error anywhere.
+ */
+export async function getMyPhotographerProfile(): Promise<{
+  id: string;
+  keepOriginals: boolean;
+} | null> {
+  const user = await getCurrentUserInfo();
+  if (!user) return null;
+  const { data, errors } = await getClient().models.PhotographerProfile.get(
+    { id: user.userId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
+  if (!data) return null;
+  return { id: String(data.id), keepOriginals: data.keepOriginals === true };
+}
+
+/**
+ * Ask SharePix to hold this photographer's originals, or stop.
+ *
+ * Creates the profile row on first use, because a photographer who has never
+ * opened a settings screen has no row — and the first thing they do with one is
+ * exactly this. Falls back to an update when the row already exists, the same
+ * two-step `writeSetting` uses and for the same reason: an update against a
+ * missing row can succeed against nothing, and somebody pressing save and
+ * seeing no error while nothing saved is the worst outcome here.
+ */
+export async function setKeepOriginals(keepOriginals: boolean): Promise<void> {
+  const user = await getCurrentUserInfo();
+  if (!user) throw new Error('Sign in to change this.');
+  const input = { id: user.userId, keepOriginals };
+
+  const created = await getClient().models.PhotographerProfile.create(input, {
+    authMode: 'userPool',
+  });
+  if (!created.errors?.length) return;
+
+  const updated = await getClient().models.PhotographerProfile.update(input, {
+    authMode: 'userPool',
+  });
+  if (updated.errors?.length) {
+    throw new Error(updated.errors.map((e) => e.message).join(' \u00b7 '));
+  }
+}
+
 /** This photographer's connections, for the /pro event list. */
 export async function fetchMyProConnections() {
   const user = await getCurrentUserInfo();
@@ -668,12 +721,37 @@ export async function fetchMyProConnections() {
       ),
     'Your events could not be loaded.',
   );
-  return (rows as Array<Record<string, unknown>>).map((row) => ({
+  const connections = (rows as Array<Record<string, unknown>>).map((row) => ({
     eventId: String(row.eventId ?? ''),
     status: String(row.status ?? ''),
     livePublishing: row.livePublishing === true,
     publishingMode: (row.publishingMode as string) ?? null,
   }));
+
+  // The connection row carries an event id and no name, so the list showed a
+  // photographer a column of UUIDs and asked them to know which wedding was
+  // which. Event grants `allow.authenticated().to(['get'])`, so the name was
+  // always readable — nothing had ever asked for it.
+  //
+  // One `get` per connection. A photographer has a handful of events, not a
+  // table of them, and this runs once when the page opens.
+  const named = await Promise.all(
+    connections.map(async (connection) => {
+      const event = await getClient()
+        .models.Event.get({ id: connection.eventId }, { authMode: 'userPool' })
+        .catch(() => null);
+      return {
+        ...connection,
+        // Null rather than the id: an event can be deleted while a connection
+        // to it survives, and a bare id on screen says nothing. The page turns
+        // this into words.
+        eventName: (event?.data?.name as string | undefined) ?? null,
+        eventDate: (event?.data?.date as string | undefined) ?? null,
+      };
+    }),
+  );
+
+  return named;
 }
 
 /** Every recorded funnel event, for the product-health dashboard. */
