@@ -3,8 +3,10 @@ import Link from 'next/link';
 import Artwork from '@/components/Artwork';
 import Layout from '@/components/Layout';
 import { trackEvent } from '@/lib/trackEvent';
+import StyledQrCode from '@/components/StyledQrCode';
+import { DIFFERENTIATORS } from '@/lib/differentiators';
 import { PRICING_TIERS } from '@/lib/pricing';
-import { organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
+import { SITE_ORIGIN, organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
 
 /**
  * The homepage, on the redesign system (docs/design-system.md).
@@ -33,6 +35,8 @@ export default function HomePage() {
     >
       <div className="bg-canvas font-sans">
         <Hero />
+        <TryItLive />
+        <OurStandard />
         <HowItWorks />
         <Occasions />
         <WhatYouGet />
@@ -59,27 +63,29 @@ function Hero() {
       <div className="spx-inner grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div>
           <p className="spx-eyebrow">Shared event galleries</p>
+          {/* The old headline was "Every moment. Everyone's perspective." — true
+              of every product in this category, and therefore worth nothing
+              when somebody has four tabs open comparing them. The promise now
+              names the two things a guest actually experiences (nothing to
+              install, nothing to join) and the thing a host finds out later
+              (the file is the one the camera wrote). */}
           <h1 className="mt-3">
-            <span className="spx-display block">Every moment.</span>
-            <span className="spx-display-serif block">Everyone&rsquo;s perspective.</span>
+            <span className="spx-display block">Nothing to install.</span>
+            <span className="spx-display-serif block">Nothing to sign up for.</span>
           </h1>
           <p className="spx-body mt-5 max-w-md">
-            One QR code on the table. Every guest&rsquo;s camera. All your photos land in
-            one gallery — no app to install, no account to make, and nobody to chase
-            afterwards.
+            Your guests point a camera at a code and start sending photos. No app, no
+            account, no phone number, nothing to explain to anyone. You get the original
+            files, at the size the camera recorded them.
           </p>
-          {/* The reassurance line, under the promise rather than instead of it.
-              The emotional message above is why somebody wants SharePix; this
-              is what makes saying yes easy. Price last, deliberately — leading
-              with it would make the price the brand. */}
           <ul className="mt-6 flex max-w-md flex-wrap gap-x-4 gap-y-1.5 text-sm text-charcoal/70">
             {[
               'No app',
               'No guest accounts',
-              'Unlimited guests',
-              'Unlimited photos*',
-              'Private by default',
-              '$79 one-time',
+              'Original quality',
+              'Location data removed',
+              'Unlisted galleries',
+              '$79 once',
             ].map((claim) => (
               <li key={claim} className="flex items-center gap-1.5">
                 <span aria-hidden className="h-1 w-1 shrink-0 bg-pine" />
@@ -89,21 +95,15 @@ function Hero() {
           </ul>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/create-event" className="spx-btn-ink">
-              Create your event
+              Create an event gallery
             </Link>
-            <Link href="/demo/try" className="spx-btn-outline">
-              Try the demo
+            <Link href="/demo/gallery" className="spx-btn-outline">
+              View a live demo gallery
             </Link>
           </div>
-          <div className="mt-10 grid max-w-md grid-cols-3 gap-6">
-            <Stat figure="847" label="Photos shared" />
-            <Stat figure="62" label="Guests" />
-            <Stat figure="0" label="Apps to install" />
-          </div>
-          {/* The stat row is illustrative on a marketing page. Labelled as such
-              rather than dressed up as platform metrics we are not measuring. */}
           <p className="mt-4 text-[0.7rem] text-charcoal/45">
-            Figures from a typical wedding. *Unlimited photos are for normal event use —{' '}
+            Free to try, one event per account. Photo and video allowances are for normal
+            event use —{' '}
             <Link href="/fair-use" className="underline">
               see fair use
             </Link>
@@ -117,12 +117,66 @@ function Hero() {
   );
 }
 
-function Stat({ figure, label }: { figure: string; label: string }) {
+/**
+ * A working QR code, in the hero, encoding the demo walkthrough.
+ *
+ * Deliberately a real code rather than a decorative one. The entire pitch is
+ * "scanning it just works" — a mock that does nothing when somebody points a
+ * phone at it would disprove the claim at the exact moment they tested it, and
+ * they would be holding the evidence.
+ *
+ * `StyledQrCode` imports `qr-code-styling` dynamically, so putting this on the
+ * homepage costs nothing until it renders. The artwork it replaces stays below
+ * it on large screens, where there is room for both.
+ */
+function TryItLive() {
   return (
-    <div>
-      <p className="spx-stat-figure">{figure}</p>
-      <p className="spx-stat-label">{label}</p>
-    </div>
+    <section className="spx-section-canvas pt-0">
+      <div className="spx-inner">
+        <div className="spx-card flex flex-col gap-8 p-6 sm:p-8 md:flex-row md:items-center">
+          <div className="mx-auto shrink-0 bg-canvas p-3 md:mx-0">
+            <StyledQrCode data={`${SITE_ORIGIN}/demo/try`} size={168} label="Try the demo" />
+          </div>
+
+          <div className="min-w-0">
+            <p className="spx-eyebrow">Try it right now</p>
+            <p className="mt-3 font-sans text-xl font-semibold leading-snug">
+              Point your phone at that code. It is the whole guest experience.
+            </p>
+            <p className="spx-body mt-2 max-w-xl text-sm">
+              It opens in whatever browser your phone already has — no install, no
+              sign-up, nothing to undo afterwards. Exactly what your guests get, before
+              you have paid for anything.
+            </p>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              {/* Reading this on a phone, the code is useless — you cannot scan
+                  the screen you are holding. The link is not a fallback behind
+                  a breakpoint; it is there for everybody. */}
+              <Link href="/demo/try" className="spx-btn-ink">
+                Or just tap here
+              </Link>
+              <span className="text-xs text-charcoal/55">
+                On a phone? Tapping does the same thing.
+              </span>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-2 border-t border-charcoal/10 pt-5">
+              {['Zero app required', 'No account', 'Original quality', 'GPS removed'].map(
+                (badge) => (
+                  <span
+                    key={badge}
+                    className="bg-sage/60 px-2 py-1 text-[0.7rem] font-medium tracking-wide text-pine"
+                  >
+                    {badge}
+                  </span>
+                ),
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -200,22 +254,64 @@ function Occasions() {
   );
 }
 
+/**
+ * What SharePix commits to, each with the limit where it stops holding.
+ *
+ * The boundaries are the point. Anybody can write "private by design"; saying
+ * which formats are covered and which are not makes a claim the reader can
+ * check.
+ *
+ * Nothing here mentions anybody else, by decision — see the note at the top of
+ * lib/differentiators.ts. The commitments are meant to stand up with no rival
+ * in the room.
+ */
+function OurStandard() {
+  return (
+    <section className="spx-section-canvas">
+      <div className="spx-inner">
+        <p className="spx-eyebrow">Our standard</p>
+        <Heading first="What we promise" second="and exactly where it ends." />
+        <p className="spx-body mt-5 max-w-lg">
+          Each of these is a specific commitment rather than a posture, so each one is
+          printed with the case where it does not apply. We would rather tell you the
+          edge than let you find it.
+        </p>
+
+        <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
+          {DIFFERENTIATORS.map((item) => (
+            <div key={item.id} className="flex flex-col bg-canvas p-7">
+              <span className="self-start bg-sage/60 px-2 py-1 text-[0.7rem] font-medium tracking-wide text-pine">
+                {item.badge}
+              </span>
+              <h3 className="mt-4 text-lg font-semibold">{item.title}</h3>
+              <p className="spx-body mt-2 text-sm">{item.claim}</p>
+              <p className="mt-3 border-l-2 border-charcoal/15 pl-3 text-xs leading-relaxed text-charcoal/55">
+                {item.boundary}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const FEATURES = [
   {
-    title: 'Private by default',
-    body: 'Galleries are reachable by link, served through signed URLs, and never listed publicly. Location data is stripped from photos as they arrive.',
-  },
-  {
-    title: 'Moderation when you want it',
-    body: 'Hold uploads for approval and release them yourself. Every still is screened automatically before it reaches the gallery.',
-  },
-  {
     title: 'Live slideshow',
-    body: 'Put the gallery on a screen at the venue and watch photos appear through the evening.',
+    body: 'Put the gallery on a screen at the venue and watch photos appear through the evening. Screened stills only — nothing reaches the projector unchecked.',
   },
   {
     title: 'Digital guest book',
     body: 'Notes, photos and short video messages, signed by the people who were there.',
+  },
+  {
+    title: 'Hold everything for approval',
+    body: 'Switch on approvals and nothing appears until you release it. Included on every plan.',
+  },
+  {
+    title: 'One ZIP, every original',
+    body: 'Download the whole event in a single archive, at full resolution. Your guests can take theirs too, without an account.',
   },
 ];
 
@@ -223,8 +319,8 @@ function WhatYouGet() {
   return (
     <section className="spx-section-canvas">
       <div className="spx-inner">
-        <p className="spx-eyebrow">What you get</p>
-        <Heading first="Easy. Beautiful." second="Private." />
+        <p className="spx-eyebrow">Also included</p>
+        <Heading first="And the rest" second="of what you get." />
         <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
           {FEATURES.map((feature) => (
             <div key={feature.title} className="bg-canvas p-7">

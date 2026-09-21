@@ -143,9 +143,10 @@ today with no registration; SMS can be added later using the same review link.
 
 ## Location metadata (EXIF/GPS)
 
-Phone photos routinely carry the exact GPS coordinates where they were taken,
-and that travels with the file whenever an original is downloaded or sent to a
-print lab. The `sanitize-upload` trigger strips it.
+Phone photos and videos routinely carry the exact GPS coordinates where they
+were taken, and that travels with the file whenever an original is downloaded or
+sent to a print lab. The `sanitize-upload` trigger strips it from all three
+formats a phone actually produces: JPEG, HEIC and MP4/QuickTime video.
 
 **Previews and thumbnails were already clean** — the browser re-draws those
 through a canvas, which produces a fresh file with no metadata. Only the
@@ -167,7 +168,7 @@ through untouched, so there is **no re-encode and no quality loss**.
 A photo already upright (orientation 1) gets no EXIF block at all. A file that
 looks malformed is left exactly as uploaded.
 
-### Two formats, two methods
+### Three formats, three methods
 
 **JPEG** is rebuilt with only the orientation kept, as above — GPS, timestamps,
 camera, thumbnails, XMP and IPTC all gone by construction.
@@ -187,10 +188,43 @@ The trade-off is that HEIC keeps benign metadata (camera, timestamps) that the
 JPEG path removes, since dropping those needs the resize this deliberately
 avoids. Location — the part that matters — is gone from both.
 
+**MP4 and QuickTime video** is handled by `video.ts`, on the same principle as
+HEIC and for the same reason: an MP4's `stco`/`co64` tables hold absolute file
+offsets for every media chunk, so removing forty bytes of metadata from a `moov`
+that sits before the `mdat` invalidates all of them. Get it wrong and the file
+is a silent brick — thumbnail, duration, and no playback.
+
+So the location boxes are overwritten with zeroes in place. Nothing changes
+length, every offset stays valid, and a zeroed `©xyz` reads as an empty string,
+which is what a video with no location looks like anyway. Four places are
+cleared: `moov/udta/©xyz`, `moov/udta/loci` (older Android), `moov/meta/ilst`'s
+own `©xyz`, and Apple's keyed `com.apple.quicktime.location.*`, which is found
+by reading the `keys` box to learn what each numbered `ilst` item means.
+
+Two things make this safe to run on a 250 MB file in a 512 MB Lambda:
+
+- **The tree is walked, never scanned.** A quarter gigabyte of compressed video
+  contains four bytes spelling every box type you can name. Descending from the
+  top means `mdat` is never a candidate, so no range can land in the media data.
+- **The file is never held in memory.** Box headers are found with sixteen-byte
+  ranged reads — a `moov` at the end of the file costs two requests rather than
+  a download — then only `moov` is fetched, and the rewrite streams through,
+  zeroing bytes as they pass.
+
+A video with no coordinates is never rewritten at all, which is the common case
+and costs three small requests.
+
 ### What is still not covered
 
 - **PNG and WebP** metadata is untouched. Both are rare from phone cameras.
 - **XMP location data**, if a photo carries it alongside Exif, survives on HEIC.
+- **A video keeps its other metadata** — camera model, creation time. Removing
+  those means rewriting box sizes, which is the resize this avoids. Location is
+  gone from all three formats; parity on everything else is not claimed.
+- **No real phone clip has been round-tripped through this yet.** The parser is
+  tested against MP4 structures built by hand, which proves the offsets are
+  right and cannot prove a real file still plays. Shoot a clip with location on,
+  upload it, and check it plays and that `©xyz` is empty.
 
 ## Cost
 
