@@ -747,6 +747,12 @@ export async function fetchMyProConnections() {
         // this into words.
         eventName: (event?.data?.name as string | undefined) ?? null,
         eventDate: (event?.data?.date as string | undefined) ?? null,
+        // The three-word code the host reads out. It is how everybody at an
+        // event refers to it — printed on the table cards, typed into /join —
+        // so it is the identifier a photographer can actually match against
+        // something the host said. The UUID is an internal key and matches
+        // nothing a human has.
+        eventCode: (event?.data?.eventCode as string | undefined) ?? null,
       };
     }),
   );

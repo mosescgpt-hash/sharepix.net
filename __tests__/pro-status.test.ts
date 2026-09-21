@@ -134,3 +134,39 @@ describe('the pages read from the module', () => {
     expect(api).toContain('models.Event.get({ id: connection.eventId }');
   });
 });
+
+describe('an event is identified by things a human has', () => {
+  const hub = codeOnly(readSource('pages/pro/index.tsx'));
+  const review = codeOnly(readSource('pages/pro/events/[eventId]/review.tsx'));
+  const api = codeOnly(readSource('lib/api.ts'));
+
+  it('carries the event code, which is what a host reads out', () => {
+    // The three-word code is printed on the table cards and typed into /join.
+    // It is the identifier a photographer can match against something the host
+    // actually said to them; a UUID matches nothing a human has.
+    expect(api).toContain('eventCode:');
+    expect(hub).toContain('row.eventCode');
+  });
+
+  it('shows the date and the code together under the name', () => {
+    expect(hub).toContain("[row.eventDate, row.eventCode].filter(Boolean).join(' · ')");
+  });
+
+  it('names the event on the review page instead of just "Review"', () => {
+    // A photographer several queues deep had nothing on screen telling them
+    // which wedding their approvals were landing in.
+    expect(review).toContain('{event ? eventLabel(event.name) : \'Review\'}');
+    expect(review).toContain('Event code {event.code}');
+  });
+
+  it('uses the UUID only as a key and a URL, never as something to read', () => {
+    // It is still the identifier the routes and React need. What it must not
+    // be is text on screen, which is what it was for every row.
+    const uses = hub.match(/row\.eventId/g) ?? [];
+    expect(uses.length).toBeGreaterThan(0);
+    expect(hub).toContain('key={row.eventId}');
+    expect(hub).toContain('href={`/pro/events/${row.eventId}/review`}');
+    // The shape it had: rendered as the content of an element.
+    expect(hub).not.toContain('>{row.eventId}<');
+  });
+});
