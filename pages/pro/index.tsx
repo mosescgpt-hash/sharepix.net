@@ -88,9 +88,13 @@ export default function ProHomePage() {
                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{eventLabel(row.eventName)}</p>
-                        {row.eventDate ? (
-                          <p className="mt-0.5 text-xs text-charcoal/55">{row.eventDate}</p>
-                        ) : null}
+                        {/* Date and code: the two things a photographer can
+                            match against something the host actually told
+                            them. The UUID matched nothing a human has. */}
+                        <p className="mt-0.5 text-xs text-charcoal/55">
+                          {[row.eventDate, row.eventCode].filter(Boolean).join(' · ') ||
+                            'No date set'}
+                        </p>
                       </div>
                       {accepted ? (
                         <span

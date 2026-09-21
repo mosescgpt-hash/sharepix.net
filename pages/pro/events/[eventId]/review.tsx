@@ -21,7 +21,7 @@ import {
   isPublishingMode,
   type PublishStatus,
 } from '@/lib/professionalMedia';
-import { PRO_QUEUES, liveState } from '@/lib/proStatus';
+import { PRO_QUEUES, eventLabel, liveState } from '@/lib/proStatus';
 import type { DisplayPhoto } from '@/lib/types';
 
 /**
@@ -59,6 +59,10 @@ export default function ProReviewPage() {
   // null until the profile has been read, so the checkbox does not flicker from
   // unchecked to checked and imply a change nobody made.
   const [keepOriginals, setKeepOriginals] = useState<boolean | null>(null);
+  // Which event this is. The page said only "Review", so a photographer deep
+  // in a queue had nothing on screen telling them which wedding they were
+  // approving into.
+  const [event, setEvent] = useState<{ name: string | null; code: string | null } | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -69,6 +73,7 @@ export default function ProReviewPage() {
       return;
     }
     setLive(mine.livePublishing);
+    setEvent({ name: mine.eventName, code: mine.eventCode });
     setMode(isPublishingMode(mine.publishingMode) ? mine.publishingMode : DEFAULT_PUBLISHING_MODE);
     setPhotos(await fetchEventPhotos(eventId, { useThumbs: true }).catch(() => []));
     // A photographer who has never changed a setting has no profile row, and
@@ -206,8 +211,15 @@ export default function ProReviewPage() {
     <Layout title="Review" width="bleed">
       <section className="spx-section-canvas py-8">
         <div className="spx-inner">
-          <p className="spx-eyebrow">SharePix Pro</p>
-          <h1 className="spx-display mt-2 text-3xl sm:text-4xl">Review</h1>
+          <p className="spx-eyebrow">SharePix Pro · Review</p>
+          {/* The event, not the word "Review". Which gallery your approvals
+              land in is the one thing worth having on screen the whole time. */}
+          <h1 className="spx-display mt-2 text-3xl sm:text-4xl">
+            {event ? eventLabel(event.name) : 'Review'}
+          </h1>
+          {event?.code ? (
+            <p className="mt-1 text-sm text-charcoal/55">Event code {event.code}</p>
+          ) : null}
 
           {/* One banner instead of a button whose label was also the status.
               "Paused — go live" had to be read as both at once, and the thing
