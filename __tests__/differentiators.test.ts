@@ -1,6 +1,10 @@
 import { codeOnly, proseOf, readSource } from './sourceGuards';
 
-import { COMPARISONS, DIFFERENTIATORS, differentiatorFor } from '../lib/differentiators';
+import {
+  COMPARATIVE_PHRASES,
+  DIFFERENTIATORS,
+  differentiatorFor,
+} from '../lib/differentiators';
 
 /**
  * The homepage's competitive claims, checked against the code that makes them
@@ -163,21 +167,46 @@ describe('the event plans really are one-time', () => {
   });
 });
 
-describe('the comparison table', () => {
-  it('ties every row to a claim that is checked above', () => {
-    for (const row of COMPARISONS) {
-      expect(differentiatorFor(row.differentiatorId)).toBeDefined();
+describe('nothing here is about anybody else', () => {
+  /**
+   * A product decision, kept by the repository rather than by memory.
+   *
+   * SharePix is not going to be the company whose homepage is about how the
+   * other options are worse. A page written that way tells the reader where to
+   * go and look next, and it ages badly the moment a rival fixes the thing.
+   */
+  const claimText = DIFFERENTIATORS.map(
+    (d) => `${d.title} ${d.claim} ${d.boundary} ${d.badge}`,
+  )
+    .join(' ')
+    .toLowerCase();
+
+  it.each(COMPARATIVE_PHRASES)('says nothing about %s', (phrase) => {
+    expect(claimText).not.toContain(phrase);
+  });
+
+  it('names no competitor', () => {
+    for (const rival of ['GuestPix', 'Kululu', 'Tacboard', 'POV']) {
+      expect(claimText).not.toContain(rival.toLowerCase());
     }
   });
 
-  it('names no competitor and quotes no invented statistic', () => {
-    // Two reasons, in order of how much they matter: a number nobody can
-    // source is a lie, and a claim about a named rival has to be defensible.
-    const text = COMPARISONS.map((row) => `${row.usual} ${row.sharepix}`).join(' ');
-    expect(text).not.toMatch(/\d+\s?%/);
-    expect(text).not.toMatch(/\d+\s?MB/i);
-    for (const rival of ['GuestPix', 'Kululu', 'Tacboard', 'POV', 'Dropbox', 'Google Drive']) {
-      expect(text).not.toContain(rival);
+  it('quotes no statistic it cannot source', () => {
+    // A number nobody can check is a lie; one in a sales claim is an
+    // actionable one.
+    expect(claimText).not.toMatch(/\d+\s?%/);
+    expect(claimText).not.toMatch(/\d+\s?mb/);
+  });
+
+  it('applies the same rule to the copy the page actually renders', () => {
+    // The module is only half of it. A comparative line typed straight into
+    // JSX would sail past a check that only reads the data.
+    //
+    // codeOnly, because the comments in these files discuss the decision and
+    // necessarily contain the words it bans.
+    const rendered = codeOnly(readSource('pages/index.tsx')).toLowerCase();
+    for (const phrase of COMPARATIVE_PHRASES) {
+      expect(rendered).not.toContain(phrase);
     }
   });
 });
@@ -189,7 +218,12 @@ describe('the homepage says these things', () => {
     // Copy typed into JSX is copy no test can check. The whole mechanism above
     // depends on the page and the module being the same words.
     expect(page).toContain('DIFFERENTIATORS.map');
-    expect(page).toContain('COMPARISONS.map');
+  });
+
+  it('carries no two-column comparison against anybody', () => {
+    const rendered = codeOnly(page);
+    expect(rendered).not.toContain('The usual way');
+    expect(rendered).not.toContain('With SharePix');
   });
 
   it('shows each claim next to its boundary', () => {

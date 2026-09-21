@@ -4,7 +4,7 @@ import Artwork from '@/components/Artwork';
 import Layout from '@/components/Layout';
 import { trackEvent } from '@/lib/trackEvent';
 import StyledQrCode from '@/components/StyledQrCode';
-import { COMPARISONS, DIFFERENTIATORS } from '@/lib/differentiators';
+import { DIFFERENTIATORS } from '@/lib/differentiators';
 import { PRICING_TIERS } from '@/lib/pricing';
 import { SITE_ORIGIN, organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
 
@@ -36,9 +36,8 @@ export default function HomePage() {
       <div className="bg-canvas font-sans">
         <Hero />
         <TryItLive />
-        <TheUsualWay />
+        <OurStandard />
         <HowItWorks />
-        <PrivacyByDesign />
         <Occasions />
         <WhatYouGet />
         <Pricing />
@@ -77,7 +76,7 @@ function Hero() {
           <p className="spx-body mt-5 max-w-md">
             Your guests point a camera at a code and start sending photos. No app, no
             account, no phone number, nothing to explain to anyone. You get the original
-            files — the full-size ones, not a squeezed copy.
+            files, at the size the camera recorded them.
           </p>
           <ul className="mt-6 flex max-w-md flex-wrap gap-x-4 gap-y-1.5 text-sm text-charcoal/70">
             {[
@@ -256,76 +255,26 @@ function Occasions() {
 }
 
 /**
- * The comparison block.
+ * What SharePix commits to, each with the limit where it stops holding.
  *
- * Rows come from `lib/differentiators.ts`, where each one is tied to a claim
- * that a test checks against the code. The left column describes the status quo
- * — a group chat, a shared folder, an app-shaped tool — and names no product
- * and quotes no statistic, because nothing here could source one.
- */
-function TheUsualWay() {
-  return (
-    <section className="spx-section-sand">
-      <div className="spx-inner">
-        <p className="spx-eyebrow">Why this is different</p>
-        <Heading first="The usual way." second="And the other way." />
-        <p className="spx-body mt-5 max-w-lg">
-          Most of this category looks alike from the outside — everyone has a QR code and
-          a slideshow. The differences show up in what happens to the files and what your
-          guests are asked to do.
-        </p>
-
-        <div className="mt-10 grid gap-px overflow-hidden border border-charcoal/15 bg-charcoal/15 md:grid-cols-2">
-          <div className="bg-canvas/60 p-6">
-            <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/60">
-              The usual way
-            </h3>
-            <ul className="mt-5 space-y-4">
-              {COMPARISONS.map((row) => (
-                <li key={row.usual} className="flex gap-3 text-sm leading-relaxed text-charcoal/70">
-                  <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 bg-charcoal/30" />
-                  {row.usual}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="bg-ink p-6 text-canvas">
-            <h3 className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-canvas/70">
-              With SharePix
-            </h3>
-            <ul className="mt-5 space-y-4">
-              {COMPARISONS.map((row) => (
-                <li key={row.sharepix} className="flex gap-3 text-sm leading-relaxed text-canvas/85">
-                  <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 bg-sage" />
-                  {row.sharepix}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/**
- * The claims, each with the limit where it stops holding.
+ * The boundaries are the point. Anybody can write "private by design"; saying
+ * which formats are covered and which are not makes a claim the reader can
+ * check.
  *
- * The boundaries are the point. Anybody can write "private by design"; a page
- * that says which formats are covered and which are not is making a claim the
- * reader can check, and the specificity is what the vague version cannot copy.
+ * Nothing here mentions anybody else, by decision — see the note at the top of
+ * lib/differentiators.ts. The commitments are meant to stand up with no rival
+ * in the room.
  */
-function PrivacyByDesign() {
+function OurStandard() {
   return (
     <section className="spx-section-canvas">
       <div className="spx-inner">
-        <p className="spx-eyebrow">Privacy by design</p>
-        <Heading first="What we do" second="with your guests' files." />
+        <p className="spx-eyebrow">Our standard</p>
+        <Heading first="What we promise" second="and exactly where it ends." />
         <p className="spx-body mt-5 max-w-lg">
-          Each of these is a specific promise rather than a posture, so each one comes
-          with the case where it does not apply. A claim with no stated edge is usually
-          hiding one.
+          Each of these is a specific commitment rather than a posture, so each one is
+          printed with the case where it does not apply. We would rather tell you the
+          edge than let you find it.
         </p>
 
         <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
@@ -358,7 +307,7 @@ const FEATURES = [
   },
   {
     title: 'Hold everything for approval',
-    body: 'Switch on approvals and nothing appears until you release it. Included, not an upgrade.',
+    body: 'Switch on approvals and nothing appears until you release it. Included on every plan.',
   },
   {
     title: 'One ZIP, every original',

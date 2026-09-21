@@ -1,14 +1,26 @@
 /**
- * What SharePix does that a competitor's landing page cannot honestly copy —
- * and, for each claim, the code that has to keep being true for it.
+ * The standards SharePix holds itself to — and, for each one, the code that has
+ * to keep being true for it.
+ *
+ * ## Nothing here is about anybody else
+ *
+ * Deliberately. An earlier draft of this module carried a two-column
+ * "the usual way / with SharePix" comparison, and it was removed on purpose:
+ * SharePix does not want to be the company whose homepage is about how the
+ * other options are bad. Every line below states what SharePix does, in terms
+ * that make sense with no rival in the room.
+ *
+ * That is also the stronger argument. A specific, checkable commitment needs no
+ * foil to land, and a reader comparing options can do the comparing themselves.
+ *
+ * `__tests__/differentiators.test.ts` fails if comparative or disparaging
+ * framing appears here or on the page, so this is a rule the repository keeps
+ * rather than a preference somebody has to remember.
  *
  * ## Why claims live in a module instead of in JSX
  *
- * The market is crowded and every entrant says "QR code, no app, live
- * slideshow". Differentiation therefore has to rest on things that are
- * specifically, checkably true, which creates a new hazard: a specific claim
- * that stops being true is worse than a vague one, because somebody bought on
- * the strength of it.
+ * Specific commitments carry a hazard: one that stops being true is worse than
+ * a vague one, because somebody bought on the strength of it.
  *
  * This repository already has a documented history of that failure — the README
  * carries a section about claims that were accurate when written and quietly
@@ -74,9 +86,9 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
   },
   {
     id: 'full-resolution',
-    title: 'The original file, not a copy of it',
+    title: 'The file the camera wrote',
     claim:
-      'What a guest uploads is what you download. No resizing, no re-encoding, no quality setting applied on the way through — the bytes are kept as sent.',
+      'What a guest uploads is what you download. The bytes are stored exactly as sent and handed back the same way, at the resolution the camera recorded.',
     boundary:
       'SharePix Pro is the deliberate exception: a photographer’s originals are never served to guests, who see a reduced preview instead.',
     backedBy: 'amplify/functions/sanitize-upload/handler.ts',
@@ -84,9 +96,9 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
   },
   {
     id: 'screened-free',
-    title: 'Screening is not an upsell',
+    title: 'Screening on every plan',
     claim:
-      'Every still image is checked for explicit content before it can appear anywhere — on every plan, including the free one. A flagged photo is never briefly visible while you catch it.',
+      'Every still image is checked for explicit content before it can appear anywhere, on every plan including the free one. A flagged photo is held straight away rather than shown while you catch it.',
     boundary:
       'Stills only; video is not screened. Screening is deliberately narrow — it looks for explicit content, not for unflattering photos.',
     backedBy: 'amplify/functions/create-event-photo/moderation.ts',
@@ -106,7 +118,7 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
     id: 'one-payment',
     title: 'One event, one payment',
     claim:
-      'Event plans are charged once. Nothing renews, no card is kept on file for later, and there is no plan that quietly bills again next month.',
+      'Event plans are charged once, at the price on the pricing page. Nothing renews and no card is kept on file afterwards.',
     boundary:
       'The Corporate plan is a monthly subscription, for organisations running events all year. It is the only recurring charge SharePix has.',
     backedBy: 'lib/pricing.ts',
@@ -115,58 +127,29 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
 ] as const;
 
 /**
- * The comparison table on the homepage.
+ * Words that would turn a commitment into a swipe.
  *
- * Deliberately not a named-competitor table. Two reasons, and the second is the
- * one that matters:
+ * The rule is a product decision, not a style preference: SharePix is not going
+ * to be the company whose homepage is about how everyone else is worse. A page
+ * written that way tells a reader where to go and look next, and it ages badly
+ * the moment a rival fixes the thing.
  *
- * 1. Claims about a named rival have to be verifiable, and nothing in this
- *    repository can check what somebody else's app weighs or requires.
- * 2. A specific, checkable claim standing next to a vague one reads as
- *    confident. A page full of swipes at rivals reads as nervous, and invites
- *    the reader to go and look at them.
- *
- * So the left column is the honest status quo most people are actually coming
- * from — a group chat, a shared drive, or an app-shaped tool — described in
- * terms nobody would dispute. The right column is specific, and every line of
- * it is pinned by a test.
+ * Checked against this module and against the rendered copy on the homepage, so
+ * the decision survives the next person who is in a hurry.
  */
-export interface Comparison {
-  /** What people do today. No invented statistics, no named products. */
-  usual: string;
-  /** What SharePix does. Must be backed by a Differentiator. */
-  sharepix: string;
-  /** Which claim above carries it. */
-  differentiatorId: string;
-}
-
-export const COMPARISONS: readonly Comparison[] = [
-  {
-    usual: 'Install an app, or make an account, before you can send a photo',
-    sharepix: 'Scan, pick photos, done — in the browser that is already open',
-    differentiatorId: 'no-account',
-  },
-  {
-    usual: 'Photos come back squeezed down to whatever the app decided',
-    sharepix: 'The original file, at the size the camera wrote it',
-    differentiatorId: 'full-resolution',
-  },
-  {
-    usual: 'Every original still carries the GPS coordinates it was taken at',
-    sharepix: 'Location data is removed from photos as they arrive',
-    differentiatorId: 'location-stripped',
-  },
-  {
-    usual: 'Nothing stands between an unwelcome photo and the projector',
-    sharepix: 'Screened automatically first, and you can hold everything for approval',
-    differentiatorId: 'screened-free',
-  },
-  {
-    usual: 'Collecting them afterwards means chasing people who have moved on',
-    sharepix: 'Already collected, in one gallery, downloadable as a single ZIP',
-    differentiatorId: 'full-resolution',
-  },
-] as const;
+export const COMPARATIVE_PHRASES: readonly string[] = [
+  'unlike',
+  'other apps',
+  'competitor',
+  'rivals',
+  'the usual way',
+  'most apps',
+  'other platforms',
+  'unlike them',
+  'they make you',
+  'nickel',
+  'sneaky',
+];
 
 export function differentiatorFor(id: string): Differentiator | undefined {
   return DIFFERENTIATORS.find((item) => item.id === id);
