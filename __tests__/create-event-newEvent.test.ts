@@ -390,6 +390,32 @@ describe('the row a new event starts as', () => {
     expect(row.accessExpiresAt).toBe('2027-07-31T12:00:00.000Z');
   });
 
+  it('starts the window at the event, not at the paperwork', () => {
+    // The bug: a host setting their wedding gallery up six weeks early spent
+    // six weeks of a sixty-day window on an empty gallery. The sixty days now
+    // run from the end of the event's day.
+    const row = newEventRow({ ...base, date: '2026-07-04' });
+    expect(row.uploadWindowEndsAt).toBe('2026-09-03T00:00:00.000Z');
+    // And the gallery moves with it, rather than ending before the uploads it
+    // is meant to hold.
+    expect(row.accessExpiresAt).toBe('2027-09-03T00:00:00.000Z');
+  });
+
+  it('runs from creation for an event that already happened', () => {
+    // A host collecting photos after the fact. Deriving the window from a past
+    // date would hand them a gallery that closed before they opened it.
+    const row = newEventRow({ ...base, date: '2026-05-01' });
+    expect(row.uploadWindowEndsAt).toBe('2026-07-31T12:00:00.000Z');
+  });
+
+  it('refuses a date too far out rather than committing the storage', () => {
+    // Uncapped, "2099-06-01" is a permanent gallery for seventy-nine dollars.
+    expect(() => newEventRow({ ...base, date: '2099-06-01' })).toThrow(/within the next/);
+    // And it is refused, not quietly moved: a date changed underneath somebody
+    // is worse than a date they were told about.
+    expect(() => newEventRow({ ...base, date: '2026-08-15' })).not.toThrow();
+  });
+
   it('gives a retired plan the access window it was actually sold', () => {
     // The window is global and lengthening it is a gift, but access length was
     // part of what the plan was, so it stays stamped from the plan's own row.

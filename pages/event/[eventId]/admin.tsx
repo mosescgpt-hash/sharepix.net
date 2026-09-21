@@ -54,6 +54,7 @@ import {
   videosRemaining,
 } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { UPLOAD_WINDOW_DAYS, latestEventDate } from '@/lib/uploadWindowStart';
 import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
 import { DisplayPhoto, QREvent } from '@/lib/types';
@@ -859,8 +860,19 @@ function AdminDashboardPage() {
                       value={editDate}
                       disabled={detailsLocked || savingDetails}
                       onChange={(e) => setEditDate(e.target.value)}
+                      // Same ceiling the server applies on save. The window
+                      // follows this date while the event has no photos, so a
+                      // date nobody could reach is a save that fails for a
+                      // reason the form never mentioned.
+                      max={latestEventDate()}
                       className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
                     />
+                    {!detailsLocked ? (
+                      <span className="mt-1.5 block text-sm text-charcoal/70">
+                        Uploads run for {UPLOAD_WINDOW_DAYS} days from this date. It locks
+                        once the first photo arrives.
+                      </span>
+                    ) : null}
                   </label>
                 </div>
 

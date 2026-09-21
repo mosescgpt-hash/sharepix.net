@@ -20,6 +20,7 @@ import {
   validateDiscountCode,
   trackEvent,
 } from '@/lib/api';
+import { UPLOAD_WINDOW_DAYS, latestEventDate } from '@/lib/uploadWindowStart';
 import { QREvent } from '@/lib/types';
 import {
   AUDIENCE_HELP,
@@ -284,8 +285,23 @@ function CreateEventPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              // The browser's own picker refuses what the server would refuse,
+              // so nobody fills the form in and then gets turned away. The
+              // server check in create-event is still the fence — this is a
+              // courtesy, and a date input's max is trivially edited.
+              max={latestEventDate()}
+              aria-describedby="event-date-help"
               className="spx-input mt-2"
             />
+            {/* The window used to run from the moment the event was created,
+                which meant a host setting up early spent it on an empty
+                gallery. It now runs from the date — so the date is worth
+                saying something about rather than leaving as a bare field. */}
+            <p id="event-date-help" className="mt-1.5 text-sm text-charcoal/70">
+              {date
+                ? `Guests can upload for ${UPLOAD_WINDOW_DAYS} days after this date.`
+                : `Uploads run for ${UPLOAD_WINDOW_DAYS} days. With a date set they start from the event; without one they start once the gallery is being used.`}
+            </p>
           </div>
 
           <div>

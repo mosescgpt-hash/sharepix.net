@@ -1,4 +1,9 @@
 import { EVENT_CODE_WORDS } from './eventCodeWords';
+import {
+  accessExpiresAtFor,
+  eventDateProblem,
+  windowEndsAtFor,
+} from './uploadWindowStart';
 /**
  * What a new event is, and whether it starts active.
  *
@@ -108,8 +113,15 @@ export const CORPORATE_EVENT_PLAN: TierPlan = {
   accessDays: 60 + 365,
 };
 
-/** The upload window every plan gets, in days. Mirrors UPLOAD_WINDOW_DAYS. */
-export const UPLOAD_WINDOW_DAYS = 60;
+/**
+ * The upload window every plan gets, in days.
+ *
+ * Re-exported rather than declared again: it used to be a second copy of the
+ * number beside the one in `uploadWindowStart.ts`, and the two could disagree
+ * without anything noticing. Callers that already import it from here are
+ * unaffected.
+ */
+export { UPLOAD_WINDOW_DAYS } from './uploadWindowStart';
 
 /** Stripe won't charge below this, so a remainder under it is comped instead. */
 export const STRIPE_MIN_CHARGE_CENTS = 50;
@@ -407,8 +419,6 @@ export function activationFor({
 // Row shape.
 // ---------------------------------------------------------------------------
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 export interface NewEventRow {
   name: string;
   date: string | null;
@@ -454,17 +464,31 @@ export function newEventRow({
   const clean = sanitizeEventName(name);
   if (!clean) throw new Error('Give your event a name.');
 
+  // How far ahead an event may be dated. Checked before anything is derived
+  // from it: an uncapped date is an unbounded storage commitment, and the
+  // refusal has to reach the host rather than be silently clamped.
+  const cleanDate = sanitizeEventDate(date);
+  const dateProblem = eventDateProblem(cleanDate, now);
+  if (dateProblem) throw new Error(dateProblem);
+
+  // The sixty days run from the event, not from the paperwork. An undated
+  // event starts provisionally from now and is re-anchored by its fifth
+  // upload — see uploadWindowStart.ts.
+  const uploadWindowEndsAt = windowEndsAtFor(cleanDate, now);
+
   const location = formatEventLocation(city, state);
   return {
     name: clean,
-    date: sanitizeEventDate(date),
+    date: cleanDate,
     location: location || null,
     tier: id,
     photoLimit: plan.photoLimit,
     videoLimit: plan.videoLimit,
     videoBytesLimit: plan.videoBytesLimit,
-    accessExpiresAt: new Date(now.getTime() + plan.accessDays * DAY_MS).toISOString(),
-    uploadWindowEndsAt: new Date(now.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS).toISOString(),
+    // Counted from the window rather than from creation, so the gallery cannot
+    // end before the uploads it holds.
+    accessExpiresAt: accessExpiresAtFor(uploadWindowEndsAt, plan.accessDays, now),
+    uploadWindowEndsAt,
     paid: active,
     createdBy: sanitizeHostName(hostName) || 'Host',
   };

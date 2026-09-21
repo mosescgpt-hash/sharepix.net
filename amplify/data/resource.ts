@@ -150,10 +150,18 @@ const schema = a.schema({
       // city (no street address).
       location: a.string(),
       accessExpiresAt: a.datetime(),
-      // When the upload window closes (creation + 60 days, plus any paid
-      // extensions). Drives the whole lifecycle: uploads, guest view resolution,
-      // host retention, and archival. Extended by the Stripe webhook.
+      // When the upload window closes: 60 days from the event date, plus any
+      // paid extensions. Drives the whole lifecycle — uploads, guest view
+      // resolution, host retention, archival. Extended by the Stripe webhook.
+      //
+      // It used to be 60 days from *creation*, which spent the window before
+      // the event happened. See amplify/functions/create-event/uploadWindowStart.ts.
       uploadWindowEndsAt: a.datetime(),
+      // Set once, by createEventPhoto, when an event with no date reaches its
+      // fifth upload and the window above is re-stamped from that moment. Its
+      // presence is what makes that re-stamp happen exactly once — so it is a
+      // marker, not a display field, and nothing reads it but the condition.
+      uploadWindowAnchoredAt: a.datetime(),
       // When true, the host has closed the event: guests can no longer upload,
       // but the gallery stays viewable. Enforced server-side in createEventPhoto.
       uploadsClosed: a.boolean(),

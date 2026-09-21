@@ -82,6 +82,10 @@ export interface PricingTier {
  * fails is a window that closed before the person with the good photos got
  * round to it. Only NEW events are affected: `uploadWindowEndsAt` is stamped on
  * the row at creation, so every existing event keeps the window it was sold.
+ *
+ * The sixty days are counted from the **event date**, not from creation. See
+ * `lib/uploadWindowStart.ts` — it also caps how far ahead a date may be set,
+ * because every day an event can be pushed forward is storage already paid for.
  */
 export const UPLOAD_WINDOW_DAYS = 60;
 export const EXTENSION_DAYS = 30;

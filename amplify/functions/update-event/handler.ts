@@ -2,6 +2,7 @@ import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/clie
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { buildPatch, mayEdit } from './settings';
+import { rescheduledWindow, type Rescheduled } from './uploadWindowStart';
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
@@ -16,7 +17,11 @@ type Handler = Schema['updateEventSettings']['functionHandler'];
  * could be hostile, but keeping the pattern means a future field added to the
  * list can't become an expression-injection question.
  */
-function expressionFor(patch: { set: Record<string, string | boolean>; remove: string[] }) {
+function expressionFor(
+  patch: { set: Record<string, string | boolean>; remove: string[] },
+  // Server-derived, never from the request. See the call site.
+  reschedule: Rescheduled | null = null,
+) {
   const names: Record<string, string> = {};
   const values: Record<string, AttributeValue> = {};
   const sets: string[] = [];
@@ -35,6 +40,17 @@ function expressionFor(patch: { set: Record<string, string | boolean>; remove: s
     names[nameRef] = field;
     return nameRef;
   });
+
+  if (reschedule) {
+    names['#windowEndsAt'] = 'uploadWindowEndsAt';
+    values[':windowEndsAt'] = { S: reschedule.uploadWindowEndsAt };
+    sets.push('#windowEndsAt = :windowEndsAt');
+    if (reschedule.accessExpiresAt) {
+      names['#accessExpiresAt'] = 'accessExpiresAt';
+      values[':accessExpiresAt'] = { S: reschedule.accessExpiresAt };
+      sets.push('#accessExpiresAt = :accessExpiresAt');
+    }
+  }
 
   // updatedAt always moves, so a change is visible to anything watching the row.
   names['#updatedAt'] = 'updatedAt';
@@ -126,7 +142,26 @@ export const handler: Handler = async (event) => {
   );
   if (!result.ok) return { success: false, message: result.reason };
 
-  const { UpdateExpression, names, values } = expressionFor(result.patch);
+  // The upload window follows the event date.
+  //
+  // Derived here rather than added to `EDITABLE_FIELDS`, and the distinction is
+  // the point of that list: it names what a *request* may write, and a host
+  // must never be able to name `uploadWindowEndsAt` — that field is what an
+  // upload-window extension is sold to move. What happens below is the server
+  // recomputing the window from a date it has just validated and capped.
+  //
+  // Only reachable before the first upload, because the date locks once photos
+  // exist. See rescheduledWindow for why that is what makes it safe.
+  const reschedule =
+    'date' in result.patch.set || result.patch.remove.includes('date')
+      ? rescheduledWindow({
+          date: (result.patch.set.date as string | undefined) ?? null,
+          currentEndsAt: found.Item.uploadWindowEndsAt?.S ?? null,
+          currentAccessExpiresAt: found.Item.accessExpiresAt?.S ?? null,
+        })
+      : null;
+
+  const { UpdateExpression, names, values } = expressionFor(result.patch, reschedule);
 
   try {
     await dynamo.send(

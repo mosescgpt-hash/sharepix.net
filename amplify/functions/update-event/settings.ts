@@ -20,6 +20,7 @@
 
 import { validateQrBranding } from './qrBranding';
 import { isFontSetKey, isGalleryLayout, normalizeAccent } from './galleryTheme';
+import { eventDateProblem } from './uploadWindowStart';
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
@@ -146,7 +147,11 @@ function provided<T>(value: T | null | undefined): value is T {
   return value !== undefined && value !== null;
 }
 
-export function buildPatch(request: SettingsRequest, event: EventState): PatchResult {
+export function buildPatch(
+  request: SettingsRequest,
+  event: EventState,
+  now: Date = new Date(),
+): PatchResult {
   const set: Record<string, string | boolean> = {};
   const remove: string[] = [];
 
@@ -169,8 +174,14 @@ export function buildPatch(request: SettingsRequest, event: EventState): PatchRe
 
   if (provided(request.date)) {
     const date = sanitizeEventDate(request.date);
-    if (date) set.date = date;
-    else if ((request.date ?? '').trim() === '') remove.push('date');
+    if (date) {
+      // The same ceiling create-event applies. Without it here, a host could
+      // set a near date, save, and then edit it to 2099 — which is the whole
+      // point of capping it at creation.
+      const problem = eventDateProblem(date, now);
+      if (problem) return { ok: false, reason: problem };
+      set.date = date;
+    } else if ((request.date ?? '').trim() === '') remove.push('date');
     else return { ok: false, reason: 'Enter the event date as a real calendar date.' };
   }
 

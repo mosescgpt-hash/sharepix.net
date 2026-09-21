@@ -296,7 +296,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Guests can add photos for 60 days from when the event is created, and the host can extend that. After the upload window closes, the gallery stays up for a further 12 months — or 30 days if the host is using their free event.',
+        // Said "60 days from when the event is created", which was true and was
+        // the bug: a host setting up six weeks early spent six weeks of it on
+        // an empty gallery.
+        text: 'Guests can add photos for 60 days from the event date, and the host can extend that. If the host did not set a date, the 60 days start once the gallery is genuinely being used rather than at setup. After the upload window closes, the gallery stays up for a further 12 months — or 30 days if the host is using their free event.',
       },
       {
         kind: 'text',
@@ -416,7 +419,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'The upload window runs 60 days from when the event was created. On your dashboard, tick Extend upload window in the Add-ons list and pay once — it adds another 30 days, and you can do it more than once.',
+        text: 'The upload window runs 60 days from your event date — or, if you did not set one, from the point the gallery starts being used. On your dashboard, tick Extend upload window in the Add-ons list and pay once — it adds another 30 days, and you can do it more than once.',
       },
       {
         kind: 'text',

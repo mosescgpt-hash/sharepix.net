@@ -13,8 +13,8 @@ title.
 
 **Decided.** Shipped.
 
-- Guests can upload for **60 days** from event creation, extendable in 30-day
-  blocks for half the plan price.
+- Guests can upload for **60 days** from the **event date**, extendable in
+  30-day blocks for half the plan price.
 - After the window closes the gallery stays available for **12 months** —
   guests at reduced resolution, the host with full access and downloads for the
   whole period.
@@ -31,6 +31,33 @@ with; those rows describe what a plan **was** and editing them rewrites history.
 specifies a 90-day upload window. Sixty, not ninety: it is comfortably past the
 point where a guest has emptied their camera roll, and it is short enough that
 the paid extension remains a real product rather than a formality.
+
+**Amended: the window starts at the event, not at creation.** As originally
+shipped the 60 days ran from the moment the event row was written, which is the
+moment a host is least likely to want them. Somebody setting up six weeks early
+spent six weeks of the window on an empty gallery; somebody three months early
+found uploads already closed on the day, having paid for a window they never
+used. Nothing reported it — every reader downstream honoured the stored date
+exactly as written.
+
+Three cases now, in `lib/uploadWindowStart.ts`:
+
+- **Dated, future.** 60 days from the end of the event's day.
+- **Dated, today or past.** 60 days from creation. An event that already
+  happened is a host collecting photos now, and deriving the window from a past
+  date would hand them a gallery that closed before they opened it.
+- **Undated.** 60 days from creation provisionally, re-stamped once when the
+  event reaches its **fifth** upload. Five, not one: hosts photograph their own
+  table card to check the code works, and that upload is indistinguishable from
+  a guest's.
+
+An event date is capped at **90 days ahead** and one year behind. Every day a
+host can push their event forward is a day of storage already paid for, so
+uncapped, a date in 2099 is a permanent gallery for seventy-nine dollars. The
+date follows the same ceiling when edited, and editing it moves the window —
+which is safe only because the name and date lock at the first upload. Without
+that lock a host could collect photos all through the window and keep pushing
+the date to buy another sixty days, free, forever.
 
 **Consequences for the research documents.** Any survey question that asks a
 host to validate "guests can upload for 90 days" is asking about a product
