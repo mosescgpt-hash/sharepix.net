@@ -11,6 +11,8 @@ import {
   processProPhoto,
   requestProUploadSlot,
   setProPublishing,
+  getMyPhotographerProfile,
+  setKeepOriginals as setKeepOriginalsSetting,
 } from '@/lib/api';
 import {
   DEFAULT_PREVIEW_LONG_EDGE,
@@ -54,6 +56,9 @@ export default function ProReviewPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [uploading, setUploading] = useState(0);
   const [message, setMessage] = useState('');
+  // null until the profile has been read, so the checkbox does not flicker from
+  // unchecked to checked and imply a change nobody made.
+  const [keepOriginals, setKeepOriginals] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -66,6 +71,10 @@ export default function ProReviewPage() {
     setLive(mine.livePublishing);
     setMode(isPublishingMode(mine.publishingMode) ? mine.publishingMode : DEFAULT_PUBLISHING_MODE);
     setPhotos(await fetchEventPhotos(eventId, { useThumbs: true }).catch(() => []));
+    // A photographer who has never changed a setting has no profile row, and
+    // that reads as "discard" — which is the default and what the copy says.
+    const profile = await getMyPhotographerProfile().catch(() => null);
+    setKeepOriginals(profile?.keepOriginals === true);
     setPhase('ready');
   }, [eventId]);
 
@@ -246,8 +255,10 @@ export default function ProReviewPage() {
               />
             </label>
             <p className="mt-2 text-xs text-charcoal/55">
-              JPEG or PNG. We make a {DEFAULT_PREVIEW_LONG_EDGE}px preview and delete your
-              original unless you have asked us to keep it.
+              JPEG or PNG. We make a {DEFAULT_PREVIEW_LONG_EDGE}px preview
+              {keepOriginals
+                ? ' and keep your original, because you asked us to.'
+                : ' and delete your original.'}
               {uploading > 0 ? ` Uploading ${uploading}…` : ''}
             </p>
           </div>
@@ -344,7 +355,46 @@ export default function ProReviewPage() {
           )}
 
           <div className="mt-10 border-t border-charcoal/15 pt-6">
-            <label className="block max-w-sm">
+            {/* The promise above this used to say "unless you have asked us to
+                keep it", and there was nowhere to ask: the field was not in the
+                schema, so the pipeline's read always came back undefined and
+                the answer was always discard. This is where you ask. */}
+            <label className="flex max-w-lg items-start gap-3">
+              <input
+                type="checkbox"
+                checked={keepOriginals === true}
+                disabled={keepOriginals === null}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setKeepOriginals(next);
+                  void setKeepOriginalsSetting(next)
+                    .then(() =>
+                      setMessage(
+                        next
+                          ? 'We will keep your originals from now on.'
+                          : 'We will delete your originals once the preview is made.',
+                      ),
+                    )
+                    .catch(() => {
+                      // Put the box back rather than leaving it showing a
+                      // setting that did not save. This one decides whether
+                      // somebody's originals survive.
+                      setKeepOriginals(!next);
+                      setMessage('That could not be saved. Your originals are unchanged.');
+                    });
+                }}
+                className="mt-1"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Keep my original files</span>
+                <span className="mt-1 block text-charcoal/65">
+                  Off by default: we make the preview and delete the original. This applies
+                  to photos you upload from now on, not to ones already processed.
+                </span>
+              </span>
+            </label>
+
+            <label className="mt-8 block max-w-sm">
               <span className="text-sm font-medium">When you approve a photo</span>
               <select
                 value={mode}

@@ -522,6 +522,18 @@ const schema = a.schema({
       defaultPublishingMode: a.string(),
       // Long edge in pixels, clamped into range by previewLongEdge().
       defaultPreviewResolution: a.integer(),
+      // Whether SharePix holds the photographer's full-resolution originals
+      // after making the preview, instead of deleting them.
+      //
+      // `process-pro-photo` has read this since the feature was written, and
+      // `/pro` and the review page have both promised it — but the field was
+      // never declared, so the read always came back undefined, the answer was
+      // always "discard", and a photographer had no way to say otherwise. The
+      // promise was on the page and the switch was not in the schema.
+      //
+      // Absent still means discard. That is the right default for somebody
+      // else's copyrighted work: holding it has to be asked for.
+      keepOriginals: a.boolean(),
     })
     .authorization((allow) => [allow.owner(), allow.group('ADMINS')]),
 
