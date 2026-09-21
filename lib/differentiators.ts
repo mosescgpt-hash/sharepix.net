@@ -34,14 +34,19 @@
  *
  * ## Why the boundaries are written down
  *
- * Each claim carries a `boundary`: the case where it does not hold. Photo
- * metadata is stripped; **video metadata is not**. A page that said "automatic
- * GPS scrubbing" without qualification would be making a safety promise the
- * product does not keep for video, and the whole point of the claim is that
- * somebody's home address does not travel with a file.
+ * Each claim carries a `boundary`: the case where it does not hold. Location is
+ * removed from photos *and* video, but not equally — a JPEG loses all of its
+ * metadata, while a video loses its coordinates and keeps the camera model and
+ * the time, because taking more out would mean rebuilding the file.
  *
- * Saying so costs a line of copy and is the difference between a claim and a
- * liability.
+ * That distinction is exactly the sort a marketing page rounds off. It should
+ * not be: the boundary is what a reader can check, and the unqualified version
+ * of a safety claim is the one that becomes a liability.
+ *
+ * This header previously read "video metadata is **not** stripped", which was
+ * true when written and stopped being true the day the video path shipped —
+ * which is the failure the whole module exists to guard against, appearing in
+ * the module's own documentation.
  */
 
 export interface Differentiator {
@@ -150,6 +155,28 @@ export const COMPARATIVE_PHRASES: readonly string[] = [
   'nickel',
   'sneaky',
 ];
+
+/**
+ * Which of those a piece of copy actually uses.
+ *
+ * Matched on word boundaries, which is not fussiness: a plain
+ * `includes('rivals')` fires on **arrivals**, and the live slideshow copy says
+ * "new arrivals jump the queue". A guard that cries wolf on ordinary prose is a
+ * guard somebody switches off.
+ *
+ * A plain boundary at both ends is not enough either. It would miss
+ * "competitors", because the trailing `\b` cannot sit between "competitor" and
+ * its own plural — so the obvious spelling of this check has a hole exactly
+ * where the word is most likely to appear. A trailing `s` or `es` is therefore
+ * allowed, and nothing more: "unlikely" must not read as "unlike".
+ */
+export function comparativePhrasesIn(text: string): string[] {
+  const haystack = text.toLowerCase();
+  return COMPARATIVE_PHRASES.filter((phrase) => {
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}(?:es|s)?\\b`).test(haystack);
+  });
+}
 
 export function differentiatorFor(id: string): Differentiator | undefined {
   return DIFFERENTIATORS.find((item) => item.id === id);
