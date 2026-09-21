@@ -12,24 +12,24 @@ const THUMB = 'events/evt-1/thumbs/abc123-thumb.jpg';
 const VIDEO = 'events/evt-1/photos/clip.mp4';
 
 describe('mirrorDecision — the leak this prevents', () => {
-  it('does NOT mirror a strippable original on its first pass', () => {
+  it('does NOT mirror an original this pass rewrote', () => {
     // This is the whole point of the module. The guest's upload still has its
     // GPS in it; stripping happens next and fires a second event. Copying now
     // would put the un-stripped file in R2 and serve it to guests.
-    const decision = mirrorDecision({ key: ORIGINAL, strippable: true, sanitized: false });
+    const decision = mirrorDecision({ key: ORIGINAL, rewritten: true, sanitized: false });
     expect(decision.mirror).toBe(false);
     expect(decision.reason).toBe('awaiting-sanitized-rewrite');
   });
 
   it('mirrors the same original once the sanitized rewrite arrives', () => {
-    const decision = mirrorDecision({ key: ORIGINAL, strippable: true, sanitized: true });
+    const decision = mirrorDecision({ key: ORIGINAL, rewritten: true, sanitized: true });
     expect(decision.mirror).toBe(true);
     expect(decision.reason).toBe('sanitized-original');
   });
 
   it('treats a missing sanitized flag as not-yet-stripped', () => {
     // Absent metadata must never be read as "already clean".
-    expect(mirrorDecision({ key: ORIGINAL, strippable: true }).mirror).toBe(false);
+    expect(mirrorDecision({ key: ORIGINAL, rewritten: true }).mirror).toBe(false);
   });
 });
 
@@ -47,19 +47,19 @@ describe('mirrorDecision — everything else', () => {
     });
   });
 
-  it('mirrors an original that is never rewritten', () => {
+  it('mirrors an original that this pass did not rewrite', () => {
     // A video or PNG is written once, so waiting for a rewrite would mean
     // waiting forever and never mirroring it at all.
-    expect(mirrorDecision({ key: VIDEO, strippable: false })).toEqual({
+    expect(mirrorDecision({ key: VIDEO, rewritten: false })).toEqual({
       mirror: true,
-      reason: 'not-strippable',
+      reason: 'no-rewrite-pending',
     });
   });
 
   it('never mirrors a rejected upload, whatever else is true of it', () => {
     for (const key of [ORIGINAL, PREVIEW, THUMB, VIDEO]) {
       for (const sanitized of [true, false]) {
-        expect(mirrorDecision({ key, rejected: true, sanitized, strippable: true }).mirror).toBe(
+        expect(mirrorDecision({ key, rejected: true, sanitized, rewritten: true }).mirror).toBe(
           false,
         );
       }
@@ -74,7 +74,7 @@ describe('mirrorDecision — everything else', () => {
 
   it('does not confuse a lookalike prefix for a derived variant', () => {
     // "previews" must be its own path segment, not a substring of the id.
-    expect(mirrorDecision({ key: 'events/evt-1/photos/previews-of-me.jpg', strippable: true }))
+    expect(mirrorDecision({ key: 'events/evt-1/photos/previews-of-me.jpg', rewritten: true }))
       .toEqual({ mirror: false, reason: 'awaiting-sanitized-rewrite' });
   });
 });

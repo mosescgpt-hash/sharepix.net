@@ -5,10 +5,13 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { Readable, Transform } from 'node:stream';
 import { sniffMediaKind, maxBytesForKind } from './safety';
 import { usableSize } from './accounting';
 import { isJpeg, isHeic, stripJpegMetadata, stripHeicGps } from './exif';
+import { findMoov, isMp4, locationRangesInMoov, patchChunk } from './video';
 import { mirrorConfigured, mirrorDecision, r2KeyFor } from './mirror';
 
 const s3 = new S3Client({});
@@ -229,16 +232,15 @@ async function processRecord(record: S3EventRecord) {
     return;
   }
 
-  await stripMetadata(bucket, key, header, headerObj.Metadata);
+  const rewrote = await stripMetadata(bucket, key, header, headerObj.Metadata);
 
   // Mirror only once the bytes are final. A JPEG or HEIC is rewritten by
   // stripMetadata, and that rewrite fires its own event carrying
   // `sanitized: 'true'` — this pass deliberately skips it so the copy that
   // reaches R2 is the stripped one, never the guest's original.
-  const strippable = isJpeg(header) || isHeic(header);
   const decision = mirrorDecision({
     key,
-    strippable,
+    rewritten: rewrote,
     sanitized: headerObj.Metadata?.sanitized === 'true',
   });
   if (decision.mirror) {
@@ -266,19 +268,24 @@ async function stripMetadata(
   key: string,
   header: Uint8Array,
   metadata: Record<string, string> | undefined,
-) {
+): Promise<boolean> {
   // Our own rewrite fires another ObjectCreated event. The marker below is how
   // that second pass knows to stop, so this never loops.
-  if (metadata?.sanitized === 'true') return;
-  // JPEG loses all metadata; HEIC only its GPS, in place — see docs/moderation.md.
+  if (metadata?.sanitized === 'true') return false;
+  // JPEG loses all metadata; HEIC and video lose their location — see
+  // docs/moderation.md for exactly what each format keeps.
   const jpeg = isJpeg(header);
-  if (!jpeg && !isHeic(header)) return;
+  if (!jpeg && !isHeic(header)) {
+    return isMp4(header) ? stripVideoLocation(bucket, key) : false;
+  }
 
   try {
     const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
     const bytes = await readBytes(object.Body);
     const stripped = jpeg ? stripJpegMetadata(bytes) : stripHeicGps(bytes);
-    if (!stripped) return; // nothing to remove, or the file looked malformed
+    // Nothing to remove, or the file looked malformed. Either way no rewrite
+    // happens, so no second event is coming and the caller must mirror now.
+    if (!stripped) return false;
 
     await s3.send(
       new PutObjectCommand({
@@ -298,12 +305,126 @@ async function stripMetadata(
       before: bytes.length,
       after: stripped.length,
     });
+    return true;
   } catch (error) {
     console.error('Could not strip photo metadata', {
       at: new Date().toISOString(),
       key,
       error: error instanceof Error ? error.message : String(error),
     });
+    // A failed strip leaves the original in place and fires no second event.
+    // Mirroring it is worse than not, but not mirroring means the gallery
+    // cannot serve it at all — and the original is already in S3 either way.
+    return false;
+  }
+}
+
+/**
+ * Erase the coordinates a phone wrote into a video, without re-encoding it.
+ *
+ * ## Why this is not simply "download, edit, upload"
+ *
+ * A video can be 250 MB and this function has 512 MB. Reading one into memory
+ * would work in testing and fail on the clip somebody actually cares about, so
+ * nothing here ever holds the whole file:
+ *
+ * 1. Box headers are read with ranged GETs of sixteen bytes to find `moov`.
+ *    Straight off a phone `moov` is at the *end*, past the media data, and
+ *    finding it costs two requests rather than a download.
+ * 2. Only `moov` is fetched — typically well under a megabyte.
+ * 3. If it holds no location, nothing else happens at all. That is the common
+ *    case and it costs three small requests.
+ * 4. If it does, the object is rewritten by streaming it through and zeroing
+ *    those byte ranges as they pass.
+ *
+ * ## Why re-encoding was never an option
+ *
+ * The product promises the original file. Handing back a transcode would break
+ * that promise to fix a different one, so this edits the container and never
+ * touches a single frame. Every range zeroed is inside `moov`; none can reach
+ * the media data.
+ *
+ * Failure leaves the video exactly as uploaded. That is the right trade for a
+ * metadata pass — a guest's clip surviving unstripped is recoverable, and this
+ * function corrupting it is not — but it does mean a persistent failure here
+ * is a silent hole in the claim, so it logs loudly enough to alarm on.
+ */
+async function stripVideoLocation(bucket: string, key: string): Promise<boolean> {
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const size = head.ContentLength ?? 0;
+    if (!size) return false;
+
+    const readRange = async (start: number, end: number): Promise<Buffer> => {
+      const part = await s3.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          // HTTP ranges are inclusive at both ends; ours are half-open.
+          Range: `bytes=${start}-${end - 1}`,
+        }),
+      );
+      return Buffer.from(await readBytes(part.Body));
+    };
+
+    const moov = await findMoov(size, readRange);
+    if (!moov) return false;
+    // A moov far larger than any real one means a malformed or hostile file.
+    // Reading it would be the memory problem this function exists to avoid.
+    if (moov.size > 64 * 1024 * 1024) {
+      console.error('VIDEO LOCATION NOT STRIPPED', { key, reason: 'moov too large', moov });
+      return false;
+    }
+
+    const moovBytes = await readRange(moov.start, moov.start + moov.size);
+    const ranges = locationRangesInMoov(moovBytes, moov.start);
+    // No location in it. The common case, and the one that must NOT report a
+    // rewrite: no second event is coming, so the caller mirrors this pass.
+    if (ranges.length === 0) return false;
+
+    const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const source = object.Body as Readable | undefined;
+    if (!source) return false;
+
+    let consumed = 0;
+    const patched = new Transform({
+      transform(chunk: Buffer, _encoding, done) {
+        // Copy before patching: the SDK may hand back a view onto a pooled
+        // buffer, and zeroing through it would corrupt unrelated bytes.
+        const owned = Buffer.from(chunk);
+        patchChunk(owned, consumed, ranges);
+        consumed += owned.length;
+        done(null, owned);
+      },
+    });
+
+    await new Upload({
+      client: s3,
+      params: {
+        Bucket: bucket,
+        Key: key,
+        Body: source.pipe(patched),
+        ContentType: object.ContentType ?? 'video/mp4',
+        Metadata: { ...(object.Metadata ?? {}), sanitized: 'true' },
+      },
+    }).done();
+
+    console.log('Stripped video location', {
+      at: new Date().toISOString(),
+      key,
+      size,
+      cleared: ranges.map((range) => range.label),
+    });
+    return true;
+  } catch (error) {
+    // Loud, because a persistent failure is a hole in a privacy claim rather
+    // than a cosmetic problem. The file is untouched either way.
+    console.error('VIDEO LOCATION NOT STRIPPED', {
+      at: new Date().toISOString(),
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
   }
 }
 

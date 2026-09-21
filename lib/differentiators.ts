@@ -76,12 +76,12 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
   },
   {
     id: 'location-stripped',
-    title: 'Photos arrive without their location',
+    title: 'Nothing arrives with its location attached',
     claim:
-      'A phone stamps the exact coordinates into every photo it takes. SharePix removes that on upload, before the file is stored or shared — so a guest is not handing out the address of the house they are standing in.',
+      'A phone stamps the exact coordinates into every photo and video it takes. SharePix removes that on upload, before the file is stored or shared — so a guest is not handing out the address of the house they are standing in.',
     boundary:
-      'Photos only. Video metadata is left exactly as the phone recorded it, including location if the phone wrote it.',
-    backedBy: 'amplify/functions/sanitize-upload/exif.ts',
+      'A photo loses all of its metadata; a video loses its coordinates and keeps the rest, such as the camera model and the time, because removing those would mean re-encoding the file.',
+    backedBy: 'amplify/functions/sanitize-upload/video.ts',
     badge: 'GPS removed',
   },
   {

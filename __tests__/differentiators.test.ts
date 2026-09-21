@@ -80,15 +80,34 @@ describe('location really is stripped from photos', () => {
   it('mirrors the stripped copy to R2, never the guest original', () => {
     // If the unstripped original reached the CDN, the coordinates would be
     // served from it and the claim would be false in the place it matters.
-    expect(handler).toContain('const strippable = isJpeg(header) || isHeic(header);');
+    //
+    // The predicate is whether THIS pass rewrote the file, not whether the
+    // file is a type that might be rewritten. A video is only rewritten when
+    // it actually carries coordinates, so the type-based version left every
+    // location-free video out of R2.
+    expect(handler).toContain('rewritten: rewrote');
+    expect(handler).not.toContain('const strippable =');
   });
 
-  it('says on the page that video is not covered', () => {
-    // The claim's boundary, and the one that could hurt somebody. The handler
-    // returns early for anything that is not JPEG or HEIC.
-    expect(handler).toContain('if (!jpeg && !isHeic(header)) return;');
+  it('strips video too, so the claim holds for everything a phone sends', () => {
+    expect(handler).toContain('stripVideoLocation(bucket, key)');
+  });
+
+  it('never re-encodes a video to strip it', () => {
+    // The original-quality claim and the location claim have to hold at the
+    // same time. Handing back a transcode would keep one by breaking the other.
+    const video = codeOnly(readSource('amplify/functions/sanitize-upload/video.ts'));
+    expect(video).not.toContain('ffmpeg');
+    expect(video).not.toContain('transcode');
+  });
+
+  it('says what a video keeps, since it is not everything', () => {
+    // Photos lose all metadata; a video loses only its coordinates, because
+    // removing the rest would mean re-encoding. Claiming parity would be the
+    // overstatement this whole file exists to catch.
     const claim = differentiatorFor('location-stripped');
     expect(claim?.boundary.toLowerCase()).toContain('video');
+    expect(claim?.boundary.toLowerCase()).toContain('keeps the rest');
   });
 });
 
