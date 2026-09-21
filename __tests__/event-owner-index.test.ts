@@ -88,14 +88,17 @@ describe('the read', () => {
     expect(fn.slice(0, 1200)).toContain('listAllPages(');
   });
 
-  it('asks for both shapes the owner string can take', () => {
-    // "<sub>::<username>" and the bare sub. For an ordinary host this is belt
-    // and braces — AppSync overwrites the argument with the caller's own claims
-    // — but a global admin is authorized by their group first, so that
-    // substitution is skipped and the value sent is the value used. Asking for
-    // only the usual shape would show such an admin none of their own events.
+  it('asks for the shape the writer actually writes', () => {
+    // This assertion used to pin the composition itself — and the composition
+    // was wrong, so the test passed while a global admin saw an empty page.
+    // The comment even described the admin case correctly; what it checked was
+    // the implementation rather than the property.
+    //
+    // It now checks that the reader derives its keys from the writer, which is
+    // the thing that cannot silently be false. lib/eventOwner.ts has the rest.
     expect(api).toContain('function ownerCandidates(');
-    expect(api).toContain('`${sub}::${user.username}`');
+    expect(api).toContain('return ownerCandidatesFor(user.userId, user.username);');
+    expect(api).not.toContain('`${sub}::${user.username}`');
   });
 
   it('de-duplicates across the two queries', () => {
@@ -108,6 +111,9 @@ describe('the read', () => {
     // A global admin has full model access, and this page shows their own
     // events. An index is also a denormalised copy: checking the answer against
     // the question costs nothing and stops a wrong one passing quietly.
-    expect(fn.slice(0, 1200)).toContain('event.owner?.includes(user.userId)');
+    //
+    // Anchored now, not a substring: `includes` would accept a row whose
+    // username half happened to contain the caller's subject.
+    expect(fn).toContain('ownerIsSubject(event.owner, user.userId)');
   });
 });
