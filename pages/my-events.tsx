@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import HostHeader from '@/components/HostHeader';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
@@ -286,4 +286,7 @@ function MyEventsPage() {
   );
 }
 
-export default withAuthenticator(MyEventsPage);
+export default withHostAuth(MyEventsPage, {
+  purpose: 'Your events.',
+  arriving: 'returning',
+});

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import { CORPORATE_PLAN } from '@/lib/pricing';
 import {
@@ -180,4 +180,7 @@ function CorporatePage() {
 }
 
 // Hosts sign in before subscribing so the plan attaches to their account.
-export default withAuthenticator(CorporatePage);
+export default withHostAuth(CorporatePage, {
+  purpose: 'Set up your Corporate plan.',
+  arriving: 'new',
+});

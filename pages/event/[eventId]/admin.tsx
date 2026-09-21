@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
@@ -1502,4 +1502,7 @@ function AdminDashboardPage() {
 
 // Cognito sign-in is required to reach this page at all;
 // the owner check above then limits it to the event's host.
-export default withAuthenticator(AdminDashboardPage);
+export default withHostAuth(AdminDashboardPage, {
+  purpose: 'Your event dashboard.',
+  arriving: 'returning',
+});

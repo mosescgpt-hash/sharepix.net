@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import EventQRCode from '@/components/EventQRCode';
@@ -539,4 +539,7 @@ function CreateEventPage() {
 }
 
 // Hosts must sign in (Cognito) to create and manage events.
-export default withAuthenticator(CreateEventPage);
+export default withHostAuth(CreateEventPage, {
+  purpose: 'Set up your event gallery.',
+  arriving: 'new',
+});

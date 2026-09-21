@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import {
   confirmUserAttribute,
   fetchUserAttributes,
@@ -305,4 +305,7 @@ function AccountPage() {
   );
 }
 
-export default withAuthenticator(AccountPage);
+export default withHostAuth(AccountPage, {
+  purpose: 'Your account.',
+  arriving: 'returning',
+});

@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import {
   fetchMFAPreference,
   setUpTOTP,
@@ -236,4 +236,7 @@ function AccountSecurityPage() {
   );
 }
 
-export default withAuthenticator(AccountSecurityPage);
+export default withHostAuth(AccountSecurityPage, {
+  purpose: 'Account security.',
+  arriving: 'returning',
+});
