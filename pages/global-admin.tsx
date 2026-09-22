@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -3957,4 +3957,7 @@ function GlobalAdminPage() {
   );
 }
 
-export default withAuthenticator(GlobalAdminPage);
+export default withHostAuth(GlobalAdminPage, {
+  purpose: 'SharePix administration.',
+  arriving: 'returning',
+});

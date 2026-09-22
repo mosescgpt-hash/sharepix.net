@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Head from 'next/head';
 import type QRCodeStyling from 'qr-code-styling';
 import { brandingForEvent, qrStylingOptions } from '@/lib/qrBranding';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import { fetchEvent, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { QREvent } from '@/lib/types';
@@ -184,4 +184,7 @@ function EventBrochurePage() {
 }
 
 // Requires sign-in; the owner/admin check above limits it to the event's host.
-export default withAuthenticator(EventBrochurePage);
+export default withHostAuth(EventBrochurePage, {
+  purpose: 'Your printable brochure.',
+  arriving: 'returning',
+});

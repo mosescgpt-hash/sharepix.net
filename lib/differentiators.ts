@@ -83,7 +83,7 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
     id: 'location-stripped',
     title: 'Nothing arrives with its location attached',
     claim:
-      'A phone stamps the exact coordinates into every photo and video it takes. SharePix removes that on upload, before the file is stored or shared — so a guest is not handing out the address of the house they are standing in.',
+      'A phone records the exact coordinates inside a photo or video whenever location tagging is switched on, which is how most arrive. SharePix removes that on upload, before the file is stored or shared — so a guest is not handing out the address of the house they are standing in.',
     boundary:
       'A photo loses all of its metadata; a video loses its coordinates and keeps the rest, such as the camera model and the time, because removing those would mean re-encoding the file.',
     backedBy: 'amplify/functions/sanitize-upload/video.ts',
@@ -91,9 +91,9 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
   },
   {
     id: 'full-resolution',
-    title: 'The file the camera wrote',
+    title: 'Full resolution, never shrunk',
     claim:
-      'What a guest uploads is what you download. The bytes are stored exactly as sent and handed back the same way, at the resolution the camera recorded.',
+      'Photos and videos are kept at the resolution the camera recorded them. Nothing is resized, re-encoded or compressed on the way in or on the way out — the only edit we make to a file is taking the metadata out of it.',
     boundary:
       'SharePix Pro is the deliberate exception: a photographer’s originals are never served to guests, who see a reduced preview instead.',
     backedBy: 'amplify/functions/sanitize-upload/handler.ts',

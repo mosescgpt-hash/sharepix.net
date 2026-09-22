@@ -265,7 +265,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the full-resolution original, the same file the camera produced — good enough to print.',
+        // "The same file the camera produced" was not true and could not be:
+        // every upload has its location data removed on the way in, which
+        // rewrites the file. What survives is the picture — full resolution,
+        // no resize, no re-encode, no second compression pass.
+        text: 'Yes. Every photo has a download button, and you can select several and take them as one ZIP file. You get the photo at full resolution, exactly as the camera recorded it — nothing is resized or re-compressed, so it is good enough to print. The only thing taken out is the embedded metadata, including the location.',
       },
       {
         kind: 'text',
@@ -292,7 +296,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Guests can add photos for 60 days from when the event is created, and the host can extend that. After the upload window closes, the gallery stays up for a further 12 months — or 30 days if the host is using their free event.',
+        // Said "60 days from when the event is created", which was true and was
+        // the bug: a host setting up six weeks early spent six weeks of it on
+        // an empty gallery.
+        text: 'Guests can add photos for 60 days from the event date, and the host can extend that. If the host did not set a date, the 60 days start once the gallery is genuinely being used rather than at setup. After the upload window closes, the gallery stays up for a further 12 months — or 30 days if the host is using their free event.',
       },
       {
         kind: 'text',
@@ -412,7 +419,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'The upload window runs 60 days from when the event was created. On your dashboard, tick Extend upload window in the Add-ons list and pay once — it adds another 30 days, and you can do it more than once.',
+        text: 'The upload window runs 60 days from your event date — or, if you did not set one, from the point the gallery starts being used. On your dashboard, tick Extend upload window in the Add-ons list and pay once — it adds another 30 days, and you can do it more than once.',
       },
       {
         kind: 'text',

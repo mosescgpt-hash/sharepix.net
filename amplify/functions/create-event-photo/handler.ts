@@ -23,6 +23,7 @@ import {
 } from './analytics';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
+import { anchoredWindowEnd } from './uploadWindowStart';
 import { contributorKey, contributorRowId, isSuccessfulEvent } from './successfulEvent';
 import { assessUsage, fairUseConfig, windowExpired } from './fairUse';
 import { entitledPhotoLimit, entitledVideoBytes, entitledVideoLimit } from './planLimits';
@@ -747,6 +748,51 @@ export const handler: Handler = async (event) => {
   }
 
   void advanceWindow();
+
+  // The upload window for an event with no date.
+  //
+  // Such an event starts its sixty days at creation, which is a guess — the
+  // host has not told us when the event is. The fifth upload is the moment
+  // that guess can be replaced by something observed: five photos is an event
+  // happening, where one is as likely to be the host checking their own QR
+  // code works.
+  //
+  // Best-effort and never awaited, like the counters above: a photo that is
+  // safely stored must not fail because a window could not be re-stamped.
+  //
+  // Two conditions make it safe to repeat. `uploadWindowAnchoredAt` missing
+  // means no previous upload has done this, so uploads racing to be the fifth
+  // cannot both win. `uploadWindowEndsAt = :seen` means the window is still
+  // the one this request read, so an extension bought in the meantime is not
+  // overwritten by a value derived before it existed.
+  const anchorEnd = anchoredWindowEnd(
+    {
+      eventDate: ev.date?.S ?? null,
+      currentEndsAt: ev.uploadWindowEndsAt?.S ?? null,
+      alreadyAnchored: Boolean(ev.uploadWindowAnchoredAt?.S),
+      photoCountBefore: (toInt(reserved?.photoCount?.N) ?? 1) - 1,
+    },
+    checkedAt,
+  );
+  if (anchorEnd) {
+    void dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression:
+            'SET uploadWindowEndsAt = :end, uploadWindowAnchoredAt = :now, updatedAt = :now',
+          ConditionExpression:
+            'attribute_not_exists(uploadWindowAnchoredAt) AND uploadWindowEndsAt = :seen',
+          ExpressionAttributeValues: {
+            ':end': { S: anchorEnd },
+            ':now': { S: checkedAt.toISOString() },
+            ':seen': { S: ev.uploadWindowEndsAt?.S ?? '' },
+          },
+        }),
+      )
+      .catch(() => undefined);
+  }
 
   // Funnel milestones. Best-effort and never awaited into the upload's own
   // outcome: a photo that is safely stored must not fail because a counter

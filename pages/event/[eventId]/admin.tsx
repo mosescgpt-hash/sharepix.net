@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
@@ -54,6 +54,7 @@ import {
   videosRemaining,
 } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { UPLOAD_WINDOW_DAYS, latestEventDate } from '@/lib/uploadWindowStart';
 import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
 import { DisplayPhoto, QREvent } from '@/lib/types';
@@ -859,8 +860,19 @@ function AdminDashboardPage() {
                       value={editDate}
                       disabled={detailsLocked || savingDetails}
                       onChange={(e) => setEditDate(e.target.value)}
+                      // Same ceiling the server applies on save. The window
+                      // follows this date while the event has no photos, so a
+                      // date nobody could reach is a save that fails for a
+                      // reason the form never mentioned.
+                      max={latestEventDate()}
                       className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
                     />
+                    {!detailsLocked ? (
+                      <span className="mt-1.5 block text-sm text-charcoal/70">
+                        Uploads run for {UPLOAD_WINDOW_DAYS} days from this date. It locks
+                        once the first photo arrives.
+                      </span>
+                    ) : null}
                   </label>
                 </div>
 
@@ -1490,4 +1502,7 @@ function AdminDashboardPage() {
 
 // Cognito sign-in is required to reach this page at all;
 // the owner check above then limits it to the event's host.
-export default withAuthenticator(AdminDashboardPage);
+export default withHostAuth(AdminDashboardPage, {
+  purpose: 'Your event dashboard.',
+  arriving: 'returning',
+});
