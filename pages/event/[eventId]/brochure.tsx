@@ -96,6 +96,11 @@ function EventBrochurePage() {
     <div className="min-h-screen bg-canvas font-sans text-charcoal">
       <Head>
         <title>{event ? `${event.name} — brochure` : 'Event brochure'} — sharepix.net</title>
+        {/* Bypasses Layout for print-only rendering, so it doesn't inherit
+            Layout's allowlist-based robots tag. Disallowed under /event/ in
+            robots.txt too, but that alone can't stop the bare URL from being
+            listed if it's ever linked from elsewhere. */}
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
 
       {/* Toolbar — hidden when printing */}
