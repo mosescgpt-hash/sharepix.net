@@ -795,7 +795,6 @@ export const WIRED_ANALYTICS_EVENTS: readonly AnalyticsEventName[] = ANALYTICS_E
       'referral_shared',
       'referral_converted',
       'featured_event_invited',
-      'landing_page_view',
       'guest_upload_started',
       'account_created',
       'repeat_event_created',

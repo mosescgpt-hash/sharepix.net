@@ -5,6 +5,7 @@ import { ReactNode } from 'react';
 import Navbar from '@/components/Navbar';
 import { SUPPORT_EMAIL } from '@/lib/help';
 import { SITE_IMAGE_NOTICE } from '@/lib/demoEvent';
+import { USE_CASES } from '@/lib/useCases';
 import {
   OG_IMAGE_PATH,
   SITE_NAME,
@@ -173,20 +174,36 @@ export default function Layout({
                 Corporate plan monthly.
               </p>
             </div>
-            <nav
-              aria-label="Footer"
-              className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm sm:gap-x-16"
-            >
-              {FOOTER_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-canvas/65 transition hover:text-mint"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
+            <div className="flex flex-wrap gap-10 sm:gap-16">
+              <div>
+                <p className="spx-eyebrow">Use cases</p>
+                <nav aria-label="Use cases" className="mt-3 flex flex-col gap-3 text-sm">
+                  {USE_CASES.map((useCase) => (
+                    <Link
+                      key={useCase.slug}
+                      href={`/${useCase.slug}`}
+                      className="text-canvas/65 transition hover:text-mint"
+                    >
+                      {useCase.navLabel}
+                    </Link>
+                  ))}
+                </nav>
+              </div>
+              <nav
+                aria-label="Footer"
+                className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm sm:gap-x-16"
+              >
+                {FOOTER_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="text-canvas/65 transition hover:text-mint"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
           </div>
           <div className="mt-12 flex flex-col gap-2 border-t border-canvas/15 pt-6 text-sm text-canvas/45 sm:flex-row sm:items-center sm:justify-between">
             <p>&copy; {new Date().getFullYear()} sharepix.net</p>
