@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import Artwork from '@/components/Artwork';
+import HowItWorksSection from '@/components/HowItWorksSection';
 import Layout from '@/components/Layout';
+import SectionHeading from '@/components/SectionHeading';
 import { trackEvent } from '@/lib/trackEvent';
 import StyledQrCode from '@/components/StyledQrCode';
 import { DIFFERENTIATORS } from '@/lib/differentiators';
@@ -37,23 +39,13 @@ export default function HomePage() {
         <Hero />
         <TryItLive />
         <OurStandard />
-        <HowItWorks />
+        <HowItWorksSection />
         <Occasions />
         <WhatYouGet />
         <Pricing />
         <ClosingCta />
       </div>
     </Layout>
-  );
-}
-
-/** Headline line one bold sans, line two italic serif. The pairing is the brand. */
-function Heading({ first, second }: { first: string; second: string }) {
-  return (
-    <h2 className="mt-3">
-      <span className="spx-display block">{first}</span>
-      <span className="spx-display-serif block">{second}</span>
-    </h2>
   );
 }
 
@@ -190,46 +182,6 @@ function TryItLive() {
   );
 }
 
-const STEPS = [
-  {
-    n: '01',
-    title: 'Create your event',
-    body: 'Name it, pick a date, choose a plan. We generate your QR code and a gallery link straight away.',
-  },
-  {
-    n: '02',
-    title: 'Guests scan and share',
-    body: 'They point a phone camera at the code. The upload page opens in the browser — no app, no sign-up, nothing to explain.',
-  },
-  {
-    n: '03',
-    title: 'Download everything',
-    body: 'Full-resolution originals in one ZIP whenever you are ready, and your guests can take theirs too.',
-  },
-];
-
-function HowItWorks() {
-  return (
-    <section className="spx-section-ink">
-      <div className="spx-inner">
-        <p className="spx-eyebrow">How it works</p>
-        <Heading first="Three steps." second="That's the whole thing." />
-        <div className="mt-12 grid gap-10 sm:grid-cols-3">
-          {STEPS.map((step) => (
-            <div key={step.n}>
-              <div className="spx-step-icon bg-canvas/15 text-canvas">
-                <span className="spx-numeral text-lg">{step.n}</span>
-              </div>
-              <h3 className="mt-5 text-lg font-semibold">{step.title}</h3>
-              <p className="spx-body mt-2 text-sm">{step.body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 const OCCASIONS = [
   { slot: 'occasion-wedding', label: 'Weddings' },
   { slot: 'occasion-birthday', label: 'Birthdays' },
@@ -244,7 +196,7 @@ function Occasions() {
     <section className="spx-section-sand">
       <div className="spx-inner">
         <p className="spx-eyebrow">Not just weddings</p>
-        <Heading first="For everything" second="worth sharing." />
+        <SectionHeading first="For everything" second="worth sharing." />
         <p className="spx-body mt-5 max-w-lg">
           Anywhere people take out their phones, SharePix collects what they shoot. Same code,
           same gallery, whatever the occasion.
@@ -280,7 +232,7 @@ function OurStandard() {
     <section className="spx-section-canvas">
       <div className="spx-inner">
         <p className="spx-eyebrow">Our standard</p>
-        <Heading first="What we promise" second="and exactly where it ends." />
+        <SectionHeading first="What we promise" second="and exactly where it ends." />
         <p className="spx-body mt-5 max-w-lg">
           Each of these is a specific commitment rather than a posture, so each one is
           printed with the case where it does not apply. We would rather tell you the
@@ -335,7 +287,7 @@ function WhatYouGet() {
     <section className="spx-section-canvas">
       <div className="spx-inner">
         <p className="spx-eyebrow">Also included</p>
-        <Heading first="And the rest" second="of what you get." />
+        <SectionHeading first="And the rest" second="of what you get." />
         <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
           {FEATURES.map((feature) => (
             <div key={feature.title} className="bg-canvas p-7">
@@ -354,7 +306,7 @@ function Pricing() {
     <section className="spx-section-sand">
       <div className="spx-inner">
         <p className="spx-eyebrow">Pricing</p>
-        <Heading first="One event. One payment." second="No surprises." />
+        <SectionHeading first="One event. One payment." second="No surprises." />
         <p className="spx-body mt-5 max-w-lg">
           One plan, priced per event rather than per guest or per photo. Nothing renews, and
           nothing is charged until you publish. Try it first with a free event.

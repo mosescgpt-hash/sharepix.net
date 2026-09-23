@@ -91,6 +91,8 @@ export const SITE_NAME = 'SharePix';
  */
 export const INDEXABLE_ROUTES = [
   '/',
+  '/company-events',
+  '/conventions',
   '/demo',
   '/demo/gallery',
   '/demo/guestbook',
@@ -99,6 +101,7 @@ export const INDEXABLE_ROUTES = [
   '/demo/try-upload',
   '/dmca',
   '/fair-use',
+  '/graduation-parties',
   '/help',
   '/help/[slug]',
   '/join',
@@ -106,6 +109,7 @@ export const INDEXABLE_ROUTES = [
   '/privacy',
   '/pro',
   '/terms',
+  '/weddings',
 ] as const;
 
 /**
@@ -164,6 +168,10 @@ export function isIndexable(route: string): boolean {
  */
 export const ROUTE_DESCRIPTIONS: Record<string, string> = {
   '/': DEFAULT_DESCRIPTION,
+  '/company-events':
+    'Crowdsource photos from company parties, conferences and team events with a QR code. Moderation built in, plans for one event or year-round.',
+  '/conventions':
+    'A shared photo gallery for cosplay meetups, fan events and conventions. Attendees scan and share — no app needed.',
   '/demo': 'A worked example of a SharePix event, set up exactly the way a real one would be. Look around before you pay for anything.',
   '/demo/gallery':
     'Three sample galleries — a wedding, a company party, and a family holiday — showing what your guests see after they upload.',
@@ -175,6 +183,8 @@ export const ROUTE_DESCRIPTIONS: Record<string, string> = {
     'Add a photo to a sample gallery from your own phone, the way a guest at your event would. No app and no account, and your photo is deleted within the hour.',
   '/dmca': 'How to report copyrighted material on sharepix.net, and the designated agent for notices under 17 U.S.C. § 512(c).',
   '/fair-use': 'What “unlimited” means on SharePix, in plain numbers — the limits that exist, when they apply, and what happens if you reach one.',
+  '/graduation-parties':
+    'Collect every photo from the grad party with one QR code. Guests need no app or account to add theirs — start with a free event.',
   '/help': 'Answers for guests adding photos and for hosts running an event — uploads, QR codes, downloads, video, and how long a gallery lasts.',
   '/join': 'Got an event code but no QR code to scan? Type the code here to open the gallery and add your photos.',
   '/pricing': `One price per event, not per guest and not per photo. A free event to try it, then $${PAID_TIER_PRICE} for the full thing. No subscription.`,
@@ -182,6 +192,8 @@ export const ROUTE_DESCRIPTIONS: Record<string, string> = {
   '/pro':
     'SharePix Pro for photographers: your shots reach the event gallery within minutes as previews you approve, while you keep the originals and the print sales.',
   '/terms': 'The terms of service for sharepix.net — what we provide, what we do not, and how refunds and outages are handled.',
+  '/weddings':
+    'Put one QR code on every table and collect every guest’s wedding photo in one private gallery. No app, no sign-up — try a free event.',
 };
 
 /**
@@ -358,6 +370,26 @@ export function pricingJsonLd(): Record<string, unknown> {
         url: `${SITE_ORIGIN}/pricing`,
       },
     ],
+  };
+}
+
+/**
+ * FAQ structured data for a use-case landing page.
+ *
+ * Built from the same question/answer pairs the page renders — never a
+ * separate copy — so the markup cannot claim an answer the visitor is not
+ * also shown. `mainEntity` is empty-safe on purpose: a page passing no FAQs
+ * gets no block instead of an empty, invalid one.
+ */
+export function faqJsonLd(faqs: { question: string; answer: string }[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: { '@type': 'Answer', text: faq.answer },
+    })),
   };
 }
 
