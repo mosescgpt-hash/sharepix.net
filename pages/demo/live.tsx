@@ -11,6 +11,7 @@ import {
   nextSlide,
   sampleImageNoticeShort,
 } from '@/lib/demoEvent';
+import { OG_IMAGE_PATH, SITE_NAME, SITE_ORIGIN, canonicalUrl, describeRoute } from '@/lib/seo';
 
 /**
  * The sample live slideshow — what goes on a screen at the venue.
@@ -52,6 +53,29 @@ export default function DemoLivePage() {
     <>
       <Head>
         <title>Sample live slideshow · SharePix</title>
+        {/*
+         * This page is on INDEXABLE_ROUTES in lib/seo.ts, but bypasses Layout
+         * for a true full-bleed slideshow (no navbar/footer) — so unlike every
+         * other /demo/* page it never got Layout's description, canonical, or
+         * Open Graph tags. Reproduced here by hand, from the same lib/seo.ts
+         * helpers Layout itself uses, so a share of this link doesn't render
+         * as a blank grey box the way an un-tagged page does everywhere else.
+         */}
+        <meta name="description" content={describeRoute('/demo/live')} />
+        <meta name="robots" content="index, follow, max-image-preview:large" />
+        <link rel="canonical" href={canonicalUrl('/demo/live')} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={SITE_NAME} />
+        <meta property="og:title" content="Sample live slideshow · SharePix" />
+        <meta property="og:description" content={describeRoute('/demo/live')} />
+        <meta property="og:url" content={canonicalUrl('/demo/live')} />
+        <meta property="og:image" content={`${SITE_ORIGIN}${OG_IMAGE_PATH}`} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Sample live slideshow · SharePix" />
+        <meta name="twitter:description" content={describeRoute('/demo/live')} />
+        <meta name="twitter:image" content={`${SITE_ORIGIN}${OG_IMAGE_PATH}`} />
       </Head>
       <main className="relative flex h-screen w-screen flex-col overflow-hidden bg-black text-white">
         <div className="relative flex-1">
