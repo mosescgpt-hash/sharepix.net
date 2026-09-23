@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import GuestReferralLink from '@/components/GuestReferralLink';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
@@ -232,6 +233,10 @@ export default function EventGalleryPage() {
                   </div>
                 )}
               </div>
+
+              {/* The guest-to-host loop. Never shown to the host or an admin
+                  looking at their own event — see components/GuestReferralLink.tsx. */}
+              {!privileged && canSee ? <GuestReferralLink source="gallery" /> : null}
             </div>
           </section>
         </div>

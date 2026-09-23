@@ -227,6 +227,15 @@ export default function LiveSlideshowPage() {
         <meta name="robots" content="noindex" />
       </Head>
       <main className="relative h-screen w-screen overflow-hidden bg-black text-white">
+        {/* Passive branding only — no link. This is a TV screen nobody is
+            touching, not a page somebody can tap; see components/GuestReferralLink.tsx
+            for the clickable version of this same guest-to-host loop. */}
+        <p
+          aria-hidden="true"
+          className="pointer-events-none absolute right-4 top-4 z-10 text-xs font-medium tracking-wide text-white/60"
+        >
+          sharepix.net
+        </p>
         {error ? (
           <div className="flex h-full items-center justify-center px-8 text-center">
             <p className="text-xl text-white/80">{error}</p>
