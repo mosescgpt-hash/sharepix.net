@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
+import GuestReferralLink from '@/components/GuestReferralLink';
 import Layout from '@/components/Layout';
 import GuestBookAlbum from '@/components/GuestBookAlbum';
 import Notice from '@/components/Notice';
@@ -255,6 +256,8 @@ export default function GuestBookPage() {
                 See the photo gallery &rarr;
               </Link>
             </p>
+
+            <GuestReferralLink source="gallery" />
           </>
         )}
         </div>

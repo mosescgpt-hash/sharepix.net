@@ -1,5 +1,5 @@
 import { ChangeEvent } from 'react';
-import Link from 'next/link';
+import GuestReferralLink from '@/components/GuestReferralLink';
 import Notice from '@/components/Notice';
 import { MAX_VIDEO_SIZE_LABEL } from '@/lib/validation';
 import { EventThemeKey } from '@/lib/eventTheme';
@@ -236,18 +236,8 @@ export default function UploadForm({
           "your photos were added", it is wrong.
 
           `source=guest_upload` is stamped on any event they go on to create —
-          see lib/attribution.ts. */}
-      {successCount > 0 && !busy ? (
-        <p className="mt-6 border-t border-charcoal/10 pt-4 text-sm text-charcoal/60">
-          Planning an event of your own?{' '}
-          <Link
-            href="/create-event?source=guest_upload"
-            className="font-medium text-pine underline"
-          >
-            Create your own SharePix
-          </Link>
-        </p>
-      ) : null}
+          see lib/attribution.ts and components/GuestReferralLink.tsx. */}
+      {successCount > 0 && !busy ? <GuestReferralLink source="guest_upload" /> : null}
     </div>
   );
 }

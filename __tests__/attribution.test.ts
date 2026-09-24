@@ -106,35 +106,50 @@ describe('reading sources back', () => {
 });
 
 describe('the guest-to-customer loop', () => {
-  const form = read('components/UploadForm.tsx');
+  // The CTA itself lives in one shared component now — see
+  // components/GuestReferralLink.tsx — rendered from the upload success
+  // state, the gallery, and the guest book. What used to be one describe
+  // block against components/UploadForm.tsx is now two: the shared markup,
+  // and each call site's own guard.
+  const link = read('components/GuestReferralLink.tsx');
 
-  it('appears only after an upload has actually succeeded', () => {
-    // Showing it before, or during, would be selling into a moment the guest
-    // is still trying to finish.
-    const cta = form.slice(form.indexOf('Planning an event of your own?'));
-    const guard = form.slice(0, form.indexOf('Planning an event of your own?'));
-    expect(guard).toContain('{successCount > 0 && !busy ? (');
-    expect(cta).toContain('/create-event?source=guest_upload');
-  });
-
-  it('is a link, not a button competing with the success message', () => {
+  it('is a link, not a button competing with whatever page renders it', () => {
     // The brief: "this should remain visually secondary" and "do not interrupt
     // upload success".
-    const cta = form.slice(
-      form.indexOf('Planning an event of your own?') - 400,
-      form.indexOf('Planning an event of your own?') + 400,
-    );
-    expect(cta).not.toContain('spx-btn-ink');
-    expect(cta).toContain('text-sm');
+    expect(link).not.toContain('spx-btn-ink');
+    expect(link).toContain('text-sm');
+  });
+
+  it('points at create-event with the source templated in', () => {
+    expect(link).toContain('/create-event?source=${source}');
   });
 
   it('asks nothing of the guest', () => {
     // No account, no email, no form. They came to give someone else photos.
-    const cta = form.slice(
-      form.indexOf('Planning an event of your own?'),
-      form.indexOf('Planning an event of your own?') + 500,
-    );
-    expect(cta).not.toMatch(/sign ?up|sign ?in|email|account/i);
+    expect(link).not.toMatch(/sign ?up|sign ?in|email|account/i);
+  });
+
+  it('appears on the upload page only after an upload has actually succeeded', () => {
+    // Showing it before, or during, would be selling into a moment the guest
+    // is still trying to finish.
+    const form = read('components/UploadForm.tsx');
+    const cta = form.slice(form.indexOf('<GuestReferralLink'));
+    const guard = form.slice(0, form.indexOf('<GuestReferralLink'));
+    expect(guard).toContain('{successCount > 0 && !busy ?');
+    expect(cta).toContain('source="guest_upload"');
+  });
+
+  it('appears on the gallery, but never for the host looking at their own event', () => {
+    const gallery = read('pages/event/[eventId]/index.tsx');
+    const cta = gallery.slice(gallery.indexOf('<GuestReferralLink'));
+    const guard = gallery.slice(0, gallery.indexOf('<GuestReferralLink'));
+    expect(guard).toContain('{!privileged && canSee ?');
+    expect(cta).toContain('source="gallery"');
+  });
+
+  it('appears on the guest book', () => {
+    const guestbook = read('pages/event/[eventId]/guestbook.tsx');
+    expect(guestbook).toContain('<GuestReferralLink source="gallery" />');
   });
 });
 
