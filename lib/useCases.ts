@@ -13,6 +13,7 @@
  * `lib/seo.ts` gives for `PAID_TIER_PRICE`: a number typed into copy is a
  * number that keeps saying $79 six months after the price moved.
  */
+import type { ImageSlot } from './imagery';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS } from './pricing';
 
 const FREE_TIER = PRICING_TIERS.find((tier) => tier.price === 0);
@@ -38,6 +39,11 @@ export interface UseCase {
   h1First: string;
   h1Second: string;
   heroBody: string;
+  /** The image slot beside the hero copy — see lib/imagery.ts. Renders a
+   *  palette placeholder until real photography exists for the slot. */
+  heroSlot: ImageSlot;
+  /** Two or three slots shown lower on the page, each with its own caption. */
+  gallery: { slot: ImageSlot; caption: string }[];
   /** Short, single-line claims — rendered as a grid, not full paragraphs. */
   benefits: string[];
   faqs: UseCaseFaq[];
@@ -53,6 +59,12 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'in one place.',
     heroBody:
       'Put one QR code on every table. Guests point a camera at it and start sending photos — no app, no account, nothing to explain. You get the originals, at the size the camera recorded them.',
+    heroSlot: 'occasion-wedding',
+    gallery: [
+      { slot: 'how-it-works-scan', caption: 'Scan the code on the table' },
+      { slot: 'guest-book-spread', caption: 'Sign the guest book' },
+      { slot: 'live-slideshow', caption: 'Watch it fill up on a screen at the reception' },
+    ],
     benefits: [
       'The candids your photographer missed',
       'Grandma can do it: point, scan, share',
@@ -91,6 +103,11 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'Every photo from the grad party.',
     heroBody:
       'Put the code out where people are already taking pictures. Friends, family and neighbors add theirs straight from their phone — no app, no account, and nothing for you to collect afterward.',
+    heroSlot: 'occasion-graduation',
+    gallery: [
+      { slot: 'how-it-works-scan', caption: 'Scan the code, no app to open first' },
+      { slot: 'home-gallery-preview', caption: 'Every guest’s photos, one gallery' },
+    ],
     benefits: [
       'Works for open houses with people coming and going',
       "Friends' photos and family photos in one gallery",
@@ -121,6 +138,11 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'without chasing anyone.',
     heroBody:
       'One QR code on a slide, a table, or a badge. Employees and guests upload straight from their phone, and everything lands in a gallery you control before it goes anywhere.',
+    heroSlot: 'occasion-corporate',
+    gallery: [
+      { slot: 'how-it-works-gallery', caption: 'Review and approve from your dashboard' },
+      { slot: 'live-slideshow', caption: 'Live on the screen at the venue' },
+    ],
     benefits: [
       'Moderation and deletion before anything goes public',
       'Location data removed automatically',
@@ -151,6 +173,11 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'for your con, meetup or fan event.',
     heroBody:
       'One code, thousands of attendees. Cosplay, panels, meetups and contests all feed the same gallery — nobody installs anything to add a photo.',
+    heroSlot: 'live-slideshow',
+    gallery: [
+      { slot: 'how-it-works-scan', caption: 'No app for anyone to install' },
+      { slot: 'home-gallery-preview', caption: 'Every panel, one gallery' },
+    ],
     benefits: [
       'Cosplay photo walls on a live slideshow',
       'Moments QR codes for each panel, contest or meetup',
