@@ -27,6 +27,7 @@ import { bodyOf, codeOnly, readSource } from './sourceGuards';
 const COPIES = [
   'amplify/functions/stripe-checkout/priceList.ts',
   'amplify/functions/create-event/priceList.ts',
+  'amplify/functions/corporate-seats/priceList.ts',
 ];
 
 describe('the copies have not drifted', () => {

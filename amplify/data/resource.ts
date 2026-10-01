@@ -8,6 +8,7 @@ import { printCheckout as printCheckoutFn } from '../functions/print-checkout/re
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
+import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
 import { costSummary as costSummaryFn } from '../functions/cost-summary/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
@@ -642,6 +643,8 @@ const schema = a.schema({
   QuotaCounter: a
     .model({
       count: a.integer(),
+      // The limit `count` was checked against, where the writer records it.
+      limit: a.integer(),
       eventId: a.string(),
       expiresAt: a.datetime(),
     })
@@ -1958,6 +1961,22 @@ const schema = a.schema({
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(corporatePortalFn)),
+
+  // How many of the caller's included Corporate event slots are in use, so the
+  // dashboard can say so before a $49 extra event comes as a surprise.
+  CorporateSeats: a.customType({
+    included: a.integer().required(),
+    inUse: a.integer().required(),
+    /** When the first slot frees up, only when all of them are taken. */
+    nextFreeAt: a.string(),
+  }),
+
+  myCorporateSeats: a
+    .query()
+    .arguments({})
+    .returns(a.ref('CorporateSeats'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(corporateSeatsFn)),
 
   CreatedEvent: a.customType({
     id: a.string().required(),

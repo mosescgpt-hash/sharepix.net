@@ -11,6 +11,8 @@ import {
   listFinancialReports,
   type SavedFinancialReport,
   clearFreeEventClaim,
+  clearQuotaCounter,
+  listQuotaCounters,
   createDiscountCode,
   deleteDiscountCode,
   deleteEventAsGlobalAdmin,
@@ -62,6 +64,14 @@ import {
 } from '@/lib/costs';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
+import {
+  DEFAULT_FREE_EVENTS_PER_DAY,
+  guestBookLimitReached,
+  quotaKind,
+  seatInUse,
+  trialDayId,
+  type QuotaCounterRow,
+} from '@/lib/quotaCounters';
 import { ARCHIVE_DAYS, GRACE_DAYS } from '@/lib/storageReclaim';
 import { entitledPhotoLimit, limitsAreStale } from '@/lib/planLimits';
 import {
@@ -163,6 +173,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'jobs', label: 'Scheduled jobs', tab: 'tests' },
   { id: 'rewards', label: 'Research rewards', tab: 'events' },
   { id: 'free-claims', label: 'Free event claims', tab: 'events' },
+  { id: 'limits', label: 'Limits', tab: 'events' },
   { id: 'print-check', label: 'Print check', tab: 'tests' },
   { id: 'alert-check', label: 'Alert email check', tab: 'tests' },
   { id: 'events', label: 'Events', tab: 'events' },
@@ -219,7 +230,10 @@ function defaultExpiryValue(): string {
 // feature later means adding one entry here and passing its key from that
 // checkout flow.
 const PAID_ITEM_SCOPES = [
-  { key: 'event:plus', label: 'Event plan' },
+  { key: 'event:plus', label: 'Full Event' },
+  // The $49 event a Corporate subscriber buys past their included ones. The
+  // checkout scopes it `event:corporate`, the same shape as every event plan.
+  { key: 'event:corporate', label: 'Corporate extra event' },
   // Retired plans. Kept so a code can still be issued against an event that
   // already carries one - existing codes naming these keep working either way,
   // because the scope matcher compares the stored string, not this list.
@@ -266,6 +280,10 @@ function GlobalAdminPage() {
   // table never blanks out the whole dashboard.
   const [claims, setClaims] = useState<FreeEventClaimRow[] | null>(null);
   const [claimsError, setClaimsError] = useState<string | null>(null);
+  // The QuotaCounter table: today's free-event allowance, Corporate seats and
+  // guest book counters. null while loading, like the claims above.
+  const [quotas, setQuotas] = useState<QuotaCounterRow[] | null>(null);
+  const [quotasError, setQuotasError] = useState<string | null>(null);
   const [incentives, setIncentives] = useState<ResearchIncentiveRow[] | null>(null);
   const [incentivesError, setIncentivesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -409,6 +427,16 @@ function GlobalAdminPage() {
         setClaimsError(
           err instanceof Error ? err.message : 'Free event claims could not be loaded.',
         );
+      }
+
+      // Same again: the table is empty until the first free event, seat or
+      // guest book note after this shipped.
+      try {
+        setQuotas(await listQuotaCounters());
+        setQuotasError(null);
+      } catch (err) {
+        setQuotas([]);
+        setQuotasError(err instanceof Error ? err.message : 'Limits could not be loaded.');
       }
 
       try {
@@ -1150,6 +1178,20 @@ function GlobalAdminPage() {
       setIncentivesError(
         err instanceof Error ? err.message : 'That reward could not be marked sent.',
       );
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleClearQuota(id: string, what: string) {
+    if (!window.confirm(`${what}\n\n${id}\n\nThis takes effect immediately.`)) return;
+    setWorking(`quota-${id}`);
+    setQuotasError(null);
+    try {
+      await clearQuotaCounter(id);
+      setQuotas((current) => (current ?? []).filter((row) => row.id !== id));
+    } catch (err) {
+      setQuotasError(err instanceof Error ? err.message : 'That limit could not be cleared.');
     } finally {
       setWorking(null);
     }
@@ -2929,6 +2971,23 @@ function GlobalAdminPage() {
                 Clearing a claim here is the only way an account gets another, and it takes
                 effect immediately.
               </p>
+              {(() => {
+                // Today's platform-wide allowance. The row records the cap it
+                // was checked against, so an override of the default shows.
+                const today = (quotas ?? []).find((row) => row.id === trialDayId());
+                const used = today?.count ?? 0;
+                const cap = today?.limit ?? DEFAULT_FREE_EVENTS_PER_DAY;
+                return (
+                  <p className="mt-3 text-sm font-medium text-charcoal">
+                    Free events today: {quotas === null ? '…' : `${used} of ${cap}`}
+                    {quotas !== null && used >= cap ? (
+                      <span className="ml-2 text-amber-800">
+                        — limit reached; new free events are refused until midnight UTC
+                      </span>
+                    ) : null}
+                  </p>
+                );
+              })()}
               {claimsError ? (
                 <Notice tone="warn" className="mt-3">
                   {claimsError}
@@ -2978,6 +3037,111 @@ function GlobalAdminPage() {
                   })}
                 </ul>
               )}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
+              <h2 id="limits" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Limits</h2>
+              <p className="text-sm text-charcoal/70">
+                Corporate event slots in use, and guests or networks that have hit the
+                guest book limit. Clearing one lifts that limit straight away: a cleared
+                slot lets the subscriber start another included event, and a cleared guest
+                book counter lets that guest or network sign again.
+              </p>
+              {quotasError ? (
+                <Notice tone="warn" className="mt-3">
+                  {quotasError}
+                </Notice>
+              ) : null}
+              {(() => {
+                if (quotas === null) {
+                  return <p className="mt-4 text-sm text-charcoal/55">Loading…</p>;
+                }
+                const seats = quotas.filter(
+                  (row) => quotaKind(row.id).kind === 'corporate-seat' && seatInUse(row),
+                );
+                const full = quotas.filter(guestBookLimitReached);
+                const eventName = (eventId?: string | null) =>
+                  (eventId && events.find((e) => e.id === eventId)?.name) || eventId || 'unknown event';
+                const clearButton = (id: string, label: string, confirmText: string) => (
+                  <button
+                    type="button"
+                    disabled={working === `quota-${id}`}
+                    onClick={() => void handleClearQuota(id, confirmText)}
+                    className="shrink-0 border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
+                  >
+                    {working === `quota-${id}` ? 'Clearing…' : label}
+                  </button>
+                );
+                return (
+                  <>
+                    <h3 className="mt-5 font-sans text-base font-semibold">
+                      Corporate slots in use ({seats.length})
+                    </h3>
+                    {seats.length === 0 ? (
+                      <p className="mt-2 text-sm text-charcoal/55">No Corporate event is taking uploads.</p>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                        {seats.map((row) => {
+                          const kind = quotaKind(row.id);
+                          const host = kind.kind === 'corporate-seat' ? kind.hostSub : '';
+                          return (
+                            <li key={row.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm text-charcoal">{eventName(row.eventId)}</p>
+                                <p className="truncate font-mono text-xs text-charcoal/60">
+                                  {host}
+                                  {row.expiresAt
+                                    ? ` · frees ${new Date(row.expiresAt).toLocaleDateString()}`
+                                    : ''}
+                                </p>
+                              </div>
+                              {clearButton(
+                                row.id,
+                                'Free slot',
+                                'Free this Corporate slot? The event keeps running; the subscriber can start one more included event.',
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    <h3 className="mt-6 font-sans text-base font-semibold">
+                      Guest book limits reached ({full.length})
+                    </h3>
+                    {full.length === 0 ? (
+                      <p className="mt-2 text-sm text-charcoal/55">Nobody is being turned away.</p>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                        {full.map((row) => {
+                          const kind = quotaKind(row.id);
+                          const eventId =
+                            kind.kind === 'guestbook-guest' || kind.kind === 'guestbook-address'
+                              ? kind.eventId
+                              : null;
+                          const who =
+                            kind.kind === 'guestbook-guest'
+                              ? `Guest ${kind.who}`
+                              : kind.kind === 'guestbook-address'
+                                ? `Network ${kind.address}`
+                                : row.id;
+                          return (
+                            <li key={row.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm text-charcoal">{eventName(eventId)}</p>
+                                <p className="truncate font-mono text-xs text-charcoal/60">
+                                  {who} · {row.count ?? 0} notes
+                                </p>
+                              </div>
+                              {clearButton(row.id, 'Reset', 'Let this guest or network sign the guest book again?')}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="spx-card mt-8 p-5" hidden={adminTab !== 'costs'}>

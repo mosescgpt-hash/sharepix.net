@@ -43,6 +43,7 @@ import { listGuestBookEntries } from './functions/list-guest-book-entries/resour
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
+import { corporateSeats } from './functions/corporate-seats/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
 import { recordBytes } from './functions/record-bytes/resource';
 import { mediaUrl } from './functions/media-url/resource';
@@ -94,6 +95,7 @@ const backend = defineBackend({
   adminUserActions,
   stripeWebhook,
   corporatePortal,
+  corporateSeats,
   sanitizeUpload,
   recordBytes,
   mediaUrl,
@@ -640,6 +642,12 @@ const webhookUrl = webhookFn.addFunctionUrl({
 const corporatePortalFn = backend.corporatePortal.resources.lambda as LambdaFunction;
 corporateTable.grantReadData(corporatePortalFn);
 corporatePortalFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
+
+// Corporate slot count for the host dashboard. Read-only on the quota table,
+// and it only ever reads the caller's own seat rows, by key.
+const corporateSeatsFn = backend.corporateSeats.resources.lambda as LambdaFunction;
+quotaTable.grantReadData(corporateSeatsFn);
+corporateSeatsFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
 
 // ---------------------------------------------------------------------------
 // Alerting. A broken webhook means payments stop being recorded and events

@@ -13,12 +13,16 @@ import CommentModeration from '@/components/CommentModeration';
 import { commentsEnabled } from '@/lib/photoEngagement';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
+import EventStatusNotices from '@/components/EventStatusNotices';
+import { eventStatusNotices, type CorporateSeatFacts } from '@/lib/eventStatus';
 import {
   deleteEventWithPhotos,
   fetchEvent,
   fetchEventPhotos,
   getCurrentUserInfo,
+  getMyCorporateSeats,
   getMyCorporateSubscription,
+  startCheckout,
   isCorporateActive,
   setEventAlertEmail,
   setEventModerationMode,
@@ -50,6 +54,7 @@ import {
   canPurchaseFor,
   extensionPrice,
   getTier,
+  isTrialTier,
   liveSlideshowAvailable,
   videosRemaining,
 } from '@/lib/pricing';
@@ -134,6 +139,9 @@ function AdminDashboardPage() {
     { text: string; ok: boolean; where: SettingsScope } | null
   >(null);
   const [corporateActive, setCorporateActive] = useState(false);
+  const [corporateSeats, setCorporateSeats] = useState<CorporateSeatFacts | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   // One cart for the paid add-ons: tick what you want, pay once.
   const [selectedAddOns, setSelectedAddOns] = useState<Set<EventAddOnKey>>(new Set());
   const [checkoutWorking, setCheckoutWorking] = useState(false);
@@ -209,6 +217,13 @@ function AdminDashboardPage() {
         return;
       }
       setEvent(ev);
+      // Only a Corporate event has slots to count, and a failure here costs the
+      // host one notice rather than their dashboard.
+      setCorporateSeats(
+        ev.tier === 'corporate' && isCorporateActive(corporateSub)
+          ? await getMyCorporateSeats().catch(() => null)
+          : null,
+      );
       const items = await fetchEventPhotos(eventId, { includeUnapproved: true, useOriginals: true });
       setPhotos(items);
       // Separately caught: a host whose photographer list fails to load should
@@ -325,6 +340,31 @@ function AdminDashboardPage() {
     .reduce((sum, addon) => sum + addon.price, 0);
 
   const lifecycle = eventLifecycle(event);
+  const statusNotices = eventStatusNotices(
+    event
+      ? {
+          tier: event.tier,
+          paid: event.paid,
+          uploadWindowEndsAt: lifecycle.uploadWindowEndsAt,
+          galleryClosesAt: lifecycle.retentionEndsAt,
+        }
+      : null,
+    corporateSeats,
+  );
+
+  // The same checkout My Events uses: the server prices the event from its own
+  // row, so a Corporate extra is charged the extra-event price, not a plan's.
+  async function handlePay() {
+    if (!event) return;
+    setPaying(true);
+    setPayError(null);
+    try {
+      window.location.assign(await startCheckout(event.tier, event.id));
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Checkout could not be started.');
+      setPaying(false);
+    }
+  }
 
   async function handleInvitePhotographer() {
     if (!event) return;
@@ -662,6 +702,13 @@ function AdminDashboardPage() {
                 </button>
               </div>
             </div>
+
+            <EventStatusNotices
+              notices={statusNotices}
+              onPay={() => void handlePay()}
+              paying={paying}
+              payError={payError}
+            />
 
             {/* A map for six screens of scroll. Anchors rather than tabs:
                 everything stays on one page, so Ctrl-F still finds a setting
@@ -1311,7 +1358,9 @@ function AdminDashboardPage() {
               {/* Only once there is something to offer. Asking a host to submit
                   photos from an empty gallery is asking for nothing, and the
                   page they would land on would have no tiles to choose from. */}
-              {photos.length > 0 ? (
+              {/* Not on a free event: the offer is part of what was paid back,
+                  and nothing was paid. */}
+              {photos.length > 0 && !isTrialTier(event.tier) ? (
                 <div className="spx-card mt-6 p-6">
                   <p className="spx-eyebrow">Featured Events</p>
                   <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">

@@ -2,6 +2,7 @@
 // Gen 2 / aws-amplify v6: typed data client + path-based storage.
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { authModeFor, getClient, type DataAuthMode } from '@/lib/dataClient';
+import type { QuotaCounterRow } from '@/lib/quotaCounters';
 import { uploadData, getUrl, downloadData, getProperties } from 'aws-amplify/storage';
 import type { Schema } from '@/amplify/data/resource';
 import {
@@ -1599,6 +1600,64 @@ export async function clearFreeEventClaim(hostSub: string): Promise<void> {
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/**
+ * Every QuotaCounter row: the daily free-event allowance, Corporate seats and
+ * guest book counters. Admin-only by the model's authorization.
+ */
+export async function listQuotaCounters(): Promise<QuotaCounterRow[]> {
+  const rows: QuotaCounterRow[] = [];
+  let nextToken: string | null | undefined;
+  do {
+    const { data, errors, nextToken: next } = await getClient().models.QuotaCounter.list({
+      authMode: 'userPool',
+      nextToken,
+      limit: 1000,
+    });
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    for (const row of data ?? []) {
+      rows.push({
+        id: row.id,
+        count: row.count ?? null,
+        limit: row.limit ?? null,
+        eventId: row.eventId ?? null,
+        expiresAt: row.expiresAt ?? null,
+      });
+    }
+    nextToken = next;
+  } while (nextToken);
+  return rows;
+}
+
+/**
+ * Lift one limit by deleting its counter: frees a Corporate seat, or lets a
+ * guest (or an address) sign the guest book again. Like clearing a free-event
+ * claim, a person decides this; nothing does it automatically.
+ */
+export async function clearQuotaCounter(id: string): Promise<void> {
+  const key = id.trim();
+  if (!key) throw new Error('Which limit? A counter id is required.');
+  const { errors } = await getClient().models.QuotaCounter.delete(
+    { id: key },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/** The caller's Corporate slots: how many are included, and how many are busy. */
+export async function getMyCorporateSeats(): Promise<{
+  included: number;
+  inUse: number;
+  nextFreeAt: string | null;
+} | null> {
+  const { data, errors } = await getClient().queries.myCorporateSeats(
+    {},
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data) return null;
+  return { included: data.included, inUse: data.inUse, nextFreeAt: data.nextFreeAt ?? null };
 }
 
 export async function listPaymentsCount(): Promise<number> {

@@ -209,9 +209,15 @@ async function takeTrialAllowance(nowISO: string): Promise<void> {
         TableName: QUOTA_TABLE,
         Key: { id: { S: trialDayKey(nowISO) } },
         UpdateExpression:
-          'ADD #count :one SET #typename = if_not_exists(#typename, :typename), updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
+          // The cap is written onto the row too, so the admin dashboard can show
+          // "12 of 25" even when FREE_EVENTS_PER_DAY overrides the default.
+          'ADD #count :one SET #typename = if_not_exists(#typename, :typename), #limit = :cap, updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
         ConditionExpression: 'attribute_not_exists(#count) OR #count < :cap',
-        ExpressionAttributeNames: { '#count': 'count', '#typename': '__typename' },
+        ExpressionAttributeNames: {
+          '#count': 'count',
+          '#limit': 'limit',
+          '#typename': '__typename',
+        },
         ExpressionAttributeValues: {
           ':one': { N: '1' },
           ':cap': { N: String(FREE_EVENTS_PER_DAY) },
