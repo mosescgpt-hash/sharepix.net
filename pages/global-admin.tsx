@@ -64,8 +64,13 @@ import {
 } from '@/lib/costs';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
+import FreeEventsChart from '@/components/FreeEventsChart';
 import {
   DEFAULT_FREE_EVENTS_PER_DAY,
+  MAX_FREE_EVENTS_PER_DAY,
+  freeEventAdvice,
+  freeEventSeries,
+  parseDailyLimit,
   guestBookLimitReached,
   quotaKind,
   seatInUse,
@@ -284,6 +289,11 @@ function GlobalAdminPage() {
   // guest book counters. null while loading, like the claims above.
   const [quotas, setQuotas] = useState<QuotaCounterRow[] | null>(null);
   const [quotasError, setQuotasError] = useState<string | null>(null);
+  // The daily free-event limit as saved in AppSetting ('' = never saved), and
+  // what is in the box.
+  const [freeLimitSaved, setFreeLimitSaved] = useState('');
+  const [freeLimitDraft, setFreeLimitDraft] = useState('');
+  const [freeLimitError, setFreeLimitError] = useState<string | null>(null);
   const [incentives, setIncentives] = useState<ResearchIncentiveRow[] | null>(null);
   const [incentivesError, setIncentivesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -524,6 +534,9 @@ function GlobalAdminPage() {
         setReportTo(stored);
         setReportSaved(stored);
         setCountFrom(await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => ''));
+        const freeLimit = await readSetting(SETTING_KEYS.freeEventsPerDay).catch(() => '');
+        setFreeLimitSaved(freeLimit);
+        setFreeLimitDraft(freeLimit);
         setSettingsError(null);
       } catch (err) {
         setSettingsError(err instanceof Error ? err.message : 'Settings could not be loaded.');
@@ -980,6 +993,29 @@ function GlobalAdminPage() {
       setSettingsError(err instanceof Error ? err.message : 'That could not be saved.');
     } finally {
       setCountFromWorking(false);
+    }
+  }
+
+  async function handleSaveFreeLimit() {
+    const value = parseDailyLimit(freeLimitDraft);
+    if (value === null) {
+      setFreeLimitError(`Enter a whole number from 0 to ${MAX_FREE_EVENTS_PER_DAY}.`);
+      return;
+    }
+    if (value === 0 && !window.confirm('Pause free events? Nobody can start one until you set a limit above 0.')) {
+      return;
+    }
+    setWorking('free-limit');
+    setFreeLimitError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      await writeSetting(SETTING_KEYS.freeEventsPerDay, String(value), me?.loginId ?? 'admin');
+      setFreeLimitSaved(String(value));
+      setFreeLimitDraft(String(value));
+    } catch (err) {
+      setFreeLimitError(err instanceof Error ? err.message : 'The limit could not be saved.');
+    } finally {
+      setWorking(null);
     }
   }
 
@@ -2972,20 +3008,65 @@ function GlobalAdminPage() {
                 effect immediately.
               </p>
               {(() => {
-                // Today's platform-wide allowance. The row records the cap it
-                // was checked against, so an override of the default shows.
-                const today = (quotas ?? []).find((row) => row.id === trialDayId());
-                const used = today?.count ?? 0;
-                const cap = today?.limit ?? DEFAULT_FREE_EVENTS_PER_DAY;
+                // The limit in force: the saved setting, else what today's row
+                // recorded (a deploy-time override), else the default.
+                const series = freeEventSeries(quotas ?? []);
+                const today = series[series.length - 1];
+                const limit =
+                  parseDailyLimit(freeLimitSaved) ?? today?.limit ?? DEFAULT_FREE_EVENTS_PER_DAY;
+                const advice = freeEventAdvice(series, limit);
+                // An empty box shows the limit in force, so it is not a change.
+                const draft = freeLimitDraft === '' ? String(limit) : freeLimitDraft;
+                const dirty = draft.trim() !== String(limit);
                 return (
-                  <p className="mt-3 text-sm font-medium text-charcoal">
-                    Free events today: {quotas === null ? '…' : `${used} of ${cap}`}
-                    {quotas !== null && used >= cap ? (
-                      <span className="ml-2 text-amber-800">
-                        — limit reached; new free events are refused until midnight UTC
-                      </span>
+                  <div className="mt-5 border-t border-charcoal/10 pt-5">
+                    <h3 className="font-sans text-base font-semibold">Free events per day</h3>
+                    <p className="mt-1 text-sm text-charcoal/70">
+                      How many free events the whole site hands out each day (midnight to
+                      midnight UTC). A change applies to the very next request. 0 pauses free
+                      events.
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-end gap-3">
+                      <label className="text-sm font-medium">
+                        Daily limit
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={MAX_FREE_EVENTS_PER_DAY}
+                          step={1}
+                          value={draft}
+                          onChange={(e) => setFreeLimitDraft(e.target.value)}
+                          className="spx-input mt-1 block w-28"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={working === 'free-limit' || !dirty}
+                        onClick={() => void handleSaveFreeLimit()}
+                        className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                      >
+                        {working === 'free-limit' ? 'Saving…' : 'Save'}
+                      </button>
+                      <p className="text-sm text-charcoal/70">
+                        Today: {quotas === null ? '…' : `${today?.given ?? 0} of ${limit} given out`}
+                        {today && today.refused > 0 ? `, ${today.refused} turned away` : ''}
+                      </p>
+                    </div>
+                    {freeLimitError ? (
+                      <Notice tone="error" className="mt-3">
+                        {freeLimitError}
+                      </Notice>
                     ) : null}
-                  </p>
+                    {quotas === null ? null : (
+                      <>
+                        <Notice tone={advice.tone} label="" className="mt-4">
+                          {advice.message}
+                        </Notice>
+                        <FreeEventsChart series={series} />
+                      </>
+                    )}
+                  </div>
                 );
               })()}
               {claimsError ? (

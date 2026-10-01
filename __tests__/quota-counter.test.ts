@@ -50,7 +50,7 @@ describe('the daily free-event allowance', () => {
   });
 
   it('defaults to 25 a day and refuses when its table is missing', () => {
-    expect(handler).toMatch(/: 25;/);
+    expect(handler).toContain('const DEFAULT_FREE_EVENTS_PER_DAY = 25;');
     const take = handler.slice(
       handler.indexOf('async function takeTrialAllowance'),
       handler.indexOf('function trialDayKey'),

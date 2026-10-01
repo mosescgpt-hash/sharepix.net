@@ -42,15 +42,50 @@ const QUOTA_TABLE = process.env.QUOTA_TABLE_NAME as string;
  * The per-account claim stops one person farming free events; it does not stop
  * someone with a script and a supply of email addresses, because every new
  * account is a new claim. This is the throttle on that: whatever the number of
- * accounts, free storage can only be created this fast. Twenty-five is several
- * times the current daily sign-up rate and is meant to be raised by setting
- * FREE_EVENTS_PER_DAY, not by a code change, once there is a real rate to set
- * it against.
+ * accounts, free storage can only be created this fast.
+ *
+ * The number is a setting, not a constant: a global admin changes it on the
+ * dashboard (AppSetting `free-events-per-day`), next to a chart of how close
+ * each day came to it. FREE_EVENTS_PER_DAY in the environment is only the
+ * fallback for when no setting has been saved, and 25 is the fallback for that.
+ * 0 is allowed and means free events are paused.
  */
-const FREE_EVENTS_PER_DAY = (() => {
-  const raw = Number(process.env.FREE_EVENTS_PER_DAY ?? '');
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 25;
-})();
+const DEFAULT_FREE_EVENTS_PER_DAY = 25;
+const MAX_FREE_EVENTS_PER_DAY = 1000;
+const FREE_EVENTS_SETTING_KEY = 'free-events-per-day';
+const SETTING_TABLE = process.env.SETTING_TABLE_NAME ?? '';
+
+/** A whole number from 0 to the maximum, or null for anything else. */
+function parseDailyLimit(raw: string | undefined | null): number | null {
+  const text = (raw ?? '').trim();
+  if (!/^\d+$/.test(text)) return null;
+  const value = Number(text);
+  return value <= MAX_FREE_EVENTS_PER_DAY ? value : null;
+}
+
+/**
+ * Today's limit: the admin's setting, else the environment, else the default.
+ *
+ * Read on every free-event request rather than cached, so a change on the
+ * dashboard applies to the very next one. It is one small GetItem on a path
+ * that runs a handful of times a day. A setting that cannot be read falls
+ * back rather than refusing: the fallback is still a limit.
+ */
+async function freeEventsPerDay(): Promise<number> {
+  if (SETTING_TABLE) {
+    const found = await dynamo
+      .send(
+        new GetItemCommand({
+          TableName: SETTING_TABLE,
+          Key: { id: { S: FREE_EVENTS_SETTING_KEY } },
+        }),
+      )
+      .catch(() => null);
+    const saved = parseDailyLimit(found?.Item?.value?.S);
+    if (saved !== null) return saved;
+  }
+  return parseDailyLimit(process.env.FREE_EVENTS_PER_DAY) ?? DEFAULT_FREE_EVENTS_PER_DAY;
+}
 
 type Handler = Schema['createHostedEvent']['functionHandler'];
 
@@ -203,14 +238,15 @@ async function takeTrialAllowance(nowISO: string): Promise<void> {
   if (!QUOTA_TABLE) {
     throw new Error('Free events are unavailable right now. Please try again later.');
   }
+  const cap = await freeEventsPerDay();
   try {
     await dynamo.send(
       new UpdateItemCommand({
         TableName: QUOTA_TABLE,
         Key: { id: { S: trialDayKey(nowISO) } },
         UpdateExpression:
-          // The cap is written onto the row too, so the admin dashboard can show
-          // "12 of 25" even when FREE_EVENTS_PER_DAY overrides the default.
+          // The cap is written onto the row too, so the dashboard chart shows
+          // the limit each day actually ran under, not today's setting.
           'ADD #count :one SET #typename = if_not_exists(#typename, :typename), #limit = :cap, updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
         ConditionExpression: 'attribute_not_exists(#count) OR #count < :cap',
         ExpressionAttributeNames: {
@@ -220,7 +256,7 @@ async function takeTrialAllowance(nowISO: string): Promise<void> {
         },
         ExpressionAttributeValues: {
           ':one': { N: '1' },
-          ':cap': { N: String(FREE_EVENTS_PER_DAY) },
+          ':cap': { N: String(cap) },
           ':now': { S: nowISO },
           ':typename': { S: 'QuotaCounter' },
         },
@@ -228,12 +264,48 @@ async function takeTrialAllowance(nowISO: string): Promise<void> {
     );
   } catch (err) {
     if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') {
+      await countRefusal(nowISO, cap);
+      if (cap === 0) {
+        throw new Error('Free events are paused right now. You can create a paid event at any time.');
+      }
       throw new Error(
         'Today’s free events have all been claimed. Please try again tomorrow, or create a paid event now.',
       );
     }
     throw err;
   }
+}
+
+/**
+ * Count a request the limit turned away, on the same day's row.
+ *
+ * This is the number that says whether the limit is too low: "25 of 25" only
+ * says the day filled up, not whether three people or three hundred were
+ * waiting behind it. Unconditional and best-effort — it is telemetry about a
+ * refusal that has already happened.
+ */
+async function countRefusal(nowISO: string, cap: number): Promise<void> {
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: trialDayKey(nowISO) } },
+        UpdateExpression:
+          'ADD #refused :one SET #typename = if_not_exists(#typename, :typename), #limit = :cap, updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
+        ExpressionAttributeNames: {
+          '#refused': 'refused',
+          '#limit': 'limit',
+          '#typename': '__typename',
+        },
+        ExpressionAttributeValues: {
+          ':one': { N: '1' },
+          ':cap': { N: String(cap) },
+          ':now': { S: nowISO },
+          ':typename': { S: 'QuotaCounter' },
+        },
+      }),
+    )
+    .catch(() => undefined);
 }
 
 function trialDayKey(nowISO: string): string {

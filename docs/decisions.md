@@ -695,8 +695,13 @@ hard limits are unchanged and stay on the fair-use page.
 
 The free event is the only way to create stored media without a card behind
 it. It now gets a **14-day upload window and a 14-day gallery** (about a month
-in all), and the platform hands out at most **25 a day** (`FREE_EVENTS_PER_DAY`
-overrides it). The per-account claim stops one person farming; the daily cap is
+in all), and the platform hands out at most **25 a day** by default. The number is an
+admin setting (AppSetting `free-events-per-day`, edited under Free event
+claims on the global dashboard, 0 pauses free events) and applies to the next
+request. Beside it, a 30-day chart shows events given out, requests the limit
+turned away, and the limit each day ran under, with a one-line verdict on
+whether to raise it. `FREE_EVENTS_PER_DAY` is only the fallback when no
+setting has been saved. The per-account claim stops one person farming; the daily cap is
 what stops a script with many email addresses.
 
 It is a **new tier id, `trial`**. Retention is read from the tier id rather

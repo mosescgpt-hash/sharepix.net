@@ -1320,6 +1320,11 @@ export const SETTING_KEYS = {
    * turns out to have been set in error.
    */
   analyticsCountFrom: 'analytics-count-from',
+  /**
+   * How many free events the platform hands out per UTC day. Read by
+   * create-event on every free-event request; see lib/quotaCounters.ts.
+   */
+  freeEventsPerDay: 'free-events-per-day',
 } as const;
 
 export async function readSetting(key: string): Promise<string> {
@@ -1621,6 +1626,7 @@ export async function listQuotaCounters(): Promise<QuotaCounterRow[]> {
         id: row.id,
         count: row.count ?? null,
         limit: row.limit ?? null,
+        refused: row.refused ?? null,
         eventId: row.eventId ?? null,
         expiresAt: row.expiresAt ?? null,
       });

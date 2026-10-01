@@ -645,6 +645,8 @@ const schema = a.schema({
       count: a.integer(),
       // The limit `count` was checked against, where the writer records it.
       limit: a.integer(),
+      // Requests the limit turned away. Only the daily free-event row uses it.
+      refused: a.integer(),
       eventId: a.string(),
       expiresAt: a.datetime(),
     })

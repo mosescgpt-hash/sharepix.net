@@ -107,7 +107,7 @@ describe('reading a counter row', () => {
 
   it('uses the same default daily allowance as create-event', () => {
     const handler = codeOnly(readSource('amplify/functions/create-event/handler.ts'));
-    expect(handler).toMatch(new RegExp(`: ${DEFAULT_FREE_EVENTS_PER_DAY};`));
+    expect(handler).toContain(`const DEFAULT_FREE_EVENTS_PER_DAY = ${DEFAULT_FREE_EVENTS_PER_DAY};`);
   });
 
   it('counts a seat as in use only while its event is taking uploads', () => {
@@ -150,7 +150,8 @@ describe('wiring', () => {
   });
 
   it('shows today’s free events and the limits list', () => {
-    expect(admin).toContain('Free events today:');
+    expect(admin).toContain('Free events per day');
+    expect(admin).toContain('<FreeEventsChart series={series} />');
     expect(admin).toContain('id="limits"');
     expect(admin).toContain('clearQuotaCounter');
   });

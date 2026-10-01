@@ -476,6 +476,10 @@ createEventFn.addEnvironment('FREE_CLAIM_TABLE_NAME', freeEventClaimTable.tableN
 quotaTable.grantReadWriteData(createEventFn);
 createEventFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
 createEventFn.addEnvironment('FREE_EVENTS_PER_DAY', process.env.FREE_EVENTS_PER_DAY ?? '');
+// The daily free-event limit is an admin setting (AppSetting
+// `free-events-per-day`), edited on the dashboard. Read-only here.
+settingTable.grantReadData(createEventFn);
+createEventFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
 
 // Update-event function: the only way a host changes their own event, now that
 // the model grants owners no `update`. It reads the row to check ownership and
