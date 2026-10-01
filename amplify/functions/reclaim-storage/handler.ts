@@ -59,6 +59,7 @@ const RECLAIM_ENABLED = (process.env.STORAGE_RECLAIM_ENABLED ?? '').toLowerCase(
  * more in that direction than the other.
  */
 const RETENTION_DAYS: Record<string, number> = {
+  trial: 14,
   free: 30,
   plus: 365,
   event: 365,

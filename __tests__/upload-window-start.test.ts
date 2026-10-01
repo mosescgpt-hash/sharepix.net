@@ -262,8 +262,11 @@ describe('the rules are actually wired in', () => {
   const schema = readSource('amplify/data/resource.ts');
 
   it('derives the new event’s window from its date', () => {
-    expect(create).toContain('windowEndsAtFor(cleanDate, now)');
-    expect(create).toContain('accessExpiresAtFor(uploadWindowEndsAt, plan.accessDays, now)');
+    expect(create).toContain('windowEndsAtFor(cleanDate, now, windowDays)');
+    expect(create).toContain(
+      'accessExpiresAtFor(uploadWindowEndsAt, plan.accessDays, now, windowDays)',
+    );
+    expect(create).toContain('const windowDays = uploadWindowDaysFor(id);');
   });
 
   it('refuses the date before deriving anything from it', () => {

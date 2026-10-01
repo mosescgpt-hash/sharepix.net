@@ -627,6 +627,26 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
+  // Counters that bound how fast something can be created, written only by
+  // the Lambdas that enforce them. The row id names the limit:
+  //
+  //   trial-day#<YYYY-MM-DD>            free events handed out that UTC day
+  //   corporate-seat#<sub>#<n>          one of a subscriber's included events
+  //   guestbook#<eventId>#guest#<key>   notes one guest has left on one event
+  //   guestbook#<eventId>#ip#<ip>       notes from one address on one event
+  //
+  // Same authorization as FreeEventClaim and for the same reason: every row is
+  // a limit on somebody, and anybody who could write or delete one could lift
+  // it. Admins can read and delete, which is how a limit gets lifted on
+  // purpose.
+  QuotaCounter: a
+    .model({
+      count: a.integer(),
+      eventId: a.string(),
+      expiresAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   // One row per distinct person who has uploaded to an event, written by
   // create-event-photo and by nothing else.
   //

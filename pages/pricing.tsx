@@ -1,7 +1,13 @@
 import { useEffect } from 'react';
 import Layout from '@/components/Layout';
 import PricingCards from '@/components/PricingCards';
-import { VIDEO_GB_INCLUDED } from '@/lib/pricing';
+import {
+  CORPORATE_PLAN,
+  TRIAL_GALLERY_DAYS,
+  TRIAL_UPLOAD_WINDOW_DAYS,
+  VIDEO_GB_INCLUDED,
+} from '@/lib/pricing';
+import { FAIR_USE_PHOTO_CEILING } from '@/lib/fairUse';
 import { trackEvent } from '@/lib/trackEvent';
 import { pricingJsonLd } from '@/lib/seo';
 
@@ -24,7 +30,7 @@ const faqs = [
   },
   {
     q: 'Is "unlimited photos" really unlimited?',
-    a: 'Yes, for a normal event — there is no number to count against and no cap to hit mid-reception. Unlimited covers normal event use: SharePix may step in on automated uploads, bulk archival or backup use, or activity that is abusive or extraordinarily large. If you are running a wedding, a conference or a school fundraiser, none of that applies to you.',
+    a: `Unlimited, with one number we would rather tell you up front: a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event. A 300-guest wedding usually lands around 2,000. If your event gets near the ceiling, a button on your dashboard asks us for more room and we raise it free — your guests keep uploading the whole time, it never pauses mid-reception. What fair use rules out is automated uploads, bulk archival or backup use, and abusive activity.`,
   },
   {
     q: 'What about video?',
@@ -32,11 +38,15 @@ const faqs = [
   },
   {
     q: 'Is my gallery private?',
-    a: 'It is unlisted, which means it is reachable only through your event link or QR code and is never indexed by search engines. It is not password-protected, and we would rather be precise about that than call it private and let you assume something stronger. Share the link with the people you want in it.',
+    a: 'It is unlisted, not private: anyone who has your event link or QR code can view the gallery and add photos, and nobody else can find it — it is never indexed by search engines. It is not password-protected, so share the link with the people you want in it, and remember that a photo of your table sign is a copy of the link.',
   },
   {
     q: 'What is the free event?',
-    a: 'A real event, not a demo — your own QR code, your own guests, your own gallery. It holds up to 50 photos and 1 video, and the gallery stays up for 30 days after uploads close. One per account, so it is there to try SharePix at something small before you pay for something that matters.',
+    a: `A real event, not a demo — your own QR code, your own guests, your own gallery. It holds up to 50 photos and 1 video, guests can upload for ${TRIAL_UPLOAD_WINDOW_DAYS} days, and the gallery stays up for ${TRIAL_GALLERY_DAYS} days after that. One per account, and a limited number are handed out each day, so it is there to try SharePix at something small before you pay for something that matters.`,
+  },
+  {
+    q: 'How does Corporate work?',
+    a: `${CORPORATE_PLAN.priceLabel}, billed monthly through Stripe. Up to ${CORPORATE_PLAN.includedEvents} of your events can take uploads at the same time; when one closes, its slot frees up for the next, and its gallery stays up as normal. If you need more running at once, each extra event is $${CORPORATE_PLAN.extraEventPrice}, paid once when you create it. Cancel any time and you keep 30 days to download everything.`,
   },
 ];
 
@@ -66,7 +76,7 @@ export default function PricingPage() {
           </div>
 
           <p className="mt-8 text-sm text-charcoal/60">
-            Unlimited guests · Unlimited photos · Full-resolution memories · Private by default
+            Unlimited guests · Unlimited photos under fair use · Full-resolution memories · Unlisted, never searchable
           </p>
         </div>
       </section>

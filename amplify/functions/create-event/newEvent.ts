@@ -1,7 +1,10 @@
 import { EVENT_CODE_WORDS } from './eventCodeWords';
+import { CORPORATE_EXTRA_EVENT_CENTS, PLAN_PRICE_CENTS } from './priceList';
 import {
+  TRIAL_UPLOAD_WINDOW_DAYS,
   accessExpiresAtFor,
   eventDateProblem,
+  uploadWindowDaysFor,
   windowEndsAtFor,
 } from './uploadWindowStart';
 /**
@@ -21,7 +24,8 @@ import {
  *
  * The plan table below is duplicated from lib/pricing.ts on purpose: Amplify
  * functions take no cross-bundle imports. The two MUST move together — see the
- * comment on TIER_PLANS.
+ * comment on TIER_PLANS. Prices are the exception: they are read from
+ * ./priceList, a byte-identical copy of lib/priceList.ts.
  */
 
 /**
@@ -67,18 +71,28 @@ export const TIER_PLANS: Record<string, TierPlan> = {
   // the note in lib/pricing.ts for why it kept that id instead of taking
   // `event`. Nothing here reads the display name — this map is ids and
   // numbers, which is why renaming the plan does not touch it.
-  free: { priceCents: 0, photoLimit: 50, videoLimit: 1, videoBytesLimit: 250 * 1024 * 1024, accessDays: 60 + 30 },
+  // The free trial: a two-week window and a two-week gallery after it. It
+  // replaced `free` below so that shortening the trial could not shorten a
+  // gallery somebody had already been promised.
+  trial: { priceCents: PLAN_PRICE_CENTS.trial, photoLimit: 50, videoLimit: 1, videoBytesLimit: 250 * 1024 * 1024, accessDays: TRIAL_UPLOAD_WINDOW_DAYS + 14 },
   // photoLimit null means unlimited, and is the number actually stamped on the
   // row. Bounded by retention and fair use rather than by a count — see
   // lib/pricing.ts for the reasoning and lib/fairUse.ts for the safeguards.
   // videoLimit null: the paid plan is sold as a 10 GB budget, not a count.
-  plus: { priceCents: 7900, photoLimit: null, videoLimit: null, videoBytesLimit: 10 * 1024 * 1024 * 1024, accessDays: 60 + 365 },
+  plus: { priceCents: PLAN_PRICE_CENTS.plus, photoLimit: null, videoLimit: null, videoBytesLimit: 10 * 1024 * 1024 * 1024, accessDays: 60 + 365 },
   // Retired, but still creatable so an event that already carries one can be
   // paid for. Their access windows are the ones those plans were sold with.
-  event: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, videoBytesLimit: null, accessDays: 60 + 365 },
-  starter: { priceCents: 1900, photoLimit: 100, videoLimit: 2, videoBytesLimit: null, accessDays: 14 },
-  standard: { priceCents: 3900, photoLimit: 1000, videoLimit: 10, videoBytesLimit: null, accessDays: 90 },
-  premium: { priceCents: 7900, photoLimit: null, videoLimit: 30, videoBytesLimit: null, accessDays: 365 },
+  //
+  // `free` is the original trial (60-day window, 30-day gallery), retired so
+  // the events created on it keep exactly that. It is not creatable as a NEW
+  // free event: create-event refuses retired trials, because the only reason
+  // a retired plan is creatable at all is so an unpaid event can be paid for,
+  // and a trial is never paid for.
+  free: { priceCents: PLAN_PRICE_CENTS.free, photoLimit: 50, videoLimit: 1, videoBytesLimit: 250 * 1024 * 1024, accessDays: 60 + 30 },
+  event: { priceCents: PLAN_PRICE_CENTS.event, photoLimit: 1000, videoLimit: 10, videoBytesLimit: null, accessDays: 60 + 365 },
+  starter: { priceCents: PLAN_PRICE_CENTS.starter, photoLimit: 100, videoLimit: 2, videoBytesLimit: null, accessDays: 14 },
+  standard: { priceCents: PLAN_PRICE_CENTS.standard, photoLimit: 1000, videoLimit: 10, videoBytesLimit: null, accessDays: 90 },
+  premium: { priceCents: PLAN_PRICE_CENTS.premium, photoLimit: null, videoLimit: 30, videoBytesLimit: null, accessDays: 365 },
 };
 
 /**
@@ -89,7 +103,13 @@ export const TIER_PLANS: Record<string, TierPlan> = {
  * a comped event is a purchase at a discount and may buy add-ons, while a
  * trial may not buy anything at all.
  */
-const TRIAL_TIERS = new Set(['free']);
+const TRIAL_TIERS = new Set(['trial', 'free']);
+
+/**
+ * The trial a new free event is created on. `free` is still a trial — events
+ * carry it — but it is no longer handed out.
+ */
+export const CURRENT_TRIAL_TIER = 'trial';
 
 export function isTrialTier(tier: string): boolean {
   return TRIAL_TIERS.has(normalizeTier(tier));
@@ -378,10 +398,18 @@ export type Activation =
 export function activationFor({
   tier,
   corporateActive,
+  corporateSeatTaken = true,
   discount,
 }: {
   tier: string;
   corporateActive: boolean;
+  /**
+   * Whether one of the subscription's included event seats was free. Only
+   * read for a corporate event on a live subscription; false means the event
+   * is an extra one and is paid for like a single event, at the corporate
+   * extra-event price.
+   */
+  corporateSeatTaken?: boolean;
   /** A validated code and the plan's price, or null when none was supplied. */
   discount: { row: DiscountRow; priceCents: number } | null;
 }): Activation {
@@ -390,12 +418,22 @@ export function activationFor({
   if (!plan) return { kind: 'refused', reason: 'Choose one of the available plans.' };
 
   if (id === 'corporate') {
-    return corporateActive
+    if (!corporateActive) {
+      return {
+        kind: 'refused',
+        reason: 'An active Corporate subscription is required for corporate events.',
+      };
+    }
+    return corporateSeatTaken
       ? { kind: 'active', via: 'corporate' }
-      : {
-          kind: 'refused',
-          reason: 'An active Corporate subscription is required for corporate events.',
-        };
+      : { kind: 'pending', owedCents: CORPORATE_EXTRA_EVENT_CENTS };
+  }
+
+  // A retired trial is a tier events carry, not one a new event may start on.
+  // Every other retired plan stays creatable so an unpaid event can be paid
+  // for; a trial is never paid for, so there is no such event to rescue.
+  if (isTrialTier(id) && id !== CURRENT_TRIAL_TIER) {
+    return { kind: 'refused', reason: 'Choose one of the available plans.' };
   }
 
   // Checked before the discount branch, and deliberately not reachable by one.
@@ -474,7 +512,8 @@ export function newEventRow({
   // The sixty days run from the event, not from the paperwork. An undated
   // event starts provisionally from now and is re-anchored by its fifth
   // upload — see uploadWindowStart.ts.
-  const uploadWindowEndsAt = windowEndsAtFor(cleanDate, now);
+  const windowDays = uploadWindowDaysFor(id);
+  const uploadWindowEndsAt = windowEndsAtFor(cleanDate, now, windowDays);
 
   const location = formatEventLocation(city, state);
   return {
@@ -487,7 +526,7 @@ export function newEventRow({
     videoBytesLimit: plan.videoBytesLimit,
     // Counted from the window rather than from creation, so the gallery cannot
     // end before the uploads it holds.
-    accessExpiresAt: accessExpiresAtFor(uploadWindowEndsAt, plan.accessDays, now),
+    accessExpiresAt: accessExpiresAtFor(uploadWindowEndsAt, plan.accessDays, now, windowDays),
     uploadWindowEndsAt,
     paid: active,
     createdBy: sanitizeHostName(hostName) || 'Host',

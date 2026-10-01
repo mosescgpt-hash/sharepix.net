@@ -37,7 +37,9 @@ function CreateEventPage() {
   }, []);
 
   const router = useRouter();
-  const initialTier = typeof router.query.tier === 'string' ? router.query.tier : 'plus';
+  // `free` is the retired trial id; links that still carry it mean the free event.
+  const queryTier = typeof router.query.tier === 'string' ? router.query.tier : 'plus';
+  const initialTier = queryTier === 'free' ? 'trial' : queryTier;
   // Where they came from, carried in the link. A claim only — the create-event
   // function normalises it against a closed set before anything is stored, so
   // an edited query string cannot put free text on an event row.
@@ -405,7 +407,10 @@ function CreateEventPage() {
                     {tier.trial ? 'Free · one per account' : `$${tier.price} / event`}
                   </span>
                   <span className="block text-xs text-charcoal/55">
-                    {tier.photoLimit ? `${tier.photoLimit.toLocaleString()} photos` : 'Unlimited photos'} ·{' '}
+                    {tier.photoLimit
+                      ? `${tier.photoLimit.toLocaleString()} photos`
+                      : 'Unlimited photos under fair use'}{' '}
+                    ·{' '}
                     {tier.accessLabel}
                   </span>
                 </label>
@@ -436,10 +441,11 @@ function CreateEventPage() {
                     {CORPORATE_PLAN.name} event · included
                   </span>
                   <span className="block text-pine">
-                    Free with your subscription — no per-event charge
+                    Included for up to {CORPORATE_PLAN.includedEvents} events running at once
                   </span>
                   <span className="block text-xs text-charcoal/55">
-                    Unlimited photos · 1-year host access
+                    Beyond that, ${CORPORATE_PLAN.extraEventPrice} per extra event at checkout ·
+                    Unlimited photos under fair use · 1-year host access
                   </span>
                 </span>
               </label>

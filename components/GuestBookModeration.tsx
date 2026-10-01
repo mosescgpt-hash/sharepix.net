@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Notice from '@/components/Notice';
 import { fetchGuestBookForHost, setGuestBookEntryHidden } from '@/lib/api';
-import { entryNeedsReview } from '@/lib/guestBook';
+import { GUEST_BOOK_SCREENING_NOTE, entryNeedsReview } from '@/lib/guestBook';
 import type { HostGuestBookEntry } from '@/lib/types';
 
 /**
@@ -64,6 +64,7 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
           {held.length > 0 ? ` · ${held.length} waiting for you` : ''}
         </p>
       </div>
+      <p className="mt-2 text-xs text-charcoal/60">{GUEST_BOOK_SCREENING_NOTE}</p>
 
       {error ? (
         <Notice tone="error" className="mt-4">

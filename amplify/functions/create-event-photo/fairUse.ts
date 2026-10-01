@@ -445,11 +445,28 @@ export function windowExpired(
 }
 
 /**
+ * The fair-use ceiling a customer is told about, in photos per event.
+ *
+ * The same number as CONCENTRATION_PHOTOS, on purpose: it is where an event is
+ * flagged and where the host is offered more room, so the figure on the
+ * pricing page is the figure the system actually reacts at. It is a ceiling
+ * that is raised on request, not one that stops uploads — nothing blocks
+ * until photoAbuseThreshold, several times further out.
+ */
+export const FAIR_USE_PHOTO_CEILING = CONCENTRATION_PHOTOS;
+
+/**
  * The customer-facing footnote.
  *
- * Says what it needs to and no more. A fair-use notice that lists thresholds
- * makes a normal customer count their photos, which is exactly the anxiety
- * "unlimited" is meant to remove.
+ * It used to say "unlimited" and then list everything that could stop it,
+ * with no number — so the footnote read as the fine print taking the headline
+ * back. Now the headline and the footnote say the same thing: unlimited, a
+ * stated ceiling, and how the ceiling is raised. The one number is the one a
+ * host can do something about; the hard limits stay on the fair-use page.
  */
 export const FAIR_USE_NOTICE =
-  'Unlimited photo uploads are for normal event use. SharePix may restrict automated uploads, bulk archival or backup use, and activity that is abusive or extraordinarily large.';
+  `Unlimited photos, with a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event that we raise free on any reasonable request — reaching it never pauses your guests. SharePix may restrict automated uploads, bulk archival or backup use, and activity that is abusive or extraordinarily large.`;
+
+/** The same promise in one short line, for feature lists. */
+export const UNLIMITED_PHOTOS_LINE =
+  `Unlimited photos — fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event, raised free on request`;

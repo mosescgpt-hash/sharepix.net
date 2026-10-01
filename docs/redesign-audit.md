@@ -123,6 +123,10 @@ The model is unusually careful and the redesign must not erode it:
 per-event, not per-person; text screening is a link check, not a content
 classifier; there is no per-IP throttle beyond AppSync defaults.
 
+> **Update (decision 15):** the guest book now also caps each guest (5 notes)
+> and each network address (200) per event. Text screening is still a link
+> check, and the host dashboard now says so beside the notes.
+
 ## 8. Technical debt
 
 1. **A design system that is 20% built.** `.sp-card` is used in 25 files but
@@ -131,8 +135,11 @@ classifier; there is no per-IP throttle beyond AppSync defaults.
 2. **No jsdom in the test setup.** Tests are pure-function only; no component
    renders under test. A component-heavy redesign has no safety net unless
    that changes.
-3. **Duplicated pricing constants.** `TIER_PRICING` in the Stripe function
-   mirrors `lib/pricing.ts` by hand, with a comment as the only link.
+3. ~~**Duplicated pricing constants.** `TIER_PRICING` in the Stripe function
+   mirrors `lib/pricing.ts` by hand, with a comment as the only link.~~
+   **Fixed.** Every price lives in `lib/priceList.ts`, copied byte-for-byte
+   into stripe-checkout and create-event; `__tests__/price-list.test.ts`
+   fails on a drifted copy or a price literal typed into a handler.
 4. ~~**`listEventPhotos` and `eventGuestBook` scan and filter** rather than
    using the secondary index.~~ **Fixed.** All four per-event readers
    (`list-event-photos`, `list-moments`, `list-guest-book-entries`,
@@ -168,7 +175,13 @@ module so production assets drop in without touching layout.
 
 ### 9c. The pricing change is a migration, not a constant
 
-| | Today | Brief |
+> **Superseded.** The table below is the brief as it stood in September 2026
+> and is kept as history, not as a proposal. The $39 / $69 figures were never
+> adopted: the lineup is a free trial, one paid plan at $79 and Corporate at
+> $149/month (decisions 3 and 15). The live numbers are in `lib/priceList.ts`
+> and nowhere else.
+
+| | Then | Brief (not adopted) |
 | --- | --- | --- |
 | Plans | Starter $19 / Standard $39 / Premium $79 | Free $0 / Event $39 / Plus $69 |
 | Subscription | Corporate $149/mo | — |
@@ -188,6 +201,13 @@ rate limiting and a tighter retention story before it ships.
 Also: **Premium currently advertises "Unlimited photos" in production.** The
 brief says not to make unlimited claims before reviewing storage costs — that
 claim is already live and should be part of the same review.
+
+> **Since resolved (decisions 14 and 15).** Storage cost was reviewed in
+> `docs/unit-economics.xlsx` and drives the fair-use thresholds. The claim now
+> states its ceiling in the same line — unlimited, with a fair-use ceiling of
+> 5,000 photos per event raised free on request — so the footnote agrees with
+> the headline. Free events now have a platform-wide daily cap and a 14-day
+> window plus a 14-day gallery.
 
 ## 10. What should not be touched
 

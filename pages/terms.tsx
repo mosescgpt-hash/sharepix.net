@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 import { FAIR_USE_NOTICE } from '@/lib/fairUse';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'September 7, 2026';
+const LAST_UPDATED = 'October 1, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
@@ -123,13 +123,15 @@ export default function TermsPage() {
                 Card details are entered on Stripe and are never stored by SharePix.
               </li>
               <li>
-                Every event includes a <strong>60-day upload window</strong>. On a paid event
-                this can be extended in 30-day blocks for half the plan price; a free event
-                cannot be extended. After it closes, the gallery stays
-                available for <strong>12 months</strong> — guests at reduced resolution, and the
-                host with full access and downloads throughout. A <strong>free event</strong> keeps
-                its gallery for 30 days rather than 12 months, and events on a retired plan keep
-                the shorter windows they were sold with. After that period, photos move to a
+                Every paid event includes a <strong>60-day upload window</strong>, which can be
+                extended in 30-day blocks for half the plan price. After it closes, the gallery
+                stays available for <strong>12 months</strong> — guests at reduced resolution, and
+                the host with full access and downloads throughout. A <strong>free event</strong>{' '}
+                has a 14-day upload window that cannot be extended and keeps its gallery for 14
+                days after that; free events created before this change keep the 60-day window
+                and 30-day gallery they were created with, and events on a retired plan keep the
+                windows they were sold with. Free events are limited to one per account and to a
+                number per day across SharePix. After that period, photos move to a
                 private archive for up to 90 days and are then permanently deleted. Deletion
                 covers the whole event, not only the pictures — comments, likes, guest book
                 entries and moments go with them. Download what
@@ -137,8 +139,8 @@ export default function TermsPage() {
                 <a href="/pricing">pricing page</a>.
               </li>
               <li>
-                The paid event includes <strong>unlimited photo uploads</strong> and unlimited
-                guests. Video is not unlimited: each event includes a fixed amount of video, shown
+                The paid event includes <strong>unlimited photo uploads</strong>, subject to the
+                fair-use ceiling in section 7, and unlimited guests. Video is not unlimited: each event includes a fixed amount of video, shown
                 on the <a href="/pricing">pricing page</a>, because a video is served at full size
                 every time it is played and so costs differently from a photo.
               </li>
@@ -163,9 +165,11 @@ export default function TermsPage() {
               general cloud storage, and it is not intended for automated or scripted uploading.
             </p>
             <p>
-              We do not publish a photo limit, and a large event is not a problem: a wedding, a
-              conference, a school fundraiser or a reunion producing thousands of photos is
-              exactly what &ldquo;unlimited&rdquo; is for, and we will not restrict an event
+              The ceiling stated above is where we check in, not where uploads stop: when an
+              event approaches it the host can ask for more room from their dashboard, and we
+              raise it free for any reasonable request. A wedding, a conference, a school
+              fundraiser or a reunion producing thousands of photos is exactly what
+              &ldquo;unlimited&rdquo; is for, and we will not restrict an event
               simply because it was popular. Where usage is far outside anything an event could
               produce, we may review the event and, if necessary, limit further uploads. Where we
               can, we will contact the host first.

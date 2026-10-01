@@ -176,6 +176,13 @@ export default function EventQRCode({
         <strong>{eventName}</strong>.
       </p>
       <p className="max-w-full break-all text-xs text-charcoal/60">{uploadUrl}</p>
+      {/* "Unlisted" is not a word a host can act on. This says what it means,
+          right where they decide who to give the code to. */}
+      <p className="text-xs font-medium text-charcoal/80">
+        {invitesUploads(audience)
+          ? 'Anyone with this link or code can view the gallery and upload — there is no password.'
+          : 'Anyone with this link or code can view the gallery — there is no password.'}
+      </p>
 
       {allowCustomization ? (
         <div className="w-full space-y-4 bg-sand p-4 text-left">

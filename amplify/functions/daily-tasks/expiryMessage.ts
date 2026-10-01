@@ -16,8 +16,9 @@
 export const RETENTION_DAYS_BY_TIER: Record<string, number> = {
   // On sale.
   plus: 365,
-  free: 30,
+  trial: 14,
   // Retired, at what they were sold with.
+  free: 30,
   event: 365,
   starter: 21,
   standard: 90,

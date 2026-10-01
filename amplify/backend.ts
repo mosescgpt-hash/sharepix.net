@@ -129,6 +129,7 @@ const hostProfileTable = backend.data.resources.tables.HostProfile;
 const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
 const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
+const quotaTable = backend.data.resources.tables.QuotaCounter;
 const contributorTable = backend.data.resources.tables.EventContributor;
 const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
@@ -467,6 +468,12 @@ createEventFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 createEventFn.addEnvironment('DISCOUNT_TABLE_NAME', discountTable.tableName);
 createEventFn.addEnvironment('HOST_PROFILE_TABLE_NAME', hostProfileTable.tableName);
 createEventFn.addEnvironment('FREE_CLAIM_TABLE_NAME', freeEventClaimTable.tableName);
+// The platform-wide daily free-event allowance and Corporate's included event
+// seats. Both are limits, so create-event refuses (or charges) rather than
+// granting when this table is unreachable.
+quotaTable.grantReadWriteData(createEventFn);
+createEventFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
+createEventFn.addEnvironment('FREE_EVENTS_PER_DAY', process.env.FREE_EVENTS_PER_DAY ?? '');
 
 // Update-event function: the only way a host changes their own event, now that
 // the model grants owners no `update`. It reads the row to check ownership and
@@ -565,6 +572,9 @@ guestBookTable.grantWriteData(guestBookWriteFn);
 guestBookWriteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 guestBookWriteFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 guestBookWriteFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
+// Per-guest and per-address note counters, so one guest cannot fill the book.
+quotaTable.grantReadWriteData(guestBookWriteFn);
+guestBookWriteFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
 
 // Guest book read: one event's visible entries for the public album (read-only).
 const guestBookListFn = backend.listGuestBookEntries.resources.lambda as LambdaFunction;

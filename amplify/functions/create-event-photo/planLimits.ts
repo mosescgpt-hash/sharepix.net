@@ -14,6 +14,7 @@
  * plan — so it is listed explicitly rather than falling through to "unknown".
  */
 export const CURRENT_PHOTO_LIMITS: Record<string, number | null> = {
+  trial: 50,
   free: 50,
   plus: null,
   event: 1000,
@@ -32,6 +33,7 @@ export const CURRENT_PHOTO_LIMITS: Record<string, number | null> = {
  * the way the photo cap was.
  */
 export const CURRENT_VIDEO_LIMITS: Record<string, number | null> = {
+  trial: 1,
   free: 1,
   // null, and not an oversight: the paid plan carries no video COUNT at all
   // now. It is bounded by CURRENT_VIDEO_BYTES instead, and a count on top
@@ -61,6 +63,7 @@ export interface PlanRow {
  * the count topped out at, so nobody crossing over ends up with less.
  */
 export const CURRENT_VIDEO_BYTES: Record<string, number | null> = {
+  trial: 250 * 1024 * 1024,
   free: 250 * 1024 * 1024,
   plus: 10 * 1024 * 1024 * 1024,
   event: null,

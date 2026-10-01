@@ -39,6 +39,30 @@ export const MAX_MESSAGE_LENGTH = 1000;
  */
 export const MAX_ENTRIES_PER_EVENT = 2000;
 
+/**
+ * Notes one guest may leave on one event.
+ *
+ * The event ceiling above is shared, so on its own it let one guest fill the
+ * whole book and lock everybody else out — the per-event cap was protecting
+ * the platform and not the couple. Five is more than anyone leaves at a real
+ * event (a note, a correction, one from the kids) and small enough that a
+ * single phone cannot crowd anyone out.
+ *
+ * "One guest" is one browser identity, which a determined person can reset.
+ * MAX_ENTRIES_PER_ADDRESS is what bounds that case.
+ */
+export const MAX_ENTRIES_PER_GUEST = 5;
+
+/**
+ * Notes from one network address on one event.
+ *
+ * Deliberately loose: a whole wedding on the venue wifi shares one address,
+ * and a hundred and fifty guests signing once each must all get in. What it
+ * stops is one machine minting fresh browser identities to fill the book —
+ * at this number it can take a tenth of it at most.
+ */
+export const MAX_ENTRIES_PER_ADDRESS = 200;
+
 export interface GuestBookEventFacts {
   tier?: string | null;
   /** Bought as an add-on. Flipped by the Stripe webhook, never by the client. */
@@ -183,7 +207,8 @@ export interface EntryScreening {
 /**
  * Screen a note's text.
  *
- * This is a link check, not a content classifier — worth being plain about.
+ * This is a link check, not a content classifier — worth being plain about,
+ * and the host dashboard says so in as many words (GUEST_BOOK_SCREENING_NOTE).
  * Rekognition screens an attached image for explicit content on the way in
  * (createEventPhoto already does that, and an attached photo is an ordinary
  * upload), but nothing here reads the *meaning* of the words. The host's review
@@ -193,6 +218,16 @@ export interface EntryScreening {
  * `allow_all` skips it, matching what that setting already means for photos:
  * the host has said they will take everything as it comes.
  */
+/**
+ * What the host is told about guest book screening, next to the notes.
+ *
+ * Photos are screened by a classifier; notes are not, and a host who assumed
+ * the same protection covered both would not think to read the book before
+ * putting it on a screen.
+ */
+export const GUEST_BOOK_SCREENING_NOTE =
+  'Notes that contain a link are held for you. The words themselves are not checked, so read new notes before you show the guest book on a screen.';
+
 export function screenEntryText(
   message: string,
   moderationMode?: string | null,

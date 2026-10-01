@@ -9,7 +9,9 @@ import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { Schema } from '../../data/resource';
 import { analyticsId, type AnalyticsEventName } from './analytics';
+import { CORPORATE_INCLUDED_EVENTS } from './priceList';
 import {
+  CURRENT_TRIAL_TIER,
   activationFor,
   codeUsable,
   eventCodeFrom,
@@ -32,6 +34,23 @@ const CORPORATE_TABLE = process.env.CORPORATE_TABLE_NAME as string;
 const DISCOUNT_TABLE = process.env.DISCOUNT_TABLE_NAME as string;
 const HOST_PROFILE_TABLE = process.env.HOST_PROFILE_TABLE_NAME as string;
 const FREE_CLAIM_TABLE = process.env.FREE_CLAIM_TABLE_NAME as string;
+const QUOTA_TABLE = process.env.QUOTA_TABLE_NAME as string;
+
+/**
+ * New free events the whole platform hands out per UTC day.
+ *
+ * The per-account claim stops one person farming free events; it does not stop
+ * someone with a script and a supply of email addresses, because every new
+ * account is a new claim. This is the throttle on that: whatever the number of
+ * accounts, free storage can only be created this fast. Twenty-five is several
+ * times the current daily sign-up rate and is meant to be raised by setting
+ * FREE_EVENTS_PER_DAY, not by a code change, once there is a real rate to set
+ * it against.
+ */
+const FREE_EVENTS_PER_DAY = (() => {
+  const raw = Number(process.env.FREE_EVENTS_PER_DAY ?? '');
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 25;
+})();
 
 type Handler = Schema['createHostedEvent']['functionHandler'];
 
@@ -173,6 +192,135 @@ async function claimFreeEvent(sub: string, eventId: string, nowISO: string): Pro
 }
 
 /**
+ * Take one of today's free events from the platform-wide allowance, or refuse.
+ *
+ * One conditional update on a single counter row per UTC day, so concurrent
+ * requests cannot both take the last one. Like the account claim, a missing
+ * table refuses: this is a limit, and a limit that disappears with an
+ * environment variable is not one.
+ */
+async function takeTrialAllowance(nowISO: string): Promise<void> {
+  if (!QUOTA_TABLE) {
+    throw new Error('Free events are unavailable right now. Please try again later.');
+  }
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: trialDayKey(nowISO) } },
+        UpdateExpression:
+          'ADD #count :one SET #typename = if_not_exists(#typename, :typename), updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
+        ConditionExpression: 'attribute_not_exists(#count) OR #count < :cap',
+        ExpressionAttributeNames: { '#count': 'count', '#typename': '__typename' },
+        ExpressionAttributeValues: {
+          ':one': { N: '1' },
+          ':cap': { N: String(FREE_EVENTS_PER_DAY) },
+          ':now': { S: nowISO },
+          ':typename': { S: 'QuotaCounter' },
+        },
+      }),
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') {
+      throw new Error(
+        'Today’s free events have all been claimed. Please try again tomorrow, or create a paid event now.',
+      );
+    }
+    throw err;
+  }
+}
+
+function trialDayKey(nowISO: string): string {
+  return `trial-day#${nowISO.slice(0, 10)}`;
+}
+
+/** Give today's allowance back. Best-effort, for the same reason as below. */
+async function releaseTrialAllowance(nowISO: string): Promise<void> {
+  if (!QUOTA_TABLE) return;
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: trialDayKey(nowISO) } },
+        UpdateExpression: 'ADD #count :neg',
+        ConditionExpression: '#count > :zero',
+        ExpressionAttributeNames: { '#count': 'count' },
+        ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/**
+ * Take one of a Corporate subscriber's included event seats, or report that
+ * they are all in use.
+ *
+ * A seat is a row, `corporate-seat#<sub>#<n>`, holding the event it was taken
+ * for and when that event's upload window closes. A seat is free when its row
+ * is missing or its event's window has closed, so seats come back on their own
+ * as events finish, with no job to run and no counter to decrement. Taking one
+ * is a conditional put on that single row, which is what makes two requests
+ * racing for the last seat unable to both win.
+ *
+ * "Active" means "still taking uploads". A finished event keeps its gallery for
+ * the full retention; it just stops occupying a seat.
+ *
+ * A missing table returns null rather than granting a seat: the subscriber is
+ * then offered an extra event at checkout, which is a worse experience than a
+ * free one but is never a free event the subscription did not cover.
+ */
+async function takeCorporateSeat(
+  sub: string,
+  eventId: string,
+  windowEndsAt: string,
+  nowISO: string,
+): Promise<string | null> {
+  if (!QUOTA_TABLE) {
+    console.error('QUOTA_TABLE_NAME is not set; corporate seats cannot be checked');
+    return null;
+  }
+  for (let n = 0; n < CORPORATE_INCLUDED_EVENTS; n += 1) {
+    const seatId = `corporate-seat#${sub}#${n}`;
+    try {
+      await dynamo.send(
+        new PutItemCommand({
+          TableName: QUOTA_TABLE,
+          Item: {
+            id: { S: seatId },
+            __typename: { S: 'QuotaCounter' },
+            eventId: { S: eventId },
+            expiresAt: { S: windowEndsAt },
+            createdAt: { S: nowISO },
+            updatedAt: { S: nowISO },
+          },
+          ConditionExpression: 'attribute_not_exists(id) OR expiresAt < :now',
+          ExpressionAttributeValues: { ':now': { S: nowISO } },
+        }),
+      );
+      return seatId;
+    } catch (err) {
+      if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') continue;
+      throw err;
+    }
+  }
+  return null;
+}
+
+/** Hand a seat back when the event it was taken for could not be written. */
+async function releaseCorporateSeat(seatId: string, eventId: string): Promise<void> {
+  await dynamo
+    .send(
+      new DeleteItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: seatId } },
+        ConditionExpression: 'eventId = :eventId',
+        ExpressionAttributeValues: { ':eventId': { S: eventId } },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/**
  * Give the claim back, for when the event it was claimed for could not be
  * written. Best-effort on purpose: if this delete fails the host has lost a
  * free event they never received, which an admin can restore, and throwing
@@ -249,7 +397,11 @@ export const handler: Handler = async (event) => {
   if (!sub) throw new Error('Sign in to create an event.');
 
   const owner = ownerStringFor(sub, identity?.username ?? '');
-  const tier = normalizeTier(event.arguments.tier);
+  // `free` is the retired trial. A bookmarked or cached ?tier=free link still
+  // means "the free event", so it is read as the current one rather than
+  // refused.
+  const requested = normalizeTier(event.arguments.tier);
+  const tier = requested === 'free' ? CURRENT_TRIAL_TIER : requested;
   if (!planFor(tier)) throw new Error('Choose one of the available plans.');
 
   // A corporate event costs nothing per event, so a code has nothing to take
@@ -278,9 +430,8 @@ export const handler: Handler = async (event) => {
     discount = { row: storedCode as DiscountRow, priceCents: planFor(tier)!.priceCents };
   }
 
-  const activation = activationFor({ tier, corporateActive, discount });
+  let activation = activationFor({ tier, corporateActive, discount });
   if (activation.kind === 'refused') throw new Error(activation.reason);
-  const active = activation.kind === 'active';
 
   // Spend the code before the event exists, and only when it is what makes the
   // event free. A partial code is not spent here — it rides along to Stripe,
@@ -301,12 +452,29 @@ export const handler: Handler = async (event) => {
       await profileNameFor(sub),
       String(identity?.claims?.email ?? identity?.claims?.['cognito:username'] ?? ''),
     ),
-    active,
+    active: activation.kind === 'active',
     now,
   });
 
   const id = randomUUID();
   const nowISO = now.toISOString();
+
+  // A corporate event takes one of the subscription's included seats. With all
+  // of them in use it is still created, unpaid, and the host pays for it as an
+  // extra event — the same checkout and the same webhook a single event uses.
+  let corporateSeat: string | null = null;
+  if (activation.kind === 'active' && activation.via === 'corporate') {
+    corporateSeat = await takeCorporateSeat(sub, id, row.uploadWindowEndsAt, nowISO);
+    if (!corporateSeat) {
+      activation = activationFor({
+        tier,
+        corporateActive,
+        corporateSeatTaken: false,
+        discount,
+      });
+      row.paid = false;
+    }
+  }
   const eventCode = eventCodeFrom((max) => randomInt(max));
 
   const item: Record<string, AttributeValue> = {
@@ -357,12 +525,29 @@ export const handler: Handler = async (event) => {
   // clear. Claiming afterwards instead would close that gap and open a much
   // worse one — the race itself.
   const trial = activation.kind === 'active' && activation.via === 'trial';
-  if (trial) await claimFreeEvent(sub, id, nowISO);
+  //
+  // The account claim goes first and the day's allowance second: a host
+  // refused by the daily limit gets their claim back and can try tomorrow,
+  // where the other order would spend the platform's allowance on somebody
+  // who already had their free event.
+  if (trial) {
+    await claimFreeEvent(sub, id, nowISO);
+    try {
+      await takeTrialAllowance(nowISO);
+    } catch (err) {
+      await releaseFreeEvent(sub);
+      throw err;
+    }
+  }
 
   try {
     await putEvent(item);
   } catch (err) {
-    if (trial) await releaseFreeEvent(sub);
+    if (trial) {
+      await releaseFreeEvent(sub);
+      await releaseTrialAllowance(nowISO);
+    }
+    if (corporateSeat) await releaseCorporateSeat(corporateSeat, id);
     throw err;
   }
 

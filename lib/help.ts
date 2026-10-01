@@ -299,7 +299,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
         // Said "60 days from when the event is created", which was true and was
         // the bug: a host setting up six weeks early spent six weeks of it on
         // an empty gallery.
-        text: 'Guests can add photos for 60 days from the event date, and the host can extend that. If the host did not set a date, the 60 days start once the gallery is genuinely being used rather than at setup. After the upload window closes, the gallery stays up for a further 12 months — or 30 days if the host is using their free event.',
+        text: 'Guests can add photos for 60 days from the event date, and the host can extend that. If the host did not set a date, the 60 days start once the gallery is genuinely being used rather than at setup. After the upload window closes, the gallery stays up for a further 12 months — or, on a free event, 14 days of uploads followed by 14 days of gallery.',
       },
       {
         kind: 'text',
@@ -669,19 +669,19 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (with a fair-use ceiling of 5,000 per event, raised free on request) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',
-        text: 'The free event is a real event with your own QR code and gallery, limited to 50 photos and 1 video, and the gallery stays up for 30 days after uploads close rather than 12 months. One per account. It is for trying SharePix at something small before you pay for something that matters.',
+        text: 'The free event is a real event with your own QR code and gallery, limited to 50 photos and 1 video. Guests can upload for 14 days, and the gallery stays up for 14 days after that rather than 12 months. One per account, and a limited number are given out each day. It is for trying SharePix at something small before you pay for something that matters.',
       },
       {
         kind: 'text',
-        text: 'Both get the same 60-day upload window and the same QR code sharing. A free event cannot buy add-ons or extend its window — create a paid event for that.',
+        text: 'Both get the same QR code sharing. A paid event gets a 60-day upload window it can extend; a free event gets 14 days and cannot buy add-ons or extend — create a paid event for that.',
       },
       {
         kind: 'text',
-        text: 'Running several events at once is what the Corporate plan is for — a monthly subscription covering multiple active events under one account.',
+        text: 'Running several events at once is what the Corporate plan is for — a monthly subscription covering up to 10 events running at once under one account, with extra events at $49 each.',
       },
     ],
     related: ['video-limits', 'add-ons', 'corporate-plan'],
@@ -844,7 +844,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Corporate is a monthly subscription covering multiple active events under one account, each with unlimited photos, 10 GB of video, company branding and a central dashboard.',
+        text: 'Corporate is $149 a month and covers up to 10 events taking uploads at the same time under one account, each with unlimited photos under the same fair-use ceiling as a full event, 10 GB of video, company branding and a central dashboard. When an event’s upload window closes its slot frees up. Need more at once? Each extra event is $49, paid once when you create it.',
       },
       {
         kind: 'text',
