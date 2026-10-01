@@ -11,7 +11,9 @@ import {
   isConcentrated,
   FAIR_USE_DEFAULTS,
   FAIR_USE_NOTICE,
+  FAIR_USE_PHOTO_CEILING,
   UNIT_ECONOMICS,
+  UNLIMITED_PHOTOS_LINE,
   assessUsage,
   fairUseConfig,
   formatBytes,
@@ -536,11 +538,27 @@ describe('deleting a photo actually deletes it', () => {
 });
 
 describe('what the customer is told', () => {
-  it('says what fair use means without listing a threshold', () => {
-    // A notice that lists numbers makes a normal customer count their photos,
-    // which is exactly the anxiety "unlimited" is meant to remove.
-    expect(FAIR_USE_NOTICE).toMatch(/normal event use/i);
-    expect(FAIR_USE_NOTICE).not.toMatch(/\d{3,}/);
+  it('states the one ceiling a host can act on, and nothing harder', () => {
+    // The notice used to carry no number, so it read as the fine print taking
+    // "unlimited" back. It now states the ceiling and how it is raised, which
+    // agrees with the headline instead of fighting it. The hard limits stay
+    // on the fair-use page: a host cannot act on them, and the notice would
+    // only tell a script what to stay under.
+    expect(FAIR_USE_NOTICE).toContain(FAIR_USE_PHOTO_CEILING.toLocaleString('en-US'));
+    expect(FAIR_USE_NOTICE).not.toContain(
+      FAIR_USE_DEFAULTS.photoAbuseThreshold.toLocaleString('en-US'),
+    );
+    expect(FAIR_USE_NOTICE).toMatch(/never pauses your guests/);
+  });
+
+  it('puts the ceiling where the system actually reacts', () => {
+    // A ceiling the code ignored would be a number for show. This one is where
+    // an event is flagged and where the host is offered more room.
+    expect(FAIR_USE_PHOTO_CEILING).toBe(CONCENTRATION_PHOTOS);
+    expect(FAIR_USE_PHOTO_CEILING).toBe(FAIR_USE_DEFAULTS.photoReviewThreshold);
+    expect(CAPACITY_ASK_PHOTOS).toBeLessThan(FAIR_USE_PHOTO_CEILING);
+    // Raised, not a block: nothing stops anywhere near it.
+    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(FAIR_USE_PHOTO_CEILING * 5);
   });
 });
 
@@ -551,11 +569,13 @@ describe('what the pricing page claims', () => {
   // Absence checks read code, never prose — see __tests__/sourceGuards.ts.
   const strip = codeOnly;
 
-  it('claims unlimited photos, and carries the asterisk', () => {
-    expect(cards).toContain('Unlimited photo uploads*');
-    // An asterisk with nothing behind it is worse than no asterisk. This one
-    // renders FAIR_USE_NOTICE directly rather than restating it, so the two
-    // cannot drift.
+  it('claims unlimited photos with the ceiling in the same line, and no asterisk', () => {
+    // The headline and the footnote say the same thing now, so there is
+    // nothing for an asterisk to point at.
+    expect(cards).toContain('UNLIMITED_PHOTOS_LINE');
+    expect(UNLIMITED_PHOTOS_LINE).toMatch(/^Unlimited photos/);
+    expect(UNLIMITED_PHOTOS_LINE).toContain(FAIR_USE_PHOTO_CEILING.toLocaleString('en-US'));
+    expect(codeOnly(cards)).not.toContain('*{FAIR_USE_NOTICE}');
     expect(cards).toContain('FAIR_USE_NOTICE');
   });
 

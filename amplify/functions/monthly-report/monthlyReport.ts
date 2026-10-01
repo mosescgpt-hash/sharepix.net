@@ -23,6 +23,9 @@ export const NOT_MEASURED: readonly string[] = [
   'Support volume — no ticketing system',
 ];
 
+/** Tiers that were never paid for: the current trial and the retired one. */
+const FREE_TIERS: readonly string[] = ['trial', 'free'];
+
 export interface ReportEvent {
   createdAt?: string | null;
   tier?: string | null;
@@ -118,8 +121,8 @@ export function figuresFor(
   const bySource = countBySource(inMonth);
   return {
     eventsCreated: inMonth.length,
-    paidEvents: inMonth.filter((event) => event.tier !== 'free').length,
-    freeEvents: inMonth.filter((event) => event.tier === 'free').length,
+    paidEvents: inMonth.filter((event) => !FREE_TIERS.includes(event.tier ?? '')).length,
+    freeEvents: inMonth.filter((event) => FREE_TIERS.includes(event.tier ?? '')).length,
     successfulEvents: successful.length,
     successRate:
       inMonth.length === 0

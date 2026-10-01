@@ -1,7 +1,9 @@
 import { EVENT_CODE_WORDS } from '../amplify/functions/create-event/eventCodeWords';
 import { isEventCodeShaped } from '../lib/eventCodeFormat';
+import { CORPORATE_EXTRA_EVENT_CENTS } from '../amplify/functions/create-event/priceList';
 import {
   CORPORATE_EVENT_PLAN,
+  CURRENT_TRIAL_TIER,
   EVENT_CODE_WORD_COUNT,
   TIER_PLANS,
   activationFor,
@@ -56,6 +58,7 @@ describe('plans', () => {
       'premium',
       'standard',
       'starter',
+      'trial',
     ]);
     expect(planFor('corporate')).toBe(CORPORATE_EVENT_PLAN);
   });
@@ -309,10 +312,56 @@ describe('activation — the rule that used to be missing entirely', () => {
     // `via` is not decoration: the handler claims the account's one free event
     // on 'trial' and spends a discount code on 'comped'. Confusing the two
     // either hands out unlimited free events or burns a code for nothing.
-    expect(activationFor({ tier: 'free', corporateActive: false, discount: null })).toEqual({
+    expect(activationFor({ tier: 'trial', corporateActive: false, discount: null })).toEqual({
       kind: 'active',
       via: 'trial',
     });
+  });
+
+  it('never starts a new event on the retired trial', () => {
+    // `free` is still a trial for the events that carry it, but a new event
+    // on it would get the old 60-day window and 30-day gallery. The handler
+    // maps ?tier=free to the current trial before it gets here.
+    expect(activationFor({ tier: 'free', corporateActive: false, discount: null }).kind).toBe(
+      'refused',
+    );
+    expect(isTrialTier('free')).toBe(true);
+    expect(CURRENT_TRIAL_TIER).toBe('trial');
+  });
+
+  it('runs a corporate event on an included seat, and charges for one past them', () => {
+    expect(
+      activationFor({ tier: 'corporate', corporateActive: true, discount: null }),
+    ).toEqual({ kind: 'active', via: 'corporate' });
+    expect(
+      activationFor({
+        tier: 'corporate',
+        corporateActive: true,
+        corporateSeatTaken: false,
+        discount: null,
+      }),
+    ).toEqual({ kind: 'pending', owedCents: CORPORATE_EXTRA_EVENT_CENTS });
+    // No subscription is still a refusal, seat or no seat.
+    expect(
+      activationFor({
+        tier: 'corporate',
+        corporateActive: false,
+        corporateSeatTaken: false,
+        discount: null,
+      }).kind,
+    ).toBe('refused');
+  });
+
+  it('gives the trial a two-week window and two weeks of gallery', () => {
+    const now = new Date('2026-10-01T12:00:00Z');
+    const row = newEventRow({ name: 'Try', tier: 'trial', hostName: 'H', active: true, now });
+    const days = (a: string, b: Date | string) =>
+      Math.round((Date.parse(a) - new Date(b).getTime()) / 86_400_000);
+    expect(days(row.uploadWindowEndsAt, now)).toBe(14);
+    expect(days(row.accessExpiresAt, row.uploadWindowEndsAt)).toBe(14);
+    // And the paid plan is untouched.
+    const paid = newEventRow({ name: 'Paid', tier: 'plus', hostName: 'H', active: true, now });
+    expect(days(paid.uploadWindowEndsAt, now)).toBe(60);
   });
 
   it('never lets a discount code turn a free event into a comped one', () => {
@@ -321,7 +370,7 @@ describe('activation — the rule that used to be missing entirely', () => {
     // handler drops the code before this point; the trial branch here is the
     // second line of that defence.
     const decision = activationFor({
-      tier: 'free',
+      tier: 'trial',
       corporateActive: false,
       discount: { row: code(), priceCents: 0 },
     });

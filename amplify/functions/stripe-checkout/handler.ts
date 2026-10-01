@@ -3,6 +3,13 @@ import { pricingSourceFor } from './pricing';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { effectiveAmountOffCents, distributeDiscount } from './discount-math';
+import {
+  CORPORATE_EXTRA_EVENT_CENTS,
+  CORPORATE_MONTHLY_CENTS,
+  GUEST_BOOK_ADDON_CENTS,
+  LIVE_SLIDESHOW_ADDON_CENTS,
+  PLAN_PRICE_CENTS,
+} from './priceList';
 
 type Handler = Schema['createCheckoutSession']['functionHandler'];
 
@@ -25,7 +32,9 @@ async function eventTier(eventId: string): Promise<string> {
  * The fields of an event's row that decide what it costs and who may pay.
  * The decision itself is in ./pricing, where it is tested.
  */
-async function eventRowFor(eventId: string): Promise<{ tier: string; owner: string } | null> {
+async function eventRowFor(
+  eventId: string,
+): Promise<{ tier: string; owner: string; paid: boolean } | null> {
   const found = await dynamo.send(
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
@@ -33,6 +42,8 @@ async function eventRowFor(eventId: string): Promise<{ tier: string; owner: stri
   return {
     tier: (found.Item.tier?.S ?? '').toLowerCase(),
     owner: found.Item.owner?.S ?? '',
+    // Missing reads as paid, matching every other gate on this field.
+    paid: found.Item.paid?.BOOL !== false,
   };
 }
 
@@ -195,14 +206,10 @@ async function buildDiscount(
   return { discounts: [{ coupon }], metadata: { discountCode: resolved.code } };
 }
 
-// Prices mirror lib/pricing.ts (dollars → cents). Kept in sync by hand so the
-// function has no cross-bundle imports.
-// Mirrors PRICING_TIERS in lib/pricing.ts (dollars -> cents). These two lists
-// MUST move together: this one is what Stripe actually charges, the other is
-// what the site advertises, and a mismatch bills a price nobody was shown.
 /**
- * What each plan costs, in cents. Mirrors PRICING_TIERS + RETIRED_TIERS in
- * lib/pricing.ts by hand, because Amplify functions cannot import from lib/.
+ * What each plan costs, in cents, and what the receipt calls it. The amounts
+ * are read from ./priceList, a byte-identical copy of lib/priceList.ts, so the
+ * price Stripe charges and the price the site advertises come from one file.
  *
  * RETIRED PLANS STAY IN THIS MAP. It prices upload-window extensions as well as
  * new checkouts (`TIER_PRICING[extTier]`), so removing a retired tier would
@@ -257,12 +264,27 @@ const TIER_PRICING: Record<string, { name: string; amount: number }> = {
   // used to be "SharePix Event", identical to the retired $39 tier below —
   // two different purchases at two different prices, indistinguishable on a
   // card statement.
-  plus: { name: 'SharePix Full Event', amount: 7900 },
+  plus: { name: 'SharePix Full Event', amount: PLAN_PRICE_CENTS.plus },
   // Retired — priced, not sold.
-  event: { name: 'SharePix Event', amount: 3900 },
-  starter: { name: 'SharePix Starter event', amount: 1900 },
-  standard: { name: 'SharePix Standard event', amount: 3900 },
-  premium: { name: 'SharePix Premium event', amount: 7900 },
+  event: { name: 'SharePix Event', amount: PLAN_PRICE_CENTS.event },
+  starter: { name: 'SharePix Starter event', amount: PLAN_PRICE_CENTS.starter },
+  standard: { name: 'SharePix Standard event', amount: PLAN_PRICE_CENTS.standard },
+  premium: { name: 'SharePix Premium event', amount: PLAN_PRICE_CENTS.premium },
+};
+
+/**
+ * A Corporate subscriber's event beyond the included ones.
+ *
+ * Kept out of TIER_PRICING on purpose. That map also prices upload-window
+ * extensions, and a corporate event has never been extendable; putting it
+ * there would quietly start selling one at half this price. Instead the event
+ * path below prices a stored `corporate` row from here, and only while that
+ * row is unpaid — which create-event leaves it only when every included seat
+ * was taken.
+ */
+const CORPORATE_EXTRA_EVENT = {
+  name: 'SharePix Corporate extra event',
+  amount: CORPORATE_EXTRA_EVENT_CENTS,
 };
 
 /** The plans a NEW purchase may name. Mirrors PRICING_TIERS in lib/pricing.ts. */
@@ -276,10 +298,6 @@ const SELLABLE_TIERS = new Set(['plus']);
 const GUEST_BOOK_INCLUDED = new Set(['plus', 'premium', 'corporate']);
 const LIVE_SLIDESHOW_INCLUDED = new Set(['plus', 'corporate']);
 
-// Mirrors LIVE_SLIDESHOW_ADDON_PRICE in lib/pricing.ts (dollars → cents).
-const LIVE_SLIDESHOW_ADDON_CENTS = 2900;
-// Mirrors GUEST_BOOK_ADDON_PRICE in lib/pricing.ts.
-const GUEST_BOOK_ADDON_CENTS = 1900;
 
 export const handler: Handler = async (event) => {
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -310,7 +328,7 @@ export const handler: Handler = async (event) => {
     const metadata = { kind: 'corporate', userId: sub, owner };
     try {
       const stripe = new Stripe(secretKey);
-      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['corporate'], 14900);
+      const disc = await buildDiscount(stripe, event.arguments.discountCode, ['corporate'], CORPORATE_MONTHLY_CENTS);
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         automatic_tax: AUTOMATIC_TAX,
@@ -326,7 +344,7 @@ export const handler: Handler = async (event) => {
               currency: 'usd',
               // Added on top of the price, not carved out of it. See TAX_BEHAVIOR.
               tax_behavior: TAX_BEHAVIOR,
-              unit_amount: 14900,
+              unit_amount: CORPORATE_MONTHLY_CENTS,
               recurring: { interval: 'month' },
               product_data: { name: 'SharePix Corporate (monthly)' },
             },
@@ -590,13 +608,18 @@ export const handler: Handler = async (event) => {
     // that already exists only needs a price, so a retired plan can still be
     // activated by the host who created it.
     sellableTier: (candidate) => SELLABLE_TIERS.has(candidate),
-    priceableTier: (candidate) => Boolean(TIER_PRICING[candidate]),
+    // A corporate event is priceable only while it is waiting on payment: the
+    // included ones are created paid, so a request naming one is refused here
+    // rather than charging a subscriber for an event they already have.
+    priceableTier: (candidate) =>
+      Boolean(TIER_PRICING[candidate]) ||
+      (candidate === 'corporate' && storedEvent?.paid === false),
     caller: event.identity as { sub?: string; groups?: string[] | null } | undefined,
   });
   if (source.kind === 'refused') throw new Error(source.reason);
 
   const tier = source.tier;
-  const pricing = TIER_PRICING[tier];
+  const pricing = tier === 'corporate' ? CORPORATE_EXTRA_EVENT : TIER_PRICING[tier];
 
   const appUrl = process.env.APP_URL ?? 'https://www.sharepix.net';
   // When paying for a real event, land back on a page that activates it; the

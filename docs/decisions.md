@@ -676,6 +676,69 @@ price covering everything.
 stamped at creation, so unlimited can stop being sold at any time but cannot be
 retracted from anyone who bought it.
 
+## 15. Claims that match the code: the ceiling, the trial, Corporate, prices
+
+**Decided and built.** Six review findings, each of which was a promise on the
+site that the code did not keep, or a limit with no number behind it.
+
+### Unlimited, with the ceiling stated
+
+"Unlimited photo uploads*" sat beside a footnote listing what could stop it,
+with no number, so the fine print read as taking the headline back. The claim
+is now one line: **unlimited photos, with a fair-use ceiling of 5,000 per event
+that we raise free on any reasonable request.** 5,000 is `CONCENTRATION_PHOTOS`
+— where an event is flagged and the host is offered more room — so the stated
+number is the one the system actually reacts at. Nothing stops at 5,000; the
+hard limits are unchanged and stay on the fair-use page.
+
+### The free event: short, and throttled
+
+The free event is the only way to create stored media without a card behind
+it. It now gets a **14-day upload window and a 14-day gallery** (about a month
+in all), and the platform hands out at most **25 a day** by default. The number is an
+admin setting (AppSetting `free-events-per-day`, edited under Free event
+claims on the global dashboard, 0 pauses free events) and applies to the next
+request. Beside it, a 30-day chart shows events given out, requests the limit
+turned away, and the limit each day ran under, with a one-line verdict on
+whether to raise it. `FREE_EVENTS_PER_DAY` is only the fallback when no
+setting has been saved. The per-account claim stops one person farming; the daily cap is
+what stops a script with many email addresses.
+
+It is a **new tier id, `trial`**. Retention is read from the tier id rather
+than stamped on the row, so shortening `free` in place would have cut short the
+gallery of every free event already running. `free` is retired at 60 + 30 and
+cannot start a new event; a `?tier=free` link is read as `trial`.
+
+### Corporate: ten at once, $49 for more
+
+Corporate was one sentence. It now has a published limit and a comparison:
+**up to 10 events taking uploads at the same time**, and an **extra event at
+$49**, paid once, through the same checkout and webhook a single event uses.
+A seat is a `QuotaCounter` row that frees itself when its event's upload
+window closes, so there is no job to run and no counter to decrement. An extra
+event is created unpaid and priced from its stored row; it is kept out of
+`TIER_PRICING` so it can never be extended at half price.
+
+### Unlisted, said plainly
+
+One line beside the QR code: the gallery is private from search, and anyone given the QR code or link can view it (and,
+where guests upload, add to) the gallery; there is no password. "Private by
+default" is gone from the pricing page.
+
+### Guest book: per guest, and honest about screening
+
+The 2,000-entry cap was per event, so one guest could fill it. Each guest
+(browser identity) may now leave 5 notes and each network address 200 per
+event; 200 is loose enough for a whole wedding on venue wifi. Text screening
+is still a link check, and the dashboard says so beside the notes.
+
+### One price list
+
+Prices were typed in three places. They now live in `lib/priceList.ts`, copied
+byte-for-byte into stripe-checkout and create-event; a test fails on a drifted
+copy or a price literal in a handler. The audit's $39 / $69 table is marked
+superseded.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

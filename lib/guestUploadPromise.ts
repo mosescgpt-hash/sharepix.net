@@ -188,7 +188,7 @@ export function promiseEligibility(
   // A free event cost nothing, so there is nothing to give back. Said kindly:
   // the host has not lost anything, and the answer is not "you are ineligible"
   // but "there is no money involved".
-  if ((event.tier ?? '') === 'free') {
+  if (['trial', 'free'].includes(event.tier ?? '')) {
     return no('free-tier', 'A free event has nothing to refund.');
   }
   if (event.paid === false) {

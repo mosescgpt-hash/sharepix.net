@@ -4,8 +4,22 @@
  * cannot retroactively alter what someone already paid for.
  */
 import { entitledVideoLimit } from './planLimits';
+import {
+  CORPORATE_EXTRA_EVENT_CENTS,
+  CORPORATE_INCLUDED_EVENTS,
+  CORPORATE_MONTHLY_CENTS,
+  GUEST_BOOK_ADDON_CENTS,
+  LIVE_SLIDESHOW_ADDON_CENTS,
+  PLAN_PRICE_CENTS,
+} from './priceList';
+import { TRIAL_UPLOAD_WINDOW_DAYS } from './uploadWindowStart';
 
-export type TierId = 'free' | 'plus' | 'event' | 'starter' | 'standard' | 'premium';
+export type TierId = 'trial' | 'free' | 'plus' | 'event' | 'starter' | 'standard' | 'premium';
+
+/** Whole dollars from the price list. Every price on the site goes through this. */
+function dollars(cents: number): number {
+  return cents / 100;
+}
 
 export interface PricingTier {
   id: TierId;
@@ -89,6 +103,17 @@ export interface PricingTier {
  */
 export const UPLOAD_WINDOW_DAYS = 60;
 export const EXTENSION_DAYS = 30;
+export { TRIAL_UPLOAD_WINDOW_DAYS };
+
+/**
+ * How long a free trial's gallery stays up after its upload window closes.
+ *
+ * Two weeks: enough to download what a small event produced, and short enough
+ * that a free event's whole life is about a month. Free events are the one
+ * way to create stored media without a card on file, so their lifetime is
+ * the storage bill nobody is paying for.
+ */
+export const TRIAL_GALLERY_DAYS = 14;
 
 /**
  * How long the gallery stays up after the upload window closes — for guests at
@@ -148,12 +173,16 @@ export const ARCHIVE_DAYS = 90;
  */
 const SELLABLE_TIERS: PricingTier[] = [
   {
-    id: 'free',
+    // A new id rather than a shorter `free`. Retention is read from the tier
+    // id, not stamped on the row, so shortening `free` in place would have cut
+    // the gallery of every free event already running. `free` is retired
+    // below at exactly what it promised.
+    id: 'trial',
     // "Free event", not "Free": the card renders the plan name as an eyebrow
     // above the price, and a plan called Free priced at Free reads as a
     // rendering bug rather than a plan.
     name: 'Free event',
-    price: 0,
+    price: dollars(PLAN_PRICE_CENTS.trial),
     trial: true,
     // Enough to run a small real event and watch it work, which is the point;
     // not enough to be a plan someone lives on. The cap is the upgrade prompt.
@@ -165,19 +194,20 @@ const SELLABLE_TIERS: PricingTier[] = [
     // One video's worth. The count binds first on this plan; the budget is
     // here so every tier answers the same question.
     videoBytesLimit: 250 * 1024 * 1024,
-    // The same 60-day upload window as the paid plan, then a 30-day gallery
-    // rather than twelve months. The window is what makes the product work at
-    // an event; the twelve months is a large part of what people pay for.
-    accessDays: UPLOAD_WINDOW_DAYS + 30,
-    accessLabel: '60-day upload window',
-    retentionDays: 30,
-    guestLowResDays: 30,
+    // Two weeks of uploads and two weeks of gallery. The free event is the
+    // first way to create storage without a card behind it, so it is kept
+    // short as well as small; see TRIAL_GALLERY_DAYS. It is also limited to
+    // a number per day across the whole platform — see create-event.
+    accessDays: TRIAL_UPLOAD_WINDOW_DAYS + TRIAL_GALLERY_DAYS,
+    accessLabel: `${TRIAL_UPLOAD_WINDOW_DAYS}-day upload window`,
+    retentionDays: TRIAL_GALLERY_DAYS,
+    guestLowResDays: TRIAL_GALLERY_DAYS,
     customQrCode: false,
     features: [
       'One free event per account',
       'Up to 50 photos and 1 video',
-      '60-day upload window',
-      'Gallery stays up for 30 days after uploads close',
+      `${TRIAL_UPLOAD_WINDOW_DAYS}-day upload window`,
+      `Gallery stays up for ${TRIAL_GALLERY_DAYS} days after uploads close`,
       'Host and guest downloads — full resolution, no account',
     ],
   },
@@ -196,7 +226,7 @@ const SELLABLE_TIERS: PricingTier[] = [
     // The id stays `plus` for the reason above. Only the display name moves,
     // so nothing an event already carries is affected.
     name: 'Full Event',
-    price: 79,
+    price: dollars(PLAN_PRICE_CENTS.plus),
     // Unlimited, and meant.
     //
     // This was 3,000, with a comment arguing that "unlimited" on a one-time
@@ -261,6 +291,31 @@ const SELLABLE_TIERS: PricingTier[] = [
  */
 const RETIRED_TIERS: PricingTier[] = [
   {
+    // The original free trial: 60-day window, 30-day gallery. Retired rather
+    // than shortened, so every free event already created keeps the gallery
+    // it was promised. Still a trial, so still never sold anything.
+    id: 'free',
+    name: 'Free event (original)',
+    price: dollars(PLAN_PRICE_CENTS.free),
+    trial: true,
+    photoLimit: 50,
+    videoLimit: 1,
+    videoBytesLimit: 250 * 1024 * 1024,
+    accessDays: UPLOAD_WINDOW_DAYS + 30,
+    accessLabel: '60-day upload window',
+    retentionDays: 30,
+    guestLowResDays: 30,
+    customQrCode: false,
+    retired: true,
+    features: [
+      'One free event per account',
+      'Up to 50 photos and 1 video',
+      '60-day upload window',
+      'Gallery stays up for 30 days after uploads close',
+      'Host and guest downloads — full resolution, no account',
+    ],
+  },
+  {
     // The $39 tier from the two-plan lineup, retired at exactly what it was
     // sold for. Its window is 60 days because that change was global and
     // applied to every event; everything else here is what a buyer was shown.
@@ -272,7 +327,7 @@ const RETIRED_TIERS: PricingTier[] = [
     // making.
     id: 'event',
     name: 'Event (original)',
-    price: 39,
+    price: dollars(PLAN_PRICE_CENTS.event),
     photoLimit: 1000,
     videoLimit: 10,
     videoBytesLimit: null,
@@ -295,7 +350,7 @@ const RETIRED_TIERS: PricingTier[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: 19,
+    price: dollars(PLAN_PRICE_CENTS.starter),
     photoLimit: 100,
     videoLimit: 2,
     videoBytesLimit: null,
@@ -317,7 +372,7 @@ const RETIRED_TIERS: PricingTier[] = [
   {
     id: 'standard',
     name: 'Standard',
-    price: 39,
+    price: dollars(PLAN_PRICE_CENTS.standard),
     photoLimit: 1000,
     videoLimit: 10,
     videoBytesLimit: null,
@@ -341,7 +396,7 @@ const RETIRED_TIERS: PricingTier[] = [
     id: 'premium',
     name: 'Premium',
     // Unlimited, permanently, for the events that bought it.
-    price: 79,
+    price: dollars(PLAN_PRICE_CENTS.premium),
     photoLimit: null,
     videoLimit: 30,
     videoBytesLimit: null,
@@ -371,11 +426,21 @@ export const PRICING_TIERS: PricingTier[] = SELLABLE_TIERS;
 /** Every tier ever sold, for interpreting an event that already exists. */
 export const ALL_TIERS: PricingTier[] = [...SELLABLE_TIERS, ...RETIRED_TIERS];
 
+const CORPORATE_PRICE = dollars(CORPORATE_MONTHLY_CENTS);
+
 export const CORPORATE_PLAN = {
   name: 'Corporate',
-  price: 149, // USD per month
+  price: CORPORATE_PRICE, // USD per month
   interval: 'month' as const,
-  priceLabel: '$149 / month',
+  priceLabel: `$${CORPORATE_PRICE} / month`,
+  /**
+   * Events running at the same time, included in the subscription. "Running"
+   * means still taking uploads: a finished event keeps its gallery for the
+   * full retention and frees its seat for the next one.
+   */
+  includedEvents: CORPORATE_INCLUDED_EVENTS,
+  /** One more event at once, beyond the included ones. One-time, per event. */
+  extraEventPrice: dollars(CORPORATE_EXTRA_EVENT_CENTS),
   // Lifecycle for events created under a Corporate subscription (premium-like:
   // unlimited photos, 1-year host retention, 30-day guest low-res).
   retentionDays: 365,
@@ -384,10 +449,14 @@ export const CORPORATE_PLAN = {
   // Sold as a budget like the paid per-event plan, for the same reason.
   videoLimit: null,
   videoBytesLimit: VIDEO_GB_INCLUDED * 1024 * 1024 * 1024,
-  accessLabel: 'Multiple events under one account',
+  accessLabel: `Up to ${CORPORATE_INCLUDED_EVENTS} events running at once`,
   features: [
-    'Multiple active events',
-    `Unlimited photos and ${VIDEO_GB_INCLUDED} GB of video per event`,
+    `Up to ${CORPORATE_INCLUDED_EVENTS} events taking uploads at the same time`,
+    `More at $${dollars(CORPORATE_EXTRA_EVENT_CENTS)} per extra event, one-time`,
+    // The same ceiling as the Full Event, stated the same way. Typed rather
+    // than imported from lib/fairUse.ts to keep this module free of it; the
+    // price-list test pins the number.
+    `Unlimited photos (fair-use ceiling 5,000 per event, raised free on request) and ${VIDEO_GB_INCLUDED} GB of video per event`,
     'Central event and storage dashboard',
     'Custom company branding',
     'Guest book — signed notes, photos, and video messages',
@@ -404,7 +473,7 @@ export const CORPORATE_PLAN = {
  * reason a couple upgrades, so gating it by tier would cost more sales than it
  * protects.
  */
-export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
+export const LIVE_SLIDESHOW_ADDON_PRICE = dollars(LIVE_SLIDESHOW_ADDON_CENTS);
 
 /**
  * One-time cost to add a guest book to a single event, on the plans that do not
@@ -416,7 +485,7 @@ export const LIVE_SLIDESHOW_ADDON_PRICE = 29;
  * stamped on real event rows, and a host on one of those can still buy either.
  * They are legacy prices now, not part of the lineup.
  */
-export const GUEST_BOOK_ADDON_PRICE = 19;
+export const GUEST_BOOK_ADDON_PRICE = dollars(GUEST_BOOK_ADDON_CENTS);
 
 /**
  * Look up any tier an event might carry, retired ones included.

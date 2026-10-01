@@ -176,6 +176,14 @@ export default function EventQRCode({
         <strong>{eventName}</strong>.
       </p>
       <p className="max-w-full break-all text-xs text-charcoal/60">{uploadUrl}</p>
+      {/* Says both halves where the host decides who gets the code: hidden from
+          search, open to anyone holding it. "Unlisted" alone is not a word a
+          host can act on. */}
+      <p className="text-xs font-medium text-charcoal/80">
+        {invitesUploads(audience)
+          ? 'Private from search: your gallery never shows up in Google. Anyone you give this QR code or link to can view it and add photos.'
+          : 'Private from search: your gallery never shows up in Google. Anyone you give this QR code or link to can view it.'}
+      </p>
 
       {allowCustomization ? (
         <div className="w-full space-y-4 bg-sand p-4 text-left">

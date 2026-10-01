@@ -38,7 +38,7 @@ const read = (path: string) => readFileSync(join(root, path), 'utf8');
  */
 
 const RETIRED = ['event', 'starter', 'standard', 'premium'];
-const SELLABLE = ['free', 'plus'];
+const SELLABLE = ['trial', 'plus'];
 /** The plans a customer can actually be charged for. Excludes the free trial. */
 const PAID = ['plus'];
 
@@ -88,7 +88,7 @@ describe('what is on sale', () => {
   });
 
   it('reports retired plans as unsellable', () => {
-    for (const id of RETIRED) expect(isSellableTier(id)).toBe(false);
+    for (const id of [...RETIRED, 'free']) expect(isSellableTier(id)).toBe(false);
     for (const id of SELLABLE) expect(isSellableTier(id)).toBe(true);
   });
 
@@ -96,9 +96,9 @@ describe('what is on sale', () => {
     // `price === 0` is not what identifies a trial — a fully comped paid event
     // also owes nothing — so the flag is what everything else reads.
     const free = PRICING_TIERS.filter((t) => t.price === 0);
-    expect(free.map((t) => t.id)).toEqual(['free']);
+    expect(free.map((t) => t.id)).toEqual(['trial']);
     expect(free[0].trial).toBe(true);
-    expect(PRICING_TIERS.filter((t) => t.trial).map((t) => t.id)).toEqual(['free']);
+    expect(PRICING_TIERS.filter((t) => t.trial).map((t) => t.id)).toEqual(['trial']);
   });
 });
 
@@ -178,11 +178,32 @@ describe('one retention policy across everything sold', () => {
     }
   });
 
-  it('opens the upload window for 60 days on every plan', () => {
+  it('opens the upload window for 60 days on every paid plan, and 14 on the trial', () => {
     expect(UPLOAD_WINDOW_DAYS).toBe(60);
-    for (const id of SELLABLE) {
+    for (const id of PAID) {
       expect(getTier(id)?.accessLabel).toBe('60-day upload window');
     }
+    expect(getTier('trial')?.accessLabel).toBe('14-day upload window');
+  });
+
+  it('keeps the trial short: two weeks of uploads, two weeks of gallery', () => {
+    // The free event is the one way to create storage without a card behind
+    // it, so its whole lifetime is about a month.
+    const trial = getTier('trial');
+    expect(trial?.retentionDays).toBe(14);
+    expect(trial?.accessDays).toBe(28);
+    expect(trial?.guestLowResDays).toBe(14);
+  });
+
+  it('leaves free events already created on the gallery they were promised', () => {
+    // Retention is read from the tier id, so the trial was shortened by adding
+    // a tier rather than editing `free`. Editing it would have cut short every
+    // free event already running.
+    const original = getTier('free');
+    expect(original?.retired).toBe(true);
+    expect(original?.trial).toBe(true);
+    expect(original?.retentionDays).toBe(30);
+    expect(original?.accessDays).toBe(UPLOAD_WINDOW_DAYS + 30);
   });
 
   it('runs paid access for the window plus the full twelve months', () => {
@@ -266,7 +287,8 @@ describe('the unlimited claim, and what makes it honest', () => {
 
   it('tells the customer what fair use means, in the plan copy', () => {
     // An asterisk with nothing behind it is worse than no asterisk.
-    expect(FAIR_USE_NOTICE).toMatch(/normal event use/i);
+    expect(FAIR_USE_NOTICE).toMatch(/fair-use ceiling/i);
+    expect(FAIR_USE_NOTICE).toMatch(/raise free on any reasonable request/i);
   });
 
   // Corporate is deliberately excluded from the rule above and still advertises
@@ -334,6 +356,7 @@ describe('capabilities are flags, not id comparisons', () => {
 describe('nothing is sold against an event nobody paid for', () => {
   it('identifies the trial by its flag, not by costing nothing', () => {
     expect(isTrialTier('free')).toBe(true);
+    expect(isTrialTier('trial')).toBe(true);
     for (const id of [...PAID, ...RETIRED, 'corporate', 'nonsense']) {
       expect(isTrialTier(id)).toBe(false);
     }
@@ -341,6 +364,7 @@ describe('nothing is sold against an event nobody paid for', () => {
 
   it('refuses every purchase against a free event', () => {
     expect(canPurchaseFor('free')).toBe(false);
+    expect(canPurchaseFor('trial')).toBe(false);
   });
 
   it('still lets every paid plan buy, retired ones included', () => {

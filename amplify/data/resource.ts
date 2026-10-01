@@ -8,6 +8,7 @@ import { printCheckout as printCheckoutFn } from '../functions/print-checkout/re
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
+import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
 import { costSummary as costSummaryFn } from '../functions/cost-summary/resource';
 import { printProviderCheck as printProviderCheckFn } from '../functions/print-provider-check/resource';
@@ -624,6 +625,30 @@ const schema = a.schema({
     .model({
       eventId: a.string(),
       claimedAt: a.datetime(),
+    })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // Counters that bound how fast something can be created, written only by
+  // the Lambdas that enforce them. The row id names the limit:
+  //
+  //   trial-day#<YYYY-MM-DD>            free events handed out that UTC day
+  //   corporate-seat#<sub>#<n>          one of a subscriber's included events
+  //   guestbook#<eventId>#guest#<key>   notes one guest has left on one event
+  //   guestbook#<eventId>#ip#<ip>       notes from one address on one event
+  //
+  // Same authorization as FreeEventClaim and for the same reason: every row is
+  // a limit on somebody, and anybody who could write or delete one could lift
+  // it. Admins can read and delete, which is how a limit gets lifted on
+  // purpose.
+  QuotaCounter: a
+    .model({
+      count: a.integer(),
+      // The limit `count` was checked against, where the writer records it.
+      limit: a.integer(),
+      // Requests the limit turned away. Only the daily free-event row uses it.
+      refused: a.integer(),
+      eventId: a.string(),
+      expiresAt: a.datetime(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
@@ -1938,6 +1963,22 @@ const schema = a.schema({
     .returns(a.ref('CheckoutSession'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(corporatePortalFn)),
+
+  // How many of the caller's included Corporate event slots are in use, so the
+  // dashboard can say so before a $49 extra event comes as a surprise.
+  CorporateSeats: a.customType({
+    included: a.integer().required(),
+    inUse: a.integer().required(),
+    /** When the first slot frees up, only when all of them are taken. */
+    nextFreeAt: a.string(),
+  }),
+
+  myCorporateSeats: a
+    .query()
+    .arguments({})
+    .returns(a.ref('CorporateSeats'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(corporateSeatsFn)),
 
   CreatedEvent: a.customType({
     id: a.string().required(),

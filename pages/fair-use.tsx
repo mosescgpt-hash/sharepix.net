@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   CAPACITY_ASK_PHOTOS,
   FAIR_USE_DEFAULTS,
+  FAIR_USE_PHOTO_CEILING,
   FAIR_USE_NOTICE,
   formatBytes,
 } from '@/lib/fairUse';
@@ -52,9 +53,11 @@ export default function FairUsePage() {
         <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
-              The paid plan includes unlimited photo uploads. We mean it, and this page
-              exists so you can check rather than take our word for it: below are the
-              actual numbers, what happens at each one, and what we will never do.
+              The paid plan includes unlimited photo uploads with a fair-use ceiling of{' '}
+              {FAIR_USE_PHOTO_CEILING.toLocaleString()} photos per event, raised free on any
+              reasonable request. This page exists so you can check rather than take our word
+              for it: below are the actual numbers, what happens at each one, and what we will
+              never do.
             </p>
             <p>{FAIR_USE_NOTICE}</p>
           </div>

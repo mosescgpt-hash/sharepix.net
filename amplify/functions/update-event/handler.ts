@@ -2,7 +2,7 @@ import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/clie
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { buildPatch, mayEdit } from './settings';
-import { rescheduledWindow, type Rescheduled } from './uploadWindowStart';
+import { rescheduledWindow, uploadWindowDaysFor, type Rescheduled } from './uploadWindowStart';
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
@@ -158,7 +158,12 @@ export const handler: Handler = async (event) => {
           date: (result.patch.set.date as string | undefined) ?? null,
           currentEndsAt: found.Item.uploadWindowEndsAt?.S ?? null,
           currentAccessExpiresAt: found.Item.accessExpiresAt?.S ?? null,
-        })
+        },
+        new Date(),
+        // The trial's window is two weeks; a date change must not turn it
+        // into sixty days.
+        uploadWindowDaysFor(found.Item.tier?.S),
+      )
       : null;
 
   const { UpdateExpression, names, values } = expressionFor(result.patch, reschedule);

@@ -43,6 +43,7 @@ import { listGuestBookEntries } from './functions/list-guest-book-entries/resour
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
+import { corporateSeats } from './functions/corporate-seats/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
 import { recordBytes } from './functions/record-bytes/resource';
 import { mediaUrl } from './functions/media-url/resource';
@@ -94,6 +95,7 @@ const backend = defineBackend({
   adminUserActions,
   stripeWebhook,
   corporatePortal,
+  corporateSeats,
   sanitizeUpload,
   recordBytes,
   mediaUrl,
@@ -129,6 +131,7 @@ const hostProfileTable = backend.data.resources.tables.HostProfile;
 const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
 const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
+const quotaTable = backend.data.resources.tables.QuotaCounter;
 const contributorTable = backend.data.resources.tables.EventContributor;
 const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
@@ -467,6 +470,16 @@ createEventFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 createEventFn.addEnvironment('DISCOUNT_TABLE_NAME', discountTable.tableName);
 createEventFn.addEnvironment('HOST_PROFILE_TABLE_NAME', hostProfileTable.tableName);
 createEventFn.addEnvironment('FREE_CLAIM_TABLE_NAME', freeEventClaimTable.tableName);
+// The platform-wide daily free-event allowance and Corporate's included event
+// seats. Both are limits, so create-event refuses (or charges) rather than
+// granting when this table is unreachable.
+quotaTable.grantReadWriteData(createEventFn);
+createEventFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
+createEventFn.addEnvironment('FREE_EVENTS_PER_DAY', process.env.FREE_EVENTS_PER_DAY ?? '');
+// The daily free-event limit is an admin setting (AppSetting
+// `free-events-per-day`), edited on the dashboard. Read-only here.
+settingTable.grantReadData(createEventFn);
+createEventFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
 
 // Update-event function: the only way a host changes their own event, now that
 // the model grants owners no `update`. It reads the row to check ownership and
@@ -565,6 +578,9 @@ guestBookTable.grantWriteData(guestBookWriteFn);
 guestBookWriteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 guestBookWriteFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 guestBookWriteFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
+// Per-guest and per-address note counters, so one guest cannot fill the book.
+quotaTable.grantReadWriteData(guestBookWriteFn);
+guestBookWriteFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
 
 // Guest book read: one event's visible entries for the public album (read-only).
 const guestBookListFn = backend.listGuestBookEntries.resources.lambda as LambdaFunction;
@@ -630,6 +646,12 @@ const webhookUrl = webhookFn.addFunctionUrl({
 const corporatePortalFn = backend.corporatePortal.resources.lambda as LambdaFunction;
 corporateTable.grantReadData(corporatePortalFn);
 corporatePortalFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
+
+// Corporate slot count for the host dashboard. Read-only on the quota table,
+// and it only ever reads the caller's own seat rows, by key.
+const corporateSeatsFn = backend.corporateSeats.resources.lambda as LambdaFunction;
+quotaTable.grantReadData(corporateSeatsFn);
+corporateSeatsFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
 
 // ---------------------------------------------------------------------------
 // Alerting. A broken webhook means payments stop being recorded and events

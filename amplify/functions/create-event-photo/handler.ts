@@ -23,7 +23,7 @@ import {
 } from './analytics';
 import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
-import { anchoredWindowEnd } from './uploadWindowStart';
+import { anchoredWindowEnd, uploadWindowDaysFor } from './uploadWindowStart';
 import { contributorKey, contributorRowId, isSuccessfulEvent } from './successfulEvent';
 import { assessUsage, fairUseConfig, windowExpired } from './fairUse';
 import { entitledPhotoLimit, entitledVideoBytes, entitledVideoLimit } from './planLimits';
@@ -773,6 +773,8 @@ export const handler: Handler = async (event) => {
       photoCountBefore: (toInt(reserved?.photoCount?.N) ?? 1) - 1,
     },
     checkedAt,
+    // Re-anchoring a trial resets two weeks, never sixty days.
+    uploadWindowDaysFor(ev.tier?.S),
   );
   if (anchorEnd) {
     void dynamo

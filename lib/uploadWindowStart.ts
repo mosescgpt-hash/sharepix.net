@@ -66,8 +66,36 @@
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The upload window every plan gets, in days. Mirrors UPLOAD_WINDOW_DAYS. */
+/** The upload window every paid plan gets, in days. Mirrors UPLOAD_WINDOW_DAYS. */
 export const UPLOAD_WINDOW_DAYS = 60;
+
+/**
+ * The upload window on the free trial, in days.
+ *
+ * Two weeks rather than sixty. The free event is the one way to create stored
+ * media without a card behind it, so its whole lifetime is kept short: long
+ * enough to run a real small event and see the photos arrive, short enough
+ * that a free event is not somewhere to keep things.
+ */
+export const TRIAL_UPLOAD_WINDOW_DAYS = 14;
+
+/** Tiers whose window is not the standard sixty days. */
+const WINDOW_DAYS_BY_TIER: Record<string, number> = {
+  trial: TRIAL_UPLOAD_WINDOW_DAYS,
+};
+
+/**
+ * The upload window for an event on this tier, in days.
+ *
+ * Every function below takes the window as an argument and defaults to sixty,
+ * so an event on any tier that is not listed above behaves exactly as before.
+ * The tier is the input rather than a stored length because the tier is what
+ * every caller already has on the row.
+ */
+export function uploadWindowDaysFor(tier: string | null | undefined): number {
+  const id = (tier ?? '').trim().toLowerCase();
+  return WINDOW_DAYS_BY_TIER[id] ?? UPLOAD_WINDOW_DAYS;
+}
 
 /**
  * How far ahead an event may be dated.
@@ -152,8 +180,9 @@ export function latestEventDate(now: Date = new Date()): string {
 export function windowEndsAtFor(
   date: string | null | undefined,
   now: Date = new Date(),
+  windowDays: number = UPLOAD_WINDOW_DAYS,
 ): string {
-  const fromCreation = now.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS;
+  const fromCreation = now.getTime() + windowDays * DAY_MS;
   const raw = (date ?? '').trim();
   if (!raw) return new Date(fromCreation).toISOString();
 
@@ -163,7 +192,7 @@ export function windowEndsAtFor(
   if (!Number.isFinite(eventEnd) || eventEnd <= now.getTime()) {
     return new Date(fromCreation).toISOString();
   }
-  return new Date(eventEnd + UPLOAD_WINDOW_DAYS * DAY_MS).toISOString();
+  return new Date(eventEnd + windowDays * DAY_MS).toISOString();
 }
 
 /**
@@ -179,10 +208,11 @@ export function accessExpiresAtFor(
   windowEndsAt: string,
   accessDays: number,
   now: Date = new Date(),
+  windowDays: number = UPLOAD_WINDOW_DAYS,
 ): string {
-  const retentionDays = Math.max(0, accessDays - UPLOAD_WINDOW_DAYS);
+  const retentionDays = Math.max(0, accessDays - windowDays);
   const windowEnd = Date.parse(windowEndsAt);
-  const base = Number.isFinite(windowEnd) ? windowEnd : now.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS;
+  const base = Number.isFinite(windowEnd) ? windowEnd : now.getTime() + windowDays * DAY_MS;
   return new Date(base + retentionDays * DAY_MS).toISOString();
 }
 
@@ -218,6 +248,7 @@ export function rescheduledWindow(
     currentAccessExpiresAt: string | null | undefined;
   },
   now: Date = new Date(),
+  windowDays: number = UPLOAD_WINDOW_DAYS,
 ): Rescheduled | null {
   const current = Date.parse(facts.currentEndsAt ?? '');
   // An event with no readable window has none, and uploadWindowClosed treats
@@ -225,7 +256,7 @@ export function rescheduledWindow(
   // deadline.
   if (!Number.isFinite(current)) return null;
 
-  const next = windowEndsAtFor(facts.date, now);
+  const next = windowEndsAtFor(facts.date, now, windowDays);
   const shift = Date.parse(next) - current;
   if (shift === 0) return null;
 
@@ -267,6 +298,7 @@ export interface AnchorFacts {
 export function anchoredWindowEnd(
   facts: AnchorFacts,
   now: Date = new Date(),
+  windowDays: number = UPLOAD_WINDOW_DAYS,
 ): string | null {
   if ((facts.eventDate ?? '').trim()) return null;
   if (facts.alreadyAnchored) return null;
@@ -275,6 +307,6 @@ export function anchoredWindowEnd(
   const current = Date.parse(facts.currentEndsAt ?? '');
   if (!Number.isFinite(current)) return null;
 
-  const candidate = now.getTime() + UPLOAD_WINDOW_DAYS * DAY_MS;
+  const candidate = now.getTime() + windowDays * DAY_MS;
   return candidate > current ? new Date(candidate).toISOString() : null;
 }

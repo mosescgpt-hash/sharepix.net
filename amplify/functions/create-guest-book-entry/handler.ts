@@ -8,7 +8,9 @@ import { randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import {
+  MAX_ENTRIES_PER_ADDRESS,
   MAX_ENTRIES_PER_EVENT,
+  MAX_ENTRIES_PER_GUEST,
   guestBookAvailable,
   screenEntryText,
   validateEntry,
@@ -19,6 +21,7 @@ const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const ENTRY_TABLE = process.env.GUEST_BOOK_TABLE_NAME as string;
+const QUOTA_TABLE = process.env.QUOTA_TABLE_NAME ?? '';
 
 type Handler = Schema['signGuestBook']['functionHandler'];
 
@@ -38,6 +41,85 @@ function acceptingEntries(ev: Record<string, AttributeValue>): boolean {
     if (Number.isFinite(ends) && ends < Date.now()) return false;
   }
   return true;
+}
+
+/**
+ * Count one note against a limit, atomically, or report that it is spent.
+ *
+ * A missing table degrades to the per-event ceiling alone rather than
+ * refusing every note: that ceiling still bounds the damage, and a guest
+ * book that silently stopped taking entries mid-reception is the worse
+ * failure. It is logged so the gap is visible.
+ */
+async function takeQuota(id: string, limit: number, eventId: string): Promise<boolean> {
+  if (!QUOTA_TABLE) {
+    console.error('QUOTA_TABLE_NAME is not set; per-guest guest book limits are off');
+    return true;
+  }
+  const now = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: id } },
+        UpdateExpression:
+          'ADD #count :one SET #typename = if_not_exists(#typename, :typename), eventId = :eventId, updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
+        ConditionExpression: 'attribute_not_exists(#count) OR #count < :limit',
+        ExpressionAttributeNames: { '#count': 'count', '#typename': '__typename' },
+        ExpressionAttributeValues: {
+          ':one': { N: '1' },
+          ':limit': { N: String(limit) },
+          ':eventId': { S: eventId },
+          ':now': { S: now },
+          ':typename': { S: 'QuotaCounter' },
+        },
+      }),
+    );
+    return true;
+  } catch (error) {
+    if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return false;
+    throw error;
+  }
+}
+
+/** Give a counted note back. Best-effort, like the event slot release below. */
+async function releaseQuota(id: string): Promise<void> {
+  if (!QUOTA_TABLE) return;
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: id } },
+        UpdateExpression: 'ADD #count :neg',
+        ConditionExpression: '#count > :zero',
+        ExpressionAttributeNames: { '#count': 'count' },
+        ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/**
+ * Who is signing, as far as the server can tell.
+ *
+ * A guest has no account, so "who" is the identity-pool id their browser was
+ * given (or the user-pool sub for a signed-in host), and the network address
+ * the request came from. Neither is taken from the request body.
+ */
+function signerKeys(
+  identity: unknown,
+  eventId: string,
+): { guest: string | null; address: string | null } {
+  const id = identity as
+    | { sub?: string; cognitoIdentityId?: string; sourceIp?: string[] }
+    | null
+    | undefined;
+  const who = (id?.sub ?? id?.cognitoIdentityId ?? '').trim();
+  const ip = (id?.sourceIp?.[0] ?? '').trim();
+  return {
+    guest: who ? `guestbook#${eventId}#guest#${who}` : null,
+    address: ip ? `guestbook#${eventId}#ip#${ip}` : null,
+  };
 }
 
 export const handler: Handler = async (event) => {
@@ -111,6 +193,30 @@ export const handler: Handler = async (event) => {
 
   const screening = screenEntryText(message, ev.moderationMode?.S ?? null);
 
+  // Per guest first, then per address, then the event's own ceiling. Each one
+  // taken is given back if a later one refuses, so a note that was never
+  // stored never counts against anybody.
+  const keys = signerKeys(event.identity, eventId);
+  const taken: string[] = [];
+  const giveBack = async () => {
+    await Promise.all(taken.map((id) => releaseQuota(id)));
+  };
+  if (keys.guest) {
+    if (!(await takeQuota(keys.guest, MAX_ENTRIES_PER_GUEST, eventId))) {
+      throw new Error(
+        `You have already left ${MAX_ENTRIES_PER_GUEST} notes in this guest book — thank you! Ask the host if you need to change one.`,
+      );
+    }
+    taken.push(keys.guest);
+  }
+  if (keys.address) {
+    if (!(await takeQuota(keys.address, MAX_ENTRIES_PER_ADDRESS, eventId))) {
+      await giveBack();
+      throw new Error('Too many notes have come from this network. Please try again later.');
+    }
+    taken.push(keys.address);
+  }
+
   // Reserve a slot atomically. This is an abuse bound on an unauthenticated
   // write endpoint, not a product limit — no real event approaches it.
   try {
@@ -129,6 +235,7 @@ export const handler: Handler = async (event) => {
       }),
     );
   } catch (error) {
+    await giveBack();
     if ((error as { name?: string }).name === 'ConditionalCheckFailedException') {
       throw new Error('This guest book is full.');
     }
@@ -171,6 +278,7 @@ export const handler: Handler = async (event) => {
         }),
       )
       .catch(() => undefined);
+    await giveBack();
     throw error;
   }
 

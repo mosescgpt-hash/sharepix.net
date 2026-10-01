@@ -826,7 +826,7 @@ export const handler = async (event?: { arguments?: { probe?: boolean | null } }
       expiresOn: formatExpiryDate(due.expiresAt),
       daysRemaining: due.daysRemaining,
       galleryUrl: `${APP_URL}/event/${event.id}/admin`,
-      canExtend: event.tier !== 'free',
+      canExtend: event.tier !== 'free' && event.tier !== 'trial',
     });
 
     if (!SENDING_ENABLED) {
