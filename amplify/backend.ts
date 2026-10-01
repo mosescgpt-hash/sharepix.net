@@ -647,8 +647,8 @@ const corporatePortalFn = backend.corporatePortal.resources.lambda as LambdaFunc
 corporateTable.grantReadData(corporatePortalFn);
 corporatePortalFn.addEnvironment('CORPORATE_TABLE_NAME', corporateTable.tableName);
 
-// Corporate slot count for the host dashboard. Read-only on the quota table,
-// and it only ever reads the caller's own seat rows, by key.
+// Corporate monthly allowance for the host dashboard. Read-only on the quota
+// table, and it only ever reads the caller's own counter row, by key.
 const corporateSeatsFn = backend.corporateSeats.resources.lambda as LambdaFunction;
 quotaTable.grantReadData(corporateSeatsFn);
 corporateSeatsFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);

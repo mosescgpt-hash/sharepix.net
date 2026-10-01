@@ -441,7 +441,7 @@ function CreateEventPage() {
                     {CORPORATE_PLAN.name} event · included
                   </span>
                   <span className="block text-pine">
-                    Included for up to {CORPORATE_PLAN.includedEvents} events running at once
+                    {CORPORATE_PLAN.includedEvents} new events included each month
                   </span>
                   <span className="block text-xs text-charcoal/55">
                     Beyond that, ${CORPORATE_PLAN.extraEventPrice} per extra event at checkout ·

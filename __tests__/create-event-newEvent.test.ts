@@ -329,7 +329,7 @@ describe('activation — the rule that used to be missing entirely', () => {
     expect(CURRENT_TRIAL_TIER).toBe('trial');
   });
 
-  it('runs a corporate event on an included seat, and charges for one past them', () => {
+  it('includes a corporate event while the month has some left, and charges for one past them', () => {
     expect(
       activationFor({ tier: 'corporate', corporateActive: true, discount: null }),
     ).toEqual({ kind: 'active', via: 'corporate' });
@@ -337,16 +337,16 @@ describe('activation — the rule that used to be missing entirely', () => {
       activationFor({
         tier: 'corporate',
         corporateActive: true,
-        corporateSeatTaken: false,
+        corporateIncluded: false,
         discount: null,
       }),
     ).toEqual({ kind: 'pending', owedCents: CORPORATE_EXTRA_EVENT_CENTS });
-    // No subscription is still a refusal, seat or no seat.
+    // No subscription is still a refusal, allowance or not.
     expect(
       activationFor({
         tier: 'corporate',
         corporateActive: false,
-        corporateSeatTaken: false,
+        corporateIncluded: false,
         discount: null,
       }).kind,
     ).toBe('refused');

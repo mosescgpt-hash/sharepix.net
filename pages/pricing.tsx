@@ -46,7 +46,7 @@ const faqs = [
   },
   {
     q: 'How does Corporate work?',
-    a: `${CORPORATE_PLAN.priceLabel}, billed monthly through Stripe. Up to ${CORPORATE_PLAN.includedEvents} of your events can take uploads at the same time; when one closes, its slot frees up for the next, and its gallery stays up as normal. If you need more running at once, each extra event is $${CORPORATE_PLAN.extraEventPrice}, paid once when you create it. Cancel any time and you keep 30 days to download everything.`,
+    a: `${CORPORATE_PLAN.priceLabel}, billed monthly through Stripe. It includes ${CORPORATE_PLAN.includedEvents} new events every calendar month, and as many can run at once as you like. The count resets on the 1st; unused events do not roll over. If you need more in a month, each extra event is $${CORPORATE_PLAN.extraEventPrice}, paid once when you create it. Cancel any time and you keep 30 days to download everything.`,
   },
 ];
 

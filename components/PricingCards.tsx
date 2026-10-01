@@ -99,7 +99,7 @@ function comparisonRows(): Row[] {
       label: 'Events',
       trial: 'One per account',
       full: 'One',
-      corporate: `${CORPORATE_PLAN.includedEvents} running at once, then $${CORPORATE_PLAN.extraEventPrice} per extra event`,
+      corporate: `${CORPORATE_PLAN.includedEvents} new each month, then $${CORPORATE_PLAN.extraEventPrice} per extra event`,
     },
     {
       label: 'Photos per event',
@@ -268,9 +268,9 @@ export default function PricingCards() {
           <span className="text-sm text-charcoal/60">per month</span>
         </p>
         <p className="spx-body mt-2 text-sm">
-          For teams that run events back to back. Up to {CORPORATE_PLAN.includedEvents} events
-          take uploads at the same time; when one closes its slot frees up for the next. Need
-          more at once? Add an extra event for ${CORPORATE_PLAN.extraEventPrice}, paid once.
+          For teams that run events back to back. {CORPORATE_PLAN.includedEvents} new events
+          are included every month, and as many can run at once as you need. Need more in a
+          month? Add an extra event for ${CORPORATE_PLAN.extraEventPrice}, paid once.
         </p>
         <ul className="mt-5 grid gap-2 text-sm text-charcoal/80 sm:grid-cols-2">
           {CORPORATE_PLAN.features.map((feature) => (

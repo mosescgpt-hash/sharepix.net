@@ -681,7 +681,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'text',
-        text: 'Running several events at once is what the Corporate plan is for — a monthly subscription covering up to 10 events running at once under one account, with extra events at $49 each.',
+        text: 'Running several events at once is what the Corporate plan is for — a monthly subscription that includes 10 new events every month under one account, with extra events at $49 each.',
       },
     ],
     related: ['video-limits', 'add-ons', 'corporate-plan'],
@@ -844,7 +844,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Corporate is $149 a month and covers up to 10 events taking uploads at the same time under one account, each with unlimited photos under the same fair-use ceiling as a full event, 10 GB of video, company branding and a central dashboard. When an event’s upload window closes its slot frees up. Need more at once? Each extra event is $49, paid once when you create it.',
+        text: 'Corporate is $149 a month and includes 10 new events every month under one account, each with unlimited photos under the same fair-use ceiling as a full event, 10 GB of video, company branding and a central dashboard. As many can run at once as you need. The count resets on the 1st (UTC) and unused events do not roll over. Need more in a month? Each extra event is $49, paid once when you create it.',
       },
       {
         kind: 'text',

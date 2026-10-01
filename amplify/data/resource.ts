@@ -632,7 +632,7 @@ const schema = a.schema({
   // the Lambdas that enforce them. The row id names the limit:
   //
   //   trial-day#<YYYY-MM-DD>            free events handed out that UTC day
-  //   corporate-seat#<sub>#<n>          one of a subscriber's included events
+  //   corporate-month#<sub>#<YYYY-MM>   a subscriber's included events that month
   //   guestbook#<eventId>#guest#<key>   notes one guest has left on one event
   //   guestbook#<eventId>#ip#<ip>       notes from one address on one event
   //
@@ -1964,13 +1964,15 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(corporatePortalFn)),
 
-  // How many of the caller's included Corporate event slots are in use, so the
-  // dashboard can say so before a $49 extra event comes as a surprise.
+  // How many of this month's included Corporate events the caller has used, so
+  // the dashboard can say so before a $49 extra event comes as a surprise.
+  // (Named for seats, which is what it counted first; the name is kept so the
+  // deployed function and query do not change.)
   CorporateSeats: a.customType({
     included: a.integer().required(),
-    inUse: a.integer().required(),
-    /** When the first slot frees up, only when all of them are taken. */
-    nextFreeAt: a.string(),
+    used: a.integer().required(),
+    /** When the allowance resets: the start of next UTC month. */
+    resetsAt: a.string().required(),
   }),
 
   myCorporateSeats: a

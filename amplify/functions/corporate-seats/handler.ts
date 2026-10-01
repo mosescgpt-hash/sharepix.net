@@ -1,4 +1,4 @@
-import { BatchGetItemCommand, DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { CORPORATE_INCLUDED_EVENTS } from './priceList';
 
@@ -8,44 +8,30 @@ const QUOTA_TABLE = process.env.QUOTA_TABLE_NAME ?? '';
 type Handler = Schema['myCorporateSeats']['functionHandler'];
 
 /**
- * How many of the caller's included Corporate event slots are taken.
+ * How many of this month's included Corporate events the caller has used.
  *
- * Reads the same `corporate-seat#<sub>#<n>` rows create-event writes, by key,
- * for the caller's own sub only — the sub comes from the verified token, so
- * nobody can ask about another account. A seat is in use while its event's
- * upload window is still open, which is exactly the rule create-event applies
- * when it decides whether a seat is free.
+ * Reads the same `corporate-month#<sub>#<YYYY-MM>` row create-event counts
+ * against, by key, for the caller's own sub only — the sub comes from the
+ * verified token, so nobody can ask about another account. The allowance
+ * resets at the start of each UTC calendar month, which is `resetsAt`.
  */
 export const handler: Handler = async (event) => {
   const sub = ((event.identity as { sub?: string } | null | undefined)?.sub ?? '').trim();
   if (!sub) throw new Error('You must be signed in.');
 
+  const now = new Date();
   const included = CORPORATE_INCLUDED_EVENTS;
-  if (!QUOTA_TABLE) return { included, inUse: 0, nextFreeAt: null };
+  const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+  if (!QUOTA_TABLE) return { included, used: 0, resetsAt };
 
-  const keys = Array.from({ length: included }, (_, n) => ({
-    id: { S: `corporate-seat#${sub}#${n}` },
-  }));
   const found = await dynamo.send(
-    new BatchGetItemCommand({
-      RequestItems: {
-        [QUOTA_TABLE]: { Keys: keys, ProjectionExpression: 'id, expiresAt' },
-      },
+    new GetItemCommand({
+      TableName: QUOTA_TABLE,
+      Key: { id: { S: `corporate-month#${sub}#${now.toISOString().slice(0, 7)}` } },
+      ProjectionExpression: '#count',
+      ExpressionAttributeNames: { '#count': 'count' },
     }),
   );
-
-  const now = Date.now();
-  const busyUntil = (found.Responses?.[QUOTA_TABLE] ?? [])
-    .map((item) => Date.parse(item.expiresAt?.S ?? ''))
-    .filter((ends) => Number.isFinite(ends) && ends > now)
-    .sort((a, b) => a - b);
-
-  return {
-    included,
-    inUse: busyUntil.length,
-    // Only worth saying when every slot is taken: it is when the next event
-    // stops costing an extra.
-    nextFreeAt:
-      busyUntil.length >= included && busyUntil[0] ? new Date(busyUntil[0]).toISOString() : null,
-  };
+  const used = Math.max(0, Number(found.Item?.count?.N ?? '0') || 0);
+  return { included, used, resetsAt };
 };

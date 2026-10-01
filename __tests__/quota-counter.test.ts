@@ -71,7 +71,6 @@ describe('the daily free-event allowance', () => {
   it('gives everything back when the event write fails', () => {
     const fail = handler.slice(handler.indexOf('await putEvent(item);'));
     expect(fail).toContain('await releaseTrialAllowance(nowISO);');
-    expect(fail).toContain('await releaseCorporateSeat(corporateSeat, id);');
   });
 
   it('reads an old ?tier=free link as the current trial', () => {
@@ -79,26 +78,41 @@ describe('the daily free-event allowance', () => {
   });
 });
 
-describe('Corporate seats', () => {
+describe('the Corporate monthly allowance', () => {
   const handler = codeOnly(readSource('amplify/functions/create-event/handler.ts'));
+  const take = handler.slice(
+    handler.indexOf('async function takeCorporateMonthly'),
+    handler.indexOf('async function releaseCorporateMonthly'),
+  );
 
-  it('takes a seat with a conditional put that frees itself when an event ends', () => {
-    expect(handler).toContain("ConditionExpression: 'attribute_not_exists(id) OR expiresAt < :now'");
-    expect(handler).toContain('corporate-seat#');
-    expect(handler).toContain('n < CORPORATE_INCLUDED_EVENTS');
+  it('counts per subscriber per UTC month, so it resets on the 1st by itself', () => {
+    expect(handler).toContain('`corporate-month#${sub}#${nowISO.slice(0, 7)}`');
   });
 
-  it('turns an event past the included seats into an unpaid extra, never a free one', () => {
-    expect(handler).toContain('corporateSeatTaken: false');
+  it('is a conditional increment, so the tenth cannot be taken twice', () => {
+    expect(take).toContain("ConditionExpression: 'attribute_not_exists(#count) OR #count < :cap'");
+    expect(take).toContain('String(CORPORATE_INCLUDED_EVENTS)');
+  });
+
+  it('is not a cap on events running at once', () => {
+    // The first version held a place per event for its whole upload window,
+    // which came to about five new events a month instead of ten.
+    expect(handler).not.toContain('corporate-seat#');
+    expect(handler).not.toContain('expiresAt < :now');
+  });
+
+  it('turns an event past the month’s allowance into an unpaid extra, never a free one', () => {
+    expect(handler).toContain('corporateIncluded: false');
     expect(handler).toContain('row.paid = false');
   });
 
-  it('never grants a seat when its table is missing', () => {
-    const take = handler.slice(
-      handler.indexOf('async function takeCorporateSeat'),
-      handler.indexOf('async function releaseCorporateSeat'),
-    );
-    expect(take).toMatch(/if \(!QUOTA_TABLE\) \{[^}]*return null;/);
+  it('never counts an event as included when its table is missing', () => {
+    expect(take).toMatch(/if \(!QUOTA_TABLE\) \{[^}]*return false;/);
+  });
+
+  it('gives the month’s event back when the event write fails', () => {
+    const fail = handler.slice(handler.indexOf('await putEvent(item);'));
+    expect(fail).toContain('await releaseCorporateMonthly(sub, nowISO);');
   });
 });
 

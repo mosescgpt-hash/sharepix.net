@@ -127,7 +127,8 @@ describe('help articles quote the numbers the code uses', () => {
 
   it('states Corporate as it is sold', () => {
     expect(help).toContain(`$${CORPORATE_PLAN.price} a month`);
-    expect(help).toContain(`up to ${CORPORATE_PLAN.includedEvents} events`);
+    expect(help).toContain(`${CORPORATE_PLAN.includedEvents} new events every month`);
+    expect(help).not.toMatch(/events (running at once|taking uploads at the same time)/);
     expect(help).toContain(`$${CORPORATE_PLAN.extraEventPrice}`);
   });
 });

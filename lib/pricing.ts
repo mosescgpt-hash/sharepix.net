@@ -434,12 +434,11 @@ export const CORPORATE_PLAN = {
   interval: 'month' as const,
   priceLabel: `$${CORPORATE_PRICE} / month`,
   /**
-   * Events running at the same time, included in the subscription. "Running"
-   * means still taking uploads: a finished event keeps its gallery for the
-   * full retention and frees its seat for the next one.
+   * New events included each calendar month (UTC). Resets on the 1st, unused
+   * ones do not roll over, and any number may run at once.
    */
   includedEvents: CORPORATE_INCLUDED_EVENTS,
-  /** One more event at once, beyond the included ones. One-time, per event. */
+  /** One more event in a month, beyond the included ones. One-time, per event. */
   extraEventPrice: dollars(CORPORATE_EXTRA_EVENT_CENTS),
   // Lifecycle for events created under a Corporate subscription (premium-like:
   // unlimited photos, 1-year host retention, 30-day guest low-res).
@@ -449,9 +448,9 @@ export const CORPORATE_PLAN = {
   // Sold as a budget like the paid per-event plan, for the same reason.
   videoLimit: null,
   videoBytesLimit: VIDEO_GB_INCLUDED * 1024 * 1024 * 1024,
-  accessLabel: `Up to ${CORPORATE_INCLUDED_EVENTS} events running at once`,
+  accessLabel: `${CORPORATE_INCLUDED_EVENTS} new events a month`,
   features: [
-    `Up to ${CORPORATE_INCLUDED_EVENTS} events taking uploads at the same time`,
+    `${CORPORATE_INCLUDED_EVENTS} new events every month, with no limit on how many run at once`,
     `More at $${dollars(CORPORATE_EXTRA_EVENT_CENTS)} per extra event, one-time`,
     // The same ceiling as the Full Event, stated the same way. Typed rather
     // than imported from lib/fairUse.ts to keep this module free of it; the
