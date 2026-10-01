@@ -329,70 +329,69 @@ async function releaseTrialAllowance(nowISO: string): Promise<void> {
     .catch(() => undefined);
 }
 
-/**
- * Take one of a Corporate subscriber's included event seats, or report that
- * they are all in use.
- *
- * A seat is a row, `corporate-seat#<sub>#<n>`, holding the event it was taken
- * for and when that event's upload window closes. A seat is free when its row
- * is missing or its event's window has closed, so seats come back on their own
- * as events finish, with no job to run and no counter to decrement. Taking one
- * is a conditional put on that single row, which is what makes two requests
- * racing for the last seat unable to both win.
- *
- * "Active" means "still taking uploads". A finished event keeps its gallery for
- * the full retention; it just stops occupying a seat.
- *
- * A missing table returns null rather than granting a seat: the subscriber is
- * then offered an extra event at checkout, which is a worse experience than a
- * free one but is never a free event the subscription did not cover.
- */
-async function takeCorporateSeat(
-  sub: string,
-  eventId: string,
-  windowEndsAt: string,
-  nowISO: string,
-): Promise<string | null> {
-  if (!QUOTA_TABLE) {
-    console.error('QUOTA_TABLE_NAME is not set; corporate seats cannot be checked');
-    return null;
-  }
-  for (let n = 0; n < CORPORATE_INCLUDED_EVENTS; n += 1) {
-    const seatId = `corporate-seat#${sub}#${n}`;
-    try {
-      await dynamo.send(
-        new PutItemCommand({
-          TableName: QUOTA_TABLE,
-          Item: {
-            id: { S: seatId },
-            __typename: { S: 'QuotaCounter' },
-            eventId: { S: eventId },
-            expiresAt: { S: windowEndsAt },
-            createdAt: { S: nowISO },
-            updatedAt: { S: nowISO },
-          },
-          ConditionExpression: 'attribute_not_exists(id) OR expiresAt < :now',
-          ExpressionAttributeValues: { ':now': { S: nowISO } },
-        }),
-      );
-      return seatId;
-    } catch (err) {
-      if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') continue;
-      throw err;
-    }
-  }
-  return null;
+/** The counter row for one subscriber's included events in one UTC month. */
+function corporateMonthKey(sub: string, nowISO: string): string {
+  return `corporate-month#${sub}#${nowISO.slice(0, 7)}`;
 }
 
-/** Hand a seat back when the event it was taken for could not be written. */
-async function releaseCorporateSeat(seatId: string, eventId: string): Promise<void> {
+/**
+ * Count one of this month's included Corporate events, or report that the
+ * month's allowance is used up.
+ *
+ * One conditional increment on a single row per subscriber per UTC calendar
+ * month, so two requests racing for the last included event cannot both get
+ * it. A new month is a new row, so the allowance resets on the 1st with no
+ * job to run. There is no limit on how many events run at once.
+ *
+ * A missing table returns false rather than counting the event as included:
+ * the subscriber is then offered it as an extra event at checkout, which is a
+ * worse experience than a free one but never an event the subscription did
+ * not cover.
+ */
+async function takeCorporateMonthly(sub: string, nowISO: string): Promise<boolean> {
+  if (!QUOTA_TABLE) {
+    console.error('QUOTA_TABLE_NAME is not set; the Corporate allowance cannot be checked');
+    return false;
+  }
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: corporateMonthKey(sub, nowISO) } },
+        UpdateExpression:
+          'ADD #count :one SET #typename = if_not_exists(#typename, :typename), #limit = :cap, updatedAt = :now, createdAt = if_not_exists(createdAt, :now)',
+        ConditionExpression: 'attribute_not_exists(#count) OR #count < :cap',
+        ExpressionAttributeNames: {
+          '#count': 'count',
+          '#limit': 'limit',
+          '#typename': '__typename',
+        },
+        ExpressionAttributeValues: {
+          ':one': { N: '1' },
+          ':cap': { N: String(CORPORATE_INCLUDED_EVENTS) },
+          ':now': { S: nowISO },
+          ':typename': { S: 'QuotaCounter' },
+        },
+      }),
+    );
+    return true;
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'ConditionalCheckFailedException') return false;
+    throw err;
+  }
+}
+
+/** Give this month's included event back when the event could not be written. */
+async function releaseCorporateMonthly(sub: string, nowISO: string): Promise<void> {
   await dynamo
     .send(
-      new DeleteItemCommand({
+      new UpdateItemCommand({
         TableName: QUOTA_TABLE,
-        Key: { id: { S: seatId } },
-        ConditionExpression: 'eventId = :eventId',
-        ExpressionAttributeValues: { ':eventId': { S: eventId } },
+        Key: { id: { S: corporateMonthKey(sub, nowISO) } },
+        UpdateExpression: 'ADD #count :neg',
+        ConditionExpression: '#count > :zero',
+        ExpressionAttributeNames: { '#count': 'count' },
+        ExpressionAttributeValues: { ':neg': { N: '-1' }, ':zero': { N: '0' } },
       }),
     )
     .catch(() => undefined);
@@ -537,17 +536,17 @@ export const handler: Handler = async (event) => {
   const id = randomUUID();
   const nowISO = now.toISOString();
 
-  // A corporate event takes one of the subscription's included seats. With all
-  // of them in use it is still created, unpaid, and the host pays for it as an
-  // extra event — the same checkout and the same webhook a single event uses.
-  let corporateSeat: string | null = null;
+  // A corporate event counts against this month's included events. Past them
+  // it is still created, unpaid, and the host pays for it as an extra event —
+  // the same checkout and the same webhook a single event uses.
+  let corporateCounted = false;
   if (activation.kind === 'active' && activation.via === 'corporate') {
-    corporateSeat = await takeCorporateSeat(sub, id, row.uploadWindowEndsAt, nowISO);
-    if (!corporateSeat) {
+    corporateCounted = await takeCorporateMonthly(sub, nowISO);
+    if (!corporateCounted) {
       activation = activationFor({
         tier,
         corporateActive,
-        corporateSeatTaken: false,
+        corporateIncluded: false,
         discount,
       });
       row.paid = false;
@@ -625,7 +624,7 @@ export const handler: Handler = async (event) => {
       await releaseFreeEvent(sub);
       await releaseTrialAllowance(nowISO);
     }
-    if (corporateSeat) await releaseCorporateSeat(corporateSeat, id);
+    if (corporateCounted) await releaseCorporateMonthly(sub, nowISO);
     throw err;
   }
 

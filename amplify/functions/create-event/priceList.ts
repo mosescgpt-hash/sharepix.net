@@ -28,7 +28,14 @@ export const PLAN_PRICE_CENTS = {
 /** The Corporate subscription, per month. */
 export const CORPORATE_MONTHLY_CENTS = 14900;
 
-/** Events a Corporate subscription runs at the same time, at no extra cost. */
+/**
+ * New events a Corporate subscription includes each calendar month (UTC).
+ *
+ * Counted per month rather than at a time: a cap on events running at once
+ * holds each one for its whole 60-day upload window, which works out at about
+ * five new events a month — half of what the plan is meant to give. Unused
+ * events do not roll over, and there is no limit on how many run at once.
+ */
 export const CORPORATE_INCLUDED_EVENTS = 10;
 
 /**

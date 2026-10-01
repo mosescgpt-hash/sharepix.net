@@ -73,7 +73,7 @@ import {
   parseDailyLimit,
   guestBookLimitReached,
   quotaKind,
-  seatInUse,
+  corporateMonthInUse,
   trialDayId,
   type QuotaCounterRow,
 } from '@/lib/quotaCounters';
@@ -3123,10 +3123,11 @@ function GlobalAdminPage() {
             <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
               <h2 id="limits" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Limits</h2>
               <p className="text-sm text-charcoal/70">
-                Corporate event slots in use, and guests or networks that have hit the
-                guest book limit. Clearing one lifts that limit straight away: a cleared
-                slot lets the subscriber start another included event, and a cleared guest
-                book counter lets that guest or network sign again.
+                Corporate subscribers&rsquo; included events used this month, and guests or
+                networks that have hit the guest book limit. Clearing one lifts that limit
+                straight away: a reset month gives the subscriber their full allowance back
+                for the rest of it, and a cleared guest book counter lets that guest or
+                network sign again.
               </p>
               {quotasError ? (
                 <Notice tone="warn" className="mt-3">
@@ -3137,9 +3138,9 @@ function GlobalAdminPage() {
                 if (quotas === null) {
                   return <p className="mt-4 text-sm text-charcoal/55">Loading…</p>;
                 }
-                const seats = quotas.filter(
-                  (row) => quotaKind(row.id).kind === 'corporate-seat' && seatInUse(row),
-                );
+                const seats = quotas
+                  .filter((row) => corporateMonthInUse(row))
+                  .sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
                 const full = quotas.filter(guestBookLimitReached);
                 const eventName = (eventId?: string | null) =>
                   (eventId && events.find((e) => e.id === eventId)?.name) || eventId || 'unknown event';
@@ -3156,30 +3157,37 @@ function GlobalAdminPage() {
                 return (
                   <>
                     <h3 className="mt-5 font-sans text-base font-semibold">
-                      Corporate slots in use ({seats.length})
+                      Corporate events this month ({seats.length}{' '}
+                      {seats.length === 1 ? 'subscriber' : 'subscribers'})
                     </h3>
                     {seats.length === 0 ? (
-                      <p className="mt-2 text-sm text-charcoal/55">No Corporate event is taking uploads.</p>
+                      <p className="mt-2 text-sm text-charcoal/55">
+                        No Corporate subscriber has started an event this month.
+                      </p>
                     ) : (
                       <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
                         {seats.map((row) => {
                           const kind = quotaKind(row.id);
-                          const host = kind.kind === 'corporate-seat' ? kind.hostSub : '';
+                          const host = kind.kind === 'corporate-month' ? kind.hostSub : '';
+                          // The counter holds a Cognito id; an event they own
+                          // gives it a name an admin recognises.
+                          const named = events.find((e) => host && e.owner?.includes(host));
+                          const used = row.count ?? 0;
+                          const included = row.limit ?? CORPORATE_PLAN.includedEvents;
                           return (
                             <li key={row.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
-                                <p className="truncate text-sm text-charcoal">{eventName(row.eventId)}</p>
-                                <p className="truncate font-mono text-xs text-charcoal/60">
-                                  {host}
-                                  {row.expiresAt
-                                    ? ` · frees ${new Date(row.expiresAt).toLocaleDateString()}`
-                                    : ''}
+                                <p className="truncate text-sm text-charcoal">
+                                  {named?.createdBy ?? 'Corporate subscriber'} · {Math.min(used, included)} of{' '}
+                                  {included} included events used
+                                  {used >= included ? ' — extras are $' + CORPORATE_PLAN.extraEventPrice + ' each' : ''}
                                 </p>
+                                <p className="truncate font-mono text-xs text-charcoal/60">{host}</p>
                               </div>
                               {clearButton(
                                 row.id,
-                                'Free slot',
-                                'Free this Corporate slot? The event keeps running; the subscriber can start one more included event.',
+                                'Reset month',
+                                'Reset this subscriber’s count for the month? They get all of their included events back until the 1st.',
                               )}
                             </li>
                           );

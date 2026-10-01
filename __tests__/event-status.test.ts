@@ -4,7 +4,7 @@ import {
   DEFAULT_FREE_EVENTS_PER_DAY,
   guestBookLimitReached,
   quotaKind,
-  seatInUse,
+  corporateMonthInUse,
   trialDayId,
 } from '../lib/quotaCounters';
 import { MAX_ENTRIES_PER_ADDRESS, MAX_ENTRIES_PER_GUEST } from '../lib/guestBook';
@@ -27,7 +27,7 @@ describe('the host dashboard notices', () => {
   it('prices an unpaid Corporate event as an extra event, and says why', () => {
     const [notice] = eventStatusNotices({ tier: 'corporate', paid: false });
     expect(notice.kind === 'unpaid' && notice.priceUsd).toBe(CORPORATE_PLAN.extraEventPrice);
-    expect(notice.body).toContain(`All ${CORPORATE_PLAN.includedEvents}`);
+    expect(notice.body).toContain(`this month's ${CORPORATE_PLAN.includedEvents} included`);
   });
 
   it('says nothing about payment on a paid or older event', () => {
@@ -57,20 +57,23 @@ describe('the host dashboard notices', () => {
     ]);
   });
 
-  it('counts Corporate slots, and warns before the next one costs extra', () => {
+  it('counts this month’s Corporate events, and warns before the next one costs extra', () => {
     const open = eventStatusNotices(
       { tier: 'corporate', paid: true },
-      { included: 10, inUse: 7, nextFreeAt: null },
+      { included: 10, used: 7, resetsAt: '2026-11-01T00:00:00Z' },
     )[0];
-    expect(open.title).toBe('7 of 10 included events running');
+    expect(open.title).toBe('7 of 10 included events used this month');
     expect(open.tone).toBe('info');
+    expect(open.body).toContain('3 more this month');
+    expect(open.body).toContain('no limit on how many run at once');
 
     const full = eventStatusNotices(
       { tier: 'corporate', paid: true },
-      { included: 10, inUse: 10, nextFreeAt: '2026-11-01T00:00:00Z' },
+      { included: 10, used: 10, resetsAt: '2026-11-01T00:00:00Z' },
     )[0];
     expect(full.tone).toBe('warn');
     expect(full.body).toContain(`$${CORPORATE_PLAN.extraEventPrice}`);
+    expect(full.body).toContain('come back');
   });
 
   it('shows nothing extra on an ordinary paid event', () => {
@@ -81,10 +84,10 @@ describe('the host dashboard notices', () => {
 describe('reading a counter row', () => {
   it('parses each kind of id create-event and the guest book write', () => {
     expect(quotaKind('trial-day#2026-10-01')).toEqual({ kind: 'trial-day', day: '2026-10-01' });
-    expect(quotaKind('corporate-seat#abc-123#4')).toEqual({
-      kind: 'corporate-seat',
+    expect(quotaKind('corporate-month#abc-123#2026-10')).toEqual({
+      kind: 'corporate-month',
       hostSub: 'abc-123',
-      seat: 4,
+      month: '2026-10',
     });
     expect(quotaKind('guestbook#ev1#guest#us-east-1:xyz')).toEqual({
       kind: 'guestbook-guest',
@@ -96,7 +99,14 @@ describe('reading a counter row', () => {
       eventId: 'ev1',
       address: '203.0.113.9',
     });
-    for (const junk of ['', 'corporate-seat#x#-1', 'corporate-seat##1', 'guestbook#ev#other#x', 'nope']) {
+    for (const junk of [
+      '',
+      'corporate-month#x#2026-1',
+      'corporate-month##2026-10',
+      'corporate-seat#x#0',
+      'guestbook#ev#other#x',
+      'nope',
+    ]) {
       expect(quotaKind(junk).kind).toBe('unknown');
     }
   });
@@ -110,11 +120,12 @@ describe('reading a counter row', () => {
     expect(handler).toContain(`const DEFAULT_FREE_EVENTS_PER_DAY = ${DEFAULT_FREE_EVENTS_PER_DAY};`);
   });
 
-  it('counts a seat as in use only while its event is taking uploads', () => {
-    const now = new Date('2026-10-01T00:00:00Z');
-    expect(seatInUse({ id: 's', expiresAt: '2026-10-02T00:00:00Z' }, now)).toBe(true);
-    expect(seatInUse({ id: 's', expiresAt: '2026-09-30T00:00:00Z' }, now)).toBe(false);
-    expect(seatInUse({ id: 's', expiresAt: null }, now)).toBe(false);
+  it('lists only this month’s Corporate counters that have been used', () => {
+    const now = new Date('2026-10-15T00:00:00Z');
+    expect(corporateMonthInUse({ id: 'corporate-month#s#2026-10', count: 3 }, now)).toBe(true);
+    expect(corporateMonthInUse({ id: 'corporate-month#s#2026-09', count: 10 }, now)).toBe(false);
+    expect(corporateMonthInUse({ id: 'corporate-month#s#2026-10', count: 0 }, now)).toBe(false);
+    expect(corporateMonthInUse({ id: 'trial-day#2026-10-15', count: 3 }, now)).toBe(false);
   });
 
   it('flags a guest book counter only once it is refusing notes', () => {
@@ -156,10 +167,10 @@ describe('wiring', () => {
     expect(admin).toContain('clearQuotaCounter');
   });
 
-  it('only ever reads the caller’s own seats', () => {
+  it('only ever reads the caller’s own monthly count', () => {
     const seats = codeOnly(readSource('amplify/functions/corporate-seats/handler.ts'));
     expect(seats).toContain('event.identity');
-    expect(seats).toContain('corporate-seat#${sub}#${n}');
+    expect(seats).toContain('`corporate-month#${sub}#${now.toISOString().slice(0, 7)}`');
     expect(seats).not.toContain('event.arguments');
     const backend = codeOnly(readSource('amplify/backend.ts'));
     expect(backend).toContain('quotaTable.grantReadData(corporateSeatsFn)');

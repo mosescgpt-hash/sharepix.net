@@ -20,7 +20,7 @@ export interface QuotaCounterRow {
 
 export type QuotaKind =
   | { kind: 'trial-day'; day: string }
-  | { kind: 'corporate-seat'; hostSub: string; seat: number }
+  | { kind: 'corporate-month'; hostSub: string; month: string }
   | { kind: 'guestbook-guest'; eventId: string; who: string }
   | { kind: 'guestbook-address'; eventId: string; address: string }
   | { kind: 'unknown' };
@@ -31,10 +31,9 @@ export function quotaKind(id: string): QuotaKind {
   if (parts[0] === 'trial-day' && parts.length === 2 && parts[1]) {
     return { kind: 'trial-day', day: parts[1] };
   }
-  if (parts[0] === 'corporate-seat' && parts.length === 3) {
-    const seat = Number(parts[2]);
-    if (parts[1] && Number.isInteger(seat) && seat >= 0) {
-      return { kind: 'corporate-seat', hostSub: parts[1], seat };
+  if (parts[0] === 'corporate-month' && parts.length === 3) {
+    if (parts[1] && /^\d{4}-\d{2}$/.test(parts[2])) {
+      return { kind: 'corporate-month', hostSub: parts[1], month: parts[2] };
     }
   }
   if (parts[0] === 'guestbook' && parts.length >= 4 && parts[1]) {
@@ -159,10 +158,18 @@ export function freeEventAdvice(series: FreeEventDay[], currentLimit: number): F
   };
 }
 
-/** A Corporate seat still holding an event that is taking uploads. */
-export function seatInUse(row: QuotaCounterRow, now: Date = new Date()): boolean {
-  const ends = Date.parse(row.expiresAt ?? '');
-  return Number.isFinite(ends) && ends > now.getTime();
+/**
+ * A Corporate subscriber's counter for the current UTC month, with at least
+ * one included event used. Last month's rows are history: the allowance has
+ * already reset past them, so they are not something to act on.
+ */
+export function corporateMonthInUse(row: QuotaCounterRow, now: Date = new Date()): boolean {
+  const kind = quotaKind(row.id);
+  return (
+    kind.kind === 'corporate-month' &&
+    kind.month === now.toISOString().slice(0, 7) &&
+    (row.count ?? 0) > 0
+  );
 }
 
 /** A guest book counter that is currently refusing notes. */

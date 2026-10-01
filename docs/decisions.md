@@ -709,15 +709,21 @@ than stamped on the row, so shortening `free` in place would have cut short the
 gallery of every free event already running. `free` is retired at 60 + 30 and
 cannot start a new event; a `?tier=free` link is read as `trial`.
 
-### Corporate: ten at once, $49 for more
+### Corporate: ten new events a month, $49 for more
 
 Corporate was one sentence. It now has a published limit and a comparison:
-**up to 10 events taking uploads at the same time**, and an **extra event at
-$49**, paid once, through the same checkout and webhook a single event uses.
-A seat is a `QuotaCounter` row that frees itself when its event's upload
-window closes, so there is no job to run and no counter to decrement. An extra
-event is created unpaid and priced from its stored row; it is kept out of
-`TIER_PRICING` so it can never be extended at half price.
+**10 new events every calendar month (UTC)**, with no limit on how many run at
+once, and an **extra event at $49**, paid once, through the same checkout and
+webhook a single event uses. The count is one `QuotaCounter` row per
+subscriber per month (`corporate-month#<sub>#<YYYY-MM>`); a new month is a new
+row, so it resets on the 1st with no job to run. Unused events do not roll
+over. An extra event is created unpaid and priced from its stored row; it is
+kept out of `TIER_PRICING` so it can never be extended at half price.
+
+It first shipped as 10 events *running at once*. Because each event holds its
+place for its whole 60-day upload window, that worked out at about five new
+events a month, half of what the plan is meant to give, so it was changed to
+a monthly count before any subscriber had used it.
 
 ### Unlisted, said plainly
 

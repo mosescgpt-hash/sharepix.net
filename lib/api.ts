@@ -1651,11 +1651,11 @@ export async function clearQuotaCounter(id: string): Promise<void> {
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
 }
 
-/** The caller's Corporate slots: how many are included, and how many are busy. */
+/** The caller's Corporate allowance this month: included, used, and when it resets. */
 export async function getMyCorporateSeats(): Promise<{
   included: number;
-  inUse: number;
-  nextFreeAt: string | null;
+  used: number;
+  resetsAt: string;
 } | null> {
   const { data, errors } = await getClient().queries.myCorporateSeats(
     {},
@@ -1663,7 +1663,7 @@ export async function getMyCorporateSeats(): Promise<{
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   if (!data) return null;
-  return { included: data.included, inUse: data.inUse, nextFreeAt: data.nextFreeAt ?? null };
+  return { included: data.included, used: data.used, resetsAt: data.resetsAt };
 }
 
 export async function listPaymentsCount(): Promise<number> {

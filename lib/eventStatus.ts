@@ -19,8 +19,10 @@ export interface StatusFacts {
 
 export interface CorporateSeatFacts {
   included: number;
-  inUse: number;
-  nextFreeAt: string | null;
+  /** Included events already used this UTC month. */
+  used: number;
+  /** When the allowance resets: the start of next UTC month. */
+  resetsAt: string;
 }
 
 export type EventStatusNotice =
@@ -49,7 +51,7 @@ export function eventStatusNotices(
 
   // Waiting on payment. Before this, the dashboard looked exactly like a live
   // event's while every guest upload was refused — and a Corporate event past
-  // the included slots is created this way on purpose.
+  // the month's included events is created this way on purpose.
   if (facts.paid === false) {
     const corporate = tier === 'corporate';
     notices.push({
@@ -57,7 +59,7 @@ export function eventStatusNotices(
       tone: 'warn',
       title: 'This event is not live yet',
       body: corporate
-        ? `All ${CORPORATE_PLAN.includedEvents} of your included Corporate events were running when you created this one, so it is an extra event. Guests cannot upload or sign the guest book until it is paid.`
+        ? `You had already used this month's ${CORPORATE_PLAN.includedEvents} included Corporate events when you created this one, so it is an extra event. Guests cannot upload or sign the guest book until it is paid.`
         : 'Checkout was not finished. Guests cannot upload or sign the guest book until it is paid.',
       priceUsd: corporate ? CORPORATE_PLAN.extraEventPrice : (getTier(tier)?.price ?? 0),
     });
@@ -85,22 +87,21 @@ export function eventStatusNotices(
     });
   }
 
-  // How many included slots are busy, so the $49 for the eleventh is a choice
-  // a host makes rather than a surprise at checkout.
+  // How many of this month's included events are used, so the $49 for the
+  // eleventh is a choice a host makes rather than a surprise at checkout.
   if (tier === 'corporate' && seats) {
-    const full = seats.inUse >= seats.included;
-    const next = seats.nextFreeAt ? new Date(seats.nextFreeAt) : null;
+    const used = Math.min(seats.used, seats.included);
+    const left = seats.included - used;
+    const resets = new Date(seats.resetsAt);
+    const when = Number.isFinite(resets.getTime()) ? ` on ${day(resets)}` : ' next month';
     notices.push({
       kind: 'corporate-seats',
-      tone: full ? 'warn' : 'info',
-      title: `${Math.min(seats.inUse, seats.included)} of ${seats.included} included events running`,
-      body: full
-        ? `Your next event will be an extra event at $${CORPORATE_PLAN.extraEventPrice}${
-            next && Number.isFinite(next.getTime())
-              ? `, unless you wait until ${day(next)} when the next slot frees up`
-              : ''
-          }. A slot frees up when an event's upload window closes.`
-        : `You can start ${seats.included - seats.inUse} more without paying extra. A slot frees up when an event's upload window closes.`,
+      tone: left === 0 ? 'warn' : 'info',
+      title: `${used} of ${seats.included} included events used this month`,
+      body:
+        left === 0
+          ? `Any more this month are extra events at $${CORPORATE_PLAN.extraEventPrice} each. Your ${seats.included} included events come back${when}.`
+          : `You can start ${left} more this month without paying extra. The count resets${when}, and there is no limit on how many run at once.`,
     });
   }
 

@@ -398,18 +398,18 @@ export type Activation =
 export function activationFor({
   tier,
   corporateActive,
-  corporateSeatTaken = true,
+  corporateIncluded = true,
   discount,
 }: {
   tier: string;
   corporateActive: boolean;
   /**
-   * Whether one of the subscription's included event seats was free. Only
-   * read for a corporate event on a live subscription; false means the event
-   * is an extra one and is paid for like a single event, at the corporate
+   * Whether this month's included Corporate events had one left. Only read
+   * for a corporate event on a live subscription; false means the event is an
+   * extra one and is paid for like a single event, at the corporate
    * extra-event price.
    */
-  corporateSeatTaken?: boolean;
+  corporateIncluded?: boolean;
   /** A validated code and the plan's price, or null when none was supplied. */
   discount: { row: DiscountRow; priceCents: number } | null;
 }): Activation {
@@ -424,7 +424,7 @@ export function activationFor({
         reason: 'An active Corporate subscription is required for corporate events.',
       };
     }
-    return corporateSeatTaken
+    return corporateIncluded
       ? { kind: 'active', via: 'corporate' }
       : { kind: 'pending', owedCents: CORPORATE_EXTRA_EVENT_CENTS };
   }
