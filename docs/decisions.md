@@ -716,7 +716,7 @@ event is created unpaid and priced from its stored row; it is kept out of
 
 ### Unlisted, said plainly
 
-One line beside the QR code: anyone with this link or code can view (and,
+One line beside the QR code: the gallery is private from search, and anyone given the QR code or link can view it (and,
 where guests upload, add to) the gallery; there is no password. "Private by
 default" is gone from the pricing page.
 

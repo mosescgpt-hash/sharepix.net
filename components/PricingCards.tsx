@@ -49,7 +49,7 @@ const INCLUDED: string[] = [
   UNLIMITED_PHOTOS_LINE,
   `${VIDEO_GB_INCLUDED} GB of video`,
   'Full-resolution originals, kept and downloadable',
-  'An unlisted gallery: anyone with your link or QR code can open it, and nobody can search for it',
+  'A gallery that is private from search, open to anyone you give the QR code or link',
   `${UPLOAD_WINDOW_DAYS}-day upload window, extendable any time`,
   `Gallery stays up for ${GALLERY_MONTHS} months after uploads close`,
   'Your own event URL and customizable QR code',

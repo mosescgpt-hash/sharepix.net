@@ -38,7 +38,7 @@ const faqs = [
   },
   {
     q: 'Is my gallery private?',
-    a: 'It is unlisted, not private: anyone who has your event link or QR code can view the gallery and add photos, and nobody else can find it — it is never indexed by search engines. It is not password-protected, so share the link with the people you want in it, and remember that a photo of your table sign is a copy of the link.',
+    a: 'It is private from search: it never appears in Google or any other search engine, and nobody can stumble onto it. It is unlisted rather than locked, though — anyone you give the QR code or link to can open the gallery and add photos, and it is not password-protected. Share it with the people you want there, and remember that a photo of your table sign works just like the link.',
   },
   {
     q: 'What is the free event?',
@@ -76,7 +76,7 @@ export default function PricingPage() {
           </div>
 
           <p className="mt-8 text-sm text-charcoal/60">
-            Unlimited guests · Unlimited photos under fair use · Full-resolution memories · Unlisted, never searchable
+            Unlimited guests · Unlimited photos under fair use · Full-resolution memories · Private from search, shared by QR code
           </p>
         </div>
       </section>

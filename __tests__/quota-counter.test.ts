@@ -131,9 +131,10 @@ describe('the guest book, per guest', () => {
 });
 
 describe('what hosts are told', () => {
-  it('says next to the QR code that anyone with the link can get in', () => {
+  it('says next to the QR code that it is hidden from search but open to anyone holding it', () => {
     const qr = readSource('components/EventQRCode.tsx');
-    expect(qr).toContain('Anyone with this link or code can view the gallery and upload');
+    expect(qr).toContain('Private from search');
+    expect(qr).toContain('Anyone you give this QR code or link to can view it and add photos.');
   });
 
   it('calls guest book screening a link check, beside the notes', () => {
