@@ -82,6 +82,7 @@ export const handler: Handler = async (event) => {
     owner: found.Item.owner?.S ?? '',
     guestDownloadsBlocked: found.Item.guestDownloadsBlocked?.BOOL === true,
     guestResolution: guestResolutionOf(found.Item),
+    takenDown: Boolean(found.Item.takenDownAt?.S),
   };
   const caller = event.identity as { sub?: string | null; groups?: string[] | null } | undefined;
 

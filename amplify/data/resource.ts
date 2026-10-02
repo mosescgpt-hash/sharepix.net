@@ -121,6 +121,21 @@ const schema = a.schema({
       // flagged, 'RESTRICTED' stops uploads on one they did not.
       usageStatus: a.string(),
       usageNote: a.string(),
+      // Content review (lib/contentReview.ts). flaggedCount is how many photos
+      // screening has flagged on this event, ever, counted by createEventPhoto.
+      // An admin clearing the event records the count at that moment, so only
+      // NEW flags can put it back in review; the alert stamp is what makes the
+      // operator email go out once per crossing.
+      flaggedCount: a.integer(),
+      contentReviewAlertedAt: a.datetime(),
+      contentReviewClearedAt: a.datetime(),
+      contentReviewClearedCount: a.integer(),
+      // Closed by an admin for malicious, illegal or abusive content. Uploads
+      // stop and nobody but an admin can see its media — the host included —
+      // but nothing is deleted: content that may have to be reported is
+      // preserved, not destroyed. See docs/moderation.md.
+      takenDownAt: a.datetime(),
+      takedownNote: a.string(),
       // Set when the media has actually been deleted at the end of the archive
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
@@ -1869,7 +1884,9 @@ const schema = a.schema({
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a
     .mutation()
-    .arguments({ email: a.string().required(), action: a.string().required() })
+    // `sub` finds an account by Cognito id when the email is not known — an
+    // event row carries its host's sub, not their address.
+    .arguments({ email: a.string(), sub: a.string(), action: a.string().required() })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(adminUserActionsFn)),

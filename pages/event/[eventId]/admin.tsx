@@ -347,6 +347,7 @@ function AdminDashboardPage() {
           paid: event.paid,
           uploadWindowEndsAt: lifecycle.uploadWindowEndsAt,
           galleryClosesAt: lifecycle.retentionEndsAt,
+          takenDownAt: event.takenDownAt,
         }
       : null,
     corporateSeats,

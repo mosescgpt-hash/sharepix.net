@@ -14,9 +14,12 @@ const USER_POOL_ID = process.env.USER_POOL_ID as string;
 type Handler = Schema['manageUser']['functionHandler'];
 
 export const handler: Handler = async (event) => {
-  const email = (event.arguments.email ?? '').trim().toLowerCase();
+  const emailArg = (event.arguments.email ?? '').trim().toLowerCase();
+  const subArg = (event.arguments.sub ?? '').trim();
   const action = event.arguments.action;
-  if (!email) {
+  // A sub goes into a Cognito filter string, so only a UUID's characters are
+  // accepted — anything else could change what the filter matches.
+  if (!emailArg && !/^[0-9a-f-]{36}$/i.test(subArg)) {
     return { success: false, message: 'Enter the account email.' };
   }
 
@@ -24,11 +27,14 @@ export const handler: Handler = async (event) => {
   const list = await client.send(
     new ListUsersCommand({
       UserPoolId: USER_POOL_ID,
-      Filter: `email = "${email.replace(/"/g, '')}"`,
+      Filter: emailArg ? `email = "${emailArg.replace(/"/g, '')}"` : `sub = "${subArg}"`,
       Limit: 1,
     }),
   );
-  const username = list.Users?.[0]?.Username;
+  const found = list.Users?.[0];
+  const username = found?.Username;
+  const email =
+    emailArg || found?.Attributes?.find((attribute) => attribute.Name === 'email')?.Value || subArg;
   if (!username) {
     return { success: false, message: `No account found for ${email}.` };
   }

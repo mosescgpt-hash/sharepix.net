@@ -255,3 +255,64 @@ and costs three small requests.
 
 Roughly **$1 per 1,000 images** (confirm current Rekognition pricing). A
 500-photo wedding is about **$0.50**.
+
+## Content review: when the operator looks, not just the host
+
+Screening holds a flagged photo for the **host**. That fails when the host is
+the problem, so flags are also counted per event (`flaggedCount`, written by
+`create-event-photo`) and an event goes in front of the **operator** when,
+since it was last cleared, it has:
+
+- **10 or more** flagged photos, or
+- **5 or more** flagged photos making up **20%+** of its uploads.
+
+The rule and its numbers live in `lib/contentReview.ts` (copied into
+`create-event-photo/contentReview.ts`, pinned by
+`__tests__/content-review.test.ts`).
+
+What happens:
+
+- The event appears under **Content review** on the global admin.
+- The first crossing sends **one** plain-text email to the report recipient
+  (the AppSetting the monthly report uses, `REPORT_TO_ADDRESS` as fallback).
+  It contains **no images and no media links**, on purpose.
+- **Nothing is closed automatically.** Screening only detects explicit adult
+  content and is wrong in both directions; a person decides.
+
+Actions on the dashboard:
+
+| Action | Effect |
+| --- | --- |
+| Reviewed, fine | Records the current flagged count; only new flags re-queue it, and a new crossing emails again |
+| Close event | `takenDownAt` + `uploadsClosed` + `usageStatus: RESTRICTED`. Uploads and guest book stop; `list-event-photos` returns nothing and `media-url` signs nothing for anyone but an admin — the host included. **Nothing is deleted.** |
+| Reopen | Clears the takedown. Uploads stay closed; the host can reopen them |
+| Disable account | Cognito disable, by the event's owner sub. Does not close their other events |
+
+### Possible child sexual abuse material
+
+Do not download, copy, forward or screenshot it. Close the event (that
+preserves it) and report to NCMEC's CyberTipline at report.cybertip.org. US
+providers that obtain actual knowledge of apparent CSAM must report it
+(18 U.S.C. § 2258A) and preserve the report's contents. Do not delete the
+event or let storage reclamation remove it while a report is open — check with
+counsel on how long to hold it.
+
+### Known gaps: closing is not yet a full lock
+
+Closing blocks the host's per-photo deletes (`delete-event-photo` refuses on a
+closed event) and storage reclamation (`reclaimVerdict` returns
+`taken-down`). Two paths remain:
+
+- **The host can still delete the Event row itself.** The Event model grants
+  its owner `delete`, so `deleteMyEvent` reaches DynamoDB directly. Photos and
+  media survive, but the row tying them together does not. Closing this means
+  routing event deletion through a function that refuses a closed event.
+- **Media is still readable from S3 by key**, as below.
+
+
+Closing stops the app from **listing** and **signing** an event's media. The
+storage rules still let guests and hosts read `events/*` directly from S3 by
+key, and keys are long random ids already handed out to anyone who loaded the
+gallery. Someone who saved a key before the closure can still fetch that file
+until the objects are moved. Moving a closed event's objects to a private
+quarantine prefix (and out of R2) is the follow-up that closes this.

@@ -1383,6 +1383,60 @@ export async function setEventUsageStatus(
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
 }
 
+/**
+ * An admin has looked at an event in content review and it is fine.
+ *
+ * Records the flagged count at this moment, so only flags AFTER now can put
+ * it back in review, and clears the alert stamp so a new crossing emails
+ * again.
+ */
+export async function clearContentReview(eventId: string, flaggedCount: number): Promise<void> {
+  const { errors } = await getClient().models.Event.update(
+    {
+      id: eventId,
+      contentReviewClearedAt: new Date().toISOString(),
+      contentReviewClearedCount: Math.max(0, flaggedCount),
+      contentReviewAlertedAt: null,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/**
+ * Close an event for malicious, illegal or abusive content.
+ *
+ * Stops uploads and guest book entries (uploadsClosed), stops them coming
+ * back through the fair-use path (usageStatus RESTRICTED), and hides the
+ * gallery and its media from everyone but admins (takenDownAt, read by
+ * list-event-photos and media-url). Deletes nothing: content that may have
+ * to be reported is preserved, which is also why this is not the delete
+ * button.
+ */
+export async function takeDownEvent(eventId: string, note: string): Promise<void> {
+  const { errors } = await getClient().models.Event.update(
+    {
+      id: eventId,
+      takenDownAt: new Date().toISOString(),
+      takedownNote: note.trim().slice(0, 500) || null,
+      uploadsClosed: true,
+      usageStatus: 'RESTRICTED',
+      usageNote: 'Closed for content review',
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/** Undo a takedown made in error. Uploads stay closed; the host can reopen them. */
+export async function restoreTakenDownEvent(eventId: string): Promise<void> {
+  const { errors } = await getClient().models.Event.update(
+    { id: eventId, takenDownAt: null, takedownNote: null, usageStatus: null, usageNote: null },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
 export interface FeedbackRow {
   id: string;
   eventId: string;
@@ -1831,13 +1885,20 @@ export async function openBillingPortal(): Promise<string> {
   return data.url;
 }
 
-/** Global-admin action on a user account: reset password, or enable/disable. */
+/**
+ * Global-admin action on a user account: reset password, or enable/disable.
+ *
+ * `who` is an email, or `{ sub }` for an account known only by its Cognito id
+ * — which is all an event row carries about its host.
+ */
 export async function manageUser(
-  email: string,
+  who: string | { sub: string },
   action: 'resetPassword' | 'enable' | 'disable',
 ): Promise<string> {
+  const target =
+    typeof who === 'string' ? { email: who.trim().toLowerCase() } : { email: '', sub: who.sub.trim() };
   const { data, errors } = await getClient().mutations.manageUser(
-    { email: email.trim().toLowerCase(), action },
+    { ...target, action },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

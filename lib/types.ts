@@ -38,6 +38,14 @@ export interface QREvent {
   uploadWindowCount?: number | null;
   uploadWindowStartedAt?: string | null;
   usageStatus?: string | null;
+  /** Content review — see lib/contentReview.ts. */
+  flaggedCount?: number | null;
+  contentReviewAlertedAt?: string | null;
+  contentReviewClearedAt?: string | null;
+  contentReviewClearedCount?: number | null;
+  /** Closed by an admin for its content. Media is hidden, nothing is deleted. */
+  takenDownAt?: string | null;
+  takedownNote?: string | null;
   usageNote?: string | null;
   mediaReclaimedAt?: string | null;
   /** The host asked for more room, and whether an admin has granted it. */

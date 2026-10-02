@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 import { FAIR_USE_NOTICE } from '@/lib/fairUse';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'October 1, 2026';
+const LAST_UPDATED = 'October 2, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
@@ -110,8 +110,26 @@ export default function TermsPage() {
               </li>
             </ul>
             <p>
-              We may remove content or suspend access that we reasonably believe violates these
-              Terms, and hosts may moderate and remove content within their own events.
+              Hosts may moderate and remove content within their own events. Uploaded photos are
+              also screened automatically, and we may review any event, including one whose
+              content is repeatedly flagged.
+            </p>
+            <p>
+              <strong>
+                We may, at our discretion and without notice, remove content, close or remove an
+                event, and suspend or close an account
+              </strong>{' '}
+              if we reasonably believe it is being used for anything malicious, illegal or
+              abusive, or in breach of these Terms, or to protect guests, other users, the public
+              or the Service. A closed event stops accepting uploads and its gallery is no longer
+              available to the host or to guests. Where the closure results from a breach of these
+              Terms, no refund is due for that event.
+            </p>
+            <p>
+              We do not tolerate child sexual abuse material. Content we believe may be illegal is
+              preserved rather than deleted and may be reported to the National Center for Missing
+              &amp; Exploited Children (NCMEC), law enforcement, or other authorities as the law
+              requires or permits, together with information about the account and event involved.
             </p>
           </div>
 
@@ -208,7 +226,9 @@ export default function TermsPage() {
             <h2>9. Termination</h2>
             <p>
               You may stop using the Service and delete your events at any time. We may suspend or
-              terminate access if you violate these Terms or to protect the Service or its users.
+              terminate your access, and close or remove your events, as described in section 5 —
+              if you violate these Terms, if we reasonably believe your use is malicious, illegal or
+              abusive, or to protect the Service or its users.
               Sections that by their nature should survive termination (such as content licenses
               already exercised, disclaimers, and limitations of liability) will survive.
             </p>

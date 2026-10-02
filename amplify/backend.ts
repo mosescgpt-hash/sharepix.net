@@ -436,6 +436,11 @@ createFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.
 createFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
 // Optional: where host replies to an alert go, when the From is send-only.
 createFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
+// The content-review email goes to the operator, not the host: the report
+// recipient set on the dashboard, with REPORT_TO_ADDRESS as the fallback.
+settingTable.grantReadData(createFn);
+createFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
+createFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
 createFn.addToRolePolicy(
   new PolicyStatement({
     // The alert is raw MIME (preview inlined as multipart/related), and IAM
@@ -566,6 +571,9 @@ printFulfillFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCE
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
 photoTable.grantReadData(listFn);
 listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// Read-only, for one attribute: whether an admin closed the event.
+eventTable.grantReadData(listFn);
+listFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // Guest book write: reads the event to re-derive entitlement and state, bumps
 // the entry counter atomically, reads the Photo table to prove an attached
