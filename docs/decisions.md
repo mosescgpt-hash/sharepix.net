@@ -763,8 +763,13 @@ discretion for malicious, illegal or abusive use, without a refund where the
 closure follows a breach, and that illegal content is preserved and may be
 reported. The wording should be reviewed by counsel.
 
-Known gap: closing stops listing and signing, but objects stay readable from
-S3 by key until they are moved to a quarantine prefix. See docs/moderation.md.
+Closing is a full lock. The media moves to an admin-only `quarantine/` prefix
+(copy, then delete the original; R2 copies removed), so keys saved before the
+closure stop working, and quarantine sits outside the expiry rule. Hosts lost
+the model-level event delete in favour of a function that refuses a closed
+event, and photo deletes, the admin delete button and storage reclamation all
+refuse one too. To delete a closed event, an admin reopens it first. See
+docs/moderation.md.
 
 ## What has to exist first
 

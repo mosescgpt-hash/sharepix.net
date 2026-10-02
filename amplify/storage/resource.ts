@@ -38,5 +38,10 @@ export const storage = defineStorage({
     // backend.ts, so the "nobody gets S3 delete" rule in the README still holds
     // for every human principal.
     'demo/*': [allow.guest.to(['write']), allow.authenticated.to(['write'])],
+    // A closed event's media, moved here by event-takedown. Admins read it to
+    // review and report; nobody else can, and nobody writes or deletes here
+    // through the browser. Outside `events/`, so the upload trigger and the
+    // bucket's expiry rule leave it alone: preserved means preserved.
+    'quarantine/*': [allow.groups(['ADMINS']).to(['read'])],
   }),
 });

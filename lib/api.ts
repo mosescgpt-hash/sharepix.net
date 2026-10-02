@@ -240,11 +240,14 @@ export async function createNewEvent(input: {
 
 /** Delete one of the current host's own events (used to cancel an unpaid one). */
 export async function deleteMyEvent(eventId: string): Promise<void> {
-  const { errors } = await getClient().models.Event.delete(
-    { id: eventId },
+  // Through a function rather than a model delete: hosts no longer have
+  // `delete` on Event, so an event SharePix has closed can be refused.
+  const { data, errors } = await getClient().mutations.removeHostedEvent(
+    { eventId },
     { authMode: 'userPool' },
   );
-  if (errors?.length) throw new Error('The event could not be removed.');
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The event could not be removed.');
 }
 
 export async function validateDiscountCode(
@@ -1413,28 +1416,28 @@ export async function clearContentReview(eventId: string, flaggedCount: number):
  * to be reported is preserved, which is also why this is not the delete
  * button.
  */
-export async function takeDownEvent(eventId: string, note: string): Promise<void> {
-  const { errors } = await getClient().models.Event.update(
-    {
-      id: eventId,
-      takenDownAt: new Date().toISOString(),
-      takedownNote: note.trim().slice(0, 500) || null,
-      uploadsClosed: true,
-      usageStatus: 'RESTRICTED',
-      usageNote: 'Closed for content review',
-    },
+export async function takeDownEvent(eventId: string, note: string): Promise<string> {
+  // Server-side, because closing also MOVES the media: out of events/, which
+  // guests and hosts can read by key, into the admin-only quarantine prefix,
+  // and out of R2. See amplify/functions/event-takedown.
+  const { data, errors } = await getClient().mutations.setEventTakedown(
+    { eventId, closed: true, note: note.trim().slice(0, 500) || undefined },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The event could not be closed.');
+  return data.message ?? 'Closed.';
 }
 
 /** Undo a takedown made in error. Uploads stay closed; the host can reopen them. */
-export async function restoreTakenDownEvent(eventId: string): Promise<void> {
-  const { errors } = await getClient().models.Event.update(
-    { id: eventId, takenDownAt: null, takedownNote: null, usageStatus: null, usageNote: null },
+export async function restoreTakenDownEvent(eventId: string): Promise<string> {
+  const { data, errors } = await getClient().mutations.setEventTakedown(
+    { eventId, closed: false },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The event could not be reopened.');
+  return data.message ?? 'Reopened.';
 }
 
 export interface FeedbackRow {

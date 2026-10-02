@@ -297,22 +297,43 @@ providers that obtain actual knowledge of apparent CSAM must report it
 event or let storage reclamation remove it while a report is open — check with
 counsel on how long to hold it.
 
-### Known gaps: closing is not yet a full lock
+### What closing locks
 
-Closing blocks the host's per-photo deletes (`delete-event-photo` refuses on a
-closed event) and storage reclamation (`reclaimVerdict` returns
-`taken-down`). Two paths remain:
+Closing runs server-side in `event-takedown` (admin-only `setEventTakedown`):
 
-- **The host can still delete the Event row itself.** The Event model grants
-  its owner `delete`, so `deleteMyEvent` reaches DynamoDB directly. Photos and
-  media survive, but the row tying them together does not. Closing this means
-  routing event deletion through a function that refuses a closed event.
-- **Media is still readable from S3 by key**, as below.
+1. **The row first.** `takenDownAt`, `uploadsClosed`, `usageStatus:
+   RESTRICTED`. From this moment `list-event-photos` returns nothing and
+   `media-url` signs nothing for anyone but an admin, host included.
+2. **The media moves.** Every object under `events/<eventId>/` is copied to
+   `quarantine/events/<eventId>/…`, then the original is deleted. The copy
+   always comes first, so an object is never in neither place. Storage rules
+   give guests and hosts read on `events/*` only and give `quarantine/*` to
+   admins, read-only, so a key someone saved before the closure stops working.
+   The R2 copies are deleted. `quarantine/` sits outside the bucket's 90-day
+   expiry rule and the upload trigger, so preserved content is neither expired
+   nor reprocessed.
+3. **Photo rows are rewritten** to the quarantine keys, so admins can still
+   review the event from its dashboard (the gallery falls back to signed S3
+   reads, which admins are allowed under `quarantine/*`).
 
+It is idempotent and stops a minute before the Lambda's 15-minute limit. A
+very large event reports how far it got; pressing **Close event** again
+finishes the move. The event is hidden from the first moment either way.
 
-Closing stops the app from **listing** and **signing** an event's media. The
-storage rules still let guests and hosts read `events/*` directly from S3 by
-key, and keys are long random ids already handed out to anyone who loaded the
-gallery. Someone who saved a key before the closure can still fetch that file
-until the objects are moved. Moving a closed event's objects to a private
-quarantine prefix (and out of R2) is the follow-up that closes this.
+**Nothing can delete a closed event:**
+
+- Hosts no longer have `delete` on the Event model. They remove events through
+  `removeHostedEvent` (`delete-event`), which refuses a closed event.
+- `delete-event-photo` refuses photos of a closed event for everyone, admins
+  included.
+- The admin **Delete event** button refuses a closed event up front.
+- Storage reclamation skips it (`reclaimVerdict` → `taken-down`).
+
+To delete a closed event on purpose, **Reopen** it first. Reopening moves the
+media back (the upload trigger re-mirrors it to R2), rewrites the rows, and only
+then clears the takedown, so a partial reopen leaves the event closed. Uploads
+stay closed; the host can reopen them.
+
+Professional photos under `pro/<eventId>/` are not moved: no browser role can
+read `pro/` at all, and `media-url` already refuses to sign them on a closed
+event.

@@ -1255,7 +1255,7 @@ function GlobalAdminPage() {
       if (note === null) return;
       setWorking(`review-${ev.id}`);
       try {
-        await takeDownEvent(ev.id, note);
+        setReviewNote(await takeDownEvent(ev.id, note));
         patchEvent(ev.id, {
           takenDownAt: new Date().toISOString(),
           takedownNote: note,
@@ -1283,8 +1283,11 @@ function GlobalAdminPage() {
           contentReviewAlertedAt: null,
         });
       } else if (action === 'restore') {
-        await restoreTakenDownEvent(ev.id);
-        patchEvent(ev.id, { takenDownAt: null, takedownNote: null });
+        const message = await restoreTakenDownEvent(ev.id);
+        setReviewNote(message);
+        // A large event can need a second press; only clear it locally once
+        // the function says it has actually reopened.
+        if (message.startsWith('Reopened')) patchEvent(ev.id, { takenDownAt: null, takedownNote: null });
       } else if (action === 'suspend') {
         setReviewNote(await manageUser({ sub: hostSub }, 'disable'));
       }
@@ -1388,6 +1391,14 @@ function GlobalAdminPage() {
   }
 
   async function handleDeleteEvent(event: QREvent) {
+    // Preserved, not deletable: content that may have to be reported. Reopen
+    // it under Content review first if it really should go.
+    if (event.takenDownAt) {
+      window.alert(
+        `“${event.name}” was closed for its content and is being preserved. Reopen it under Content review first if it really should be deleted.`,
+      );
+      return;
+    }
     if (
       !window.confirm(
         `Permanently remove “${event.name}” and all of its photos? This cannot be undone.`,

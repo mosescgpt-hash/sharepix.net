@@ -1,5 +1,7 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
+import { deleteEvent as deleteEventFn } from '../functions/delete-event/resource';
+import { eventTakedown as eventTakedownFn } from '../functions/event-takedown/resource';
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
 import { createEvent as createEventFn } from '../functions/create-event/resource';
 import { updateEvent as updateEventFn } from '../functions/update-event/resource';
@@ -136,6 +138,11 @@ const schema = a.schema({
       // preserved, not destroyed. See docs/moderation.md.
       takenDownAt: a.datetime(),
       takedownNote: a.string(),
+      // Where the media move into the admin-only quarantine prefix has got
+      // to: 'moving' while event-takedown works, 'done' once every object and
+      // Photo row has moved. Absent on an open event.
+      quarantineState: a.string(),
+      quarantinedAt: a.datetime(),
       // Set when the media has actually been deleted at the end of the archive
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
@@ -311,8 +318,11 @@ const schema = a.schema({
     // but not the QR link can be sent to the right event. The lookup itself is
     // a Lambda, not a model query — see findEventByCode in amplify/functions.
     .secondaryIndexes((index) => [index('owner'), index('eventCode')])
+    // No owner `delete`. A host removes an event through removeHostedEvent,
+    // which refuses one SharePix has closed; a direct model delete would let
+    // the host of a closed event make the record of it disappear.
     .authorization((allow) => [
-      allow.ownerDefinedIn('owner').to(['get', 'list', 'delete']),
+      allow.ownerDefinedIn('owner').to(['get', 'list']),
       allow.group('ADMINS'),
       allow.authenticated().to(['get']),
       allow.guest().to(['get']),
@@ -2128,6 +2138,25 @@ const schema = a.schema({
 
   // Deletes a photo's S3 objects and record behind an ownership check, so S3
   // delete permission never has to be granted to every signed-in user.
+  // A host removing their own event. Replaces the owner `delete` on the
+  // Event model so a closed event can be refused. See delete-event.
+  removeHostedEvent: a
+    .mutation()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.authenticated(), allow.group('ADMINS')])
+    .handler(a.handler.function(deleteEventFn)),
+
+  // Admin-only: close an event for its content (closed: true) or reopen it.
+  // Moves its media into or out of the quarantine prefix, removes the R2
+  // copies, and rewrites the Photo rows. See event-takedown.
+  setEventTakedown: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), closed: a.boolean().required(), note: a.string() })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(eventTakedownFn)),
+
   deleteEventPhoto: a
     .mutation()
     .arguments({ photoId: a.id().required() })

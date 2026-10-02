@@ -131,9 +131,10 @@ export const handler: Handler = async (event) => {
   }
 
   // A closed event is preserved: content that may have to be reported must
-  // not be destroyable by the host whose event was closed for it. Only an
-  // admin can delete from one. A failed read refuses rather than allowing.
-  if (!isAdmin) {
+  // not be destroyable — by the host whose event was closed for it, or by an
+  // admin pressing delete without thinking. An admin reopens it first, on
+  // purpose. Its keys live under quarantine/ by then anyway.
+  {
     const eventId = item.eventId?.S ?? '';
     const ev = eventId
       ? await dynamo.send(

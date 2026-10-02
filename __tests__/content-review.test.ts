@@ -121,15 +121,16 @@ describe('closing an event', () => {
     expect(codeOnly(readSource('amplify/backend.ts'))).toContain('eventTable.grantReadData(listFn)');
   });
 
-  it('stops uploads and deletes nothing', () => {
+  it('stops uploads, and runs server-side so the media can be moved', () => {
     const api = readSource('lib/api.ts');
     const takeDown = api.slice(
       api.indexOf('export async function takeDownEvent'),
       api.indexOf('export async function restoreTakenDownEvent'),
     );
-    expect(takeDown).toContain('uploadsClosed: true');
-    expect(takeDown).toContain("usageStatus: 'RESTRICTED'");
-    expect(codeOnly(takeDown)).not.toMatch(/delete/i);
+    expect(takeDown).toContain('setEventTakedown');
+    const fn = codeOnly(readSource('amplify/functions/event-takedown/handler.ts'));
+    expect(fn).toContain('uploadsClosed = :true');
+    expect(fn).toContain("':restricted': { S: 'RESTRICTED' }");
   });
 
   it('tells the host, and only that', () => {

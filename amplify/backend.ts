@@ -25,6 +25,8 @@ import { auth } from './auth/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
+import { deleteEvent } from './functions/delete-event/resource';
+import { eventTakedown } from './functions/event-takedown/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
 import { createEvent } from './functions/create-event/resource';
 import { updateEvent } from './functions/update-event/resource';
@@ -77,6 +79,8 @@ const backend = defineBackend({
   data,
   storage,
   deleteEventPhoto,
+  deleteEvent,
+  eventTakedown,
   createEventPhoto,
   createEvent,
   updateEvent,
@@ -375,6 +379,28 @@ mediaUrlFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_K
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.
+// Host event removal: reads the row to check ownership and the takedown flag,
+// then deletes it. The Event model no longer grants owners `delete`.
+const deleteEventFn = backend.deleteEvent.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(deleteEventFn);
+deleteEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+
+// Close / reopen for content. Moves objects between events/ and quarantine/
+// (copy, then delete the source), drops the R2 copies on close, and rewrites
+// Photo rows' keys. Needs list, read, write and delete on the bucket.
+const takedownFn = backend.eventTakedown.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(takedownFn);
+photoTable.grantReadWriteData(takedownFn);
+bucket.grantReadWrite(takedownFn);
+bucket.grantDelete(takedownFn);
+takedownFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+takedownFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+takedownFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+takedownFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+takedownFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+takedownFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+takedownFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+
 const deleteFn = backend.deleteEventPhoto.resources.lambda as LambdaFunction;
 photoTable.grantReadWriteData(deleteFn);
 eventTable.grantReadWriteData(deleteFn);
