@@ -1440,6 +1440,43 @@ export async function restoreTakenDownEvent(eventId: string): Promise<string> {
   return data.message ?? 'Reopened.';
 }
 
+export interface UploadEvidenceRow {
+  photoId: string;
+  sourceIp: string | null;
+  callerId: string | null;
+  uploadedBy: string | null;
+  reasons: string | null;
+  recordedAt: string | null;
+}
+
+/**
+ * Who uploaded this event's flagged photos: address, identity and screening
+ * reasons. Admin-only by the model's authorization; written by
+ * createEventPhoto for flagged photos and nothing else.
+ */
+export async function listUploadEvidence(eventId: string): Promise<UploadEvidenceRow[]> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      getClient().models.UploadEvidence.list({
+        filter: { eventId: { eq: eventId } },
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'Uploader details could not be loaded.',
+  );
+  return rows
+    .map((row) => ({
+      photoId: row.photoId ?? row.id,
+      sourceIp: row.sourceIp ?? null,
+      callerId: row.callerId ?? null,
+      uploadedBy: row.uploadedBy ?? null,
+      reasons: row.reasons ?? null,
+      recordedAt: row.recordedAt ?? row.createdAt ?? null,
+    }))
+    .sort((a, b) => (a.recordedAt ?? '').localeCompare(b.recordedAt ?? ''));
+}
+
 export interface FeedbackRow {
   id: string;
   eventId: string;

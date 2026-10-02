@@ -76,6 +76,7 @@ import {
   needsContentReview,
 } from '@/lib/contentReview';
 import FreeEventsChart from '@/components/FreeEventsChart';
+import UploadEvidenceList from '@/components/UploadEvidenceList';
 import {
   DEFAULT_FREE_EVENTS_PER_DAY,
   MAX_FREE_EVENTS_PER_DAY,
@@ -3296,6 +3297,7 @@ function GlobalAdminPage() {
                                     ? ` · this account: ${account.flagged} flagged across ${account.events} events`
                                     : ''}
                                 </p>
+                                <UploadEvidenceList eventId={ev.id} />
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {button(ev, 'clear', 'Reviewed, fine')}
@@ -3327,6 +3329,7 @@ function GlobalAdminPage() {
                               {ev.takedownNote ? (
                                 <p className="truncate text-xs text-charcoal/65">{ev.takedownNote}</p>
                               ) : null}
+                              <UploadEvidenceList eventId={ev.id} />
                             </div>
                             {button(ev, 'restore', 'Reopen')}
                           </li>
