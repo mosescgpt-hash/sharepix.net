@@ -1,5 +1,5 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { Duration } from 'aws-cdk-lib';
+import { Duration, Stack } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -22,9 +22,12 @@ import {
   RetentionDays,
 } from 'aws-cdk-lib/aws-logs';
 import { auth } from './auth/resource';
+import { adminMfaGate } from './auth/admin-mfa-gate/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
+import { deleteEvent } from './functions/delete-event/resource';
+import { eventTakedown } from './functions/event-takedown/resource';
 import { createEventPhoto } from './functions/create-event-photo/resource';
 import { createEvent } from './functions/create-event/resource';
 import { updateEvent } from './functions/update-event/resource';
@@ -74,9 +77,12 @@ const backend = defineBackend({
   decideProPhoto,
   connectPhotographer,
   auth,
+  adminMfaGate,
   data,
   storage,
   deleteEventPhoto,
+  deleteEvent,
+  eventTakedown,
   createEventPhoto,
   createEvent,
   updateEvent,
@@ -375,6 +381,32 @@ mediaUrlFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_K
 
 // Delete function: remove the S3 objects + photo record and free a slot on the
 // event counter. It never needs broad S3 delete rights handed to every user.
+// Host event removal: reads the row to check ownership and the takedown flag,
+// then deletes it. The Event model no longer grants owners `delete`.
+const deleteEventFn = backend.deleteEvent.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(deleteEventFn);
+deleteEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+
+// Close / reopen for content. Moves objects between events/ and quarantine/
+// (copy, then delete the source), drops the R2 copies on close, and rewrites
+// Photo rows' keys. Needs list, read, write and delete on the bucket.
+const takedownFn = backend.eventTakedown.resources.lambda as LambdaFunction;
+// A host removing a closed or in-review event starts its quarantine move in
+// the background, so the button returns at once.
+takedownFn.grantInvoke(deleteEventFn);
+deleteEventFn.addEnvironment('TAKEDOWN_FUNCTION_NAME', takedownFn.functionName);
+eventTable.grantReadWriteData(takedownFn);
+photoTable.grantReadWriteData(takedownFn);
+bucket.grantReadWrite(takedownFn);
+bucket.grantDelete(takedownFn);
+takedownFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+takedownFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+takedownFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
+takedownFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
+takedownFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
+takedownFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
+takedownFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCESS_KEY ?? '');
+
 const deleteFn = backend.deleteEventPhoto.resources.lambda as LambdaFunction;
 photoTable.grantReadWriteData(deleteFn);
 eventTable.grantReadWriteData(deleteFn);
@@ -436,6 +468,16 @@ createFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.
 createFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
 // Optional: where host replies to an alert go, when the From is send-only.
 createFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
+// The content-review email goes to the operator, not the host: the report
+// recipient set on the dashboard, with REPORT_TO_ADDRESS as the fallback.
+settingTable.grantReadData(createFn);
+createFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
+// Who uploaded a FLAGGED photo (address, identity), admin-only, for
+// investigation. Write-only: this function never reads it back.
+const uploadEvidenceTable = backend.data.resources.tables.UploadEvidence;
+uploadEvidenceTable.grantWriteData(createFn);
+createFn.addEnvironment('UPLOAD_EVIDENCE_TABLE_NAME', uploadEvidenceTable.tableName);
+createFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
 createFn.addToRolePolicy(
   new PolicyStatement({
     // The alert is raw MIME (preview inlined as multipart/related), and IAM
@@ -566,6 +608,9 @@ printFulfillFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCE
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
 photoTable.grantReadData(listFn);
 listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// Read-only, for one attribute: whether an admin closed the event.
+eventTable.grantReadData(listFn);
+listFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // Guest book write: reads the event to re-derive entitlement and state, bumps
 // the entry counter atomically, reads the Photo table to prove an attached
@@ -605,6 +650,21 @@ momentListFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 // Admin user-actions function: reset passwords and enable/disable accounts in
 // the Cognito user pool. Scoped to just these admin operations on this pool.
 const userPool = backend.auth.resources.userPool;
+
+// The admin MFA gate (amplify/auth/admin-mfa-gate) reads a signing-in admin's
+// MFA settings. Scoped to user pools in this account and region rather than
+// to this pool's ARN: the pool references the trigger, so the trigger's policy
+// naming the pool would make each depend on the other.
+const mfaGateFn = backend.adminMfaGate.resources.lambda as LambdaFunction;
+{
+  const stack = Stack.of(mfaGateFn);
+  mfaGateFn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['cognito-idp:AdminGetUser'],
+      resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
+    }),
+  );
+}
 const adminFn = backend.adminUserActions.resources.lambda as LambdaFunction;
 adminFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 adminFn.addToRolePolicy(

@@ -37,7 +37,17 @@ const nextConfig = {
     ],
   },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      // The admin portal and its manifest: never indexed, archived or
+      // followed. A header as well as the page's meta tag, because the
+      // manifest has no markup to carry one. Deliberately NOT in robots.txt,
+      // which is public and would advertise the path. See pages/sp-hq.tsx.
+      ...['/sp-hq', '/hq.webmanifest'].map((source) => ({
+        source,
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' }],
+      })),
+    ];
   },
 };
 

@@ -205,3 +205,31 @@ The cheap mitigations, in the order they pay off:
 1. **Recovery codes for AWS and Stripe MFA**, printed and somewhere physical.
 2. **A second AWS account with admin**, so a lost phone is an inconvenience.
 3. **A password manager the accounts actually live in**, rather than a browser.
+
+## The admin portal (`/sp-hq`)
+
+A phone-sized operator console: content review with Fine / Close / Disable,
+today's free events against the limit, Corporate activity, the newest events,
+and a link to the full `/global-admin` dashboard.
+
+**Who gets in.** Email, password and a current authenticator code. Admin
+powers require an authenticator app: the `admin-mfa-gate` Cognito trigger
+(pre-token generation) issues tokens WITHOUT the `ADMINS` group to an admin
+who has no TOTP set up, so every admin-only API and page refuses them until
+they set one up on `/account-security` and sign in again. MFA stays optional
+for hosts. The trigger never throws; if its check fails it withholds the admin
+group and lets the sign-in through.
+
+**Set up an authenticator before deploying this.** An admin without TOTP loses
+admin access at their next sign-in.
+
+**Unlisted, not secret.** `noindex` in the page (outside the sign-in wrapper,
+so the signed-out page carries it) and in an `X-Robots-Tag` header, in no
+sitemap and no link, and deliberately absent from robots.txt (public; listing
+it would advertise it). The path can still be found in the site's build files;
+what a stranger gets there is a sign-in form.
+
+**Install it.** Open `https://www.sharepix.net/sp-hq` on the phone, then
+iPhone Safari: Share → Add to Home Screen. Android Chrome: menu → Install app.
+It installs as "SP Admin" from its own manifest (`/hq.webmanifest`), scoped to
+`/sp-hq`, and opens straight to the portal.

@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'September 5, 2026';
+const LAST_UPDATED = 'October 2, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
@@ -214,6 +214,19 @@ export default function PrivacyPage() {
               Hosts can delete their photos and events at any time. We may retain limited records
               (such as payment confirmations) as required for accounting, legal, or
               fraud-prevention purposes.
+            </p>
+            <p>
+              When our automated screening flags an uploaded photo as possibly explicit, we keep
+              the network (IP) address and account identifier it was uploaded from, so that we
+              can investigate abuse. We do not record this for other uploads. If we close an
+              event for violating our Terms, its content and these records are preserved rather
+              than deleted, and may be disclosed to law enforcement or other authorities where
+              the law requires or permits.
+            </p>
+            <p>
+              When a host removes an event, it is removed from their account. If that event is
+              under review, or has been closed, for possible violations of our Terms, its content
+              and records may be preserved for the same purposes rather than deleted.
             </p>
           </div>
 

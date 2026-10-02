@@ -130,6 +130,26 @@ export const handler: Handler = async (event) => {
     throw new Error('Only the event host can delete this photo.');
   }
 
+  // A closed event is preserved: content that may have to be reported must
+  // not be destroyable — by the host whose event was closed for it, or by an
+  // admin pressing delete without thinking. An admin reopens it first, on
+  // purpose. Its keys live under quarantine/ by then anyway.
+  {
+    const eventId = item.eventId?.S ?? '';
+    const ev = eventId
+      ? await dynamo.send(
+          new GetItemCommand({
+            TableName: EVENT_TABLE,
+            Key: { id: { S: eventId } },
+            ProjectionExpression: 'takenDownAt',
+          }),
+        )
+      : null;
+    if (ev?.Item?.takenDownAt?.S) {
+      throw new Error('This event has been closed by SharePix and its photos cannot be changed.');
+    }
+  }
+
   // All three, not two. The thumbnail used to be left behind entirely: it is
   // mirrored to R2 like the others and is a real object serving real bytes.
   const keys = [item.s3Key?.S, item.previewS3Key?.S, item.thumbS3Key?.S].filter(

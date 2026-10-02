@@ -15,6 +15,10 @@ export interface StatusFacts {
   uploadWindowEndsAt?: Date | null;
   /** When the gallery closes: the window plus the plan's retention. */
   galleryClosesAt?: Date | null;
+  /** Set when SharePix closed the event for its content. */
+  takenDownAt?: string | null;
+  /** Closed without telling the host why. */
+  takedownQuiet?: boolean | null;
 }
 
 export interface CorporateSeatFacts {
@@ -35,7 +39,8 @@ export type EventStatusNotice =
       priceUsd: number;
     }
   | { kind: 'trial'; tone: 'info'; title: string; body: string; upgradePriceUsd: number }
-  | { kind: 'corporate-seats'; tone: 'info' | 'warn'; title: string; body: string };
+  | { kind: 'corporate-seats'; tone: 'info' | 'warn'; title: string; body: string }
+  | { kind: 'taken-down'; tone: 'error'; title: string; body: string };
 
 function day(date: Date): string {
   return date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
@@ -48,6 +53,30 @@ export function eventStatusNotices(
   if (!facts) return [];
   const tier = (facts.tier ?? '').toLowerCase();
   const notices: EventStatusNotice[] = [];
+
+  // Closed by SharePix. Outranks everything else, and is the only notice: an
+  // offer to pay or upgrade beside it would read as a way to undo it.
+  if (facts.takenDownAt && facts.takedownQuiet) {
+    // Closed quietly: the same lock, and no reason given.
+    return [
+      {
+        kind: 'taken-down',
+        tone: 'error',
+        title: 'This event is unavailable',
+        body: 'Uploads are stopped and the gallery cannot be shown right now. If you need help, contact support@sharepix.net.',
+      },
+    ];
+  }
+  if (facts.takenDownAt) {
+    return [
+      {
+        kind: 'taken-down',
+        tone: 'error',
+        title: 'SharePix has closed this event',
+        body: 'It was closed under our terms of service for its content. Uploads are stopped and the gallery is not available to you or your guests. If you think this is a mistake, contact support@sharepix.net.',
+      },
+    ];
+  }
 
   // Waiting on payment. Before this, the dashboard looked exactly like a live
   // event's while every guest upload was refused — and a Corporate event past

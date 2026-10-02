@@ -255,3 +255,103 @@ and costs three small requests.
 
 Roughly **$1 per 1,000 images** (confirm current Rekognition pricing). A
 500-photo wedding is about **$0.50**.
+
+## Content review: when the operator looks, not just the host
+
+Screening holds a flagged photo for the **host**. That fails when the host is
+the problem, so flags are also counted per event (`flaggedCount`, written by
+`create-event-photo`) and an event goes in front of the **operator** when,
+since it was last cleared, it has:
+
+- **10 or more** flagged photos, or
+- **5 or more** flagged photos making up **20%+** of its uploads.
+
+The rule and its numbers live in `lib/contentReview.ts` (copied into
+`create-event-photo/contentReview.ts`, pinned by
+`__tests__/content-review.test.ts`).
+
+What happens:
+
+- The event appears under **Content review** on the global admin.
+- The first crossing sends **one** plain-text email to the report recipient
+  (the AppSetting the monthly report uses, `REPORT_TO_ADDRESS` as fallback).
+  It contains **no images and no media links**, on purpose.
+- **Nothing is closed automatically.** Screening only detects explicit adult
+  content and is wrong in both directions; a person decides.
+
+Actions on the dashboard:
+
+| Action | Effect |
+| --- | --- |
+| Reviewed, fine | Records the current flagged count; only new flags re-queue it, and a new crossing emails again |
+| Close event | `takenDownAt` + `uploadsClosed` + `usageStatus: RESTRICTED`. Uploads and guest book stop; `list-event-photos` returns nothing and `media-url` signs nothing for anyone but an admin — the host included. **Nothing is deleted.** |
+| Reopen | Clears the takedown. Uploads stay closed; the host can reopen them |
+| Disable account | Cognito disable, by the event's owner sub. Does not close their other events |
+
+### Who uploaded a flagged photo
+
+When screening flags a photo, `create-event-photo` writes an `UploadEvidence`
+row (id = photo id): the request's source IP, the caller's identity-pool id or
+user sub, the uploader label and the screening reasons. Ordinary uploads record
+no address anywhere. The table is admin-only and separate from the Photo row,
+which hosts can read.
+
+### Possible child sexual abuse material
+
+Do not download, copy, forward or screenshot it. Close the event (that
+preserves it) and report to NCMEC's CyberTipline at report.cybertip.org. US
+providers that obtain actual knowledge of apparent CSAM must report it
+(18 U.S.C. § 2258A) and preserve the report's contents. Do not delete the
+event or let storage reclamation remove it while a report is open — check with
+counsel on how long to hold it.
+
+### What closing locks
+
+Closing runs server-side in `event-takedown` (admin-only `setEventTakedown`):
+
+1. **The row first.** `takenDownAt`, `uploadsClosed`, `usageStatus:
+   RESTRICTED`. From this moment `list-event-photos` returns nothing and
+   `media-url` signs nothing for anyone but an admin, host included.
+2. **The media moves.** Every object under `events/<eventId>/` is copied to
+   `quarantine/events/<eventId>/…`, then the original is deleted. The copy
+   always comes first, so an object is never in neither place. Storage rules
+   give guests and hosts read on `events/*` only and give `quarantine/*` to
+   admins, read-only, so a key someone saved before the closure stops working.
+   The R2 copies are deleted. `quarantine/` sits outside the bucket's 90-day
+   expiry rule and the upload trigger, so preserved content is neither expired
+   nor reprocessed.
+3. **Photo rows are rewritten** to the quarantine keys, so admins can still
+   review the event from its dashboard (the gallery falls back to signed S3
+   reads, which admins are allowed under `quarantine/*`).
+
+It is idempotent and stops a minute before the Lambda's 15-minute limit. A
+very large event reports how far it got; pressing **Close event** again
+finishes the move. The event is hidden from the first moment either way.
+
+**Nothing can delete a closed event:**
+
+- Hosts no longer have `delete` on the Event model. They remove events through
+  `removeHostedEvent` (`delete-event`). An ordinary event is deleted exactly as
+  before. A closed event, or one over the content-review threshold, is
+  **removed from the host's account and preserved**: it is marked
+  `hostDeletedAt`, closed quietly if it was not already, and its media moved to
+  quarantine in the background. The host gets the same "removed" answer as
+  any other removal; the admin list labels it **Removed by host**. The privacy
+  policy discloses this.
+- `delete-event-photo` refuses photos of a closed event for everyone, admins
+  included.
+- The admin **Delete event** button refuses a closed event up front.
+- Storage reclamation skips it (`reclaimVerdict` → `taken-down`).
+
+To delete a closed event on purpose, **Reopen** it first. Reopening moves the
+media back (the upload trigger re-mirrors it to R2), rewrites the rows, and only
+then clears the takedown, so a partial reopen leaves the event closed. Uploads
+stay closed; the host can reopen them.
+
+**Closing quietly.** Close event asks whether to tell the host why. A quiet
+close (`takedownQuiet`) is the same lock; the host's dashboard says only "This
+event is unavailable", with no reason.
+
+Professional photos under `pro/<eventId>/` are not moved: no browser role can
+read `pro/` at all, and `media-url` already refuses to sign them on a closed
+event.

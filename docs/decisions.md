@@ -745,6 +745,32 @@ byte-for-byte into stripe-checkout and create-event; a test fails on a drifted
 copy or a price literal in a handler. The audit's $39 / $69 table is marked
 superseded.
 
+## 16. Content review, and the right to close an event
+
+**Decided and built.** Screening held explicit photos for the host to review,
+which protects nobody when the host is the problem. Flagged photos are now
+counted per event and an event crossing **10 flagged, or 20% of uploads once 5
+are flagged**, goes on a Content review list on the global admin and sends one
+email to the operator. Nothing closes automatically: screening is wrong often
+enough that a person must decide.
+
+An admin can mark it fine (only new flags re-queue it), **close** it, or
+disable the account. Closing hides the gallery and media from everyone but
+admins and **deletes nothing**, because content that may be illegal has to be
+preserved and, for CSAM, reported to NCMEC. The alert email carries no images
+for the same reason. The terms now say we may close events and accounts at our
+discretion for malicious, illegal or abusive use, without a refund where the
+closure follows a breach, and that illegal content is preserved and may be
+reported. The wording should be reviewed by counsel.
+
+Closing is a full lock. The media moves to an admin-only `quarantine/` prefix
+(copy, then delete the original; R2 copies removed), so keys saved before the
+closure stop working, and quarantine sits outside the expiry rule. Hosts lost
+the model-level event delete in favour of a function that refuses a closed
+event, and photo deletes, the admin delete button and storage reclamation all
+refuse one too. To delete a closed event, an admin reopens it first. See
+docs/moderation.md.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

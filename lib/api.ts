@@ -240,11 +240,14 @@ export async function createNewEvent(input: {
 
 /** Delete one of the current host's own events (used to cancel an unpaid one). */
 export async function deleteMyEvent(eventId: string): Promise<void> {
-  const { errors } = await getClient().models.Event.delete(
-    { id: eventId },
+  // Through a function rather than a model delete: hosts no longer have
+  // `delete` on Event, so an event SharePix has closed can be refused.
+  const { data, errors } = await getClient().mutations.removeHostedEvent(
+    { eventId },
     { authMode: 'userPool' },
   );
-  if (errors?.length) throw new Error('The event could not be removed.');
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The event could not be removed.');
 }
 
 export async function validateDiscountCode(
@@ -343,6 +346,9 @@ export async function listMyEvents(): Promise<QREvent[]> {
 
   return [...byId.values()]
     .filter((event) => ownerIsSubject(event.owner, user.userId))
+    // Removed by its host, and preserved because it was closed or in review:
+    // gone from their account, like any removed event.
+    .filter((event) => !event.hostDeletedAt)
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }
 
@@ -1383,6 +1389,101 @@ export async function setEventUsageStatus(
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
 }
 
+/**
+ * An admin has looked at an event in content review and it is fine.
+ *
+ * Records the flagged count at this moment, so only flags AFTER now can put
+ * it back in review, and clears the alert stamp so a new crossing emails
+ * again.
+ */
+export async function clearContentReview(eventId: string, flaggedCount: number): Promise<void> {
+  const { errors } = await getClient().models.Event.update(
+    {
+      id: eventId,
+      contentReviewClearedAt: new Date().toISOString(),
+      contentReviewClearedCount: Math.max(0, flaggedCount),
+      contentReviewAlertedAt: null,
+    },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+}
+
+/**
+ * Close an event for malicious, illegal or abusive content.
+ *
+ * Stops uploads and guest book entries (uploadsClosed), stops them coming
+ * back through the fair-use path (usageStatus RESTRICTED), and hides the
+ * gallery and its media from everyone but admins (takenDownAt, read by
+ * list-event-photos and media-url). Deletes nothing: content that may have
+ * to be reported is preserved, which is also why this is not the delete
+ * button.
+ */
+export async function takeDownEvent(
+  eventId: string,
+  note: string,
+  quiet = false,
+): Promise<string> {
+  // Server-side, because closing also MOVES the media: out of events/, which
+  // guests and hosts can read by key, into the admin-only quarantine prefix,
+  // and out of R2. See amplify/functions/event-takedown.
+  const { data, errors } = await getClient().mutations.setEventTakedown(
+    { eventId, closed: true, note: note.trim().slice(0, 500) || undefined, quiet },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The event could not be closed.');
+  return data.message ?? 'Closed.';
+}
+
+/** Undo a takedown made in error. Uploads stay closed; the host can reopen them. */
+export async function restoreTakenDownEvent(eventId: string): Promise<string> {
+  const { data, errors } = await getClient().mutations.setEventTakedown(
+    { eventId, closed: false },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (!data?.success) throw new Error(data?.message ?? 'The event could not be reopened.');
+  return data.message ?? 'Reopened.';
+}
+
+export interface UploadEvidenceRow {
+  photoId: string;
+  sourceIp: string | null;
+  callerId: string | null;
+  uploadedBy: string | null;
+  reasons: string | null;
+  recordedAt: string | null;
+}
+
+/**
+ * Who uploaded this event's flagged photos: address, identity and screening
+ * reasons. Admin-only by the model's authorization; written by
+ * createEventPhoto for flagged photos and nothing else.
+ */
+export async function listUploadEvidence(eventId: string): Promise<UploadEvidenceRow[]> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      getClient().models.UploadEvidence.list({
+        filter: { eventId: { eq: eventId } },
+        limit: LIST_PAGE_LIMIT,
+        nextToken,
+        authMode: 'userPool',
+      }),
+    'Uploader details could not be loaded.',
+  );
+  return rows
+    .map((row) => ({
+      photoId: row.photoId ?? row.id,
+      sourceIp: row.sourceIp ?? null,
+      callerId: row.callerId ?? null,
+      uploadedBy: row.uploadedBy ?? null,
+      reasons: row.reasons ?? null,
+      recordedAt: row.recordedAt ?? row.createdAt ?? null,
+    }))
+    .sort((a, b) => (a.recordedAt ?? '').localeCompare(b.recordedAt ?? ''));
+}
+
 export interface FeedbackRow {
   id: string;
   eventId: string;
@@ -1831,13 +1932,20 @@ export async function openBillingPortal(): Promise<string> {
   return data.url;
 }
 
-/** Global-admin action on a user account: reset password, or enable/disable. */
+/**
+ * Global-admin action on a user account: reset password, or enable/disable.
+ *
+ * `who` is an email, or `{ sub }` for an account known only by its Cognito id
+ * — which is all an event row carries about its host.
+ */
 export async function manageUser(
-  email: string,
+  who: string | { sub: string },
   action: 'resetPassword' | 'enable' | 'disable',
 ): Promise<string> {
+  const target =
+    typeof who === 'string' ? { email: who.trim().toLowerCase() } : { email: '', sub: who.sub.trim() };
   const { data, errors } = await getClient().mutations.manageUser(
-    { email: email.trim().toLowerCase(), action },
+    { ...target, action },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

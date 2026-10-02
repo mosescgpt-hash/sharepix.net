@@ -41,7 +41,9 @@ describe('the owner field', () => {
   it('is what the authorization rule names', () => {
     // The same field the rule reads and the index keys on. Two different names
     // here would mean an index that answers a question about somebody else.
-    expect(codeOnly(eventModel)).toContain("allow.ownerDefinedIn('owner').to(['get', 'list', 'delete'])");
+    // `delete` went to removeHostedEvent, which refuses an event SharePix has
+    // closed; the owner field and what it names are unchanged.
+    expect(codeOnly(eventModel)).toContain("allow.ownerDefinedIn('owner').to(['get', 'list'])");
   });
 
   it('grants hosts no create or update, as before', () => {

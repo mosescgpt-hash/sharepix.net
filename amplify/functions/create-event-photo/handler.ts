@@ -10,6 +10,12 @@ import {
 } from '@aws-sdk/client-rekognition';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import {
+  REVIEW_FLAGGED_COUNT,
+  REVIEW_FLAGGED_SHARE,
+  REVIEW_MIN_FLAGGED_FOR_SHARE,
+  needsContentReview,
+} from './contentReview';
 import { buildAlertEmail } from './alert-email';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
@@ -291,6 +297,169 @@ async function openReview(input: {
  * upload. A send failure leaves the photo hidden and reviewable in the
  * dashboard, which is the safe outcome.
  */
+/**
+ * Who gets the content-review email: the report recipient an admin set on the
+ * dashboard (AppSetting `monthly-report-recipient`), else REPORT_TO_ADDRESS.
+ * The same person the monthly report goes to, because the same person runs
+ * the platform; a second address to configure would be a second one left
+ * blank.
+ */
+async function operatorAddress(): Promise<string> {
+  const fallback = (process.env.REPORT_TO_ADDRESS ?? '').trim();
+  const table = process.env.SETTING_TABLE_NAME ?? '';
+  if (!table) return fallback;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: table,
+        Key: { id: { S: 'monthly-report-recipient' } },
+      }),
+    )
+    .catch(() => null);
+  return (found?.Item?.value?.S ?? '').trim() || fallback;
+}
+
+/**
+ * Count a flagged photo against its event, and tell the operator the first
+ * time the event crosses the review thresholds (lib/contentReview.ts).
+ *
+ * Best-effort throughout: the photo is already stored and already hidden by
+ * its own status, so nothing here may fail the upload.
+ *
+ * The email carries NO image and no link to one. If the content is illegal,
+ * copying it into an inbox is distributing it; the admin dashboard is where a
+ * person looks, signed in, on purpose. The once-only rule is a conditional
+ * write on `contentReviewAlertedAt`, so a burst of flagged uploads sends one
+ * message, not one per photo.
+ */
+/**
+ * Keep who uploaded a flagged photo, for investigation.
+ *
+ * Flagged photos only: an ordinary upload's address is recorded nowhere. Kept
+ * in its own admin-only table rather than on the Photo row, which the host can
+ * read. Best-effort, like everything else on this path.
+ */
+async function recordUploadEvidence(input: {
+  eventId: string;
+  photoId: string;
+  identity: unknown;
+  uploadedBy: string | undefined | null;
+  reasons: string[];
+}): Promise<void> {
+  const table = process.env.UPLOAD_EVIDENCE_TABLE_NAME ?? '';
+  if (!table) return;
+  const who = input.identity as
+    | { sub?: string; cognitoIdentityId?: string; sourceIp?: string[] }
+    | null
+    | undefined;
+  const now = new Date().toISOString();
+  const item: Record<string, AttributeValue> = {
+    id: { S: input.photoId },
+    __typename: { S: 'UploadEvidence' },
+    eventId: { S: input.eventId },
+    photoId: { S: input.photoId },
+    recordedAt: { S: now },
+    createdAt: { S: now },
+    updatedAt: { S: now },
+  };
+  const ip = (who?.sourceIp ?? []).filter(Boolean).join(', ');
+  if (ip) item.sourceIp = { S: ip.slice(0, 200) };
+  const callerId = who?.sub ?? who?.cognitoIdentityId ?? '';
+  if (callerId) item.callerId = { S: callerId };
+  if (input.uploadedBy) item.uploadedBy = { S: input.uploadedBy.slice(0, 200) };
+  if (input.reasons.length) item.reasons = { S: input.reasons.join(', ').slice(0, 500) };
+  await dynamo
+    .send(new PutItemCommand({ TableName: table, Item: item }))
+    .catch((error) =>
+      console.error('Could not record evidence for a flagged upload', {
+        eventId: input.eventId,
+        photoId: input.photoId,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+}
+
+async function recordFlagged(eventId: string, eventName: string): Promise<void> {
+  try {
+    const updated = await dynamo.send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: 'ADD flaggedCount :one',
+        ConditionExpression: 'attribute_exists(id)',
+        ExpressionAttributeValues: { ':one': { N: '1' } },
+        ReturnValues: 'ALL_NEW',
+      }),
+    );
+    const row = updated.Attributes ?? {};
+    const facts = {
+      flaggedCount: toInt(row.flaggedCount?.N) ?? 0,
+      photoCount: toInt(row.photoCount?.N) ?? 0,
+      contentReviewClearedCount: toInt(row.contentReviewClearedCount?.N) ?? 0,
+      takenDownAt: row.takenDownAt?.S ?? null,
+    };
+    if (!needsContentReview(facts) || row.contentReviewAlertedAt?.S) return;
+
+    // Claim the alert. Two uploads crossing the line together cannot both win.
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'SET contentReviewAlertedAt = :now',
+          ConditionExpression: 'attribute_not_exists(contentReviewAlertedAt)',
+          ExpressionAttributeValues: { ':now': { S: new Date().toISOString() } },
+        }),
+      );
+    } catch (error) {
+      if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
+      throw error;
+    }
+
+    const from = process.env.ALERT_FROM_ADDRESS;
+    const to = await operatorAddress();
+    if (!from || !to) {
+      console.warn('Event needs content review; no operator email configured', { eventId });
+      return;
+    }
+    const appUrl = process.env.APP_URL ?? 'https://www.sharepix.net';
+    const share = facts.photoCount > 0 ? Math.round((facts.flaggedCount / facts.photoCount) * 100) : 0;
+    const subject = `SharePix: an event needs content review (${facts.flaggedCount} flagged photos)`;
+    const text = [
+      'An event has crossed the content-review threshold.',
+      '',
+      `Event: ${eventName || '(unnamed)'}`,
+      `Event id: ${eventId}`,
+      `Flagged photos: ${facts.flaggedCount} of ${facts.photoCount} uploaded (${share}%)`,
+      '',
+      `The threshold is ${REVIEW_FLAGGED_COUNT} flagged photos, or ${Math.round(REVIEW_FLAGGED_SHARE * 100)}% of uploads once ${REVIEW_MIN_FLAGGED_FOR_SHARE} are flagged.`,
+      'Screening only detects explicit adult content and is often wrong; this is a prompt to look, not a finding.',
+      '',
+      `Review it, sign in first: ${appUrl}/global-admin#content-review`,
+      '',
+      'This message deliberately contains no images. If anything in the event could involve a minor, do not download or forward it: close the event from the dashboard (that preserves it) and report it to NCMEC at report.cybertip.org.',
+    ].join('\n');
+    await ses.send(
+      new SendEmailCommand({
+        FromEmailAddress: from,
+        Destination: { ToAddresses: [to] },
+        Content: {
+          Simple: {
+            Subject: { Data: subject },
+            Body: { Text: { Data: text } },
+          },
+        },
+      }),
+    );
+  } catch (error) {
+    console.error('Could not record a flagged photo against its event', {
+      at: new Date().toISOString(),
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 async function sendAlertEmail(input: {
   to: string;
   eventName: string;
@@ -927,6 +1096,14 @@ export const handler: Handler = async (event) => {
   // signing in. Only after the record exists, so the link always resolves.
   if (screening.status === 'flagged') {
     const eventName = ev.name?.S ?? '';
+    await recordUploadEvidence({
+      eventId,
+      photoId: id,
+      identity: event.identity,
+      uploadedBy,
+      reasons: screening.reasons,
+    });
+    await recordFlagged(eventId, eventName);
     const token = await openReview({
       photoId: id,
       eventId,

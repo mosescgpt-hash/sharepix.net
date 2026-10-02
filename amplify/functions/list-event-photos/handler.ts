@@ -1,10 +1,32 @@
-import { DynamoDBClient, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { isVisibleTo } from './visibility';
 
 const dynamo = new DynamoDBClient({});
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
+
+/**
+ * Whether an admin has closed this event for its content. Read on every call:
+ * one small GetItem, and the alternative is a closed event's gallery staying
+ * listable to anyone with its link. A failed read answers "not closed" — the
+ * same outcome as before closing existed — and media-url refuses to sign its
+ * files regardless.
+ */
+async function isTakenDown(eventId: string): Promise<boolean> {
+  if (!EVENT_TABLE) return false;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        ProjectionExpression: 'takenDownAt',
+      }),
+    )
+    .catch(() => null);
+  return Boolean(found?.Item?.takenDownAt?.S);
+}
 
 /**
  * The secondary index on Photo.eventId, as Amplify names it.
@@ -95,6 +117,9 @@ export const handler: Handler = async (event) => {
     sub?: string;
     groups?: string[] | null;
   } | null;
+
+  // A closed event lists nothing to anyone but an admin.
+  if (!(identity?.groups ?? []).includes('ADMINS') && (await isTakenDown(eventId))) return [];
 
   const items = await photosForEvent(eventId);
 

@@ -1,5 +1,7 @@
 import { a, defineData, type ClientSchema } from '@aws-amplify/backend';
 import { deleteEventPhoto as deleteEventPhotoFn } from '../functions/delete-event-photo/resource';
+import { deleteEvent as deleteEventFn } from '../functions/delete-event/resource';
+import { eventTakedown as eventTakedownFn } from '../functions/event-takedown/resource';
 import { createEventPhoto as createEventPhotoFn } from '../functions/create-event-photo/resource';
 import { createEvent as createEventFn } from '../functions/create-event/resource';
 import { updateEvent as updateEventFn } from '../functions/update-event/resource';
@@ -121,6 +123,32 @@ const schema = a.schema({
       // flagged, 'RESTRICTED' stops uploads on one they did not.
       usageStatus: a.string(),
       usageNote: a.string(),
+      // Content review (lib/contentReview.ts). flaggedCount is how many photos
+      // screening has flagged on this event, ever, counted by createEventPhoto.
+      // An admin clearing the event records the count at that moment, so only
+      // NEW flags can put it back in review; the alert stamp is what makes the
+      // operator email go out once per crossing.
+      flaggedCount: a.integer(),
+      contentReviewAlertedAt: a.datetime(),
+      contentReviewClearedAt: a.datetime(),
+      contentReviewClearedCount: a.integer(),
+      // Closed by an admin for malicious, illegal or abusive content. Uploads
+      // stop and nobody but an admin can see its media — the host included —
+      // but nothing is deleted: content that may have to be reported is
+      // preserved, not destroyed. See docs/moderation.md.
+      takenDownAt: a.datetime(),
+      takedownNote: a.string(),
+      // Where the media move into the admin-only quarantine prefix has got
+      // to: 'moving' while event-takedown works, 'done' once every object and
+      // Photo row has moved. Absent on an open event.
+      quarantineState: a.string(),
+      quarantinedAt: a.datetime(),
+      // Closed without telling the host why: they see "This event is
+      // unavailable" rather than "SharePix has closed this event".
+      takedownQuiet: a.boolean(),
+      // The host removed a closed or in-review event. It is gone from their
+      // account and preserved here; see delete-event.
+      hostDeletedAt: a.datetime(),
       // Set when the media has actually been deleted at the end of the archive
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
@@ -296,8 +324,11 @@ const schema = a.schema({
     // but not the QR link can be sent to the right event. The lookup itself is
     // a Lambda, not a model query — see findEventByCode in amplify/functions.
     .secondaryIndexes((index) => [index('owner'), index('eventCode')])
+    // No owner `delete`. A host removes an event through removeHostedEvent,
+    // which refuses one SharePix has closed; a direct model delete would let
+    // the host of a closed event make the record of it disappear.
     .authorization((allow) => [
-      allow.ownerDefinedIn('owner').to(['get', 'list', 'delete']),
+      allow.ownerDefinedIn('owner').to(['get', 'list']),
       allow.group('ADMINS'),
       allow.authenticated().to(['get']),
       allow.guest().to(['get']),
@@ -640,6 +671,28 @@ const schema = a.schema({
   // a limit on somebody, and anybody who could write or delete one could lift
   // it. Admins can read and delete, which is how a limit gets lifted on
   // purpose.
+  // Who uploaded a photo that screening flagged, as far as the request shows:
+  // the network address and the caller's identity. Written by
+  // createEventPhoto for FLAGGED photos only — an ordinary upload records no
+  // address anywhere — and kept for abuse investigation and law-enforcement
+  // requests (see the evidence export). The row id is the photo id.
+  //
+  // Admin-only, deliberately not on the Photo row: hosts read their own
+  // Photo rows, and a host has no business with their guests' IP addresses.
+  UploadEvidence: a
+    .model({
+      eventId: a.string(),
+      photoId: a.string(),
+      sourceIp: a.string(),
+      /** Identity-pool id for a guest, user-pool sub for a signed-in caller. */
+      callerId: a.string(),
+      uploadedBy: a.string(),
+      reasons: a.string(),
+      recordedAt: a.datetime(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   QuotaCounter: a
     .model({
       count: a.integer(),
@@ -1869,7 +1922,9 @@ const schema = a.schema({
   // Global-admin only: reset a user's password or enable/disable their account.
   manageUser: a
     .mutation()
-    .arguments({ email: a.string().required(), action: a.string().required() })
+    // `sub` finds an account by Cognito id when the email is not known — an
+    // event row carries its host's sub, not their address.
+    .arguments({ email: a.string(), sub: a.string(), action: a.string().required() })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(adminUserActionsFn)),
@@ -2111,6 +2166,31 @@ const schema = a.schema({
 
   // Deletes a photo's S3 objects and record behind an ownership check, so S3
   // delete permission never has to be granted to every signed-in user.
+  // A host removing their own event. Replaces the owner `delete` on the
+  // Event model so a closed event can be refused. See delete-event.
+  removeHostedEvent: a
+    .mutation()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.authenticated(), allow.group('ADMINS')])
+    .handler(a.handler.function(deleteEventFn)),
+
+  // Admin-only: close an event for its content (closed: true) or reopen it.
+  // Moves its media into or out of the quarantine prefix, removes the R2
+  // copies, and rewrites the Photo rows. See event-takedown.
+  setEventTakedown: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      closed: a.boolean().required(),
+      note: a.string(),
+      // Close without telling the host why. See takedownQuiet on Event.
+      quiet: a.boolean(),
+    })
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(eventTakedownFn)),
+
   deleteEventPhoto: a
     .mutation()
     .arguments({ photoId: a.id().required() })

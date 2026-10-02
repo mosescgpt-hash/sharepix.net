@@ -69,6 +69,11 @@ export interface ReclaimFacts {
   uploadWindowEndsAt?: string | null;
   /** Set once the media has actually been removed. Stops a second pass. */
   mediaReclaimedAt?: string | null;
+  /**
+   * Closed by an admin for its content. Never reclaimed: content that may have
+   * to be reported is preserved until a person decides otherwise.
+   */
+  takenDownAt?: string | null;
 }
 
 export type ReclaimVerdict =
@@ -76,7 +81,13 @@ export type ReclaimVerdict =
   | {
       reclaim: false;
       deleteAfter: Date | null;
-      reason: 'no-window-date' | 'unparseable-date' | 'not-yet' | 'already-reclaimed' | 'no-event';
+      reason:
+        | 'no-window-date'
+        | 'unparseable-date'
+        | 'not-yet'
+        | 'already-reclaimed'
+        | 'no-event'
+        | 'taken-down';
     };
 
 /**
@@ -108,6 +119,9 @@ export function reclaimVerdict(
   if (!event) return { reclaim: false, deleteAfter: null, reason: 'no-event' };
   if (event.mediaReclaimedAt) {
     return { reclaim: false, deleteAfter: null, reason: 'already-reclaimed' };
+  }
+  if (event.takenDownAt) {
+    return { reclaim: false, deleteAfter: null, reason: 'taken-down' };
   }
 
   // The two refusals that matter most. An event with no anchor is not old — it

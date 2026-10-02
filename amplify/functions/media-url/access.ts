@@ -120,6 +120,12 @@ export interface EventState {
   guestDownloadsBlocked?: boolean;
   /** What guests may currently see: full, small, or nothing. */
   guestResolution: 'full' | 'small' | 'none';
+  /**
+   * Closed by an admin for malicious, illegal or abusive content. Nothing is
+   * signed for anyone but an admin — the host included, since the host may be
+   * the reason it was closed.
+   */
+  takenDown?: boolean;
 }
 
 export function isHostOrAdmin(caller: Caller | null | undefined, owner: string): boolean {
@@ -174,6 +180,10 @@ export function canSign({
   // either. It exists so the processor can read it once, and the processor
   // reads it with its own IAM grant rather than through this function.
   if (variant === 'pro-original') return refuse;
+
+  // Checked before the host branch: on a closed event only an admin, who has
+  // to be able to review and report it, gets anything at all.
+  if (event.takenDown === true && !(caller?.groups ?? []).includes('ADMINS')) return refuse;
 
   const host = isHostOrAdmin(caller, event.owner);
   if (host) return { allowed: true, host: true };

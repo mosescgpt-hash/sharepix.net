@@ -105,6 +105,7 @@ interface EventRow {
   tier: string;
   uploadWindowEndsAt: string | null;
   mediaReclaimedAt: string | null;
+  takenDownAt: string | null;
 }
 
 async function* allEvents(): AsyncGenerator<EventRow> {
@@ -114,7 +115,7 @@ async function* allEvents(): AsyncGenerator<EventRow> {
       new ScanCommand({
         TableName: EVENT_TABLE,
         ExclusiveStartKey: startKey,
-        ProjectionExpression: '#id, tier, uploadWindowEndsAt, mediaReclaimedAt',
+        ProjectionExpression: '#id, tier, uploadWindowEndsAt, mediaReclaimedAt, takenDownAt',
         // `id` is safest aliased.
         ExpressionAttributeNames: { '#id': 'id' },
       }),
@@ -125,6 +126,7 @@ async function* allEvents(): AsyncGenerator<EventRow> {
         tier: item.tier?.S ?? '',
         uploadWindowEndsAt: item.uploadWindowEndsAt?.S ?? null,
         mediaReclaimedAt: item.mediaReclaimedAt?.S ?? null,
+        takenDownAt: item.takenDownAt?.S ?? null,
       };
     }
     startKey = page.LastEvaluatedKey;

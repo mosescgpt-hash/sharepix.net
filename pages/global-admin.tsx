@@ -12,6 +12,9 @@ import {
   type SavedFinancialReport,
   clearFreeEventClaim,
   clearQuotaCounter,
+  clearContentReview,
+  takeDownEvent,
+  restoreTakenDownEvent,
   listQuotaCounters,
   createDiscountCode,
   deleteDiscountCode,
@@ -64,7 +67,16 @@ import {
 } from '@/lib/costs';
 import { EVENT_THEMES, themeKeyForEvent, themeLabel } from '@/lib/eventTheme';
 import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS, getTier } from '@/lib/pricing';
+import {
+  REVIEW_FLAGGED_COUNT,
+  REVIEW_FLAGGED_SHARE,
+  REVIEW_MIN_FLAGGED_FOR_SHARE,
+  flaggedShare,
+  flaggedSinceCleared,
+  needsContentReview,
+} from '@/lib/contentReview';
 import FreeEventsChart from '@/components/FreeEventsChart';
+import UploadEvidenceList from '@/components/UploadEvidenceList';
 import {
   DEFAULT_FREE_EVENTS_PER_DAY,
   MAX_FREE_EVENTS_PER_DAY,
@@ -178,6 +190,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'jobs', label: 'Scheduled jobs', tab: 'tests' },
   { id: 'rewards', label: 'Research rewards', tab: 'events' },
   { id: 'free-claims', label: 'Free event claims', tab: 'events' },
+  { id: 'content-review', label: 'Content review', tab: 'events' },
   { id: 'limits', label: 'Limits', tab: 'events' },
   { id: 'print-check', label: 'Print check', tab: 'tests' },
   { id: 'alert-check', label: 'Alert email check', tab: 'tests' },
@@ -289,6 +302,8 @@ function GlobalAdminPage() {
   // guest book counters. null while loading, like the claims above.
   const [quotas, setQuotas] = useState<QuotaCounterRow[] | null>(null);
   const [quotasError, setQuotasError] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewNote, setReviewNote] = useState<string | null>(null);
   // The daily free-event limit as saved in AppSetting ('' = never saved), and
   // what is in the box.
   const [freeLimitSaved, setFreeLimitSaved] = useState('');
@@ -1219,6 +1234,74 @@ function GlobalAdminPage() {
     }
   }
 
+  /** Patch one event in the loaded list, so an action shows without a reload. */
+  function patchEvent(eventId: string, changes: Partial<QREvent>) {
+    setEvents((current) => current.map((e) => (e.id === eventId ? { ...e, ...changes } : e)));
+  }
+
+  async function handleReviewAction(
+    ev: QREvent,
+    action: 'clear' | 'close' | 'restore' | 'suspend',
+  ) {
+    setReviewError(null);
+    setReviewNote(null);
+    const hostSub = (ev.owner ?? '').split('::')[0];
+    if (action === 'clear') {
+      if (!window.confirm(`Mark “${ev.name}” as reviewed and fine?\n\nOnly new flags from here on can put it back in review.`)) return;
+    } else if (action === 'close') {
+      const note = window.prompt(
+        `Close “${ev.name}”?\n\nUploads stop and nobody but an admin can see its photos — the host included. Nothing is deleted.\n\nReason (kept on the event, not shown to the host):`,
+        '',
+      );
+      if (note === null) return;
+      const quiet = !window.confirm(
+        'Tell the host why?\n\nOK: the host sees “SharePix has closed this event”.\nCancel: close quietly — the host only sees “This event is unavailable”, with no reason.',
+      );
+      setWorking(`review-${ev.id}`);
+      try {
+        setReviewNote(await takeDownEvent(ev.id, note, quiet));
+        patchEvent(ev.id, {
+          takenDownAt: new Date().toISOString(),
+          takedownNote: note,
+          uploadsClosed: true,
+        });
+      } catch (err) {
+        setReviewError(err instanceof Error ? err.message : 'The event could not be closed.');
+      } finally {
+        setWorking(null);
+      }
+      return;
+    } else if (action === 'restore') {
+      if (!window.confirm(`Reopen “${ev.name}” to its host and guests?\n\nUploads stay closed; the host can reopen them.`)) return;
+    } else if (action === 'suspend') {
+      if (!hostSub) return;
+      if (!window.confirm(`Disable the account that owns “${ev.name}”?\n\nThey cannot sign in or create events until you re-enable them under Users. Their events are not closed by this — close those separately.`)) return;
+    }
+    setWorking(`review-${ev.id}`);
+    try {
+      if (action === 'clear') {
+        await clearContentReview(ev.id, ev.flaggedCount ?? 0);
+        patchEvent(ev.id, {
+          contentReviewClearedAt: new Date().toISOString(),
+          contentReviewClearedCount: ev.flaggedCount ?? 0,
+          contentReviewAlertedAt: null,
+        });
+      } else if (action === 'restore') {
+        const message = await restoreTakenDownEvent(ev.id);
+        setReviewNote(message);
+        // A large event can need a second press; only clear it locally once
+        // the function says it has actually reopened.
+        if (message.startsWith('Reopened')) patchEvent(ev.id, { takenDownAt: null, takedownNote: null });
+      } else if (action === 'suspend') {
+        setReviewNote(await manageUser({ sub: hostSub }, 'disable'));
+      }
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : 'That could not be done.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
   async function handleClearQuota(id: string, what: string) {
     if (!window.confirm(`${what}\n\n${id}\n\nThis takes effect immediately.`)) return;
     setWorking(`quota-${id}`);
@@ -1312,6 +1395,14 @@ function GlobalAdminPage() {
   }
 
   async function handleDeleteEvent(event: QREvent) {
+    // Preserved, not deletable: content that may have to be reported. Reopen
+    // it under Content review first if it really should go.
+    if (event.takenDownAt) {
+      window.alert(
+        `“${event.name}” was closed for its content and is being preserved. Reopen it under Content review first if it really should be deleted.`,
+      );
+      return;
+    }
     if (
       !window.confirm(
         `Permanently remove “${event.name}” and all of its photos? This cannot be undone.`,
@@ -3118,6 +3209,145 @@ function GlobalAdminPage() {
                   })}
                 </ul>
               )}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
+              <h2 id="content-review" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Content review</h2>
+              <p className="text-sm text-charcoal/70">
+                Events whose photos screening keeps flagging: {REVIEW_FLAGGED_COUNT} or more
+                flagged, or {Math.round(REVIEW_FLAGGED_SHARE * 100)}% of uploads once{' '}
+                {REVIEW_MIN_FLAGGED_FOR_SHARE} are flagged. Screening only looks for explicit adult
+                content and is often wrong — a boudoir shoot trips it honestly — so this is a
+                list to look at, and nothing on it is closed automatically.
+              </p>
+              <Notice tone="warn" label="" className="mt-3">
+                If anything could involve a minor, do not download, copy or forward it. Close the
+                event here (that preserves it, and hides it from everyone but admins) and report it
+                to NCMEC at{' '}
+                <a href="https://report.cybertip.org" className="underline" target="_blank" rel="noopener noreferrer">
+                  report.cybertip.org
+                </a>
+                . US providers who learn of it are required to report it.
+              </Notice>
+              {reviewError ? (
+                <Notice tone="error" className="mt-3">
+                  {reviewError}
+                </Notice>
+              ) : null}
+              {reviewNote ? (
+                <Notice tone="success" className="mt-3">
+                  {reviewNote}
+                </Notice>
+              ) : null}
+              {(() => {
+                const queue = events
+                  .filter((e) => needsContentReview(e))
+                  .sort((a, b) => flaggedSinceCleared(b) - flaggedSinceCleared(a));
+                const closed = events.filter((e) => e.takenDownAt);
+                // Per account: every event a host owns, so one event that looks
+                // fine can be seen next to three that do not.
+                const byOwner = new Map<string, { flagged: number; events: number }>();
+                for (const e of events) {
+                  const sub = (e.owner ?? '').split('::')[0];
+                  if (!sub || !(e.flaggedCount ?? 0)) continue;
+                  const agg = byOwner.get(sub) ?? { flagged: 0, events: 0 };
+                  agg.flagged += e.flaggedCount ?? 0;
+                  agg.events += 1;
+                  byOwner.set(sub, agg);
+                }
+                const button = (ev: QREvent, action: 'clear' | 'close' | 'restore' | 'suspend', label: string, danger = false) => (
+                  <button
+                    type="button"
+                    disabled={working === `review-${ev.id}`}
+                    onClick={() => void handleReviewAction(ev, action)}
+                    className={`shrink-0 border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
+                      danger
+                        ? 'border-red-300 text-red-800 hover:border-red-600'
+                        : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+                return (
+                  <>
+                    <h3 className="mt-5 font-sans text-base font-semibold">
+                      Needs review ({queue.length})
+                    </h3>
+                    {queue.length === 0 ? (
+                      <p className="mt-2 text-sm text-charcoal/55">No event is over the threshold.</p>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                        {queue.map((ev) => {
+                          const sub = (ev.owner ?? '').split('::')[0];
+                          const account = byOwner.get(sub);
+                          return (
+                            <li key={ev.id} className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-charcoal">
+                                  <Link href={`/event/${ev.id}/admin`} className="underline">
+                                    {ev.name}
+                                  </Link>{' '}
+                                  · {ev.createdBy ?? 'Host'}
+                                </p>
+                                <p className="text-xs text-charcoal/65">
+                                  {ev.flaggedCount ?? 0} flagged of {ev.photoCount ?? 0} photos (
+                                  {Math.round(flaggedShare(ev) * 100)}%)
+                                  {ev.contentReviewClearedCount
+                                    ? ` · ${flaggedSinceCleared(ev)} new since last cleared`
+                                    : ''}
+                                  {account && account.events > 1
+                                    ? ` · this account: ${account.flagged} flagged across ${account.events} events`
+                                    : ''}
+                                </p>
+                                <UploadEvidenceList eventId={ev.id} />
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {button(ev, 'clear', 'Reviewed, fine')}
+                                {button(ev, 'close', 'Close event', true)}
+                                {button(ev, 'suspend', 'Disable account', true)}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    <h3 className="mt-6 font-sans text-base font-semibold">
+                      Closed for content ({closed.length})
+                    </h3>
+                    {closed.length === 0 ? (
+                      <p className="mt-2 text-sm text-charcoal/55">No event has been closed.</p>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                        {closed.map((ev) => (
+                          <li key={ev.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm text-charcoal">
+                                <Link href={`/event/${ev.id}/admin`} className="underline">
+                                  {ev.name}
+                                </Link>{' '}
+                                · closed {new Date(ev.takenDownAt as string).toLocaleDateString()}
+                                {ev.takedownQuiet ? ' · quietly' : ''}
+                                {ev.hostDeletedAt ? (
+                                  <span className="ml-2 border border-red-300 px-1.5 py-0.5 text-xs font-medium text-red-800">
+                                    Removed by host {new Date(ev.hostDeletedAt).toLocaleDateString()}
+                                  </span>
+                                ) : null}
+                              </p>
+                              {ev.takedownNote ? (
+                                <p className="truncate text-xs text-charcoal/65">{ev.takedownNote}</p>
+                              ) : null}
+                              <UploadEvidenceList eventId={ev.id} />
+                            </div>
+                            {button(ev, 'restore', 'Reopen')}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
