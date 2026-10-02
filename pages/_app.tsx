@@ -45,8 +45,10 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="application-name" content="sharepix.net" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="sharepix.net" />
-        <link rel="manifest" href="/manifest.webmanifest" />
+        {/* Keyed so one page can replace them: the admin portal installs as
+            its own app, with its own manifest and home-screen name. */}
+        <meta key="apple-title" name="apple-mobile-web-app-title" content="sharepix.net" />
+        <link key="manifest" rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </Head>
       {/* Cloudflare Web Analytics.

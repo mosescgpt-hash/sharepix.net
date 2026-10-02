@@ -1,4 +1,5 @@
 import { defineAuth } from '@aws-amplify/backend';
+import { adminMfaGate } from './admin-mfa-gate/resource';
 
 /**
  * Host sign-in via email (Gen 2 standard).
@@ -19,4 +20,9 @@ export const auth = defineAuth({
     totp: true,
   },
   groups: ['ADMINS'],
+  // Admin powers require an authenticator app: an ADMINS member without TOTP
+  // gets tokens without the ADMINS group. MFA stays optional for hosts.
+  triggers: {
+    preTokenGeneration: adminMfaGate,
+  },
 });

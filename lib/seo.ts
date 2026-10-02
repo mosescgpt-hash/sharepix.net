@@ -149,7 +149,19 @@ export const PRIVATE_ROUTES = [
   '/share/[shareId]',
   '/survey/[link]',
   '/unsubscribe',
+  // Unlisted: see UNLISTED_ROUTES.
+  '/sp-hq',
 ] as const;
+
+/**
+ * Private routes deliberately left OUT of robots.txt.
+ *
+ * robots.txt is public, so a Disallow line is a signpost to anyone reading it.
+ * For the admin portal that is the wrong trade: it is kept out of indexes by
+ * its noindex meta tag and X-Robots-Tag header, appears in no sitemap and no
+ * link, and a crawler that fetches it anyway gets a sign-in form.
+ */
+export const UNLISTED_ROUTES = ['/sp-hq'] as const;
 
 const INDEXABLE = new Set<string>(INDEXABLE_ROUTES);
 

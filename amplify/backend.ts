@@ -1,5 +1,5 @@
 import { defineBackend } from '@aws-amplify/backend';
-import { Duration } from 'aws-cdk-lib';
+import { Duration, Stack } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -22,6 +22,7 @@ import {
   RetentionDays,
 } from 'aws-cdk-lib/aws-logs';
 import { auth } from './auth/resource';
+import { adminMfaGate } from './auth/admin-mfa-gate/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
@@ -76,6 +77,7 @@ const backend = defineBackend({
   decideProPhoto,
   connectPhotographer,
   auth,
+  adminMfaGate,
   data,
   storage,
   deleteEventPhoto,
@@ -648,6 +650,21 @@ momentListFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 // Admin user-actions function: reset passwords and enable/disable accounts in
 // the Cognito user pool. Scoped to just these admin operations on this pool.
 const userPool = backend.auth.resources.userPool;
+
+// The admin MFA gate (amplify/auth/admin-mfa-gate) reads a signing-in admin's
+// MFA settings. Scoped to user pools in this account and region rather than
+// to this pool's ARN: the pool references the trigger, so the trigger's policy
+// naming the pool would make each depend on the other.
+const mfaGateFn = backend.adminMfaGate.resources.lambda as LambdaFunction;
+{
+  const stack = Stack.of(mfaGateFn);
+  mfaGateFn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['cognito-idp:AdminGetUser'],
+      resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
+    }),
+  );
+}
 const adminFn = backend.adminUserActions.resources.lambda as LambdaFunction;
 adminFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 adminFn.addToRolePolicy(

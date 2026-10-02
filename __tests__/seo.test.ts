@@ -7,6 +7,7 @@ import {
   INDEXABLE_ROUTES,
   OG_IMAGE_PATH,
   PRIVATE_ROUTES,
+  UNLISTED_ROUTES,
   ROUTE_DESCRIPTIONS,
   SITE_ORIGIN,
   canonicalUrl,
@@ -138,11 +139,23 @@ describe('nothing private is indexable', () => {
     expect({ gated }).toEqual({ gated: [] });
   });
 
-  it('covers every private route with a disallow prefix', () => {
+  it('covers every private route with a disallow prefix, except the unlisted ones', () => {
+    const unlisted = new Set<string>(UNLISTED_ROUTES);
     const uncovered = PRIVATE_ROUTES.filter(
-      (route) => !DISALLOWED_PREFIXES.some((prefix) => route.startsWith(prefix)),
+      (route) =>
+        !unlisted.has(route) && !DISALLOWED_PREFIXES.some((prefix) => route.startsWith(prefix)),
     );
     expect({ uncovered }).toEqual({ uncovered: [] });
+  });
+
+  it('never names an unlisted route in robots.txt, which is public', () => {
+    // An unlisted route is private AND not advertised: a Disallow line would
+    // point straight at it.
+    for (const route of UNLISTED_ROUTES) {
+      expect((PRIVATE_ROUTES as readonly string[]).includes(route)).toBe(true);
+      expect(DISALLOWED_PREFIXES.some((prefix) => route.startsWith(prefix))).toBe(false);
+      expect(readFileSync(join(__dirname, '..', 'public', 'robots.txt'), 'utf8')).not.toContain(route);
+    }
   });
 
   it('disallows no prefix that would swallow an indexable route', () => {
