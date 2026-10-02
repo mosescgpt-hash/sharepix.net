@@ -332,6 +332,53 @@ async function operatorAddress(): Promise<string> {
  * write on `contentReviewAlertedAt`, so a burst of flagged uploads sends one
  * message, not one per photo.
  */
+/**
+ * Keep who uploaded a flagged photo, for investigation.
+ *
+ * Flagged photos only: an ordinary upload's address is recorded nowhere. Kept
+ * in its own admin-only table rather than on the Photo row, which the host can
+ * read. Best-effort, like everything else on this path.
+ */
+async function recordUploadEvidence(input: {
+  eventId: string;
+  photoId: string;
+  identity: unknown;
+  uploadedBy: string | undefined | null;
+  reasons: string[];
+}): Promise<void> {
+  const table = process.env.UPLOAD_EVIDENCE_TABLE_NAME ?? '';
+  if (!table) return;
+  const who = input.identity as
+    | { sub?: string; cognitoIdentityId?: string; sourceIp?: string[] }
+    | null
+    | undefined;
+  const now = new Date().toISOString();
+  const item: Record<string, AttributeValue> = {
+    id: { S: input.photoId },
+    __typename: { S: 'UploadEvidence' },
+    eventId: { S: input.eventId },
+    photoId: { S: input.photoId },
+    recordedAt: { S: now },
+    createdAt: { S: now },
+    updatedAt: { S: now },
+  };
+  const ip = (who?.sourceIp ?? []).filter(Boolean).join(', ');
+  if (ip) item.sourceIp = { S: ip.slice(0, 200) };
+  const callerId = who?.sub ?? who?.cognitoIdentityId ?? '';
+  if (callerId) item.callerId = { S: callerId };
+  if (input.uploadedBy) item.uploadedBy = { S: input.uploadedBy.slice(0, 200) };
+  if (input.reasons.length) item.reasons = { S: input.reasons.join(', ').slice(0, 500) };
+  await dynamo
+    .send(new PutItemCommand({ TableName: table, Item: item }))
+    .catch((error) =>
+      console.error('Could not record evidence for a flagged upload', {
+        eventId: input.eventId,
+        photoId: input.photoId,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+}
+
 async function recordFlagged(eventId: string, eventName: string): Promise<void> {
   try {
     const updated = await dynamo.send(
@@ -1049,6 +1096,13 @@ export const handler: Handler = async (event) => {
   // signing in. Only after the record exists, so the link always resolves.
   if (screening.status === 'flagged') {
     const eventName = ev.name?.S ?? '';
+    await recordUploadEvidence({
+      eventId,
+      photoId: id,
+      identity: event.identity,
+      uploadedBy,
+      reasons: screening.reasons,
+    });
     await recordFlagged(eventId, eventName);
     const token = await openReview({
       photoId: id,

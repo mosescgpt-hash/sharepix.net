@@ -288,6 +288,14 @@ Actions on the dashboard:
 | Reopen | Clears the takedown. Uploads stay closed; the host can reopen them |
 | Disable account | Cognito disable, by the event's owner sub. Does not close their other events |
 
+### Who uploaded a flagged photo
+
+When screening flags a photo, `create-event-photo` writes an `UploadEvidence`
+row (id = photo id): the request's source IP, the caller's identity-pool id or
+user sub, the uploader label and the screening reasons. Ordinary uploads record
+no address anywhere. The table is admin-only and separate from the Photo row,
+which hosts can read.
+
 ### Possible child sexual abuse material
 
 Do not download, copy, forward or screenshot it. Close the event (that

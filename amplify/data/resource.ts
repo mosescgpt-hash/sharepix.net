@@ -665,6 +665,28 @@ const schema = a.schema({
   // a limit on somebody, and anybody who could write or delete one could lift
   // it. Admins can read and delete, which is how a limit gets lifted on
   // purpose.
+  // Who uploaded a photo that screening flagged, as far as the request shows:
+  // the network address and the caller's identity. Written by
+  // createEventPhoto for FLAGGED photos only — an ordinary upload records no
+  // address anywhere — and kept for abuse investigation and law-enforcement
+  // requests (see the evidence export). The row id is the photo id.
+  //
+  // Admin-only, deliberately not on the Photo row: hosts read their own
+  // Photo rows, and a host has no business with their guests' IP addresses.
+  UploadEvidence: a
+    .model({
+      eventId: a.string(),
+      photoId: a.string(),
+      sourceIp: a.string(),
+      /** Identity-pool id for a guest, user-pool sub for a signed-in caller. */
+      callerId: a.string(),
+      uploadedBy: a.string(),
+      reasons: a.string(),
+      recordedAt: a.datetime(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   QuotaCounter: a
     .model({
       count: a.integer(),

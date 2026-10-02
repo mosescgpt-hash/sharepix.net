@@ -466,6 +466,11 @@ createFn.addEnvironment('ALERT_REPLY_TO', process.env.ALERT_REPLY_TO ?? '');
 // recipient set on the dashboard, with REPORT_TO_ADDRESS as the fallback.
 settingTable.grantReadData(createFn);
 createFn.addEnvironment('SETTING_TABLE_NAME', settingTable.tableName);
+// Who uploaded a FLAGGED photo (address, identity), admin-only, for
+// investigation. Write-only: this function never reads it back.
+const uploadEvidenceTable = backend.data.resources.tables.UploadEvidence;
+uploadEvidenceTable.grantWriteData(createFn);
+createFn.addEnvironment('UPLOAD_EVIDENCE_TABLE_NAME', uploadEvidenceTable.tableName);
 createFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
 createFn.addToRolePolicy(
   new PolicyStatement({
