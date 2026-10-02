@@ -37,7 +37,8 @@ import type { MediaSource } from '@/lib/mediaSource';
 import { formatEventLocation } from '@/lib/eventLocation';
 import { sanitizeDisplayName } from '@/lib/account';
 import { isEventThemeKey } from '@/lib/eventTheme';
-import { createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
+import { createCoverImage, createPhotoPreview, createPhotoThumb } from '@/lib/mediaPreview';
+import type { CoverStyle } from '@/lib/eventCover';
 import { LIST_PAGE_LIMIT, listAllPages } from '@/lib/listPages';
 import { SURVEY_QUESTIONS } from '@/lib/survey';
 import {
@@ -2151,6 +2152,8 @@ async function updateEventSettings(
     galleryAccent?: string;
     reactionsEnabled?: boolean;
     commentsEnabled?: boolean;
+    /** The whole cover as JSON; '' clears it. */
+    coverStyle?: string;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -2178,6 +2181,7 @@ async function updateEventSettings(
       galleryAccent: changes.galleryAccent,
       reactionsEnabled: changes.reactionsEnabled,
       commentsEnabled: changes.commentsEnabled,
+      coverStyle: changes.coverStyle,
     },
     { authMode: 'userPool' },
   );
@@ -2438,6 +2442,49 @@ export async function setEventGalleryTheme(
   theme: { galleryFontSet?: string; galleryLayout?: string; galleryAccent?: string },
 ): Promise<void> {
   await updateEventSettings(eventId, theme, 'The gallery style could not be saved.');
+}
+
+/**
+ * Save the cover over an event's pages, whole. Pass null to go back to the
+ * SharePix navy band. The function re-validates every field — see
+ * lib/eventCover.ts — so this cannot store a preset or a photo the settings
+ * card could not have offered.
+ */
+export async function setEventCover(eventId: string, style: CoverStyle | null): Promise<void> {
+  const json = style && Object.keys(style).length > 0 ? JSON.stringify(style) : '';
+  await updateEventSettings(eventId, { coverStyle: json }, 'The cover could not be saved.');
+}
+
+/**
+ * Upload a host's cover photo and return its key, ready for setEventCover.
+ *
+ * Re-encoded in the browser first, which shrinks a 12 MB phone photo to a few
+ * hundred kilobytes and strips its location data. The name is random so a
+ * guest, who can also write under the event's folder, cannot guess it.
+ */
+export async function uploadEventCoverImage(eventId: string, file: File): Promise<string> {
+  const blob = await createCoverImage(file);
+  if (!blob) throw new Error('That file could not be used. Try a JPEG or PNG photo.');
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const key = `events/${eventId}/cover/${id}.jpg`;
+  await retryTransient(() =>
+    uploadData({ path: key, data: blob, options: { contentType: 'image/jpeg' } }).result,
+  );
+  return key;
+}
+
+/**
+ * Where to load a cover photo from: R2 where the mirror has it, S3 behind it,
+ * the same as a gallery photo.
+ */
+export async function getEventCoverSource(eventId: string, key: string): Promise<MediaSource> {
+  const [r2, s3] = await Promise.all([
+    r2UrlsFor(eventId, [key]),
+    signedUrlFor(key).catch(() => ''),
+  ]);
+  const primary = r2.get(key);
+  if (primary) return s3 ? { primary, fallback: s3 } : { primary };
+  return { primary: s3 };
 }
 
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */

@@ -166,6 +166,12 @@ const schema = a.schema({
       galleryFontSet: a.string(),
       galleryLayout: a.string(),
       galleryAccent: a.string(),
+      // The cover at the top of the event's pages — a host's photo or a preset
+      // background, headline, shade, alignment, countdown — as one JSON string.
+      // Written only by updateEventSettings, which validates it whole with
+      // sanitizeCoverStyle; a photo must live under this event's own cover/
+      // folder. See lib/eventCover.ts.
+      coverStyle: a.string(),
       // Whether guests can like and comment on photos. ABSENT MEANS ON: every
       // event created before this existed has no value, and the honest reading
       // of that is "nobody turned this off". See lib/photoEngagement.ts, which
@@ -2127,6 +2133,7 @@ const schema = a.schema({
       galleryAccent: a.string(),
       reactionsEnabled: a.boolean(),
       commentsEnabled: a.boolean(),
+      coverStyle: a.string(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])

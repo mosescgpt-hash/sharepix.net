@@ -45,6 +45,8 @@ const ORIGINAL = /^events\/([^/]+)\/photos\//;
 /** `events/<eventId>/previews/...` and `.../thumbs/...` — browser re-encodes. */
 const PREVIEW = /^events\/([^/]+)\/previews\//;
 const THUMB = /^events\/([^/]+)\/thumbs\//;
+/** `events/<eventId>/cover/...` — the host's cover photo. See lib/eventCover.ts. */
+const COVER = /^events\/([^/]+)\/cover\//;
 
 /**
  * SharePix Pro. `pro/<eventId>/originals|previews|thumbnails/<uploadId>`.
@@ -61,6 +63,7 @@ export type Variant =
   | 'original'
   | 'preview'
   | 'thumb'
+  | 'cover'
   | 'pro-original'
   | 'pro-preview'
   | 'pro-thumb'
@@ -70,6 +73,7 @@ export function variantOf(key: string): Variant {
   if (ORIGINAL.test(key)) return 'original';
   if (PREVIEW.test(key)) return 'preview';
   if (THUMB.test(key)) return 'thumb';
+  if (COVER.test(key)) return 'cover';
   if (PRO_ORIGINAL.test(key)) return 'pro-original';
   if (PRO_PREVIEW.test(key)) return 'pro-preview';
   if (PRO_THUMB.test(key)) return 'pro-thumb';
@@ -195,6 +199,11 @@ export function canSign({
   // proUploadIdOf is how the handler knows which rows to check.
   if (isVideoKey(key)) return refuse;
   if (event.guestResolution === 'none') return refuse;
+
+  // The cover is the page's masthead, not one of the event's photos: the host
+  // chose it to be shown, so withheld downloads and the low-resolution phase
+  // do not shrink it. It still goes dark with the gallery, above.
+  if (variant === 'cover') return { allowed: true, host: false };
 
   // Withheld downloads and the post-window low-resolution phase land in the
   // same place: the guest may have the thumbnail and nothing larger.

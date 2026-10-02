@@ -465,8 +465,20 @@ export const FAIR_USE_PHOTO_CEILING = CONCENTRATION_PHOTOS;
  * host can do something about; the hard limits stay on the fair-use page.
  */
 export const FAIR_USE_NOTICE =
-  `Unlimited photos, with a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event that we raise free on any reasonable request — reaching it never pauses your guests. SharePix may restrict automated uploads, bulk archival or backup use, and activity that is abusive or extraordinarily large.`;
+  `Unlimited photos, with a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event that we raise free on any reasonable request — reaching it never pauses your guests. There is no per-guest limit: the ceiling is for the whole event, never for one person. SharePix may restrict automated uploads, bulk archival or backup use, and activity that is abusive or extraordinarily large.`;
 
 /** The same promise in one short line, for feature lists. */
 export const UNLIMITED_PHOTOS_LINE =
   `Unlimited photos — fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event, raised free on request`;
+
+/**
+ * No per-guest cap, said in so many words.
+ *
+ * Some event apps cap each guest at a roll of film's worth of photos. SharePix
+ * never has, and hosts comparing products ask. MAX_PHOTOS_PER_CONTRIBUTOR above
+ * is not a cap either: it is one half of a signal an admin looks at, and it
+ * stops nobody's upload. If a per-guest limit is ever introduced, this line and
+ * every page that shows it must go first.
+ */
+export const NO_PER_GUEST_LIMIT_LINE =
+  'No per-guest limit — every guest can share every photo they took';

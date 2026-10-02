@@ -443,6 +443,13 @@
   color: var(--spx-event-accent-text, inherit);
 }
 
+/* Except on a dark band. The accent is checked for contrast against the
+   light page, so a colour that passes there is usually too dark to read on
+   navy or over a cover photo; those keep the mint they were designed with. */
+.spx-themed-event .spx-section-ink .spx-eyebrow {
+  color: theme('colors.mint');
+}
+
 .spx-themed-event .spx-rule {
   background-color: var(--spx-event-accent, currentColor);
 }

@@ -34,12 +34,13 @@
 const ORIGINAL_KEY = /^events\/[^/]+\/photos\//;
 
 /**
- * Browser-generated variants: `events/<eventId>/previews/...` and `.../thumbs/`.
+ * Browser-generated variants: `events/<eventId>/previews/...`, `.../thumbs/`
+ * and the host's `.../cover/` photo (lib/eventCover.ts).
  * These are re-encoded from the original by canvas, which carries no metadata
  * across, so they need no vetting — but they are what the gallery actually
  * serves, so they are the most important thing to have in R2.
  */
-const DERIVED_KEY = /^events\/[^/]+\/(previews|thumbs)\//;
+const DERIVED_KEY = /^events\/[^/]+\/(previews|thumbs|cover)\//;
 
 export interface MirrorInput {
   /** The decoded S3 object key. */

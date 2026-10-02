@@ -202,7 +202,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Each photo can be up to 25 MB. A free event holds 50 photos; a full event holds an unlimited number. Videos are counted separately.',
+        text: 'Each photo can be up to 25 MB. A free event holds 50 photos; a full event holds an unlimited number. Videos are counted separately. There is no per-guest limit — any limit is for the event as a whole, so share every photo you took.',
       },
       {
         kind: 'text',
