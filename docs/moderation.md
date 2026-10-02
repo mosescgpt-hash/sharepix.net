@@ -331,7 +331,13 @@ finishes the move. The event is hidden from the first moment either way.
 **Nothing can delete a closed event:**
 
 - Hosts no longer have `delete` on the Event model. They remove events through
-  `removeHostedEvent` (`delete-event`), which refuses a closed event.
+  `removeHostedEvent` (`delete-event`). An ordinary event is deleted exactly as
+  before. A closed event, or one over the content-review threshold, is
+  **removed from the host's account and preserved**: it is marked
+  `hostDeletedAt`, closed quietly if it was not already, and its media moved to
+  quarantine in the background. The host gets the same "removed" answer as
+  any other removal; the admin list labels it **Removed by host**. The privacy
+  policy discloses this.
 - `delete-event-photo` refuses photos of a closed event for everyone, admins
   included.
 - The admin **Delete event** button refuses a closed event up front.
@@ -341,6 +347,10 @@ To delete a closed event on purpose, **Reopen** it first. Reopening moves the
 media back (the upload trigger re-mirrors it to R2), rewrites the rows, and only
 then clears the takedown, so a partial reopen leaves the event closed. Uploads
 stay closed; the host can reopen them.
+
+**Closing quietly.** Close event asks whether to tell the host why. A quiet
+close (`takedownQuiet`) is the same lock; the host's dashboard says only "This
+event is unavailable", with no reason.
 
 Professional photos under `pro/<eventId>/` are not moved: no browser role can
 read `pro/` at all, and `media-url` already refuses to sign them on a closed

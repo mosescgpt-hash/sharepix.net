@@ -389,6 +389,10 @@ deleteEventFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 // (copy, then delete the source), drops the R2 copies on close, and rewrites
 // Photo rows' keys. Needs list, read, write and delete on the bucket.
 const takedownFn = backend.eventTakedown.resources.lambda as LambdaFunction;
+// A host removing a closed or in-review event starts its quarantine move in
+// the background, so the button returns at once.
+takedownFn.grantInvoke(deleteEventFn);
+deleteEventFn.addEnvironment('TAKEDOWN_FUNCTION_NAME', takedownFn.functionName);
 eventTable.grantReadWriteData(takedownFn);
 photoTable.grantReadWriteData(takedownFn);
 bucket.grantReadWrite(takedownFn);

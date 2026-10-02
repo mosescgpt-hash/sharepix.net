@@ -113,14 +113,12 @@ describe('the takedown function', () => {
 });
 
 describe('nobody can delete a closed event', () => {
-  it('hosts lost the model delete, and use a function that refuses', () => {
+  it('hosts lost the model delete, and go through a function instead', () => {
     const schema = codeOnly(readSource('amplify/data/resource.ts'));
     expect(schema).not.toContain("allow.ownerDefinedIn('owner').to(['get', 'list', 'delete'])");
-    const fn = codeOnly(readSource('amplify/functions/delete-event/handler.ts'));
-    expect(fn).toContain('if (found.Item.takenDownAt?.S)');
-    expect(fn).toContain("ConditionExpression: 'attribute_not_exists(takenDownAt)'");
     expect(codeOnly(readSource('lib/api.ts'))).toContain('getClient().mutations.removeHostedEvent(');
   });
+
 
   it('refuses photo deletes from a closed event for admins too', () => {
     const fn = codeOnly(readSource('amplify/functions/delete-event-photo/handler.ts'));
@@ -133,5 +131,51 @@ describe('nobody can delete a closed event', () => {
     const admin = readSource('pages/global-admin.tsx');
     const handler = admin.slice(admin.indexOf('async function handleDeleteEvent'));
     expect(handler.indexOf('if (event.takenDownAt)')).toBeLessThan(handler.indexOf('deleteEventAsGlobalAdmin'));
+  });
+});
+
+describe('a host removing a closed or flagged event', () => {
+  const fn = codeOnly(readSource('amplify/functions/delete-event/handler.ts'));
+  const main = fn.slice(fn.indexOf('export const handler'), fn.indexOf('async function preserve'));
+  const preserve = fn.slice(fn.indexOf('async function preserve'));
+
+  it('preserves it instead of deleting it', () => {
+    expect(main).toContain('if (closed || flagged) {');
+    expect(main.indexOf('await preserve(eventId, closed)')).toBeLessThan(main.indexOf('new DeleteItemCommand'));
+    expect(preserve).not.toContain('DeleteItemCommand');
+    expect(preserve).toContain('hostDeletedAt = :now');
+  });
+
+  it('still deletes an ordinary event, conditionally on it staying open', () => {
+    expect(main).toContain("ConditionExpression: 'attribute_not_exists(takenDownAt)'");
+    // A closure that lands in between is preserved, not deleted.
+    expect(main).toContain('await preserve(eventId, true)');
+  });
+
+  it('closes an unclosed one quietly and starts the quarantine move', () => {
+    expect(preserve).toContain('takedownQuiet = :true');
+    expect(preserve).toContain("InvocationType: 'Event'");
+    expect(preserve).toContain('arguments: { eventId, closed: true, quiet: true }');
+    const backend = codeOnly(readSource('amplify/backend.ts'));
+    expect(backend).toContain('takedownFn.grantInvoke(deleteEventFn)');
+  });
+
+  it('gives the host the same answer either way', () => {
+    expect(fn.match(/return REMOVED;/g)?.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('takes it out of the host account, and only there', () => {
+    const api = codeOnly(readSource('lib/api.ts'));
+    expect(api).toContain('.filter((event) => !event.hostDeletedAt)');
+    const dash = codeOnly(readSource('pages/event/[eventId]/admin.tsx'));
+    expect(dash).toContain('if (ev.hostDeletedAt && !globalAdmin)');
+    const admin = readSource('pages/global-admin.tsx');
+    expect(admin).toContain('Removed by host');
+  });
+
+  it('is disclosed in the privacy policy', () => {
+    const privacy = readSource('pages/privacy.tsx').replace(/\s+/g, ' ');
+    expect(privacy).toContain('When a host removes an event, it is removed from their account.');
+    expect(privacy).toContain('may be preserved for the same purposes rather than deleted');
   });
 });

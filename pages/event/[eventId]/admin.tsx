@@ -216,6 +216,11 @@ function AdminDashboardPage() {
         setDenied(true);
         return;
       }
+      // Removed by its host: answers as any removed event would.
+      if (ev.hostDeletedAt && !globalAdmin) {
+        setError('We couldn\u2019t find that event.');
+        return;
+      }
       setEvent(ev);
       // Only a Corporate event has slots to count, and a failure here costs the
       // host one notice rather than their dashboard.
@@ -348,6 +353,7 @@ function AdminDashboardPage() {
           uploadWindowEndsAt: lifecycle.uploadWindowEndsAt,
           galleryClosesAt: lifecycle.retentionEndsAt,
           takenDownAt: event.takenDownAt,
+          takedownQuiet: event.takedownQuiet,
         }
       : null,
     corporateSeats,

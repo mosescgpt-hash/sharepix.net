@@ -62,10 +62,11 @@ describe('the upload function', () => {
     handler.indexOf('async function sendAlertEmail'),
   );
 
-  it('uses a byte-identical copy of the rule', () => {
-    expect(bodyOf(readSource('amplify/functions/create-event-photo/contentReview.ts'))).toBe(
-      bodyOf(readSource('lib/contentReview.ts')),
-    );
+  it.each([
+    'amplify/functions/create-event-photo/contentReview.ts',
+    'amplify/functions/delete-event/contentReview.ts',
+  ])('%s is a byte-identical copy of the rule', (copy) => {
+    expect(bodyOf(readSource(copy))).toBe(bodyOf(readSource('lib/contentReview.ts')));
   });
 
   it('counts every flagged photo on its event', () => {
@@ -178,5 +179,18 @@ describe('a closed event is preserved', () => {
   it('cannot have its photos deleted by the host', () => {
     const fn = codeOnly(readSource('amplify/functions/delete-event-photo/handler.ts'));
     expect(fn).toContain('if (ev?.Item?.takenDownAt?.S)');
+  });
+});
+
+describe('closing quietly', () => {
+  it('tells the host the event is unavailable, and not why', () => {
+    const [notice] = eventStatusNotices({
+      tier: 'plus',
+      paid: true,
+      takenDownAt: '2026-10-02T00:00:00Z',
+      takedownQuiet: true,
+    });
+    expect(notice.title).toBe('This event is unavailable');
+    expect(notice.body).not.toMatch(/SharePix has closed|terms|content/i);
   });
 });

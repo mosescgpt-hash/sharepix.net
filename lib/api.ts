@@ -346,6 +346,9 @@ export async function listMyEvents(): Promise<QREvent[]> {
 
   return [...byId.values()]
     .filter((event) => ownerIsSubject(event.owner, user.userId))
+    // Removed by its host, and preserved because it was closed or in review:
+    // gone from their account, like any removed event.
+    .filter((event) => !event.hostDeletedAt)
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }
 
@@ -1416,12 +1419,16 @@ export async function clearContentReview(eventId: string, flaggedCount: number):
  * to be reported is preserved, which is also why this is not the delete
  * button.
  */
-export async function takeDownEvent(eventId: string, note: string): Promise<string> {
+export async function takeDownEvent(
+  eventId: string,
+  note: string,
+  quiet = false,
+): Promise<string> {
   // Server-side, because closing also MOVES the media: out of events/, which
   // guests and hosts can read by key, into the admin-only quarantine prefix,
   // and out of R2. See amplify/functions/event-takedown.
   const { data, errors } = await getClient().mutations.setEventTakedown(
-    { eventId, closed: true, note: note.trim().slice(0, 500) || undefined },
+    { eventId, closed: true, note: note.trim().slice(0, 500) || undefined, quiet },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

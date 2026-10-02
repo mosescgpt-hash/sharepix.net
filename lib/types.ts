@@ -46,6 +46,10 @@ export interface QREvent {
   /** Closed by an admin for its content. Media is hidden, nothing is deleted. */
   takenDownAt?: string | null;
   takedownNote?: string | null;
+  /** Closed without telling the host why. */
+  takedownQuiet?: boolean | null;
+  /** The host removed this closed or in-review event; preserved, not deleted. */
+  hostDeletedAt?: string | null;
   usageNote?: string | null;
   mediaReclaimedAt?: string | null;
   /** The host asked for more room, and whether an admin has granted it. */

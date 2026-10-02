@@ -143,6 +143,12 @@ const schema = a.schema({
       // Photo row has moved. Absent on an open event.
       quarantineState: a.string(),
       quarantinedAt: a.datetime(),
+      // Closed without telling the host why: they see "This event is
+      // unavailable" rather than "SharePix has closed this event".
+      takedownQuiet: a.boolean(),
+      // The host removed a closed or in-review event. It is gone from their
+      // account and preserved here; see delete-event.
+      hostDeletedAt: a.datetime(),
       // Set when the media has actually been deleted at the end of the archive
       // window. Its absence is what makes reclamation re-runnable: a run that
       // fails partway leaves this unset and the next run finishes the job.
@@ -2174,7 +2180,13 @@ const schema = a.schema({
   // copies, and rewrites the Photo rows. See event-takedown.
   setEventTakedown: a
     .mutation()
-    .arguments({ eventId: a.id().required(), closed: a.boolean().required(), note: a.string() })
+    .arguments({
+      eventId: a.id().required(),
+      closed: a.boolean().required(),
+      note: a.string(),
+      // Close without telling the host why. See takedownQuiet on Event.
+      quiet: a.boolean(),
+    })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(eventTakedownFn)),

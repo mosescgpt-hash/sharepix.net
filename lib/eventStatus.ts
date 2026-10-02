@@ -17,6 +17,8 @@ export interface StatusFacts {
   galleryClosesAt?: Date | null;
   /** Set when SharePix closed the event for its content. */
   takenDownAt?: string | null;
+  /** Closed without telling the host why. */
+  takedownQuiet?: boolean | null;
 }
 
 export interface CorporateSeatFacts {
@@ -54,6 +56,17 @@ export function eventStatusNotices(
 
   // Closed by SharePix. Outranks everything else, and is the only notice: an
   // offer to pay or upgrade beside it would read as a way to undo it.
+  if (facts.takenDownAt && facts.takedownQuiet) {
+    // Closed quietly: the same lock, and no reason given.
+    return [
+      {
+        kind: 'taken-down',
+        tone: 'error',
+        title: 'This event is unavailable',
+        body: 'Uploads are stopped and the gallery cannot be shown right now. If you need help, contact support@sharepix.net.',
+      },
+    ];
+  }
   if (facts.takenDownAt) {
     return [
       {

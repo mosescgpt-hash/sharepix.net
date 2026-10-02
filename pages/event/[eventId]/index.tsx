@@ -48,8 +48,10 @@ export default function EventGalleryPage() {
       // Closed by SharePix for its content. Said plainly and without detail:
       // the server already refuses its media, and the reason is not a guest's
       // business. An admin still gets the gallery, to review it.
-      if (ev.takenDownAt && !(await isGlobalAdmin().catch(() => false))) {
-        setError('This event is no longer available.');
+      if ((ev.takenDownAt || ev.hostDeletedAt) && !(await isGlobalAdmin().catch(() => false))) {
+        setError(
+          ev.hostDeletedAt ? 'We couldn’t find that event.' : 'This event is no longer available.',
+        );
         return;
       }
       setEvent(ev);

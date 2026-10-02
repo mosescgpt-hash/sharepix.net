@@ -223,6 +223,11 @@ export default function PrivacyPage() {
               than deleted, and may be disclosed to law enforcement or other authorities where
               the law requires or permits.
             </p>
+            <p>
+              When a host removes an event, it is removed from their account. If that event is
+              under review, or has been closed, for possible violations of our Terms, its content
+              and records may be preserved for the same purposes rather than deleted.
+            </p>
           </div>
 
           <div>

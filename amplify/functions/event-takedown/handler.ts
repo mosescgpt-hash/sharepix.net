@@ -209,6 +209,7 @@ export const handler: Handler = async (event, context) => {
   if (!eventId) throw new Error('Which event?');
   const closing = event.arguments.closed === true;
   const note = (event.arguments.note ?? '').trim().slice(0, 500);
+  const quiet = event.arguments.quiet === true;
 
   const found = await dynamo.send(
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
@@ -228,7 +229,7 @@ export const handler: Handler = async (event, context) => {
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
         UpdateExpression:
-          'SET takenDownAt = if_not_exists(takenDownAt, :now), uploadsClosed = :true, usageStatus = :restricted, usageNote = :usageNote, quarantineState = :moving' +
+          'SET takenDownAt = if_not_exists(takenDownAt, :now), uploadsClosed = :true, usageStatus = :restricted, usageNote = :usageNote, quarantineState = :moving, takedownQuiet = :quiet' +
           (note ? ', takedownNote = :note' : ''),
         ExpressionAttributeValues: {
           ':now': { S: now },
@@ -236,6 +237,7 @@ export const handler: Handler = async (event, context) => {
           ':restricted': { S: 'RESTRICTED' },
           ':usageNote': { S: 'Closed for content review' },
           ':moving': { S: 'moving' },
+          ':quiet': { BOOL: quiet },
           ...(note ? { ':note': { S: note } } : {}),
         },
       }),
@@ -283,7 +285,9 @@ export const handler: Handler = async (event, context) => {
       // uploadsClosed stays set: reopening the gallery is the admin's call,
       // reopening uploads is the host's.
       UpdateExpression:
-        'REMOVE takenDownAt, takedownNote, usageStatus, usageNote, quarantineState, quarantinedAt',
+        // hostDeletedAt stays: a host who removed the event does not get it
+        // back because an admin reopened it.
+        'REMOVE takenDownAt, takedownNote, takedownQuiet, usageStatus, usageNote, quarantineState, quarantinedAt',
     }),
   );
   return {

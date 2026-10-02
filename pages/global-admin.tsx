@@ -1254,9 +1254,12 @@ function GlobalAdminPage() {
         '',
       );
       if (note === null) return;
+      const quiet = !window.confirm(
+        'Tell the host why?\n\nOK: the host sees “SharePix has closed this event”.\nCancel: close quietly — the host only sees “This event is unavailable”, with no reason.',
+      );
       setWorking(`review-${ev.id}`);
       try {
-        setReviewNote(await takeDownEvent(ev.id, note));
+        setReviewNote(await takeDownEvent(ev.id, note, quiet));
         patchEvent(ev.id, {
           takenDownAt: new Date().toISOString(),
           takedownNote: note,
@@ -3325,6 +3328,12 @@ function GlobalAdminPage() {
                                   {ev.name}
                                 </Link>{' '}
                                 · closed {new Date(ev.takenDownAt as string).toLocaleDateString()}
+                                {ev.takedownQuiet ? ' · quietly' : ''}
+                                {ev.hostDeletedAt ? (
+                                  <span className="ml-2 border border-red-300 px-1.5 py-0.5 text-xs font-medium text-red-800">
+                                    Removed by host {new Date(ev.hostDeletedAt).toLocaleDateString()}
+                                  </span>
+                                ) : null}
                               </p>
                               {ev.takedownNote ? (
                                 <p className="truncate text-xs text-charcoal/65">{ev.takedownNote}</p>
