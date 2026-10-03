@@ -137,6 +137,8 @@ export const PRIVATE_ROUTES = [
   '/event/[eventId]/brochure',
   '/event/[eventId]/guestbook',
   '/event/[eventId]/live',
+  '/event/[eventId]/nfc',
+  '/event/[eventId]/signs',
   '/event/[eventId]/table-tent',
   '/event/[eventId]/upload',
   '/featured/[eventId]',

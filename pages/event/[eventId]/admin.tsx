@@ -779,6 +779,12 @@ function AdminDashboardPage() {
                 >
                   Printable brochure →
                 </Link>
+                <Link
+                  href={`/event/${event.id}/signs`}
+                  className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60"
+                >
+                  Signs (PDF) →
+                </Link>
               </div>
 
               {/* Moments mint their own QR codes, one per part of the event,

@@ -22,9 +22,11 @@
   "dependencies": {
     "@aws-amplify/ui-react": "^6.5.5",
     "aws-amplify": "^6.10.0",
+    "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "next": "^16.2.10",
     "qr-code-styling": "^1.9.2",
+    "qrcode-generator": "^1.5.2",
     "qrcode.react": "^3.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
