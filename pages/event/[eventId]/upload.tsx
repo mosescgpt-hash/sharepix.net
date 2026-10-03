@@ -4,6 +4,9 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import UploadForm from '@/components/UploadForm';
+import EventCover from '@/components/EventCover';
+import { NO_PER_GUEST_LIMIT_LINE } from '@/lib/fairUse';
+import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { fetchEvent, fetchEventMoments } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { videosRemaining } from '@/lib/pricing';
@@ -100,22 +103,26 @@ export default function GuestUploadPage() {
         </section>
       ) : event ? (
         <>
-          <section className="spx-section-ink py-10 sm:py-14">
-            <div className="mx-auto w-full max-w-lg">
-              <p className="spx-eyebrow">
-                You&rsquo;re adding {photosOnly ? 'photos' : 'photos and videos'} to
-              </p>
-              <h1 className="spx-display mt-3">{event.name}</h1>
-              {event.date ? (
-                <p className="spx-display-serif mt-1 text-2xl">
-                  {new Date(`${event.date}T00:00:00`).toLocaleDateString()}
-                </p>
-              ) : null}
-              {event.location ? (
-                <p className="mt-2 text-sm text-canvas/70">{event.location}</p>
-              ) : null}
-            </div>
-          </section>
+          {/* The host's cover, in their fonts. Only the masthead is themed:
+              the form below stays the plain, familiar upload page. */}
+          <div style={themeStyle(resolveGalleryTheme(event))} className="spx-themed-event">
+            <EventCover
+              event={event}
+              eyebrow={<>You&rsquo;re adding {photosOnly ? 'photos' : 'photos and videos'} to</>}
+              meta={
+                <>
+                  {event.date ? (
+                    <p className="spx-display-serif mt-1 text-2xl">
+                      {new Date(`${event.date}T00:00:00`).toLocaleDateString()}
+                    </p>
+                  ) : null}
+                  {event.location ? (
+                    <p className="mt-2 text-sm text-canvas/70">{event.location}</p>
+                  ) : null}
+                </>
+              }
+            />
+          </div>
 
           <section className="spx-section-canvas py-10 sm:py-14">
             <div className="mx-auto w-full max-w-lg">
@@ -154,13 +161,20 @@ export default function GuestUploadPage() {
                   photos can be added.
                 </Notice>
               ) : canUpload ? (
-                <UploadForm
-                  eventId={event.id}
-                  allowVideo={event.videoUploadsEnabled !== false}
-                  videosRemaining={videosRemaining(event)}
-                  themeKey={themeKeyForEvent(event)}
-                  momentId={momentId}
-                />
+                <>
+                  <p className="mb-4 text-center text-sm text-charcoal/70">
+                    {/* Said here because it is the question a guest arrives
+                        with, having used apps that stop them at 36. */}
+                    {NO_PER_GUEST_LIMIT_LINE}.
+                  </p>
+                  <UploadForm
+                    eventId={event.id}
+                    allowVideo={event.videoUploadsEnabled !== false}
+                    videosRemaining={videosRemaining(event)}
+                    themeKey={themeKeyForEvent(event)}
+                    momentId={momentId}
+                  />
+                </>
               ) : event.uploadsClosed ? (
                 <Notice tone="warn" label="Closed by the host">
                   The host has closed this event, so it&rsquo;s no longer accepting new photos. You

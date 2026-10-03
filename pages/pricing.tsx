@@ -29,6 +29,10 @@ const faqs = [
     a: 'You can delete any photo on either plan. The paid plan adds approve-before-showing moderation, so nothing appears in the gallery until you have seen it.',
   },
   {
+    q: 'Is there a limit on how many photos each guest can share?',
+    a: 'No. Some event apps give each guest a roll of film — 24 or 36 shots and then they are done. SharePix has no per-guest limit: every guest can share every photo they took, and the fair-use ceiling below is for the whole event, never for one person.',
+  },
+  {
     q: 'Is "unlimited photos" really unlimited?',
     a: `Unlimited, with one number we would rather tell you up front: a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event. A 300-guest wedding usually lands around 2,000. If your event gets near the ceiling, a button on your dashboard asks us for more room and we raise it free — your guests keep uploading the whole time, it never pauses mid-reception. What fair use rules out is automated uploads, bulk archival or backup use, and abusive activity.`,
   },
@@ -76,7 +80,7 @@ export default function PricingPage() {
           </div>
 
           <p className="mt-8 text-sm text-charcoal/60">
-            Unlimited guests · Unlimited photos under fair use · Full-resolution memories · Private from search, shared by QR code
+            Unlimited guests · Unlimited photos under fair use · No per-guest limit · Full-resolution memories · Private from search, shared by QR code
           </p>
         </div>
       </section>

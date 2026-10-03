@@ -20,6 +20,7 @@
 
 import { validateQrBranding } from './qrBranding';
 import { isFontSetKey, isGalleryLayout, normalizeAccent } from './galleryTheme';
+import { sanitizeCoverStyle } from './eventCover';
 import { eventDateProblem } from './uploadWindowStart';
 
 // eslint-disable-next-line no-control-regex
@@ -101,12 +102,16 @@ export interface SettingsRequest {
   /** Guest likes and comments. See lib/photoEngagement.ts. */
   reactionsEnabled?: boolean | null;
   commentsEnabled?: boolean | null;
+  /** The cover as JSON, '' to clear it. See lib/eventCover.ts. */
+  coverStyle?: string | null;
 }
 
 /** The event as stored, insofar as these rules care. */
 export interface EventState {
   /** Photos uploaded so far — what locks the name and date. */
   photoCount: number;
+  /** The event's id, which a cover photo's key must name. */
+  id?: string;
 }
 
 export interface Patch {
@@ -286,6 +291,16 @@ export function buildPatch(
     }
   }
 
+  // The cover is one value, validated whole. A photo key must point inside
+  // this event's own folder, so a host cannot borrow another event's media
+  // (or anything else in the bucket) as their background.
+  if (provided(request.coverStyle)) {
+    const cover = sanitizeCoverStyle(request.coverStyle, event.id ?? '');
+    if (!cover.ok) return { ok: false, reason: cover.reason };
+    if (cover.value) set.coverStyle = cover.value;
+    else remove.push('coverStyle');
+  }
+
   for (const flag of [
     'videoUploadsEnabled',
     'guestDownloadsBlocked',
@@ -344,4 +359,5 @@ export const EDITABLE_FIELDS = [
   'qrDotStyle',
   'qrColor',
   'qrLogo',
+  'coverStyle',
 ];

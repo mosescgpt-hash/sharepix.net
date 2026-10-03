@@ -5,6 +5,7 @@ import GuestReferralLink from '@/components/GuestReferralLink';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
+import EventCover from '@/components/EventCover';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
 import { fetchEvent, fetchEventMoments, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
@@ -124,35 +125,35 @@ export default function EventGalleryPage() {
         // than by swapping classes: every value has been validated, and this
         // way a stored value can never become markup. See lib/galleryTheme.ts.
         <div style={themeStyle(theme)} className="spx-themed-event">
-          {/* The event's own name is the headline. The navy band gives the
-              gallery a masthead instead of opening on a bare grid. */}
-          <section className="spx-section-ink py-12 sm:py-16">
-            <div className="spx-inner">
-              <p className="spx-eyebrow">
+          {/* The event's own name is the headline, over the host's cover
+              photo or background — the navy band when they chose neither. */}
+          <EventCover
+            event={event}
+            eyebrow={
+              <>
                 {photos.length} {photos.length === 1 ? 'memory' : 'memories'} shared
-              </p>
-              <h1 className="spx-display mt-3">{event.name}</h1>
-              {event.location ? (
+              </>
+            }
+            meta={
+              event.location ? (
                 <p className="spx-display-serif mt-1 text-2xl sm:text-3xl">{event.location}</p>
-              ) : null}
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                {lifecycle.uploadOpen ? (
-                  <Link href={`/event/${event.id}/upload`} className="spx-btn-canvas">
-                    Add your photos
-                  </Link>
-                ) : null}
-                {guestBookAvailable(event) ? (
-                  <Link href={`/event/${event.id}/guestbook`} className="spx-btn-outline">
-                    Guest book
-                  </Link>
-                ) : null}
-                <button type="button" onClick={load} className="spx-btn-outline">
-                  Refresh
-                </button>
-              </div>
-            </div>
-          </section>
+              ) : null
+            }
+          >
+            {lifecycle.uploadOpen ? (
+              <Link href={`/event/${event.id}/upload`} className="spx-btn-canvas">
+                Add your photos
+              </Link>
+            ) : null}
+            {guestBookAvailable(event) ? (
+              <Link href={`/event/${event.id}/guestbook`} className="spx-btn-outline">
+                Guest book
+              </Link>
+            ) : null}
+            <button type="button" onClick={load} className="spx-btn-outline">
+              Refresh
+            </button>
+          </EventCover>
 
           <section className="spx-section-canvas py-10 sm:py-14">
             <div className="spx-inner">

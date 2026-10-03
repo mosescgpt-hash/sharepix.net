@@ -7,7 +7,12 @@ import {
   VIDEO_GB_INCLUDED,
   getTier,
 } from '@/lib/pricing';
-import { FAIR_USE_NOTICE, FAIR_USE_PHOTO_CEILING, UNLIMITED_PHOTOS_LINE } from '@/lib/fairUse';
+import {
+  FAIR_USE_NOTICE,
+  FAIR_USE_PHOTO_CEILING,
+  NO_PER_GUEST_LIMIT_LINE,
+  UNLIMITED_PHOTOS_LINE,
+} from '@/lib/fairUse';
 
 /**
  * A drawn tick rather than a bare "✓" glyph: the glyph renders differently on
@@ -47,6 +52,7 @@ function Check() {
 const INCLUDED: string[] = [
   'Unlimited guests — no app, no accounts, no passwords to share',
   UNLIMITED_PHOTOS_LINE,
+  NO_PER_GUEST_LIMIT_LINE,
   `${VIDEO_GB_INCLUDED} GB of video`,
   'Full-resolution originals, kept and downloadable',
   'A gallery that is private from search, open to anyone you give the QR code or link',
@@ -59,7 +65,7 @@ const INCLUDED: string[] = [
   'ZIP download of everything, in one click',
   'Guest names and captions on every upload',
   'Approve-before-showing moderation, and delete anything at any time',
-  'Your own event colours and branding',
+  'Your own cover photo or background, fonts, colours and layout',
 ];
 
 /** One row of the comparison: what each of the three plans gives. */

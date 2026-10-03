@@ -771,6 +771,28 @@ event, and photo deletes, the admin delete button and storage reclamation all
 refuse one too. To delete a closed event, an admin reopens it first. See
 docs/moderation.md.
 
+## 17. Event covers, and no per-guest limit
+
+Hosts comparing SharePix with Zola liked one thing — the couple's photo behind
+their names on the page guests land on — and disliked another: a 36-photo cap
+per guest. SharePix never had a per-guest cap, so that is now said in so many
+words (NO_PER_GUEST_LIMIT_LINE in lib/fairUse.ts: pricing, help, the guest
+upload page). MAX_PHOTOS_PER_CONTRIBUTOR is a review signal, not a cap; if a
+per-guest limit is ever introduced, that line must come down first.
+
+The cover (lib/eventCover.ts) is one validated JSON value on the event,
+`coverStyle`, written only through updateEventSettings. Two levels: starter
+looks, a photo or a background, fonts and layout up front, each saving on
+click; headline, photo position, shade, alignment, height, countdown and
+accent behind "More options". Words on a cover are always light on dark —
+every preset clears AA for white text and a photo always carries a shade of at
+least 25% — so no choice a host makes can produce an unreadable masthead.
+
+A cover photo is re-encoded in the browser (metadata gone), stored under
+`events/<id>/cover/` with a random name, mirrored to R2 like a preview so it
+outlives the 90-day S3 copy, signed for guests even in the thumbnail-only
+phase, and closed with the rest of the event's media.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

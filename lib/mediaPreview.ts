@@ -54,3 +54,17 @@ export async function createPhotoPreview(file: File): Promise<Blob | null> {
 export async function createPhotoThumb(file: File): Promise<Blob | null> {
   return resizeImage(file, THUMB_MAX_DIMENSION, THUMB_JPEG_QUALITY);
 }
+
+// An event's cover photo: wide on a desktop, so larger than a preview, and
+// shown behind text under a shade, so it tolerates more compression.
+const COVER_MAX_DIMENSION = 2400;
+const COVER_JPEG_QUALITY = 0.8;
+
+/**
+ * The host's cover photo, re-encoded. Drawing it through a canvas also drops
+ * every byte of metadata, location included, which is why the upload trigger
+ * treats a cover like a preview rather than vetting it as an original.
+ */
+export async function createCoverImage(file: File): Promise<Blob | null> {
+  return resizeImage(file, COVER_MAX_DIMENSION, COVER_JPEG_QUALITY);
+}

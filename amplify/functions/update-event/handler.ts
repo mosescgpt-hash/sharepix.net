@@ -137,8 +137,9 @@ export const handler: Handler = async (event) => {
       galleryAccent: event.arguments.galleryAccent,
       reactionsEnabled: event.arguments.reactionsEnabled,
       commentsEnabled: event.arguments.commentsEnabled,
+      coverStyle: event.arguments.coverStyle,
     },
-    { photoCount: Number(found.Item.photoCount?.N ?? '0') },
+    { photoCount: Number(found.Item.photoCount?.N ?? '0'), id: eventId },
   );
   if (!result.ok) return { success: false, message: result.reason };
 
