@@ -305,6 +305,10 @@ const schema = a.schema({
       // uploader was the plan. It is not a limit: a 'host-only' event's guests
       // can still upload if they find the page.
       uploadAudience: a.string(),
+      // Who may see the gallery: 'everyone' (absent), 'own' (each guest sees
+      // only their own uploads) or 'host'. Enforced in listEventPhotos. See
+      // amplify/functions/list-event-photos/visibility.ts.
+      galleryAudience: a.string(),
       // Whether guests may upload video. Missing means allowed, so existing
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
@@ -451,6 +455,12 @@ const schema = a.schema({
       // a like is keyed to a browser, not a person. See lib/photoEngagement.ts.
       likeCount: a.integer(),
       commentCount: a.integer(),
+      // Who uploaded it: their Cognito sub when signed in, otherwise their
+      // identity-pool id, which a guest's browser keeps between visits. Set by
+      // createEventPhoto from the verified identity, never from the request,
+      // and read only by listEventPhotos for the "guests see only their own
+      // photos" setting. Not on the EventPhoto type, so no guest ever sees it.
+      uploaderId: a.string(),
     })
     .secondaryIndexes((index) => [index('eventId')])
     // No direct `create` (photos come only from createEventPhoto) and no
@@ -1489,7 +1499,8 @@ const schema = a.schema({
   // Photo model won't need to grant guests broad list access.
   listEventPhotos: a
     .query()
-    .arguments({ eventId: a.id().required() })
+    // shareId: a host's download share, honoured whatever the gallery setting.
+    .arguments({ eventId: a.id().required(), shareId: a.string() })
     .returns(a.ref('EventPhoto').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listEventPhotosFn)),
@@ -2300,6 +2311,7 @@ const schema = a.schema({
       reactionsEnabled: a.boolean(),
       commentsEnabled: a.boolean(),
       coverStyle: a.string(),
+      galleryAudience: a.string(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])

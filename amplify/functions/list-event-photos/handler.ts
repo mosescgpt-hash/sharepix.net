@@ -1,31 +1,78 @@
 import { DynamoDBClient, GetItemCommand, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
-import { isVisibleTo } from './visibility';
+import {
+  audienceAllows,
+  galleryAudienceOf,
+  isHostOrAdmin,
+  isVisibleTo,
+  uploaderIdOf,
+  type GalleryAudience,
+} from './visibility';
 
 const dynamo = new DynamoDBClient({});
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
+const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
+
+interface EventFacts {
+  takenDown: boolean;
+  owner: string;
+  audience: GalleryAudience;
+}
 
 /**
- * Whether an admin has closed this event for its content. Read on every call:
- * one small GetItem, and the alternative is a closed event's gallery staying
- * listable to anyone with its link. A failed read answers "not closed" — the
- * same outcome as before closing existed — and media-url refuses to sign its
- * files regardless.
+ * What this listing needs from the event: whether an admin closed it, who owns
+ * it, and who the host lets see the gallery. One small GetItem per call.
+ *
+ * A failed read answers "open, everyone" — the same outcome as before either
+ * setting existed — and media-url refuses to sign a closed event's files
+ * regardless.
  */
-async function isTakenDown(eventId: string): Promise<boolean> {
-  if (!EVENT_TABLE) return false;
+async function eventFacts(eventId: string): Promise<EventFacts> {
+  const fallback: EventFacts = { takenDown: false, owner: '', audience: 'everyone' };
+  if (!EVENT_TABLE) return fallback;
   const found = await dynamo
     .send(
       new GetItemCommand({
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'takenDownAt',
+        ProjectionExpression: 'takenDownAt, #owner, galleryAudience',
+        ExpressionAttributeNames: { '#owner': 'owner' },
       }),
     )
     .catch(() => null);
-  return Boolean(found?.Item?.takenDownAt?.S);
+  if (!found?.Item) return fallback;
+  return {
+    takenDown: Boolean(found.Item.takenDownAt?.S),
+    owner: found.Item.owner?.S ?? '',
+    audience: galleryAudienceOf(found.Item.galleryAudience?.S),
+  };
+}
+
+/**
+ * The photo ids in a host's download share, when it is for this event and
+ * has not expired; otherwise null.
+ *
+ * A share is the host choosing particular photos for particular people, so it
+ * is honoured whatever the gallery setting — a host who keeps the gallery to
+ * themselves and then sends a share link meant it to work.
+ */
+async function sharedPhotoIds(shareId: string, eventId: string): Promise<Set<string> | null> {
+  if (!SHARE_TABLE || !shareId) return null;
+  const found = await dynamo
+    .send(new GetItemCommand({ TableName: SHARE_TABLE, Key: { id: { S: shareId } } }))
+    .catch(() => null);
+  const item = found?.Item;
+  if (!item || item.eventId?.S !== eventId) return null;
+  const expires = item.expiresAt?.S ? Date.parse(item.expiresAt.S) : NaN;
+  if (Number.isFinite(expires) && expires <= Date.now()) return null;
+  try {
+    const ids = JSON.parse(item.photoIdsJson?.S ?? '[]');
+    return Array.isArray(ids) ? new Set(ids.filter((id) => typeof id === 'string')) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -115,11 +162,32 @@ export const handler: Handler = async (event) => {
 
   const identity = event.identity as unknown as {
     sub?: string;
+    cognitoIdentityId?: string;
     groups?: string[] | null;
   } | null;
 
+  const facts = await eventFacts(eventId);
   // A closed event lists nothing to anyone but an admin.
-  if (!(identity?.groups ?? []).includes('ADMINS') && (await isTakenDown(eventId))) return [];
+  if (!(identity?.groups ?? []).includes('ADMINS') && facts.takenDown) return [];
+
+  // The host's gallery setting. The host and admins see everything; a share
+  // link sees exactly what the host put in it; everyone else sees what the
+  // setting allows.
+  const privileged = isHostOrAdmin(identity, facts.owner);
+  const shared = privileged ? null : await sharedPhotoIds(event.arguments.shareId ?? '', eventId);
+  const callerId = uploaderIdOf(identity);
+  const audienceFilter = (item: PhotoItem) => {
+    if (privileged) return true;
+    if (shared) return shared.has(item.id?.S ?? '');
+    return audienceAllows(
+      facts.audience,
+      { uploaderId: item.uploaderId?.S, uploadedByUserId: item.uploadedByUserId?.S },
+      callerId,
+    );
+  };
+
+  // Nothing to read for a guest of a host-only gallery.
+  if (!privileged && !shared && facts.audience === 'host') return [];
 
   const items = await photosForEvent(eventId);
 
@@ -134,6 +202,7 @@ export const handler: Handler = async (event) => {
     .filter((item) =>
       isVisibleTo({ s3Key: item.s3Key?.S, eventOwner: item.eventOwner?.S }, identity),
     )
+    .filter(audienceFilter)
     .map((item) => ({
       id: item.id?.S ?? '',
       eventId: item.eventId?.S ?? '',

@@ -25,6 +25,8 @@ describe('the allow-list is the whole surface', () => {
       // JSON value. See lib/eventCover.ts.
       'coverStyle',
       'date',
+      // Who may see the gallery — a privacy choice, not a priced one.
+      'galleryAudience',
       'guestDownloadsBlocked',
       'location',
       'moderationMode',

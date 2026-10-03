@@ -10,6 +10,7 @@ import ChallengeCard from '@/components/challenges/ChallengeCard';
 import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
 import type { EventChallenge } from '@/lib/challenges/api';
 import { NO_PER_GUEST_LIMIT_LINE } from '@/lib/fairUse';
+import { galleryAudienceFor } from '@/lib/galleryAudience';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { fetchEvent, fetchEventMoments } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
@@ -220,11 +221,22 @@ export default function GuestUploadPage() {
                 </div>
               ) : null}
 
-              <p className="mt-8 text-center text-sm">
-                <Link href={`/event/${event.id}`} className="text-pine underline">
-                  View the event gallery &rarr;
-                </Link>
-              </p>
+              {/* A host who keeps the gallery to themselves has nothing to
+                  link guests to; one who shows guests their own says so. */}
+              {galleryAudienceFor(event) !== 'host' ? (
+                <p className="mt-8 text-center text-sm">
+                  <Link href={`/event/${event.id}`} className="text-pine underline">
+                    {galleryAudienceFor(event) === 'own'
+                      ? 'See the photos you’ve added'
+                      : 'View the event gallery'}{' '}
+                    &rarr;
+                  </Link>
+                </p>
+              ) : (
+                <p className="mt-8 text-center text-sm text-charcoal/60">
+                  The host is keeping this gallery private — your photos go straight to them.
+                </p>
+              )}
             </div>
           </section>
         </>

@@ -2154,6 +2154,7 @@ async function updateEventSettings(
     commentsEnabled?: boolean;
     /** The whole cover as JSON; '' clears it. */
     coverStyle?: string;
+    galleryAudience?: string;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -2182,6 +2183,7 @@ async function updateEventSettings(
       reactionsEnabled: changes.reactionsEnabled,
       commentsEnabled: changes.commentsEnabled,
       coverStyle: changes.coverStyle,
+      galleryAudience: changes.galleryAudience,
     },
     { authMode: 'userPool' },
   );
@@ -2485,6 +2487,21 @@ export async function getEventCoverSource(eventId: string, key: string): Promise
   const primary = r2.get(key);
   if (primary) return s3 ? { primary, fallback: s3 } : { primary };
   return { primary: s3 };
+}
+
+/**
+ * Who may see the gallery. Enforced server-side in listEventPhotos — this only
+ * stores the choice, and the function refuses anything but the three options.
+ */
+export async function setEventGalleryAudience(
+  eventId: string,
+  audience: 'everyone' | 'own' | 'host',
+): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    { galleryAudience: audience },
+    'Who can see the gallery could not be saved.',
+  );
 }
 
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
@@ -3002,7 +3019,13 @@ async function listEventPhotosViaModel(eventId: string): Promise<QRPhoto[]> {
 /** Fetch photos for an event and resolve signed URLs for display. */
 export async function fetchEventPhotos(
   eventId: string,
-  opts: { includeUnapproved?: boolean; useOriginals?: boolean; useThumbs?: boolean } = {}
+  opts: {
+    includeUnapproved?: boolean;
+    useOriginals?: boolean;
+    useThumbs?: boolean;
+    /** A host's download share: its photos, whatever the gallery setting. */
+    shareId?: string;
+  } = {}
 ): Promise<DisplayPhoto[]> {
   let photos: QRPhoto[];
   if (opts.includeUnapproved) {
@@ -3013,7 +3036,7 @@ export async function fetchEventPhotos(
     // Public gallery: scoped query that only returns this event's approved
     // photos, so photos can't be enumerated across events.
     const { data, errors } = await getClient().queries.listEventPhotos(
-      { eventId },
+      { eventId, shareId: opts.shareId },
       { authMode: await authModeFor() },
     );
     if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));

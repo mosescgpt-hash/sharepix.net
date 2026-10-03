@@ -29,7 +29,7 @@ export default function DownloadSharePage() {
         const allowedIds = new Set(loadedShare.photoIds);
         const [event, eventPhotos] = await Promise.all([
           fetchEvent(loadedShare.eventId),
-          fetchEventPhotos(loadedShare.eventId),
+          fetchEventPhotos(loadedShare.eventId, { shareId }),
         ]);
         if (!cancelled) {
           setShare(loadedShare);
