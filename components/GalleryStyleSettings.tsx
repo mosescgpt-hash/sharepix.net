@@ -62,6 +62,7 @@ function draftCover(event: QREvent, draft: CoverStyle): ResolvedCover {
   return {
     image: draft.image ?? null,
     preset: coverPresetFor(draft.preset),
+    tone: draft.image ? 'dark' : coverPresetFor(draft.preset).tone,
     focus: draft.focus ?? 50,
     shade: draft.shade ?? DEFAULT_SHADE,
     title: draft.title?.trim() || null,
@@ -233,7 +234,7 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
           Fonts, colour and background that go together, in one click. Change any part of it
           afterwards.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {STARTER_LOOKS.map((look) => {
             const fonts = fontSetFor(look.galleryFontSet);
             const active =
@@ -252,7 +253,9 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
                 }`}
               >
                 <span
-                  className="block px-3 py-4 text-canvas"
+                  className={`block px-3 py-4 ${
+                    coverPresetFor(look.coverPreset).tone === 'light' ? 'text-ink' : 'text-canvas'
+                  }`}
                   style={{ background: coverPresetFor(look.coverPreset).background }}
                 >
                   <span className="block text-lg leading-tight" style={{ fontFamily: fonts.heading }}>
@@ -324,7 +327,11 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
                 aria-label={preset.label}
                 title={preset.label}
                 className={`h-10 w-14 border-2 transition disabled:opacity-50 ${
-                  active ? 'border-ink ring-2 ring-ink/30' : 'border-transparent hover:border-charcoal/40'
+                  active
+                    ? 'border-ink ring-2 ring-ink/30'
+                    : preset.tone === 'light'
+                      ? 'border-charcoal/15 hover:border-charcoal/40'
+                      : 'border-transparent hover:border-charcoal/40'
                 }`}
                 style={{ background: preset.background }}
               />

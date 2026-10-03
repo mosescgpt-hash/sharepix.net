@@ -117,7 +117,7 @@ export default function GuestUploadPage() {
                     </p>
                   ) : null}
                   {event.location ? (
-                    <p className="mt-2 text-sm text-canvas/70">{event.location}</p>
+                    <p className="mt-2 text-sm opacity-70">{event.location}</p>
                   ) : null}
                 </>
               }

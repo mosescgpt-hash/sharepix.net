@@ -784,9 +784,16 @@ The cover (lib/eventCover.ts) is one validated JSON value on the event,
 `coverStyle`, written only through updateEventSettings. Two levels: starter
 looks, a photo or a background, fonts and layout up front, each saving on
 click; headline, photo position, shade, alignment, height, countdown and
-accent behind "More options". Words on a cover are always light on dark —
-every preset clears AA for white text and a photo always carries a shade of at
-least 25% — so no choice a host makes can produce an unreadable masthead.
+accent behind "More options". Words on a cover were always light on dark at first —
+every dark preset clears AA for white text and a photo always carries a shade
+of at least 25% — so no choice a host makes can produce an unreadable masthead.
+
+Later: ivory and cream presets, with the "Ivory" and "Linen" starter looks.
+Those two flip the text to dark ink, because the host asked for an elegant
+light theme and white on ivory is unreadable. Text colour still follows from
+the background and is never a choice of its own; each preset declares its tone
+and is tested against its own text colour. A photo is always shaded dark,
+whatever preset sits behind it.
 
 A cover photo is re-encoded in the browser (metadata gone), stored under
 `events/<id>/cover/` with a random name, mirrored to R2 like a preview so it

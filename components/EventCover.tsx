@@ -33,10 +33,11 @@ const HEIGHT_CLASS: Record<ResolvedCover['height'], string> = {
  * The masthead of an event's pages: the host's photo or chosen background,
  * the headline over it, and the page's own actions underneath.
  *
- * Text here is always light on dark (see lib/eventCover.ts for why), so the
- * section keeps the `spx-section-ink` styles the pages already use, and only
- * its background changes. An event with no cover renders exactly the navy band
- * it always has.
+ * Text follows the background (see lib/eventCover.ts): light on dark covers
+ * and photos, which keep the `spx-section-ink` styles the pages already use,
+ * and dark ink on the ivory and cream presets, which use the page's own
+ * canvas styles. An event with no cover renders exactly the navy band it
+ * always has.
  */
 export default function EventCover({
   event,
@@ -72,6 +73,8 @@ export default function EventCover({
   const countdown = cover.countdown ? coverCountdown(event) : null;
   const title = cover.title || event.name;
   const centered = cover.align === 'center';
+  // Ivory and cream carry dark ink; everything else, photos included, white.
+  const light = cover.tone === 'light' && !photo && !cover.image;
   const height = preview
     ? cover.height === 'tall'
       ? 'flex min-h-[18rem] flex-col justify-end py-10'
@@ -82,7 +85,7 @@ export default function EventCover({
 
   return (
     <section
-      className={`spx-section-ink spx-cover relative isolate overflow-hidden ${height}`}
+      className={`${light ? 'spx-section-canvas spx-cover-light border-b border-charcoal/10' : 'spx-section-ink'} spx-cover relative isolate overflow-hidden ${height}`}
       // A preset is a gradient from a fixed list, never a stored string, so
       // nothing a host typed reaches this style attribute.
       style={photo || cover.image ? undefined : { background: cover.preset.background }}
@@ -116,11 +119,14 @@ export default function EventCover({
         <div className={centered ? 'mx-auto max-w-2xl' : 'max-w-2xl'}>
           {eyebrow ? <p className="spx-eyebrow">{eyebrow}</p> : null}
           <h1 className={`spx-display mt-3 ${preview ? 'text-3xl sm:text-4xl' : ''}`}>{title}</h1>
-          {/* Light, not the accent: an accent is chosen to match the
-              event, which usually means it matches this background too. */}
+          {/* On a dark cover, light rather than the accent: an accent is
+              chosen to match the event, which usually means it matches the
+              background too. On ivory the accent is the point — a gold or
+              blush rule is what makes it read as stationery. */}
           <span
             aria-hidden
-            className={`mt-4 block h-0.5 w-12 bg-canvas/70 ${centered ? 'mx-auto' : ''}`}
+            className={`mt-4 block h-0.5 w-12 ${light ? '' : 'bg-canvas/70'} ${centered ? 'mx-auto' : ''}`}
+            style={light ? { background: 'var(--spx-event-accent, rgba(18,56,81,0.45))' } : undefined}
           />
           {cover.subtitle ? (
             <p className="spx-display-serif mt-3 text-xl sm:text-2xl">{cover.subtitle}</p>
@@ -128,8 +134,17 @@ export default function EventCover({
             meta
           )}
           {countdown ? (
-            <p className="mt-4 inline-flex items-center gap-2 border border-canvas/30 bg-ink/40 px-3 py-1 text-sm font-medium text-canvas">
-              <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-mint" />
+            <p
+              className={`mt-4 inline-flex items-center gap-2 border px-3 py-1 text-sm font-medium ${
+                light
+                  ? 'border-charcoal/20 bg-paper/60 text-charcoal'
+                  : 'border-canvas/30 bg-ink/40 text-canvas'
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`inline-block h-1.5 w-1.5 rounded-full ${light ? 'bg-pine' : 'bg-mint'}`}
+              />
               {countdown}
             </p>
           ) : null}

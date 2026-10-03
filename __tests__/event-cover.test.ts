@@ -17,6 +17,8 @@ import { mirrorDecision } from '../amplify/functions/sanitize-upload/mirror';
 import { bodyOf, readSource as read } from './sourceGuards';
 
 const EVENT = 'evt-123';
+/** tailwind.config.js `charcoal`, the page's body text colour. */
+const CHARCOAL = '#152833';
 const KEY = `events/${EVENT}/cover/a1b2c3d4e5f6a7b8.jpg`;
 
 describe('the copy has not drifted', () => {
@@ -30,12 +32,32 @@ describe('the copy has not drifted', () => {
 describe('every preset is readable', () => {
   // The cover's words are always white. A preset that fails this would be a
   // background nobody can read the event's name on.
-  it.each(COVER_PRESETS.map((p) => [p.key, p.lightest]))(
-    '%s clears WCAG AA for white text',
-    (_key, lightest) => {
-      expect(contrastRatio('#ffffff', lightest)).toBeGreaterThanOrEqual(4.5);
+  // Words on a dark cover are white; on ivory and cream they are the page's
+  // dark ink (charcoal). Either way, a preset that fails this would be a
+  // background nobody can read the event's name on.
+  it.each(COVER_PRESETS.map((p) => [p.key, p.tone, p.textAgainst]))(
+    '%s (%s) clears WCAG AA for its text colour',
+    (_key, tone, against) => {
+      const text = tone === 'light' ? CHARCOAL : '#ffffff';
+      expect(contrastRatio(text, against)).toBeGreaterThanOrEqual(4.5);
     },
   );
+
+  it('offers light backgrounds as well as dark ones', () => {
+    expect(COVER_PRESETS.filter((p) => p.tone === 'light').map((p) => p.key)).toEqual([
+      'ivory',
+      'cream',
+    ]);
+  });
+
+  it('shades a photo dark whatever the background behind it', () => {
+    const cover = resolveEventCover({
+      id: EVENT,
+      coverStyle: JSON.stringify({ image: KEY, preset: 'ivory' }),
+    });
+    expect(cover.tone).toBe('dark');
+    expect(resolveEventCover({ id: EVENT, coverStyle: '{"preset":"ivory"}' }).tone).toBe('light');
+  });
 
   it('builds every background from fixed values, not from anything stored', () => {
     for (const preset of COVER_PRESETS) {
@@ -260,6 +282,16 @@ describe('starter looks', () => {
       if (look.galleryAccent) expect(normalizeAccent(look.galleryAccent)).toBe(look.galleryAccent);
     }
     expect(new Set(STARTER_LOOKS.map((l) => l.key)).size).toBe(STARTER_LOOKS.length);
+  });
+
+  // On ivory and cream the accent colours the small label above the headline,
+  // so it has to be readable there and not only on the gallery's page colour.
+  it('pair light backgrounds with an accent dark enough to read on them', () => {
+    for (const look of STARTER_LOOKS) {
+      const preset = COVER_PRESETS.find((p) => p.key === look.coverPreset);
+      if (preset?.tone !== 'light') continue;
+      expect(contrastRatio(look.galleryAccent, preset.textAgainst)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 
