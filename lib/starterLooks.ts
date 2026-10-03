@@ -36,6 +36,22 @@ export const STARTER_LOOKS: StarterLook[] = [
     coverPreset: 'rose',
   },
   {
+    key: 'ivory',
+    label: 'Ivory',
+    description: 'Elegant weddings, black tie',
+    galleryFontSet: 'elegant',
+    galleryAccent: '#7d6234',
+    coverPreset: 'ivory',
+  },
+  {
+    key: 'linen',
+    label: 'Linen',
+    description: 'Classic, soft and warm',
+    galleryFontSet: 'classic',
+    galleryAccent: '#5b4a3a',
+    coverPreset: 'cream',
+  },
+  {
     key: 'garden',
     label: 'Garden',
     description: 'Outdoor, rustic, spring',

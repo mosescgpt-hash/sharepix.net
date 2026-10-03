@@ -117,6 +117,9 @@
   .spx-section-ink .spx-btn-outline {
     @apply border-canvas/35 text-canvas hover:border-canvas;
   }
+  /* An ivory or cream event cover. The light button would vanish into it, so
+     the main action turns navy there. */
+  .spx-cover-light .spx-btn-canvas { @apply bg-ink text-canvas hover:bg-night; }
 
   /* A panel that lifts off canvas: white, hairline, still square. */
   .spx-card { @apply border border-charcoal/10 bg-paper; }

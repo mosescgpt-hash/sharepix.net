@@ -20,11 +20,13 @@
  *
  * ## Always readable
  *
- * Words on the cover are always light on dark, whatever the host picks. The
- * presets are all dark enough for white text (a test checks each one against
- * WCAG AA), and a photo always carries a shade of at least MIN_SHADE. A host
- * can make the shade lighter, never absent: a white dress and a white headline
- * is a page nobody can read, and the host would only find out from a guest.
+ * The host picks a background; the text colour follows from it and is never a
+ * separate choice. Dark presets carry white text, the light ones (ivory,
+ * cream) carry dark ink, and a test checks every preset against WCAG AA for
+ * its own text colour. A photo always carries white text over a shade of at
+ * least MIN_SHADE. A host can make the shade lighter, never absent: a white
+ * dress and a white headline is a page nobody can read, and the host would
+ * only find out from a guest.
  *
  * ## One stored value, validated twice
  *
@@ -44,8 +46,17 @@ export interface CoverPreset {
   label: string;
   /** The background itself. Only ever built from the constants below. */
   background: string;
-  /** The lightest colour in it, which white text has to be legible against. */
-  lightest: string;
+  /**
+   * Which way the words go. 'dark' backgrounds carry white text; 'light' ones
+   * (ivory, cream) carry the page's dark ink.
+   */
+  tone: 'dark' | 'light';
+  /**
+   * The colour in the background that is closest to the text colour — the
+   * lightest stop of a dark preset, the darkest of a light one. The text has to
+   * clear AA against it, and a test checks that it does.
+   */
+  textAgainst: string;
 }
 
 export const COVER_PRESETS: CoverPreset[] = [
@@ -53,56 +64,80 @@ export const COVER_PRESETS: CoverPreset[] = [
     key: 'navy',
     label: 'SharePix navy',
     background: '#123851',
-    lightest: '#123851',
+    tone: 'dark',
+    textAgainst: '#123851',
   },
   {
     key: 'midnight',
     label: 'Midnight',
     background: 'linear-gradient(160deg, #0f1b2d 0%, #22304a 100%)',
-    lightest: '#22304a',
+    tone: 'dark',
+    textAgainst: '#22304a',
   },
   {
     key: 'rose',
     label: 'Rose',
     background: 'linear-gradient(150deg, #6d2e46 0%, #a14a63 100%)',
-    lightest: '#a14a63',
+    tone: 'dark',
+    textAgainst: '#a14a63',
   },
   {
     key: 'sage',
     label: 'Sage',
     background: 'linear-gradient(150deg, #2f4a3a 0%, #557560 100%)',
-    lightest: '#557560',
+    tone: 'dark',
+    textAgainst: '#557560',
   },
   {
     key: 'champagne',
     label: 'Champagne',
     background: 'linear-gradient(150deg, #4a3a22 0%, #7a6038 100%)',
-    lightest: '#7a6038',
+    tone: 'dark',
+    textAgainst: '#7a6038',
   },
   {
     key: 'ocean',
     label: 'Ocean',
     background: 'linear-gradient(160deg, #0d3b4f 0%, #16657a 100%)',
-    lightest: '#16657a',
+    tone: 'dark',
+    textAgainst: '#16657a',
   },
   {
     key: 'plum',
     label: 'Plum',
     background: 'linear-gradient(150deg, #3b1f4a 0%, #6b3f7d 100%)',
-    lightest: '#6b3f7d',
+    tone: 'dark',
+    textAgainst: '#6b3f7d',
   },
   {
     key: 'sunset',
     label: 'Sunset',
     background: 'linear-gradient(140deg, #5b2333 0%, #9a3f2f 100%)',
-    lightest: '#9a3f2f',
+    tone: 'dark',
+    textAgainst: '#9a3f2f',
+  },
+  {
+    key: 'ivory',
+    label: 'Ivory',
+    background: 'linear-gradient(170deg, #fdfbf6 0%, #f4eddf 100%)',
+    tone: 'light',
+    textAgainst: '#f4eddf',
+  },
+  {
+    key: 'cream',
+    label: 'Cream',
+    background:
+      'radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.7) 0%, transparent 60%), linear-gradient(170deg, #f8f1e3 0%, #ecdfc6 100%)',
+    tone: 'light',
+    textAgainst: '#ecdfc6',
   },
   {
     key: 'confetti',
     label: 'Confetti',
     background:
       'radial-gradient(circle at 12% 20%, rgba(255,214,102,0.35) 0 3px, transparent 4px), radial-gradient(circle at 78% 30%, rgba(255,140,170,0.35) 0 3px, transparent 4px), radial-gradient(circle at 40% 75%, rgba(120,200,255,0.35) 0 3px, transparent 4px), radial-gradient(circle at 88% 82%, rgba(160,230,170,0.35) 0 3px, transparent 4px), #1d2440',
-    lightest: '#1d2440',
+    tone: 'dark',
+    textAgainst: '#1d2440',
   },
 ];
 
@@ -240,6 +275,8 @@ export interface ResolvedCover {
   /** The host's photo, or null for a preset background. */
   image: string | null;
   preset: CoverPreset;
+  /** Which way the words go: a photo is always shaded dark. */
+  tone: 'dark' | 'light';
   focus: number;
   shade: number;
   /** The custom headline, or null to use the event's name. */
@@ -264,9 +301,11 @@ export function resolveEventCover(
   let style: CoverStyle = {};
   const cleaned = event?.id ? sanitizeCoverStyle(event.coverStyle, event.id) : null;
   if (cleaned?.ok && cleaned.value) style = JSON.parse(cleaned.value) as CoverStyle;
+  const preset = coverPresetFor(style.preset);
   return {
     image: style.image ?? null,
-    preset: coverPresetFor(style.preset),
+    preset,
+    tone: style.image ? 'dark' : preset.tone,
     focus: style.focus ?? 50,
     shade: style.shade ?? DEFAULT_SHADE,
     title: style.title ?? null,
