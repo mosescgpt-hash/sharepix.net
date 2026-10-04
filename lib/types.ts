@@ -73,6 +73,10 @@ export interface QREvent {
   liveSlideshowEnabled?: boolean | null;
   /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;
+  /** Guest upload reminders; see lib/uploadReminders. */
+  uploadRemindersEnabled?: boolean | null;
+  /** IANA zone, e.g. America/Chicago. Set with the reminders switch. */
+  timeZone?: string | null;
   guestBookCount?: number | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
   moderationMode?: string | null;

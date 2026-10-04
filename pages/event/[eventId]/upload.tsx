@@ -5,6 +5,7 @@ import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import UploadForm from '@/components/UploadForm';
 import EventCover from '@/components/EventCover';
+import ReminderOptInCard from '@/components/uploadReminders/ReminderOptInCard';
 import { NO_PER_GUEST_LIMIT_LINE } from '@/lib/fairUse';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { fetchEvent, fetchEventMoments } from '@/lib/api';
@@ -33,6 +34,8 @@ export default function GuestUploadPage() {
   const [momentId, setMomentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Set after the first successful upload; the reminder offer waits for it.
+  const [uploadedOnce, setUploadedOnce] = useState(false);
 
   useEffect(() => {
     if (!eventId) return;
@@ -173,7 +176,9 @@ export default function GuestUploadPage() {
                     videosRemaining={videosRemaining(event)}
                     themeKey={themeKeyForEvent(event)}
                     momentId={momentId}
+                    onUploaded={() => setUploadedOnce(true)}
                   />
+                  {uploadedOnce ? <ReminderOptInCard event={event} /> : null}
                 </>
               ) : event.uploadsClosed ? (
                 <Notice tone="warn" label="Closed by the host">

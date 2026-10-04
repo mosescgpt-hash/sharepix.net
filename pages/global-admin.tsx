@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
+import AdminReminderRun from '@/components/uploadReminders/AdminReminderRun';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import { isGlobalAdmin } from '@/lib/admin';
@@ -2998,6 +2999,7 @@ function GlobalAdminPage() {
                   {working === 'job-reclaim' ? 'Running…' : 'Reclaim expired storage'}
                 </button>
               </div>
+              <AdminReminderRun />
               <p className="mt-3 text-sm text-charcoal/70">
                 <strong>Reclamation deletes photos permanently</strong> — every event whose
                 gallery retention and {ARCHIVE_DAYS}-day archive have both closed, plus{' '}

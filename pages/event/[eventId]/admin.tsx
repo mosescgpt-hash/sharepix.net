@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
+import HostReminderSettings from '@/components/uploadReminders/HostReminderSettings';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
@@ -1243,6 +1244,8 @@ function AdminDashboardPage() {
                   </ul>
                 ) : null}
               </div>
+
+              <HostReminderSettings event={event} onSaved={load} />
 
               <div className="spx-card mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Add-ons</h2>

@@ -45,6 +45,8 @@ import { proUpload } from '../functions/pro-upload/resource';
 import { processProPhoto } from '../functions/process-pro-photo/resource';
 import { decideProPhoto } from '../functions/decide-pro-photo/resource';
 import { connectPhotographer } from '../functions/connect-photographer/resource';
+import { uploadReminders as uploadRemindersFn } from '../functions/upload-reminders/resource';
+import { sendUploadReminders as sendUploadRemindersFn } from '../functions/send-upload-reminders/resource';
 
 const schema = a.schema({
   Event: a
@@ -249,6 +251,14 @@ const schema = a.schema({
       // createGuestBookEntry so the abuse ceiling can be enforced atomically
       // without scanning. Not a product limit; see MAX_ENTRIES_PER_EVENT.
       guestBookCount: a.integer(),
+      // Guest upload reminders (lib/uploadReminders). Off unless the host turns
+      // them on, which they do together with the event's time zone, because
+      // the reminders go out at 10:00 local. Written only by
+      // setUploadReminders. reminderOptInCount is the abuse ceiling, kept
+      // atomically by requestUploadReminder; hosts never see who opted in.
+      uploadRemindersEnabled: a.boolean(),
+      timeZone: a.string(),
+      reminderOptInCount: a.integer(),
       // How uploads are screened for this event. 'review' (the default, and what
       // a missing value means) holds potentially explicit photos back for the
       // host; 'allow_all' skips screening entirely and shows everything
@@ -476,6 +486,26 @@ const schema = a.schema({
   // verify the event is paid, open, and actually has a guest book), and no
   // guest read (that would let anyone enumerate every note at every event on
   // the platform). The public album reads through listGuestBookEntries.
+  // A guest asking to be reminded to add more photos. Holds an email address
+  // the host must never see, so there is no owner rule and no guest rule at
+  // all: rows are written only by requestUploadReminder (which validates,
+  // dedupes and enforces the event's state), read only by the scheduled sender,
+  // and deleted 30 days after the upload window closes. The id is a hash of
+  // event and address, which is what makes "one opt-in per email per event"
+  // a conditional write rather than a scan.
+  ReminderOptIn: a
+    .model({
+      eventId: a.id().required(),
+      email: a.string().required(),
+      /** Random, compared in constant time by stopUploadReminders. */
+      unsubscribeToken: a.string().required(),
+      firstSentAt: a.datetime(),
+      secondSentAt: a.datetime(),
+      unsubscribed: a.boolean(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   GuestBookEntry: a
     .model({
       eventId: a.id().required(),
@@ -1533,6 +1563,55 @@ const schema = a.schema({
     message: a.string(),
   }),
 
+
+  UploadReminderResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+  }),
+
+  // A guest asks for a reminder to add more photos. Open to signed-out
+  // callers, and so the whole control: it re-checks the address, the event's
+  // switch and window, the ceiling, and refuses a second opt-in for the same
+  // address. Returns nothing about other guests.
+  requestUploadReminder: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), email: a.string().required() })
+    .returns(a.ref('UploadReminderResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(uploadRemindersFn)),
+
+  // The unsubscribe link in a reminder. The token is the credential; no login.
+  stopUploadReminders: a
+    .mutation()
+    .arguments({ id: a.string().required(), token: a.string().required() })
+    .returns(a.ref('UploadReminderResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(uploadRemindersFn)),
+
+  // The host turns reminders on or off and sets the event's time zone. Owner
+  // (or admin) only, checked against the stored row.
+  setUploadReminders: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      enabled: a.boolean().required(),
+      timeZone: a.string(),
+    })
+    .returns(a.ref('UploadReminderResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(uploadRemindersFn)),
+
+  // Run the hourly reminder job now, from the global admin dashboard. The same
+  // function the schedule invokes, and like the other job runners it takes
+  // nothing that changes what a run does: `probe: true` only reports whether
+  // sending is switched on. A manual run sends exactly what is due, which is
+  // what the next hourly run would have sent anyway.
+  runUploadReminders: a
+    .mutation()
+    .arguments({ probe: a.boolean() })
+    .returns(a.ref('JobRunResult'))
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(sendUploadRemindersFn)),
 
   UnsubscribeResult: a.customType({
     unsubscribed: a.boolean().required(),
