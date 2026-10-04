@@ -17,6 +17,7 @@ import { guestBookAvailable } from '@/lib/guestBook';
 import { groupPhotosByMoment } from '@/lib/moments';
 import ChallengeChips from '@/components/challenges/ChallengeChips';
 import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
+import { galleryAudienceFor } from '@/lib/galleryAudience';
 
 /**
  * The guest gallery, on the redesign system. Mobile first — most people reach
@@ -141,7 +142,11 @@ export default function EventGalleryPage() {
             event={event}
             eyebrow={
               <>
-                {photos.length} {photos.length === 1 ? 'memory' : 'memories'} shared
+                {!privileged && galleryAudienceFor(event) === 'host'
+                  ? 'A private gallery'
+                  : `${photos.length} ${photos.length === 1 ? 'memory' : 'memories'} ${
+                      !privileged && galleryAudienceFor(event) === 'own' ? 'from you' : 'shared'
+                    }`}
               </>
             }
             meta={
@@ -182,6 +187,16 @@ export default function EventGalleryPage() {
                     Uploads for this event have closed. These previews stay available for a little
                     longer before the gallery closes.
                   </Notice>
+                ) : !privileged && galleryAudienceFor(event) === 'own' ? (
+                  <Notice label="Private gallery">
+                    The host is keeping this gallery private. You can see the photos you&rsquo;ve
+                    added from this phone; everyone&rsquo;s photos go to the host.
+                  </Notice>
+                ) : !privileged && galleryAudienceFor(event) === 'host' ? (
+                  <Notice label="Private gallery">
+                    The host is keeping this gallery to themselves. Every photo you add goes
+                    straight to them.
+                  </Notice>
                 ) : !privileged && event.guestDownloadsBlocked === true ? (
                   <Notice label="">
                     The host has kept downloads for this event to themselves, so these are viewing
@@ -205,9 +220,17 @@ export default function EventGalleryPage() {
                   </Notice>
                 ) : photos.length === 0 ? (
                   <div className="spx-empty">
-                    <p className="spx-display-serif text-2xl">Nothing here yet.</p>
+                    <p className="spx-display-serif text-2xl">
+                      {!privileged && galleryAudienceFor(event) !== 'everyone'
+                        ? 'Your photos will show here.'
+                        : 'Nothing here yet.'}
+                    </p>
                     <p className="spx-body mt-2 max-w-sm text-sm">
-                      Be the first to add something — every photo your guests take lands here.
+                      {!privileged && galleryAudienceFor(event) === 'host'
+                        ? 'Only the host sees this gallery. Add yours and they will have them.'
+                        : !privileged && galleryAudienceFor(event) === 'own'
+                          ? 'Add some and they will appear here for you, and for the host.'
+                          : 'Be the first to add something — every photo your guests take lands here.'}
                     </p>
                     {lifecycle.uploadOpen ? (
                       <Link href={`/event/${event.id}/upload`} className="spx-btn-ink mt-6">

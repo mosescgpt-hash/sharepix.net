@@ -1079,6 +1079,12 @@ export const handler: Handler = async (event) => {
   if (thumbS3Key) item.thumbS3Key = { S: thumbS3Key };
   if (uploadedBy) item.uploadedBy = { S: uploadedBy };
   if (uploadedByUserId) item.uploadedByUserId = { S: uploadedByUserId };
+  // Who uploaded it, from the verified identity rather than anything in the
+  // request: the sub when signed in, else the guest's identity-pool id. What
+  // listEventPhotos matches on when a host lets guests see only their own.
+  const who = event.identity as { sub?: string; cognitoIdentityId?: string } | undefined;
+  const uploaderId = who?.sub || who?.cognitoIdentityId || '';
+  if (uploaderId) item.uploaderId = { S: uploaderId };
   if (contentHash) item.contentHash = { S: contentHash };
   if (momentId) item.momentId = { S: momentId };
   if (challengeId) item.challengeId = { S: challengeId };

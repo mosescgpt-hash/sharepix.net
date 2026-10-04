@@ -4,6 +4,7 @@ import Notice from '@/components/Notice';
 import {
   setEventCover,
   setEventEngagement,
+  setEventGalleryAudience,
   setEventGalleryTheme,
   uploadEventCoverImage,
 } from '@/lib/api';
@@ -29,6 +30,7 @@ import {
   resolveGalleryTheme,
   themeStyle,
 } from '@/lib/galleryTheme';
+import { GALLERY_AUDIENCE_OPTIONS, galleryAudienceFor } from '@/lib/galleryAudience';
 import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
 import { STARTER_LOOKS } from '@/lib/starterLooks';
 import type { QREvent } from '@/lib/types';
@@ -457,7 +459,57 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
 
       {tab === 'gallery' ? (
         <div role="tabpanel" id="look-panel-gallery" aria-labelledby="look-tab-gallery">
-          <fieldset className="">
+          <fieldset>
+            <legend className="text-xs uppercase tracking-wide text-charcoal/55">
+              Who can see the gallery
+            </legend>
+            <div className="mt-3 space-y-2">
+              {GALLERY_AUDIENCE_OPTIONS.map((option) => {
+                const active = galleryAudienceFor(event) === option.key;
+                return (
+                  <label
+                    key={option.key}
+                    className={`flex cursor-pointer items-start gap-3 border p-3 transition ${
+                      active ? 'border-ink bg-ink/5' : 'border-charcoal/20 hover:border-charcoal/50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="gallery-audience"
+                      className="mt-1"
+                      checked={active}
+                      disabled={working_}
+                      onChange={() =>
+                        void run(
+                          'audience',
+                          () => setEventGalleryAudience(event.id, option.key),
+                          'Saved. You always see every photo yourself.',
+                        )
+                      }
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-charcoal">{option.label}</span>
+                      <span className="mt-0.5 block text-xs text-charcoal/60">
+                        {option.description}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {galleryAudienceFor(event) !== 'everyone' ? (
+              // What this does and does not do, said before a host relies on it.
+              <p className="mt-3 text-xs text-charcoal/60">
+                {galleryAudienceFor(event) === 'own'
+                  ? 'A guest’s “own” photos are the ones uploaded from the same phone and browser, or while signed in. Photos from before October 2026 can’t be matched to a guest, so only you see those. '
+                  : ''}
+                Open the live slideshow signed in as yourself so it shows everything. Share links
+                you create still work: they show exactly the photos you put in them.
+              </p>
+            ) : null}
+          </fieldset>
+
+          <fieldset className="mt-6">
             <legend className="text-xs uppercase tracking-wide text-charcoal/55">Gallery layout</legend>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {GALLERY_LAYOUTS.map((option) => (

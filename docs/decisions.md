@@ -800,6 +800,32 @@ A cover photo is re-encoded in the browser (metadata gone), stored under
 outlives the 90-day S3 copy, signed for guests even in the thumbnail-only
 phase, and closed with the rest of the event's media.
 
+## 18. Who can see the gallery
+
+Zola lets a couple choose whether guests see the shared gallery or only their
+own photos. SharePix now has the same choice, `galleryAudience`: everyone (the
+default, stored as absent), each guest sees only their own, or only the host.
+
+It is enforced in listEventPhotos, the query every guest view goes through —
+gallery, slideshow, guest book — and nowhere in the page. The host and admins
+always see everything; a host's download share sees exactly the photos the
+host put in it, whatever the setting.
+
+"Own" needs to know who uploaded what without an account, so createEventPhoto
+now stores `uploaderId` on every photo: the Cognito sub when signed in, else
+the guest's identity-pool id, which their browser keeps between visits. Taken
+from the verified identity, never from the request, and never returned to a
+guest. Photos from before it existed match nobody, so in "own" mode they show
+only to the host: erring toward the privacy the host asked for.
+
+Storage for guests and signed-in users became `get` rather than `read`. In
+Amplify Gen 2 `read` includes list, which let anyone with guest credentials
+enumerate an event's folder — held-for-review photos and videos as well as,
+with this setting, other guests' photos. The site never lists; every read is
+by a key listEventPhotos handed out. A guest could still open a photo whose key
+they guessed, so this is a privacy setting, not encryption, and the settings
+card says what it does in plain words.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

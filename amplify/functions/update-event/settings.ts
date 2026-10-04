@@ -104,6 +104,8 @@ export interface SettingsRequest {
   commentsEnabled?: boolean | null;
   /** The cover as JSON, '' to clear it. See lib/eventCover.ts. */
   coverStyle?: string | null;
+  /** 'everyone' | 'own' | 'host'. Who may see the gallery. */
+  galleryAudience?: string | null;
 }
 
 /** The event as stored, insofar as these rules care. */
@@ -291,6 +293,15 @@ export function buildPatch(
     }
   }
 
+  // Who may see the gallery. 'everyone' is stored as absent, so an event that
+  // was never changed and one changed back look the same to every reader.
+  if (provided(request.galleryAudience)) {
+    const audience = (request.galleryAudience ?? '').trim().toLowerCase();
+    if (audience === 'own' || audience === 'host') set.galleryAudience = audience;
+    else if (audience === 'everyone' || audience === '') remove.push('galleryAudience');
+    else return { ok: false, reason: 'Choose who can see the gallery.' };
+  }
+
   // The cover is one value, validated whole. A photo key must point inside
   // this event's own folder, so a host cannot borrow another event's media
   // (or anything else in the bucket) as their background.
@@ -360,4 +371,5 @@ export const EDITABLE_FIELDS = [
   'qrColor',
   'qrLogo',
   'coverStyle',
+  'galleryAudience',
 ];

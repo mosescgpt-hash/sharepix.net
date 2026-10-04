@@ -138,6 +138,7 @@ export const handler: Handler = async (event) => {
       reactionsEnabled: event.arguments.reactionsEnabled,
       commentsEnabled: event.arguments.commentsEnabled,
       coverStyle: event.arguments.coverStyle,
+      galleryAudience: event.arguments.galleryAudience,
     },
     { photoCount: Number(found.Item.photoCount?.N ?? '0'), id: eventId },
   );

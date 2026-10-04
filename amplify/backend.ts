@@ -619,6 +619,11 @@ listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 // Read-only, for one attribute: whether an admin closed the event.
 eventTable.grantReadData(listFn);
 listFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+// Read-only, for a host's download share: a share link sees the photos the host
+// put in it, whatever the gallery setting.
+const downloadShareTable = backend.data.resources.tables.DownloadShare;
+downloadShareTable.grantReadData(listFn);
+listFn.addEnvironment('DOWNLOAD_SHARE_TABLE_NAME', downloadShareTable.tableName);
 
 // Guest book write: reads the event to re-derive entitlement and state, bumps
 // the entry counter atomically, reads the Photo table to prove an attached

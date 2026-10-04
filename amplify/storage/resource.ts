@@ -17,8 +17,14 @@ export const storage = defineStorage({
   },
   access: (allow) => ({
     'events/*': [
-      allow.guest.to(['read', 'write']),
-      allow.authenticated.to(['read', 'write']),
+      // `get`, not `read`. In Amplify Gen 2, `read` is get AND list, and list
+      // let anyone holding guest credentials enumerate every file in any
+      // event's folder they knew the id of — held-for-review photos, videos,
+      // and, once a host chose "guests see only their own", everyone else's
+      // photos too. The site never lists: every read is by a key it was given
+      // by listEventPhotos, which is where visibility is decided.
+      allow.guest.to(['get', 'write']),
+      allow.authenticated.to(['get', 'write']),
       // Users in the ADMINS group use the admin IAM role, which otherwise
       // wouldn't inherit the authenticated role's storage access — so admins
       // couldn't load photos. Grant it explicitly.

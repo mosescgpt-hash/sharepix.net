@@ -117,7 +117,7 @@ describe('closing an event', () => {
   it('lists nothing to anyone but an admin', () => {
     const list = codeOnly(readSource('amplify/functions/list-event-photos/handler.ts'));
     expect(list).toContain(
-      "if (!(identity?.groups ?? []).includes('ADMINS') && (await isTakenDown(eventId))) return [];",
+      "if (!(identity?.groups ?? []).includes('ADMINS') && facts.takenDown) return [];",
     );
     expect(codeOnly(readSource('amplify/backend.ts'))).toContain('eventTable.grantReadData(listFn)');
   });

@@ -61,6 +61,8 @@ export interface QREvent {
   galleryAccent?: string | null;
   /** The cover over the event's pages, as JSON. See lib/eventCover.ts. */
   coverStyle?: string | null;
+  /** 'everyone' (absent) | 'own' | 'host'. See lib/galleryAudience.ts. */
+  galleryAudience?: string | null;
   reactionsEnabled?: boolean | null;
   commentsEnabled?: boolean | null;
   accessExpiresAt?: string | null;
