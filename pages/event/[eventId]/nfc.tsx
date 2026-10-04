@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
+import NfcOrderCard from '@/components/signKit/NfcOrderCard';
 import { eventUploadUrl } from '@/lib/signKit/content';
 import { useHostEvent } from '@/lib/signKit/useHostEvent';
 
@@ -132,9 +133,10 @@ function NfcPage() {
                   <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ink text-sm font-semibold text-canvas">
                     {i + 1}
                   </span>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <h2 className="font-semibold">{step.title}</h2>
                     <p className="mt-1 text-sm text-charcoal/70">{step.body}</p>
+                    {i === 0 ? <NfcOrderCard className="mt-3" /> : null}
                   </div>
                 </li>
               ))}

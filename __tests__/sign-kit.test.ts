@@ -16,6 +16,7 @@ import { qrMatrix, qrRuns } from '../lib/signKit/qr';
 import { buildSignPdf, measureWith } from '../lib/signKit/render';
 import { fitText, pdfSafeText } from '../lib/signKit/text';
 import { closesLine, eventUploadUrl, signContent } from '../lib/signKit/content';
+import { NFC_STORE_AFFILIATE, NFC_STORE_LINKS } from '../lib/signKit/nfcStore';
 
 const content: SignContent = {
   eventName: 'Anderson & Okafor Wedding',
@@ -203,5 +204,17 @@ describe('signContent', () => {
 
   it('falls back to a placeholder when nothing in the name can be printed', () => {
     expect(signContent({ ...event, name: '🎉🎉' }, 'https://x', 'x', now).eventName).toBe('Our event');
+  });
+});
+
+describe('NFC store links', () => {
+  it('offers regular and on-metal stickers over https', () => {
+    expect(NFC_STORE_LINKS.map((l) => l.label)).toEqual(['NFC stickers', 'On-metal NFC stickers']);
+    for (const link of NFC_STORE_LINKS) expect(new URL(link.url).protocol).toBe('https:');
+  });
+
+  it('ships without an affiliate claim', () => {
+    // Flip this with the links, never alone: the card's disclosure reads it.
+    expect(NFC_STORE_AFFILIATE).toBe(false);
   });
 });

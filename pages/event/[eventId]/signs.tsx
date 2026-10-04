@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
+import NfcOrderCard from '@/components/signKit/NfcOrderCard';
 import SignPreview from '@/components/signKit/SignPreview';
 import { signContent } from '@/lib/signKit/content';
 import { layoutSign, type SignContent } from '@/lib/signKit/layout';
@@ -245,6 +246,8 @@ function SignsPage() {
                 </li>
               </ul>
             </div>
+
+            <NfcOrderCard className="mt-5" />
           </>
         ) : null}
       </main>
