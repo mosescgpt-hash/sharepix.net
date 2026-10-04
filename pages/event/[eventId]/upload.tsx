@@ -6,6 +6,9 @@ import Notice from '@/components/Notice';
 import UploadForm from '@/components/UploadForm';
 import EventCover from '@/components/EventCover';
 import ReminderOptInCard from '@/components/uploadReminders/ReminderOptInCard';
+import ChallengeCard from '@/components/challenges/ChallengeCard';
+import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
+import type { EventChallenge } from '@/lib/challenges/api';
 import { NO_PER_GUEST_LIMIT_LINE } from '@/lib/fairUse';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { fetchEvent, fetchEventMoments } from '@/lib/api';
@@ -36,6 +39,10 @@ export default function GuestUploadPage() {
   const [error, setError] = useState<string | null>(null);
   // Set after the first successful upload; the reminder offer waits for it.
   const [uploadedOnce, setUploadedOnce] = useState(false);
+  // Photo challenges: [] unless the host turned them on. `challenge` is the
+  // one the guest chose; it rides on the next batch and is then cleared.
+  const challenges = useEventChallenges(event);
+  const [challenge, setChallenge] = useState<EventChallenge | null>(null);
 
   useEffect(() => {
     if (!eventId) return;
@@ -165,6 +172,7 @@ export default function GuestUploadPage() {
                 </Notice>
               ) : canUpload ? (
                 <>
+                  <ChallengeCard challenges={challenges} selected={challenge} onSelect={setChallenge} />
                   <p className="mb-4 text-center text-sm text-charcoal/70">
                     {/* Said here because it is the question a guest arrives
                         with, having used apps that stop them at 36. */}
@@ -176,7 +184,11 @@ export default function GuestUploadPage() {
                     videosRemaining={videosRemaining(event)}
                     themeKey={themeKeyForEvent(event)}
                     momentId={momentId}
-                    onUploaded={() => setUploadedOnce(true)}
+                    challengeId={challenge?.id ?? null}
+                    onUploaded={() => {
+                      setUploadedOnce(true);
+                      setChallenge(null);
+                    }}
                   />
                   {uploadedOnce ? <ReminderOptInCard event={event} /> : null}
                 </>

@@ -25,6 +25,8 @@ interface UploadFormProps {
    * deleted moment arrives here as null.
    */
   momentId?: string | null;
+  /** The photo challenge these uploads answer, if any. See lib/challenges. */
+  challengeId?: string | null;
 }
 
 export default function UploadForm({
@@ -34,8 +36,9 @@ export default function UploadForm({
   videosRemaining = null,
   themeKey = null,
   momentId = null,
+  challengeId = null,
 }: UploadFormProps) {
-  const upload = useMediaUpload({ eventId, allowVideo, videosRemaining, onUploaded, momentId });
+  const upload = useMediaUpload({ eventId, allowVideo, videosRemaining, onUploaded, momentId, challengeId });
   const {
     queue,
     busy,

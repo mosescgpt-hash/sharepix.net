@@ -64,6 +64,8 @@ import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
 import { uploadReminders } from './functions/upload-reminders/resource';
 import { sendUploadReminders } from './functions/send-upload-reminders/resource';
+import { saveChallenge } from './functions/save-challenge/resource';
+import { listChallenges } from './functions/list-challenges/resource';
 
 import { findEventByCode } from './functions/find-event-by-code/resource';
 import { proUpload } from './functions/pro-upload/resource';
@@ -121,6 +123,8 @@ const backend = defineBackend({
   photoEngagement,
   uploadReminders,
   sendUploadReminders,
+  saveChallenge,
+  listChallenges,
 });
 
 // Rate limiting in front of the API. A no-op unless WAF_ENABLED is set — see
@@ -650,6 +654,24 @@ momentWriteFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 const momentListFn = backend.listMoments.resources.lambda as LambdaFunction;
 momentTable.grantReadData(momentListFn);
 momentListFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
+
+// Photo challenges (lib/challenges). The write function reads the event to
+// prove the caller owns it, and writes the event only for the two switches.
+// The list function reads the event for the switch and the owner (who sees
+// inactive prompts too). createEventPhoto reads a challenge to check a claim.
+const challengeTable = backend.data.resources.tables.Challenge;
+const challengeWriteFn = backend.saveChallenge.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(challengeWriteFn);
+challengeTable.grantReadWriteData(challengeWriteFn);
+challengeWriteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+challengeWriteFn.addEnvironment('CHALLENGE_TABLE_NAME', challengeTable.tableName);
+const challengeListFn = backend.listChallenges.resources.lambda as LambdaFunction;
+eventTable.grantReadData(challengeListFn);
+challengeTable.grantReadData(challengeListFn);
+challengeListFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+challengeListFn.addEnvironment('CHALLENGE_TABLE_NAME', challengeTable.tableName);
+challengeTable.grantReadData(createFn);
+createFn.addEnvironment('CHALLENGE_TABLE_NAME', challengeTable.tableName);
 
 // Admin user-actions function: reset passwords and enable/disable accounts in
 // the Cognito user pool. Scoped to just these admin operations on this pool.

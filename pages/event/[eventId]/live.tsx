@@ -16,6 +16,9 @@ import {
   slideshowEligible,
 } from '@/lib/slideshow';
 import { QREvent, QRPhoto } from '@/lib/types';
+import ChallengeCaption from '@/components/challenges/ChallengeCaption';
+import { challengeCaption } from '@/lib/challenges/rules';
+import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
 
 /** A photo plus where we resolved it from (R2 first, S3 behind), and when. */
 interface Frame {
@@ -46,6 +49,9 @@ export default function LiveSlideshowPage() {
   const [isNew, setIsNew] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
   const [photoCount, setPhotoCount] = useState(0);
+  // Photo challenges, for the caption under a challenge photo. [] unless the
+  // host turned challenges on.
+  const challenges = useEventChallenges(event);
 
   // Reel state lives in refs: the timers below read it without re-subscribing on
   // every render (which would restart the slideshow each tick).
@@ -293,6 +299,9 @@ export default function LiveSlideshowPage() {
                 <p className="truncate text-2xl font-medium drop-shadow">
                   {frame.photo.uploadedBy || 'Anonymous'}
                 </p>
+                <ChallengeCaption
+                  text={challengeCaption(frame.photo, challenges, event?.challengeCaptions)}
+                />
                 {event ? (
                   <p className="truncate text-sm text-white/60">{event.name}</p>
                 ) : null}

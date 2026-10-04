@@ -146,6 +146,7 @@ export const handler: Handler = async (event) => {
       eventOwner: item.eventOwner?.S ?? null,
       contentHash: item.contentHash?.S ?? null,
       momentId: item.momentId?.S ?? null,
+      challengeId: item.challengeId?.S ?? null,
       createdAt: item.createdAt?.S ?? null,
     }));
 };

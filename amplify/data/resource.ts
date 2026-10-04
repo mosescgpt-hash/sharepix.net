@@ -47,6 +47,8 @@ import { decideProPhoto } from '../functions/decide-pro-photo/resource';
 import { connectPhotographer } from '../functions/connect-photographer/resource';
 import { uploadReminders as uploadRemindersFn } from '../functions/upload-reminders/resource';
 import { sendUploadReminders as sendUploadRemindersFn } from '../functions/send-upload-reminders/resource';
+import { saveChallenge as saveChallengeFn } from '../functions/save-challenge/resource';
+import { listChallenges as listChallengesFn } from '../functions/list-challenges/resource';
 
 const schema = a.schema({
   Event: a
@@ -259,6 +261,13 @@ const schema = a.schema({
       uploadRemindersEnabled: a.boolean(),
       timeZone: a.string(),
       reminderOptInCount: a.integer(),
+      // Photo challenges (lib/challenges). challengesEnabled is the switch:
+      // absent means off, and off means the upload page, gallery and slideshow
+      // render as if challenges did not exist. challengeCaptions is the
+      // slideshow caption toggle and is ABSENT MEANS ON. Both written only by
+      // setChallengeSettings.
+      challengesEnabled: a.boolean(),
+      challengeCaptions: a.boolean(),
       // How uploads are screened for this event. 'review' (the default, and what
       // a missing value means) holds potentially explicit photos back for the
       // host; 'allow_all' skips screening entirely and shows everything
@@ -388,6 +397,11 @@ const schema = a.schema({
       // trusted. A value pointing at a moment the host later deleted is also
       // valid; the gallery folds it back to "no moment". See lib/moments.ts.
       momentId: a.string(),
+      // The photo challenge the guest was answering, if any. Optional forever,
+      // and a claim checked like momentId: createEventPhoto keeps it only if
+      // the challenge belongs to this event and the event has challenges on.
+      // A value pointing at a deleted challenge is valid and simply unfiled.
+      challengeId: a.string(),
 
       // --- SharePix Pro -------------------------------------------------
       //
@@ -493,6 +507,21 @@ const schema = a.schema({
   // and deleted 30 days after the upload window closes. The id is a hash of
   // event and address, which is what makes "one opt-in per email per event"
   // a conditional write rather than a scan.
+  // A photo prompt a host offers guests. No owner or guest rule: the host
+  // writes through saveChallenge/deleteChallenge (which check the event's
+  // stored owner, so nobody can add prompts to someone else's event) and
+  // everyone reads through eventChallenges, which also hides inactive prompts
+  // from guests and everything when the switch is off.
+  Challenge: a
+    .model({
+      eventId: a.id().required(),
+      text: a.string().required(),
+      order: a.integer(),
+      active: a.boolean(),
+    })
+    .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
   ReminderOptIn: a
     .model({
       eventId: a.id().required(),
@@ -1452,6 +1481,7 @@ const schema = a.schema({
     eventOwner: a.string(),
     contentHash: a.string(),
     momentId: a.string(),
+    challengeId: a.string(),
     createdAt: a.string(),
   }),
 
@@ -1612,6 +1642,63 @@ const schema = a.schema({
     .returns(a.ref('JobRunResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(sendUploadRemindersFn)),
+
+  ChallengeView: a.customType({
+    id: a.string().required(),
+    eventId: a.string().required(),
+    text: a.string().required(),
+    order: a.integer(),
+    active: a.boolean(),
+    createdAt: a.string(),
+  }),
+
+  ChallengeResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    challenge: a.ref('ChallengeView'),
+  }),
+
+  // Add or edit one challenge. Omitting challengeId creates. Owner or admin.
+  saveChallenge: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      challengeId: a.id(),
+      text: a.string().required(),
+      order: a.integer(),
+      active: a.boolean(),
+    })
+    .returns(a.ref('ChallengeResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(saveChallengeFn)),
+
+  // Photos that answered it keep their challengeId and fold back to unfiled.
+  // Not deleteChallenge: the model generates that name, and a collision fails
+  // the whole deployment.
+  removeChallenge: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), challengeId: a.id().required() })
+    .returns(a.ref('ChallengeResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(saveChallengeFn)),
+
+  // The event's challenge switch and the slideshow caption toggle.
+  setChallengeSettings: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), enabled: a.boolean(), captions: a.boolean() })
+    .returns(a.ref('ChallengeResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(saveChallengeFn)),
+
+  // One event's challenges. Guests get the active ones, and nothing when the
+  // switch is off; the event's owner and admins get every one, so the
+  // dashboard can set them up before turning the switch on.
+  eventChallenges: a
+    .query()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('ChallengeView').array())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(listChallengesFn)),
 
   UnsubscribeResult: a.customType({
     unsubscribed: a.boolean().required(),
@@ -2245,6 +2332,8 @@ const schema = a.schema({
       // eventId matches before keeping it, and silently drops it otherwise
       // rather than failing an upload the guest has already waited through.
       momentId: a.string(),
+      // The challenge the guest was answering. A claim; see Photo.challengeId.
+      challengeId: a.string(),
     })
     .returns(a.ref('PhotoUploadResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
