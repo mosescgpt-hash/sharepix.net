@@ -2631,6 +2631,8 @@ export interface EventUploadContext {
    * picks it) before choosing photos, and it cannot change mid-upload.
    */
   momentId: string | null;
+  /** The photo challenge this batch answers, if any. A claim; see lib/challenges. */
+  challengeId?: string | null;
 }
 
 /** Resolve auth, guest credentials, and the event once for an entire upload batch. */
@@ -2638,6 +2640,7 @@ export async function prepareEventUpload(
   eventId: string,
   uploaderName?: string,
   momentId?: string | null,
+  challengeId?: string | null,
 ): Promise<EventUploadContext> {
   let user = await getCurrentUserInfo();
   let authMode: DataAuthMode = user ? 'userPool' : 'identityPool';
@@ -2713,6 +2716,7 @@ export async function prepareEventUpload(
     // Passed through as the guest's claim. createEventPhoto proves the moment
     // belongs to this event before filing anything under it.
     momentId: momentId?.trim() || null,
+    challengeId: challengeId?.trim() || null,
   };
 }
 
@@ -2851,6 +2855,7 @@ export async function uploadEventPhotoWithContext(
         uploadedByUserId: context.uploadedByUserId,
         contentHash: contentHash ?? undefined,
         momentId: context.momentId ?? undefined,
+        challengeId: context.challengeId ?? undefined,
       },
       { authMode: context.authMode },
     );

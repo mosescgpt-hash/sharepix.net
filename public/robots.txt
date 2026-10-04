@@ -13,6 +13,7 @@ Disallow: /my-events
 Disallow: /pro/join
 Disallow: /pro/events/
 Disallow: /rating/
+Disallow: /reminders/
 Disallow: /review/
 Disallow: /share/
 Disallow: /survey/

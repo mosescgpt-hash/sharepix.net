@@ -45,6 +45,8 @@ const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET_NAME = process.env.BUCKET_NAME as string;
 const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME as string;
 const MOMENT_TABLE = process.env.MOMENT_TABLE_NAME as string;
+// Photo challenges (lib/challenges). Unset leaves every upload unfiled.
+const CHALLENGE_TABLE = process.env.CHALLENGE_TABLE_NAME ?? '';
 const CONTRIBUTOR_TABLE = process.env.CONTRIBUTOR_TABLE_NAME as string;
 
 /** How long a review link stays usable before the host must use the dashboard. */
@@ -1040,6 +1042,24 @@ export const handler: Handler = async (event) => {
     }
   }
 
+  // The photo challenge the guest was answering. Checked exactly like the
+  // moment above, and never fatal: kept only when the event has challenges on
+  // and the challenge is this event's, otherwise the photo is simply unfiled.
+  let challengeId: string | null = null;
+  const claimedChallenge = (event.arguments.challengeId ?? '').toString().trim();
+  if (claimedChallenge && CHALLENGE_TABLE && ev.challengesEnabled?.BOOL === true) {
+    const challenge = await dynamo
+      .send(
+        new GetItemCommand({
+          TableName: CHALLENGE_TABLE,
+          Key: { id: { S: claimedChallenge } },
+          ProjectionExpression: 'id, eventId',
+        }),
+      )
+      .catch(() => null);
+    if (challenge?.Item?.eventId?.S === eventId) challengeId = claimedChallenge;
+  }
+
   const now = new Date().toISOString();
   const item: Record<string, AttributeValue> = {
     id: { S: id },
@@ -1061,6 +1081,7 @@ export const handler: Handler = async (event) => {
   if (uploadedByUserId) item.uploadedByUserId = { S: uploadedByUserId };
   if (contentHash) item.contentHash = { S: contentHash };
   if (momentId) item.momentId = { S: momentId };
+  if (challengeId) item.challengeId = { S: challengeId };
 
   try {
     await dynamo.send(

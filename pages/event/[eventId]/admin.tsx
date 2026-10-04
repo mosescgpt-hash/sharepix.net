@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
+import HostReminderSettings from '@/components/uploadReminders/HostReminderSettings';
+import ChallengesManager from '@/components/challenges/ChallengesManager';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
@@ -779,6 +781,12 @@ function AdminDashboardPage() {
                 >
                   Printable brochure →
                 </Link>
+                <Link
+                  href={`/event/${event.id}/signs`}
+                  className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60"
+                >
+                  Signs (PDF) →
+                </Link>
               </div>
 
               {/* Moments mint their own QR codes, one per part of the event,
@@ -1237,6 +1245,10 @@ function AdminDashboardPage() {
                   </ul>
                 ) : null}
               </div>
+
+              <HostReminderSettings event={event} onSaved={load} />
+
+              <ChallengesManager event={event} photos={photos} onSettingsSaved={load} />
 
               <div className="spx-card mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Add-ons</h2>

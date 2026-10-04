@@ -30,6 +30,8 @@ interface UseMediaUploadArgs {
    * the moment belongs to this event before filing anything under it.
    */
   momentId?: string | null;
+  /** The photo challenge this batch answers, if any. */
+  challengeId?: string | null;
 }
 
 /**
@@ -45,6 +47,7 @@ export function useMediaUpload({
   videosRemaining,
   onUploaded,
   momentId = null,
+  challengeId = null,
 }: UseMediaUploadArgs) {
   const [queue, setQueue] = useState<QueuedMedia[]>([]);
   const [busy, setBusy] = useState(false);
@@ -113,7 +116,7 @@ export function useMediaUpload({
     try {
       let uploadContext: Awaited<ReturnType<typeof prepareEventUpload>>;
       try {
-        uploadContext = await prepareEventUpload(eventId, uploadedBy, momentId);
+        uploadContext = await prepareEventUpload(eventId, uploadedBy, momentId, challengeId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'The upload session could not be started.';
         setQueue((previous) => previous.map((item) =>

@@ -15,6 +15,8 @@ import { canDownloadEventMedia, galleryVariantFor, isEventHost } from '@/lib/gal
 import { DisplayPhoto, EventMoment, QREvent } from '@/lib/types';
 import { guestBookAvailable } from '@/lib/guestBook';
 import { groupPhotosByMoment } from '@/lib/moments';
+import ChallengeChips from '@/components/challenges/ChallengeChips';
+import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
 
 /**
  * The guest gallery, on the redesign system. Mobile first — most people reach
@@ -31,6 +33,10 @@ export default function EventGalleryPage() {
   const [event, setEvent] = useState<QREvent | null>(null);
   const [photos, setPhotos] = useState<DisplayPhoto[]>([]);
   const [moments, setMoments] = useState<EventMoment[]>([]);
+  // Photo challenges: [] unless the host turned them on, so the chips and the
+  // filter below are invisible on every other event.
+  const challenges = useEventChallenges(event);
+  const [challengeFilter, setChallengeFilter] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState(false);
@@ -105,6 +111,10 @@ export default function EventGalleryPage() {
   // lib/photoEngagement.ts for why they are switches at all.
   const likesOn = likesEnabled(event);
   const commentsOn = commentsEnabled(event);
+  // The challenge chip's filter. A filter that no longer matches anything
+  // (its challenge was deleted, or switched off) shows everything.
+  const filtered = challengeFilter ? photos.filter((p) => p.challengeId === challengeFilter) : photos;
+  const shown = filtered.length > 0 ? filtered : photos;
 
   return (
     <Layout title={event ? event.name : 'Event gallery'} width="bleed">
@@ -181,6 +191,14 @@ export default function EventGalleryPage() {
               </div>
 
               <div className="mt-8">
+                {canSee && photos.length > 0 ? (
+                  <ChallengeChips
+                    challenges={challenges}
+                    photos={photos}
+                    selectedId={challengeFilter}
+                    onSelect={setChallengeFilter}
+                  />
+                ) : null}
                 {!canSee ? (
                   <Notice tone="warn" label="Gallery closed">
                     This gallery has closed. Hosts can still reach it from the admin dashboard.
@@ -197,9 +215,11 @@ export default function EventGalleryPage() {
                       </Link>
                     ) : null}
                   </div>
-                ) : moments.length === 0 ? (
+                ) : moments.length === 0 || shown !== photos ? (
+                  // One grid while a challenge filter is on, too: grouping a
+                  // filtered set by moment would be mostly empty headings.
                   <PhotoGrid
-                    photos={photos}
+                    photos={shown}
                     canDownload={canDownload}
                     canViewOriginal={host || admin}
                     eventName={event.name}
@@ -213,7 +233,7 @@ export default function EventGalleryPage() {
                   // none, this page renders exactly as it did before moments
                   // existed — one grid, no headings, nothing to explain.
                   <div className="space-y-14">
-                    {groupPhotosByMoment(photos, moments).map((group) => (
+                    {groupPhotosByMoment(shown, moments).map((group) => (
                       <section key={group.moment?.id ?? 'unfiled'}>
                         <h2 className="spx-display-serif text-3xl">
                           {group.moment ? group.moment.name : 'Everything else'}

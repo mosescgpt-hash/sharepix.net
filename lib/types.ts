@@ -73,6 +73,13 @@ export interface QREvent {
   liveSlideshowEnabled?: boolean | null;
   /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;
+  /** Guest upload reminders; see lib/uploadReminders. */
+  uploadRemindersEnabled?: boolean | null;
+  /** IANA zone, e.g. America/Chicago. Set with the reminders switch. */
+  timeZone?: string | null;
+  /** Photo challenges switch and slideshow captions; see lib/challenges. */
+  challengesEnabled?: boolean | null;
+  challengeCaptions?: boolean | null;
   guestBookCount?: number | null;
   /** 'review' (default) holds flagged photos for the host; 'allow_all' skips screening. */
   moderationMode?: string | null;
@@ -158,6 +165,8 @@ export interface QRPhoto {
    * moment the host has since deleted is equally valid — see lib/moments.ts.
    */
   momentId?: string | null;
+  /** The photo challenge it answered, if any. See lib/challenges. */
+  challengeId?: string | null;
   createdAt?: string | null;
 }
 

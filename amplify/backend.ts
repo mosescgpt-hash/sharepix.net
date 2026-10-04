@@ -62,6 +62,10 @@ import { recordAnalytics } from './functions/record-analytics/resource';
 import { submitMarketing } from './functions/submit-marketing/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
+import { uploadReminders } from './functions/upload-reminders/resource';
+import { sendUploadReminders } from './functions/send-upload-reminders/resource';
+import { saveChallenge } from './functions/save-challenge/resource';
+import { listChallenges } from './functions/list-challenges/resource';
 
 import { findEventByCode } from './functions/find-event-by-code/resource';
 import { proUpload } from './functions/pro-upload/resource';
@@ -117,6 +121,10 @@ const backend = defineBackend({
   submitMarketing,
   reclaimStorage,
   photoEngagement,
+  uploadReminders,
+  sendUploadReminders,
+  saveChallenge,
+  listChallenges,
 });
 
 // Rate limiting in front of the API. A no-op unless WAF_ENABLED is set — see
@@ -647,6 +655,24 @@ const momentListFn = backend.listMoments.resources.lambda as LambdaFunction;
 momentTable.grantReadData(momentListFn);
 momentListFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
 
+// Photo challenges (lib/challenges). The write function reads the event to
+// prove the caller owns it, and writes the event only for the two switches.
+// The list function reads the event for the switch and the owner (who sees
+// inactive prompts too). createEventPhoto reads a challenge to check a claim.
+const challengeTable = backend.data.resources.tables.Challenge;
+const challengeWriteFn = backend.saveChallenge.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(challengeWriteFn);
+challengeTable.grantReadWriteData(challengeWriteFn);
+challengeWriteFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+challengeWriteFn.addEnvironment('CHALLENGE_TABLE_NAME', challengeTable.tableName);
+const challengeListFn = backend.listChallenges.resources.lambda as LambdaFunction;
+eventTable.grantReadData(challengeListFn);
+challengeTable.grantReadData(challengeListFn);
+challengeListFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+challengeListFn.addEnvironment('CHALLENGE_TABLE_NAME', challengeTable.tableName);
+challengeTable.grantReadData(createFn);
+createFn.addEnvironment('CHALLENGE_TABLE_NAME', challengeTable.tableName);
+
 // Admin user-actions function: reset passwords and enable/disable accounts in
 // the Cognito user pool. Scoped to just these admin operations on this pool.
 const userPool = backend.auth.resources.userPool;
@@ -970,6 +996,38 @@ dailyTasksFn.addToRolePolicy(
 const unsubscribeFn = backend.unsubscribeEmail.resources.lambda as LambdaFunction;
 emailPreferenceTable.grantReadWriteData(unsubscribeFn);
 unsubscribeFn.addEnvironment('PREFERENCE_TABLE_NAME', emailPreferenceTable.tableName);
+
+// Guest upload reminders (lib/uploadReminders).
+//
+// The mutation function reads the event to check its switch, window and owner;
+// it writes the event only to keep the opt-in counter and, for the host, the
+// switch and time zone. It writes opt-in rows and reads one back to check an
+// unsubscribe token. Nothing a guest calls can read a list of addresses.
+const reminderOptInTable = backend.data.resources.tables.ReminderOptIn;
+const uploadRemindersFn = backend.uploadReminders.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(uploadRemindersFn);
+reminderOptInTable.grantReadWriteData(uploadRemindersFn);
+uploadRemindersFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+uploadRemindersFn.addEnvironment('REMINDER_OPT_IN_TABLE_NAME', reminderOptInTable.tableName);
+
+// The hourly sender. Event access is READ-ONLY, like the daily job. It reads
+// opt-ins, claims each send with a conditional update, and deletes rows 30
+// days after the window closes. Sending shares EMAIL_SENDING_ENABLED with the
+// host mail, so one switch turns all customer mail on.
+const sendRemindersFn = backend.sendUploadReminders.resources.lambda as LambdaFunction;
+eventTable.grantReadData(sendRemindersFn);
+reminderOptInTable.grantReadWriteData(sendRemindersFn);
+sendRemindersFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+sendRemindersFn.addEnvironment('REMINDER_OPT_IN_TABLE_NAME', reminderOptInTable.tableName);
+sendRemindersFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+sendRemindersFn.addEnvironment(
+  'REMINDER_FROM_ADDRESS',
+  process.env.REMINDER_FROM_ADDRESS ?? 'SharePix <noreply@sharepix.net>',
+);
+sendRemindersFn.addEnvironment('EMAIL_SENDING_ENABLED', process.env.EMAIL_SENDING_ENABLED ?? '');
+sendRemindersFn.addToRolePolicy(
+  new PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
+);
 
 // The research survey programme. The daily job opens an invitation (a PENDING
 // obligation carrying the link's token); the completion function turns it into
