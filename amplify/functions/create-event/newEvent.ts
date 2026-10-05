@@ -175,6 +175,32 @@ export function normalizeTier(tier: string | null | undefined): string {
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
 
+/**
+ * The event types a host can pick, mirrored from lib/eventTypes.ts (and so
+ * from the survey's `eventType` question). A test keeps the copies equal.
+ */
+export const EVENT_TYPE_VALUES = [
+  'wedding',
+  'graduation',
+  'birthday',
+  'anniversary',
+  'family-reunion',
+  'church',
+  'school-team',
+  'corporate',
+  'other',
+] as const;
+
+/**
+ * The stored event type, or null. An unrecognised value is dropped rather
+ * than refused: it only steers suggestions, and must never cost somebody an
+ * event they are paying for.
+ */
+export function normalizeEventType(value: string | null | undefined): string | null {
+  const v = (value ?? '').trim().toLowerCase();
+  return (EVENT_TYPE_VALUES as readonly string[]).includes(v) ? v : null;
+}
+
 /** Longest event name we store, matching the form's maxLength. */
 export const MAX_EVENT_NAME = 80;
 

@@ -43,77 +43,79 @@ function before(a: string, b: string) {
   });
 }
 
-describe('the three bands', () => {
-  it('runs share, then watch, then setup', () => {
-    before('id="share"', 'id="watch"');
-    before('id="watch"', 'id="setup"');
+describe('the six tabs', () => {
+  const ORDER = ['share', 'photos', 'design', 'guests', 'extras', 'event'];
+
+  it('runs share, photos, design, guests, extras, event', () => {
+    for (let i = 1; i < ORDER.length; i += 1) {
+      before(`id="${ORDER[i - 1]}"`, `id="${ORDER[i]}"`);
+    }
   });
 
-  it('gives each band an anchor the nav can reach', () => {
-    for (const id of ['share', 'watch', 'setup']) {
-      expect(SOURCE).toContain(`id="${id}"`);
+  it('gives every panel a tab and hides the ones not chosen', () => {
+    for (const id of ORDER) {
+      expect(SOURCE).toContain(`id: '${id}'`);
+      expect(SOURCE).toContain(`hidden={activeTab !== '${id}'}`);
     }
-    // The nav is generated from BANDS, so the ids cannot drift apart.
-    expect(SOURCE).toContain('href={`#${band.id}`}');
+    // The tab bar is generated from TABS, so the ids cannot drift apart.
+    expect(SOURCE).toContain('aria-controls={t.id}');
+  });
+
+  it('still lands old section links on a tab', () => {
+    for (const legacy of ["'event-qr-code': 'share'", "watch: 'photos'", "setup: 'design'"]) {
+      expect(SOURCE).toContain(legacy);
+    }
   });
 });
 
-describe('share it', () => {
+/** Assert every snippet sits inside the panel `id`, before the panel `next`. */
+function inPanel(id: string, next: string | null, snippets: string[]) {
+  for (const snippet of snippets) {
+    before(`id="${id}"`, snippet);
+    if (next) before(snippet, `id="${next}"`);
+  }
+}
+
+describe('share', () => {
   it('puts the QR code above the gallery style, not below it', () => {
-    // The original complaint: the first card on the page was a font picker and
-    // the QR code rendered under it.
     before('id="event-qr-code"', '<GalleryStyleSettings');
   });
 
   it('shows the QR code without a toggle', () => {
-    // It used to be `{showQR ? (...) : null}` behind a Show/Hide button.
     expect(SOURCE).not.toContain('showQR');
     expect(SOURCE).not.toContain('setShowQR');
   });
 
-  it('keeps the printables with the code they print', () => {
-    before('id="event-qr-code"', '/table-tent');
-    before('/table-tent', 'id="watch"');
-    before('/brochure', 'id="watch"');
-  });
-
-  it('puts moments beside the QR code rather than below the photos', () => {
-    // Each moment mints its own QR code. It was eleventh on the page, under the
-    // photo grid.
-    before('<MomentsManager', 'id="watch"');
-    before('<MomentsManager', '<AdminPhotoGrid');
+  it('keeps the printables and moments with the code they print', () => {
+    inPanel('share', 'photos', ['id="event-qr-code"', '/table-tent', '/brochure', '<MomentsManager']);
   });
 });
 
-describe('watch it', () => {
+describe('photos', () => {
   it('holds the counts, the queues and the photos', () => {
-    for (const snippet of [
+    inPanel('photos', 'design', [
       'Total photos',
       '<CommentModeration',
       '<GuestBookModeration',
       '<DownloadShareBuilder',
       '<AdminPhotoGrid',
-    ]) {
-      before('id="watch"', snippet);
-      before(snippet, 'id="setup"');
-    }
+    ]);
   });
 });
 
-describe('set it up', () => {
-  it('holds the settings, the style and the add-ons', () => {
-    for (const snippet of [
-      '>Event details</h2>',
-      '<GalleryStyleSettings',
+describe('the settings tabs', () => {
+  it('puts each setting in its tab', () => {
+    inPanel('design', 'guests', ['<GalleryStyleSettings']);
+    inPanel('guests', 'extras', [
       'What guests can do',
       'Photo screening',
       'Guest downloads',
       'Guest videos',
-      'SharePix Pro',
-      'Add-ons',
-    ]) {
-      before('id="setup"', snippet);
-    }
+      '<HostReminderSettings',
+      '<ChallengesManager',
+    ]);
+    inPanel('extras', 'event', ['SharePix Pro', 'Add-ons', 'Featured Events']);
+    inPanel('event', null, ['>Event details</h2>', 'Ending the event']);
   });
 
   it('keeps Delete event out of the card with the event name in it', () => {
@@ -215,14 +217,14 @@ describe('the guide meets a new host differently', () => {
     expect(codeOnly(FULL)).toContain('defaultOpen');
   });
 
-  it('renders it before the first band for a new event', () => {
+  it('renders it before the tabs for a new event', () => {
     // The point of opening it is that it is the first thing on the page. Open
     // but eighth would be no better than closed.
     before('defaultOpen', 'id="share"');
   });
 
   it('still offers it, closed, once photos exist', () => {
-    before('photos.length > 0', 'id="watch"');
+    before('photos.length > 0', 'id="photos"');
     // Two renderings, one per branch.
     expect(codeOnly(FULL).split('<HostGuide').length - 1).toBe(2);
   });

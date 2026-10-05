@@ -826,6 +826,33 @@ by a key listEventPhotos handed out. A guest could still open a photo whose key
 they guessed, so this is a privacy setting, not encryption, and the settings
 card says what it does in plain words.
 
+## 19. Event type first, and a dashboard in tabs
+
+Priorities, in order: easy, then professional, then quick to set up.
+
+**Creating an event starts with "What are you celebrating?"** The answer is
+stored in the `eventType` field the survey already used (same closed set,
+normalised server-side in create-event) and steers what follows: the name
+field's example, the three looks offered, and whether "who will add the
+photos" is asked at all (only for church and school events, where "just me" is
+common; everyone else defaults to guests and can change it under Guests). City
+and state left the create form; they are still under Event details.
+
+**Every new event starts with a look applied**, the first suggestion for its
+type, shown live with the host's own event name before they create it. The
+default for "something else" and for events without a type is **Signature**:
+Playfair headings over a Poppins body, the midnight cover and a navy accent.
+It is the most restrained combination in the set and the one that reads as
+professional rather than themed, so it is the safe default for corporate,
+school and graduation events too.
+
+**The dashboard is six tabs** (Share, Photos, Design, Guests, Extras, Event)
+instead of three anchored bands down one long page. This reverses the earlier
+choice of anchors over tabs. Each tab has its own fragment (`admin#design`),
+the old anchors (`#event-qr-code`, `#watch`, `#setup`) map onto tabs, and
+hidden panels stay mounted so a half-edited setting survives a tab switch.
+Destructive actions stay last, alone in the Event tab.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

@@ -13,6 +13,7 @@ import {
   isTrialTier,
 } from '@/lib/pricing';
 import {
+  applyStarterLook,
   createNewEvent,
   getMyCorporateSubscription,
   isCorporateActive,
@@ -27,6 +28,11 @@ import {
   AUDIENCE_OPTIONS,
   AUDIENCE_QUESTION,
 } from '@/lib/eventAudience';
+import { EVENT_TYPES, eventTypeFor, type EventTypeOption } from '@/lib/eventTypes';
+import { starterLookFor } from '@/lib/starterLooks';
+import { coverPresetFor } from '@/lib/eventCover';
+import { fontSetFor } from '@/lib/galleryTheme';
+import { artworkFor } from '@/lib/imagery';
 
 function CreateEventPage() {
   // The Decide stage opening. This page is behind the authenticator, so
@@ -45,13 +51,32 @@ function CreateEventPage() {
   // an edited query string cannot put free text on an event row.
   const source = typeof router.query.source === 'string' ? router.query.source : '';
 
+  // Step one is the kind of event; everything after it is narrowed by the
+  // answer. A link can carry it (`?type=wedding`, from a wedding page) and
+  // skip straight to step two.
+  const [eventType, setEventType] = useState<EventTypeOption | null>(null);
+  const [lookKey, setLookKey] = useState('signature');
+  useEffect(() => {
+    const fromLink = eventTypeFor(
+      typeof router.query.type === 'string' ? router.query.type : null,
+    );
+    if (fromLink && !eventType) chooseType(fromLink);
+  }, [router.query.type]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function chooseType(option: EventTypeOption) {
+    setEventType(option);
+    setLookKey(option.looks[0]);
+    if (!option.asksAudience) setAudience('guests');
+    window.scrollTo({ top: 0 });
+  }
+
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
-  const [city, setCity] = useState('');
   // Who the QR signs will be addressed to. Defaults to guests because that is
-  // the common case; the point of asking is that it is not the only one.
+  // the common case. Only asked for the event types where "just me" is common
+  // (see asksAudience in lib/eventTypes.ts); everyone else can change it later
+  // under Guests.
   const [audience, setAudience] = useState<'guests' | 'host-only'>('guests');
-  const [stateRegion, setStateRegion] = useState('');
   // A link to a retired plan (an old bookmark, a stale email) must not select
   // something that is no longer for sale.
   const [tierId, setTierId] = useState(isSellableTier(initialTier) ? initialTier : 'plus');
@@ -175,13 +200,19 @@ function CreateEventPage() {
       const event = await createNewEvent({
         name: name.trim(),
         date,
-        city,
-        state: stateRegion,
         tier: tierId,
         uploadAudience: audience,
         discountCode: pilotCodeStatus === 'valid' ? pilotCode : undefined,
         source,
+        eventType: eventType?.value,
       });
+
+      // The look, saved before anything else happens, so the gallery looks
+      // finished the first time anyone opens it. A failure here costs the host
+      // nothing but the default style: the event exists and they can pick a
+      // look from the Design tab.
+      const look = starterLookFor(lookKey);
+      if (look) await applyStarterLook(event.id, look).catch(() => undefined);
 
       // Active already: covered by a Corporate subscription, or comped outright.
       if (event.paid !== false) {
@@ -244,19 +275,91 @@ function CreateEventPage() {
     );
   }
 
+  if (!eventType) {
+    const pictured = EVENT_TYPES.filter((t) => t.image);
+    const others = EVENT_TYPES.filter((t) => !t.image);
+    return (
+      <Layout title="Create an event" width="bleed">
+        <section className="spx-section-ink py-10 sm:py-14">
+          <div className="mx-auto w-full max-w-3xl">
+            <p className="spx-eyebrow">Step 1 of 2</p>
+            <h1 className="mt-3">
+              <span className="spx-display block">What are you celebrating?</span>
+            </h1>
+            <p className="spx-body mt-4">
+              We&apos;ll set up a gallery that suits it. You can change everything later.
+            </p>
+          </div>
+        </section>
+
+        <section className="spx-section-canvas py-10 sm:py-14">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {pictured.map((option) => {
+                const art = artworkFor(option.image!);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => chooseType(option)}
+                    className="group relative aspect-[4/3] overflow-hidden border border-charcoal/15 text-left transition hover:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink"
+                  >
+                    {art.kind === 'photo' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={art.src}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <span className="absolute inset-0 bg-ink" />
+                    )}
+                    <span className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                    <span className="absolute bottom-3 left-3 right-3 font-sans text-base font-semibold text-white sm:text-lg">
+                      {option.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {others.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => chooseType(option)}
+                  className="border border-charcoal/15 bg-paper px-4 py-4 text-left text-sm font-medium transition hover:border-ink"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      </Layout>
+    );
+  }
+
+  const look = starterLookFor(lookKey);
+  const lookCover = coverPresetFor(look?.coverPreset);
+  const lookFonts = fontSetFor(look?.galleryFontSet);
+
   return (
     <Layout title="Create an event" width="bleed">
       <section className="spx-section-ink py-10 sm:py-14">
         <div className="mx-auto w-full max-w-lg">
-          <p className="spx-eyebrow">A minute of typing</p>
+          <p className="spx-eyebrow">Step 2 of 2 · {eventType.label}</p>
           <h1 className="mt-3">
-            <span className="spx-display block">Create your event.</span>
-            <span className="spx-display-serif block">The code comes next.</span>
+            <span className="spx-display block">Name it.</span>
+            <span className="spx-display-serif block">Your QR code is next.</span>
           </h1>
-          <p className="spx-body mt-4">
-            Name it and choose a plan. Pay securely on Stripe — or apply a pilot code — and your
-            QR code is ready right after.
-          </p>
+          <button
+            type="button"
+            onClick={() => setEventType(null)}
+            className="mt-4 text-sm text-canvas/70 underline underline-offset-4 hover:text-canvas"
+          >
+            Change event type
+          </button>
         </div>
       </section>
 
@@ -272,8 +375,9 @@ function CreateEventPage() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Sam & Riley's Wedding"
+              placeholder={eventType.namePlaceholder}
               maxLength={80}
+              autoFocus
               className="spx-input mt-2"
             />
           </div>
@@ -306,44 +410,75 @@ function CreateEventPage() {
             </p>
           </div>
 
-          <div>
-            <span className="block text-sm font-medium">
-              Where is it? <span className="text-charcoal/50">(optional)</span>
-            </span>
-            <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <input
-                id="event-city"
-                type="text"
-                value={city}
-                maxLength={60}
-                onChange={(e) => setCity(e.target.value)}
-                placeholder="City"
-                aria-label="City"
-                className="spx-input"
-              />
-              <input
-                id="event-state"
-                type="text"
-                value={stateRegion}
-                maxLength={40}
-                onChange={(e) => setStateRegion(e.target.value)}
-                placeholder="State"
-                aria-label="State"
-                className="spx-input"
-              />
+          {/* The look, chosen for them and shown with their own name in it, so
+              the first thing they see of their gallery already looks finished.
+              Three that suit the event type; the rest are in the Design tab. */}
+          <fieldset>
+            <legend className="text-sm font-medium text-charcoal">Your gallery&apos;s look</legend>
+            <div
+              className={`mt-2 border border-charcoal/15 px-6 py-10 text-center ${
+                lookCover.tone === 'light' ? 'text-ink' : 'text-canvas'
+              }`}
+              style={{ background: lookCover.background }}
+            >
+              <p
+                className="text-3xl leading-tight sm:text-4xl"
+                style={{ fontFamily: lookFonts.heading }}
+              >
+                {name.trim() || eventType.namePlaceholder}
+              </p>
+              {date ? (
+                <p className="mt-2 text-sm opacity-80" style={{ fontFamily: lookFonts.body }}>
+                  {new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                </p>
+              ) : null}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {eventType.looks.map((key) => {
+                const option = starterLookFor(key);
+                if (!option) return null;
+                const active = key === lookKey;
+                return (
+                  <label
+                    key={key}
+                    className={`flex cursor-pointer items-center gap-2 border px-3 py-2 text-sm transition ${
+                      active
+                        ? 'border-ink bg-ink text-canvas'
+                        : 'border-charcoal/15 bg-paper hover:border-charcoal/40'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="look"
+                      value={key}
+                      checked={active}
+                      onChange={() => setLookKey(key)}
+                      className="sr-only"
+                    />
+                    <span
+                      aria-hidden
+                      className="inline-block h-3.5 w-3.5 rounded-full border border-charcoal/20"
+                      style={{ background: coverPresetFor(option.coverPreset).background }}
+                    />
+                    {option.label}
+                  </label>
+                );
+              })}
             </div>
             <p className="mt-1.5 text-xs text-charcoal/55">
-              Shown with the event, so photos stay tied to the place years later. City and
-              state only — we never store a street address, and photo location data is
-              always removed on upload.
+              Add your own cover photo and fine-tune it any time from your dashboard.
             </p>
-          </div>
+          </fieldset>
 
-          {/* Asked here because only the host knows, and only now. The counts
-              can tell you afterwards that one person uploaded; they cannot tell
-              you whether that was the plan, and that is the difference between
-              a disappointing event and a church sharing photos with parents
-              exactly as intended. See lib/eventAudience.ts. */}
+          {/* Asked here only where "just me" is a common answer — a church or
+              a school sharing with parents. The counts can tell you afterwards
+              that one person uploaded; they cannot tell you whether that was
+              the plan. See lib/eventAudience.ts. */}
+          {eventType.asksAudience ? (
           <fieldset>
             <legend className="text-sm font-medium text-charcoal">{AUDIENCE_QUESTION}</legend>
             <p className="mt-1 text-xs text-charcoal/55">{AUDIENCE_HELP}</p>
@@ -377,6 +512,7 @@ function CreateEventPage() {
               ))}
             </div>
           </fieldset>
+          ) : null}
 
           <fieldset>
             <legend className="text-sm font-medium text-charcoal">Plan</legend>
