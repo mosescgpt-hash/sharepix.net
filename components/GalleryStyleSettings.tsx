@@ -50,6 +50,11 @@ interface Props {
   event: QREvent;
   /** Re-read the event after a save, so what is shown is what was stored. */
   onSaved: () => void;
+  /**
+   * Open a tab from outside, e.g. the dashboard's "I want to…" list. `n` makes
+   * asking for the same tab twice still count as a new request.
+   */
+  requestedTab?: { key: TabKey; n: number } | null;
 }
 
 /** What is stored, as the editable shape. */
@@ -111,7 +116,7 @@ function draftCover(event: QREvent, draft: CoverStyle): ResolvedCover {
  * in their own typeface, layouts as a diagram, backgrounds as swatches, and
  * the whole thing in the preview at the top.
  */
-export default function GalleryStyleSettings({ event, onSaved }: Props) {
+export default function GalleryStyleSettings({ event, onSaved, requestedTab }: Props) {
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -119,6 +124,9 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
   const [draft, setDraft] = useState<CoverStyle>(() => storedStyle(event));
   const [localImage, setLocalImage] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('looks');
+  useEffect(() => {
+    if (requestedTab) setTab(requestedTab.key);
+  }, [requestedTab]);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   // A save re-reads the event; start the draft again from what was stored.

@@ -67,4 +67,18 @@ describe('Look and feel, in tabs', () => {
     expect(screen.queryByText(/^Suggested for/)).toBeNull();
     expect(screen.getByText('Signature')).toBeInTheDocument();
   });
+
+  it('opens the tab the dashboard asks for', () => {
+    const { rerender } = render(
+      <GalleryStyleSettings event={event} onSaved={() => undefined} requestedTab={null} />,
+    );
+    rerender(
+      <GalleryStyleSettings
+        event={event}
+        onSaved={() => undefined}
+        requestedTab={{ key: 'cover', n: 1 }}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Cover' })).toHaveAttribute('aria-selected', 'true');
+  });
 });

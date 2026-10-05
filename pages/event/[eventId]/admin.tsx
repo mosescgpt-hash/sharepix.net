@@ -61,6 +61,7 @@ import {
   videosRemaining,
 } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { jumpByKey, jumpsFor, type LookTab } from '@/lib/dashboardJumps';
 import { UPLOAD_WINDOW_DAYS, latestEventDate } from '@/lib/uploadWindowStart';
 import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
@@ -293,6 +294,27 @@ function AdminDashboardPage() {
     const fromLink = tabFromHash(window.location.hash);
     if (fromLink) setActiveTab(fromLink);
   }, [router.asPath]);
+
+  // "I want to…": open the tab, open the Look and feel tab inside it where
+  // there is one, then bring the card into view and briefly outline it so the
+  // eye lands on the right thing.
+  const [lookTabRequest, setLookTabRequest] = useState<{ key: LookTab; n: number } | null>(null);
+  const jumpTo = useCallback(
+    (key: string) => {
+      const jump = jumpByKey(key);
+      if (!jump) return;
+      selectTab(jump.tab);
+      if (jump.lookTab) setLookTabRequest({ key: jump.lookTab, n: Date.now() });
+      window.setTimeout(() => {
+        const el = document.getElementById(jump.target);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('ring-2', 'ring-ink', 'ring-offset-4');
+        window.setTimeout(() => el.classList.remove('ring-2', 'ring-ink', 'ring-offset-4'), 1600);
+      }, 50);
+    },
+    [selectTab],
+  );
 
   const scrollToQR = useCallback(() => {
     setActiveTab('share');
@@ -770,6 +792,37 @@ function AdminDashboardPage() {
               <HostGuide event={event} defaultOpen onShowQR={scrollToQR} />
             ) : null}
 
+            {/* For the host who knows what they want to change but not which
+                tab it is under. A native select: on a phone it opens the
+                system picker, which is the easiest list there is to use. */}
+            <div className="mt-8 max-w-sm">
+              <label htmlFor="dashboard-jump" className="block text-sm font-medium">
+                I want to…
+              </label>
+              <select
+                id="dashboard-jump"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) jumpTo(e.target.value);
+                }}
+                className="spx-input mt-2"
+              >
+                <option value="">Choose what to change</option>
+                {jumpsFor({
+                  commentsOn: commentsEnabled(event),
+                  featuredOffered: photos.length > 0 && !isTrialTier(event.tier),
+                }).map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.jumps.map((jump) => (
+                      <option key={jump.key} value={jump.key}>
+                        {jump.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
             {/* Tabs rather than one long scroll: six screens of settings read
                 as one thing to do at a time. Each tab has its own address
                 (admin#design), so a link to a tab still lands on it, and every
@@ -777,7 +830,7 @@ function AdminDashboardPage() {
             <div
               role="tablist"
               aria-label="Dashboard"
-              className="-mx-4 mt-8 flex overflow-x-auto border-b border-charcoal/15 px-4 sm:mx-0 sm:px-0"
+              className="-mx-4 mt-6 flex overflow-x-auto border-b border-charcoal/15 px-4 sm:mx-0 sm:px-0"
               onKeyDown={(e) => {
                 if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
                 const i = TABS.findIndex((t) => t.id === activeTab);
@@ -837,7 +890,7 @@ function AdminDashboardPage() {
               {/* The printables, beside the code they print. They used to be
                   two links in the header of the settings card, four screens
                   below the QR code they carry. */}
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <div id="printables" className="scroll-mt-24 mt-6 flex flex-wrap justify-center gap-2">
                 <Link
                   href={`/event/${event.id}/table-tent`}
                   target="_blank"
@@ -863,7 +916,9 @@ function AdminDashboardPage() {
               {/* Moments mint their own QR codes, one per part of the event,
                   so they belong beside the main code rather than eight
                   sections below it — which is where they were. */}
-              <MomentsManager eventId={event.id} origin={origin} branding={event} />
+              <div id="moments" className="scroll-mt-24">
+                <MomentsManager eventId={event.id} origin={origin} branding={event} />
+              </div>
 
               {photos.length > 0 ? (
                 <HostGuide event={event} onShowQR={scrollToQR} />
@@ -944,14 +999,14 @@ function AdminDashboardPage() {
                   queue for a feature the host switched off is a panel that
                   explains nothing and worries them. */}
               {commentsEnabled(event) ? (
-                <div className="mt-8">
+                <div id="comments" className="scroll-mt-24 mt-8">
                   <CommentModeration eventId={event.id} />
                 </div>
               ) : null}
 
               {guestBookAvailable(event) ? <GuestBookModeration eventId={event.id} /> : null}
 
-              <div className="mt-6">
+              <div id="download-share" className="scroll-mt-24 mt-6">
                 <DownloadShareBuilder
                   event={event}
                   selectedIds={selectedApprovedIds}
@@ -961,7 +1016,7 @@ function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="mt-6">
+              <div id="photo-grid" className="scroll-mt-24 mt-6">
                 <AdminPhotoGrid
                   photos={photos}
                   onChanged={load}
@@ -981,8 +1036,8 @@ function AdminDashboardPage() {
             >
               <p className="text-sm text-charcoal/60">{TABS[2].blurb}</p>
 
-              <div className="mt-6">
-                <GalleryStyleSettings event={event} onSaved={load} />
+              <div id="look-and-feel" className="scroll-mt-24 mt-6">
+                <GalleryStyleSettings event={event} onSaved={load} requestedTab={lookTabRequest} />
               </div>
             </section>
 
@@ -995,7 +1050,7 @@ function AdminDashboardPage() {
             >
               <p className="text-sm text-charcoal/60">{TABS[3].blurb}</p>
 
-              <div className="spx-card mt-6 p-6">
+              <div id="guest-settings" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                   What guests can do
                 </h2>
@@ -1034,7 +1089,7 @@ function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <div className="mt-4 border-t border-ink/10 pt-4">
+                <div id="photo-screening" className="scroll-mt-24 mt-4 border-t border-ink/10 pt-4">
                   <p className="text-sm font-medium">Photo screening</p>
                   <p className="text-xs text-charcoal/60">
                     Uploads are checked for explicit content. Alcohol, smoking, and kissing are
@@ -1069,7 +1124,7 @@ function AdminDashboardPage() {
                       : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
                   </p>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+                  <div id="guest-downloads" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Guest downloads</p>
                       <p className="text-xs text-charcoal/60">
@@ -1097,7 +1152,7 @@ function AdminDashboardPage() {
                     </button>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+                  <div id="guest-videos" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Guest videos</p>
                       <p className="text-xs text-charcoal/60">
@@ -1170,9 +1225,13 @@ function AdminDashboardPage() {
                 ) : null}
               </div>
 
-              <HostReminderSettings event={event} onSaved={load} />
+              <div id="reminders" className="scroll-mt-24">
+                <HostReminderSettings event={event} onSaved={load} />
+              </div>
 
-              <ChallengesManager event={event} photos={photos} onSettingsSaved={load} />
+              <div id="challenges" className="scroll-mt-24">
+                <ChallengesManager event={event} photos={photos} onSettingsSaved={load} />
+              </div>
             </section>
 
             <section
@@ -1187,7 +1246,7 @@ function AdminDashboardPage() {
               {/* SharePix Pro. Always here, because a host books a photographer
                   before the event rather than after it — unlike Featured Events
                   below, which needs photos to exist first. */}
-              <div className="spx-card mt-6 p-6">
+              <div id="photographer" className="spx-card scroll-mt-24 mt-6 p-6">
                 <p className="spx-eyebrow">SharePix Pro</p>
                 <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">
                   Add your photographer
@@ -1250,7 +1309,7 @@ function AdminDashboardPage() {
                 ) : null}
               </div>
 
-              <div className="spx-card mt-6 p-6">
+              <div id="addons" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Add-ons</h2>
                 <p className="text-xs text-charcoal/60">
                   Tick what you want and pay once.{' '}
@@ -1380,7 +1439,7 @@ function AdminDashboardPage() {
               {/* Not on a free event: the offer is part of what was paid back,
                   and nothing was paid. */}
               {photos.length > 0 && !isTrialTier(event.tier) ? (
-                <div className="spx-card mt-6 p-6">
+                <div id="featured" className="spx-card scroll-mt-24 mt-6 p-6">
                   <p className="spx-eyebrow">Featured Events</p>
                   <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">
                     Show future hosts what this looked like
@@ -1410,7 +1469,7 @@ function AdminDashboardPage() {
               {/* Name, date and place, in a card of their own. These used to
                   open a single settings card that ran to three screens and
                   ended with Delete event. */}
-              <div className="spx-card mt-6 p-6">
+              <div id="event-details" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Event details</h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="block">
@@ -1610,7 +1669,7 @@ function AdminDashboardPage() {
               {/* Closing and deleting, alone at the bottom in a card that
                   looks like what it is. Delete event used to share a card
                   with the Event name field. */}
-              <div className="spx-card mt-6 border-red-200 p-6">
+              <div id="ending" className="spx-card scroll-mt-24 mt-6 border-red-200 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                   Ending the event
                 </h2>

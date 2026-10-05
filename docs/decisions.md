@@ -853,6 +853,17 @@ the old anchors (`#event-qr-code`, `#watch`, `#setup`) map onto tabs, and
 hidden panels stay mounted so a half-edited setting survives a tab switch.
 Destructive actions stay last, alone in the Event tab.
 
+**"I want to…"** sits above the tabs: a dropdown of what hosts come to change,
+in their words ("Turn guest downloads on or off", "Change the cover photo"),
+grouped by tab. Choosing one opens the tab (and the Look and feel tab inside
+Design where needed), scrolls to the card and outlines it briefly. The list
+lives in `lib/dashboardJumps.ts`; a test fails if an entry points at a card
+that is not in the tab it names.
+
+**Rollback.** Branch `backup/pre-redesign-2026-10-05` is main as it was before
+this change (`5fc6b99`). To revert, merge a revert of this change's merge
+commit, or reset main to that branch.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric
