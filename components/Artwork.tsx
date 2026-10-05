@@ -1,4 +1,4 @@
-import { artworkFor, PLACEHOLDER_TONES, type ImageSlot } from '@/lib/imagery';
+import { artworkFor, type ImageSlot } from '@/lib/imagery';
 
 interface ArtworkProps {
   slot: ImageSlot;
@@ -15,8 +15,8 @@ interface ArtworkProps {
  * a frame; they never name a file, an aspect ratio or an alt string. When the
  * licensed photography lands, the registry changes and no page does.
  *
- * A slot with no photo renders a palette gradient at the same dimensions — not
- * a broken <img>, and not a grey box with a filename on it.
+ * A slot with no photo renders nothing — not a broken <img>, and not a tinted
+ * placeholder block, which looked like a page somebody had not finished.
  */
 export default function Artwork({ slot, className = '', caption, priority = false }: ArtworkProps) {
   const art = artworkFor(slot);
@@ -44,17 +44,8 @@ export default function Artwork({ slot, className = '', caption, priority = fals
     );
   }
 
-  return (
-    <div
-      className={`spx-tile ${PLACEHOLDER_TONES[art.tone]} ${className}`}
-      role="img"
-      aria-label={art.alt}
-    >
-      {caption ? (
-        <span className="spx-tile-caption bg-gradient-to-t from-charcoal/70 to-transparent">
-          {caption}
-        </span>
-      ) : null}
-    </div>
-  );
+  // No photo, no tile. A tinted block with a caption over it read as an
+  // unfinished page, so a slot without a photograph renders nothing at all
+  // and the layout closes up around it.
+  return null;
 }
