@@ -4,9 +4,36 @@ import Artwork from '@/components/Artwork';
 import HowItWorksSection from '@/components/HowItWorksSection';
 import Layout from '@/components/Layout';
 import QuickFactsStrip from '@/components/QuickFactsStrip';
+import SamplePhoto from '@/components/SamplePhoto';
 import { trackEvent } from '@/lib/trackEvent';
 import { faqJsonLd } from '@/lib/seo';
-import type { UseCase } from '@/lib/useCases';
+import type { UseCase, UseCaseImage } from '@/lib/useCases';
+
+/** A slot, or a sample-gallery photo, in the same tile frame. */
+function Picture({
+  image,
+  className,
+  caption,
+  priority,
+}: {
+  image: UseCaseImage;
+  className: string;
+  caption?: string;
+  priority?: boolean;
+}) {
+  if ('slot' in image) {
+    return <Artwork slot={image.slot} className={className} caption={caption} priority={priority} />;
+  }
+  return (
+    <SamplePhoto
+      src={image.photo}
+      alt={image.alt}
+      className={className}
+      caption={caption}
+      priority={priority}
+    />
+  );
+}
 
 /**
  * The shared shape behind every use-case landing page (/weddings,
@@ -44,7 +71,7 @@ export default function UseCaseLanding({ useCase }: { useCase: UseCase }) {
                 </Link>
               </div>
             </div>
-            <Artwork slot={useCase.heroSlot} className="spx-arch aspect-[4/5] w-full" priority />
+            <Picture image={useCase.hero} className="spx-arch aspect-[4/5] w-full" priority />
           </div>
         </section>
 
@@ -68,11 +95,17 @@ export default function UseCaseLanding({ useCase }: { useCase: UseCase }) {
         <section className="spx-section-canvas">
           <div className="spx-inner">
             <p className="spx-eyebrow">See it in action</p>
-            <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+            {/* As many columns as pictures, so two never leave an empty third
+                column beside them. */}
+            <div
+              className={`mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 ${
+                useCase.gallery.length >= 3 ? 'lg:grid-cols-3' : ''
+              }`}
+            >
               {useCase.gallery.map((item) => (
-                <Artwork
-                  key={item.slot}
-                  slot={item.slot}
+                <Picture
+                  key={item.caption}
+                  image={item}
                   caption={item.caption}
                   className="aspect-[4/3]"
                 />

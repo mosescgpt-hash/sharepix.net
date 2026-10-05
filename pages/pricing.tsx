@@ -63,8 +63,11 @@ export default function PricingPage() {
 
   return (
     <Layout title="Pricing" width="bleed" structuredData={pricingJsonLd()}>
+      {/* One centred column, the width of the cards, rather than a wide
+          container with the cards pinned to its left and the right third of
+          the screen left empty. */}
       <section className="spx-section-canvas">
-        <div className="mx-auto w-full max-w-6xl">
+        <div className="mx-auto w-full max-w-3xl">
           <p className="spx-eyebrow">Simple pricing</p>
           <h1 className="mt-3">
             <span className="spx-display block">One event. One price.</span>
@@ -75,7 +78,7 @@ export default function PricingPage() {
             for free, nothing renews, and there is no bigger plan to be upsold to later.
           </p>
 
-          <div className="mt-12 max-w-3xl">
+          <div className="mt-12">
             <PricingCards />
           </div>
 
