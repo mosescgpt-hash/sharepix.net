@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import EventCover from '@/components/EventCover';
 import Notice from '@/components/Notice';
 import {
+  applyStarterLook,
   setEventCover,
   setEventEngagement,
   setEventGalleryAudience,
@@ -33,6 +34,7 @@ import {
 import { GALLERY_AUDIENCE_OPTIONS, galleryAudienceFor } from '@/lib/galleryAudience';
 import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
 import { STARTER_LOOKS } from '@/lib/starterLooks';
+import { eventTypeFor } from '@/lib/eventTypes';
 import type { QREvent } from '@/lib/types';
 
 const TABS = [
@@ -48,6 +50,11 @@ interface Props {
   event: QREvent;
   /** Re-read the event after a save, so what is shown is what was stored. */
   onSaved: () => void;
+  /**
+   * Open a tab from outside, e.g. the dashboard's "I want to…" list. `n` makes
+   * asking for the same tab twice still count as a new request.
+   */
+  requestedTab?: { key: TabKey; n: number } | null;
 }
 
 /** What is stored, as the editable shape. */
@@ -94,7 +101,8 @@ function draftCover(event: QREvent, draft: CoverStyle): ResolvedCover {
  * shows up without scrolling back to check it.
  *
  *   **Looks, Cover, Fonts, Gallery** hold everything most hosts need, and none
- *   of it needs a decision: six one-click starter looks, "use my photo" or a
+ *   of it needs a decision: one-click starter looks (the ones that suit the
+ *   event type first), "use my photo" or a
  *   background, the font cards, the gallery layout and likes and comments.
  *   Each saves the moment it is clicked.
  *
@@ -108,7 +116,7 @@ function draftCover(event: QREvent, draft: CoverStyle): ResolvedCover {
  * in their own typeface, layouts as a diagram, backgrounds as swatches, and
  * the whole thing in the preview at the top.
  */
-export default function GalleryStyleSettings({ event, onSaved }: Props) {
+export default function GalleryStyleSettings({ event, onSaved, requestedTab }: Props) {
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -116,6 +124,9 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
   const [draft, setDraft] = useState<CoverStyle>(() => storedStyle(event));
   const [localImage, setLocalImage] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('looks');
+  useEffect(() => {
+    if (requestedTab) setTab(requestedTab.key);
+  }, [requestedTab]);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   // A save re-reads the event; start the draft again from what was stored.
@@ -196,21 +207,59 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
     if (!look) return;
     void run(
       `look-${look.key}`,
-      async () => {
-        await setEventGalleryTheme(event.id, {
-          galleryFontSet: look.galleryFontSet,
-          galleryAccent: look.galleryAccent,
-        });
-        // The look's background, behind a photo if the host has one — it
-        // never removes their photo.
-        await setEventCover(event.id, { ...storedStyle(event), preset: look.coverPreset });
-      },
+      // The look's background, behind a photo if the host has one — it never
+      // removes their photo.
+      () => applyStarterLook(event.id, look, storedStyle(event)),
       `“${look.label}” applied.`,
     );
   }
 
+  // The looks that suit this kind of event come first, under their own label;
+  // the rest follow. An event created before the question sees them in order.
+  const eventKind = eventTypeFor(event.eventType);
+  const suggested = eventKind
+    ? eventKind.looks
+        .map((key) => STARTER_LOOKS.find((l) => l.key === key))
+        .filter((l): l is (typeof STARTER_LOOKS)[number] => Boolean(l))
+    : [];
+  const otherLooks = STARTER_LOOKS.filter((l) => !suggested.includes(l));
+
   const set = (changes: Partial<CoverStyle>) => setDraft((d) => ({ ...d, ...changes }));
   const working_ = working !== null;
+
+  function renderLook(look: (typeof STARTER_LOOKS)[number]) {
+    const fonts = fontSetFor(look.galleryFontSet);
+    const active =
+      currentFont === look.galleryFontSet &&
+      (event.galleryAccent ?? '') === look.galleryAccent &&
+      resolveEventCover(event).preset.key === look.coverPreset;
+    return (
+      <button
+        key={look.key}
+        type="button"
+        disabled={working_}
+        onClick={() => applyLook(look.key)}
+        aria-pressed={active}
+        className={`overflow-hidden border text-left transition disabled:opacity-50 ${
+          active ? 'border-ink ring-1 ring-ink' : 'border-charcoal/20 hover:border-charcoal/50'
+        }`}
+      >
+        <span
+          className={`block px-3 py-4 ${
+            coverPresetFor(look.coverPreset).tone === 'light' ? 'text-ink' : 'text-canvas'
+          }`}
+          style={{ background: coverPresetFor(look.coverPreset).background }}
+        >
+          <span className="block text-lg leading-tight" style={{ fontFamily: fonts.heading }}>
+            {look.label}
+          </span>
+        </span>
+        <span className="block px-3 py-2 text-xs text-charcoal/60">
+          {working === `look-${look.key}` ? 'Applying…' : look.description}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <div className="spx-card p-5">
@@ -295,40 +344,19 @@ export default function GalleryStyleSettings({ event, onSaved }: Props) {
               Fonts, colour and background that go together, in one click. Change any part of it
               afterwards.
             </p>
+            {suggested.length > 0 ? (
+              <>
+                <p className="mt-4 text-xs font-medium text-charcoal">
+                  Suggested for {eventKind!.label.toLowerCase()}
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {suggested.map(renderLook)}
+                </div>
+                <p className="mt-5 text-xs font-medium text-charcoal">More looks</p>
+              </>
+            ) : null}
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {STARTER_LOOKS.map((look) => {
-                const fonts = fontSetFor(look.galleryFontSet);
-                const active =
-                  currentFont === look.galleryFontSet &&
-                  (event.galleryAccent ?? '') === look.galleryAccent &&
-                  resolveEventCover(event).preset.key === look.coverPreset;
-                return (
-                  <button
-                    key={look.key}
-                    type="button"
-                    disabled={working_}
-                    onClick={() => applyLook(look.key)}
-                    aria-pressed={active}
-                    className={`overflow-hidden border text-left transition disabled:opacity-50 ${
-                      active ? 'border-ink ring-1 ring-ink' : 'border-charcoal/20 hover:border-charcoal/50'
-                    }`}
-                  >
-                    <span
-                      className={`block px-3 py-4 ${
-                        coverPresetFor(look.coverPreset).tone === 'light' ? 'text-ink' : 'text-canvas'
-                      }`}
-                      style={{ background: coverPresetFor(look.coverPreset).background }}
-                    >
-                      <span className="block text-lg leading-tight" style={{ fontFamily: fonts.heading }}>
-                        {look.label}
-                      </span>
-                    </span>
-                    <span className="block px-3 py-2 text-xs text-charcoal/60">
-                      {working === `look-${look.key}` ? 'Applying…' : look.description}
-                    </span>
-                  </button>
-                );
-              })}
+              {otherLooks.map(renderLook)}
             </div>
           </fieldset>
         </div>

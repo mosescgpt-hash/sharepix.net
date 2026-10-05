@@ -217,6 +217,8 @@ export async function createNewEvent(input: {
   uploadAudience?: 'guests' | 'host-only';
   /** Where they came from. Normalised server-side; see lib/attribution.ts. */
   source?: string;
+  /** Wedding, birthday and so on. See lib/eventTypes.ts. */
+  eventType?: string;
 }): Promise<QREvent> {
   const { data: event, errors } = await getClient().mutations.createHostedEvent(
     {
@@ -228,6 +230,7 @@ export async function createNewEvent(input: {
       discountCode: input.discountCode?.trim().toUpperCase() || undefined,
       uploadAudience: input.uploadAudience || undefined,
       source: input.source || undefined,
+      eventType: input.eventType || undefined,
     },
     { authMode: 'userPool' },
   );
@@ -2455,6 +2458,27 @@ export async function setEventGalleryTheme(
 export async function setEventCover(eventId: string, style: CoverStyle | null): Promise<void> {
   const json = style && Object.keys(style).length > 0 ? JSON.stringify(style) : '';
   await updateEventSettings(eventId, { coverStyle: json }, 'The cover could not be saved.');
+}
+
+/**
+ * Apply a starter look in one save: its fonts, its accent and its cover
+ * background. The cover keeps everything else already on it — a host's own
+ * photo, headline and position — so a look never removes their photo.
+ */
+export async function applyStarterLook(
+  eventId: string,
+  look: { galleryFontSet: string; galleryAccent: string; coverPreset: string },
+  currentCover: CoverStyle = {},
+): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    {
+      galleryFontSet: look.galleryFontSet,
+      galleryAccent: look.galleryAccent,
+      coverStyle: JSON.stringify({ ...currentCover, preset: look.coverPreset }),
+    },
+    'The look could not be applied.',
+  );
 }
 
 /**

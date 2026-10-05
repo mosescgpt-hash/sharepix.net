@@ -19,6 +19,18 @@ export interface StarterLook {
 }
 
 export const STARTER_LOOKS: StarterLook[] = [
+  // The most professional of the set, and the fallback for any event type
+  // without a better fit: serif headings over a plain body (the pairing
+  // editorial and brand sites use), a deep midnight cover and one restrained
+  // navy accent. Nothing about it says "template".
+  {
+    key: 'signature',
+    label: 'Signature',
+    description: 'Polished and professional',
+    galleryFontSet: 'classic',
+    galleryAccent: '#24395c',
+    coverPreset: 'midnight',
+  },
   {
     key: 'sharepix',
     label: 'SharePix',
@@ -84,3 +96,7 @@ export const STARTER_LOOKS: StarterLook[] = [
     coverPreset: 'ocean',
   },
 ];
+
+export function starterLookFor(key: string | null | undefined): StarterLook | null {
+  return STARTER_LOOKS.find((l) => l.key === key) ?? null;
+}

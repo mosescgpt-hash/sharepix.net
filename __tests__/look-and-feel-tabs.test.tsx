@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
 
 jest.mock('@/lib/api', () => ({
+  applyStarterLook: jest.fn(() => Promise.resolve()),
   getEventCoverSource: jest.fn(() => new Promise(() => undefined)),
   setEventCover: jest.fn(),
   setEventEngagement: jest.fn(),
@@ -46,5 +47,38 @@ describe('Look and feel, in tabs', () => {
     // Still marked from another tab, which is the point of it.
     fireEvent.click(screen.getByRole('tab', { name: 'Fonts' }));
     expect(screen.getByLabelText('unsaved changes')).toBeInTheDocument();
+  });
+
+  it('puts the looks that suit the event type first', () => {
+    render(
+      <GalleryStyleSettings
+        event={{ id: 'evt-2', name: 'Pat & Lee', eventType: 'wedding' } as never}
+        onSaved={() => undefined}
+      />,
+    );
+    expect(screen.getByText('Suggested for wedding')).toBeInTheDocument();
+    const looks = screen.getAllByRole('button', { pressed: false }).map((b) => b.textContent);
+    expect(looks[0]).toMatch(/^Ivory/);
+    expect(screen.getByText('More looks')).toBeInTheDocument();
+  });
+
+  it('shows every look in one list for an event without a type', () => {
+    render(<GalleryStyleSettings event={event} onSaved={() => undefined} />);
+    expect(screen.queryByText(/^Suggested for/)).toBeNull();
+    expect(screen.getByText('Signature')).toBeInTheDocument();
+  });
+
+  it('opens the tab the dashboard asks for', () => {
+    const { rerender } = render(
+      <GalleryStyleSettings event={event} onSaved={() => undefined} requestedTab={null} />,
+    );
+    rerender(
+      <GalleryStyleSettings
+        event={event}
+        onSaved={() => undefined}
+        requestedTab={{ key: 'cover', n: 1 }}
+      />,
+    );
+    expect(screen.getByRole('tab', { name: 'Cover' })).toHaveAttribute('aria-selected', 'true');
   });
 });

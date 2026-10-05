@@ -61,6 +61,7 @@ import {
   videosRemaining,
 } from '@/lib/pricing';
 import { eventLifecycle } from '@/lib/lifecycle';
+import { jumpByKey, jumpsFor, type LookTab } from '@/lib/dashboardJumps';
 import { UPLOAD_WINDOW_DAYS, latestEventDate } from '@/lib/uploadWindowStart';
 import { guestBookAvailable, guestBookPurchasable } from '@/lib/guestBook';
 import { parseEventLocation } from '@/lib/eventLocation';
@@ -94,11 +95,36 @@ import {
  * and one Ctrl-F — a host hunting for "where do I turn off videos" should not
  * have to guess which tab it is behind.
  */
-const BANDS = [
-  { id: 'share', label: 'Share it', blurb: 'The code, the signs, and the moments.' },
-  { id: 'watch', label: 'Watch it', blurb: 'What your guests have added so far.' },
-  { id: 'setup', label: 'Set it up', blurb: 'Details, style, and everything optional.' },
+/**
+ * The dashboard's tabs, in the order a host needs them: share the code, watch
+ * the photos come in, then the settings, most-used first and the destructive
+ * ones last.
+ */
+const TABS = [
+  { id: 'share', label: 'Share', blurb: 'Your QR code, printable signs and moments.' },
+  { id: 'photos', label: 'Photos', blurb: 'What your guests have added so far.' },
+  { id: 'design', label: 'Design', blurb: 'How your event pages and gallery look.' },
+  { id: 'guests', label: 'Guests', blurb: 'Permissions, reminders and photo challenges.' },
+  { id: 'extras', label: 'Extras', blurb: 'Your photographer, add-ons and featured events.' },
+  { id: 'event', label: 'Event', blurb: 'Name, date and place — and ending the event.' },
 ] as const;
+type TabId = (typeof TABS)[number]['id'];
+
+/**
+ * The tab a URL fragment points at. The old section anchors still work, so a
+ * link in an email or a bookmark from before the tabs lands somewhere sensible.
+ */
+function tabFromHash(hash: string): TabId | null {
+  const id = hash.replace(/^#/, '');
+  const direct = TABS.find((t) => t.id === id);
+  if (direct) return direct.id;
+  const legacy: Record<string, TabId> = {
+    'event-qr-code': 'share',
+    watch: 'photos',
+    setup: 'design',
+  };
+  return legacy[id] ?? null;
+}
 
 /**
  * Which settings card a confirmation belongs to.
@@ -255,10 +281,49 @@ function AdminDashboardPage() {
    * The code is now the first thing in "Share it" and never hidden, so all that
    * is left is the scroll.
    */
+  const [activeTab, setActiveTab] = useState<TabId>('share');
+  const selectTab = useCallback((id: TabId) => {
+    setActiveTab(id);
+    // replaceState, not a router push: switching tabs is not a navigation, so
+    // Back leaves the dashboard rather than stepping through tabs. Next's own
+    // history state is passed through untouched.
+    window.history.replaceState(window.history.state, '', `#${id}`);
+  }, []);
+
+  useEffect(() => {
+    const fromLink = tabFromHash(window.location.hash);
+    if (fromLink) setActiveTab(fromLink);
+  }, [router.asPath]);
+
+  // "I want to…": open the tab, open the Look and feel tab inside it where
+  // there is one, then bring the card into view and briefly outline it so the
+  // eye lands on the right thing.
+  const [lookTabRequest, setLookTabRequest] = useState<{ key: LookTab; n: number } | null>(null);
+  const jumpTo = useCallback(
+    (key: string) => {
+      const jump = jumpByKey(key);
+      if (!jump) return;
+      selectTab(jump.tab);
+      if (jump.lookTab) setLookTabRequest({ key: jump.lookTab, n: Date.now() });
+      window.setTimeout(() => {
+        const el = document.getElementById(jump.target);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('ring-2', 'ring-ink', 'ring-offset-4');
+        window.setTimeout(() => el.classList.remove('ring-2', 'ring-ink', 'ring-offset-4'), 1600);
+      }, 50);
+    },
+    [selectTab],
+  );
+
   const scrollToQR = useCallback(() => {
-    document
-      .getElementById('event-qr-code')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveTab('share');
+    // A beat, so the Share panel is showing before we scroll to the code in it.
+    window.setTimeout(() => {
+      document
+        .getElementById('event-qr-code')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   }, []);
 
   useEffect(() => {
@@ -719,32 +784,91 @@ function AdminDashboardPage() {
               payError={payError}
             />
 
-            {/* A map for six screens of scroll. Anchors rather than tabs:
-                everything stays on one page, so Ctrl-F still finds a setting
-                and a link to a section still lands on it. */}
-            <nav aria-label="Sections" className="mt-8 flex flex-wrap gap-2 text-sm">
-              {BANDS.map((band) => (
-                <a
-                  key={band.id}
-                  href={`#${band.id}`}
-                  className="border border-charcoal/20 px-4 py-2 font-medium text-charcoal transition hover:border-charcoal/60"
-                >
-                  {band.label}
-                </a>
-              ))}
-            </nav>
-
             {/* Expanded and first when the event has no photos yet: on day one
                 a host needs the instructions and very little else. Once photos
-                exist it drops to the quiet strip at the end of "Share it",
-                where a host who has done this before never has to open it. */}
+                exist it drops to the quiet strip at the end of Share, where a
+                host who has done this before never has to open it. */}
             {photos.length === 0 ? (
               <HostGuide event={event} defaultOpen onShowQR={scrollToQR} />
             ) : null}
 
-            <section id="share" className="scroll-mt-24 pt-12">
-              <p className="spx-eyebrow">{BANDS[0].label}</p>
-              <p className="mt-2 text-sm text-charcoal/60">{BANDS[0].blurb}</p>
+            {/* For the host who knows what they want to change but not which
+                tab it is under. A native select: on a phone it opens the
+                system picker, which is the easiest list there is to use. */}
+            <div className="mt-8 max-w-sm">
+              <label htmlFor="dashboard-jump" className="block text-sm font-medium">
+                I want to…
+              </label>
+              <select
+                id="dashboard-jump"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) jumpTo(e.target.value);
+                }}
+                className="spx-input mt-2"
+              >
+                <option value="">Choose what to change</option>
+                {jumpsFor({
+                  commentsOn: commentsEnabled(event),
+                  featuredOffered: photos.length > 0 && !isTrialTier(event.tier),
+                }).map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.jumps.map((jump) => (
+                      <option key={jump.key} value={jump.key}>
+                        {jump.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+
+            {/* Tabs rather than one long scroll: six screens of settings read
+                as one thing to do at a time. Each tab has its own address
+                (admin#design), so a link to a tab still lands on it, and every
+                panel stays mounted, so nothing half-edited is lost by switching. */}
+            <div
+              role="tablist"
+              aria-label="Dashboard"
+              className="-mx-4 mt-6 flex overflow-x-auto border-b border-charcoal/15 px-4 sm:mx-0 sm:px-0"
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                const i = TABS.findIndex((t) => t.id === activeTab);
+                const next = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+                selectTab(next.id);
+                document.getElementById(`tab-${next.id}`)?.focus();
+              }}
+            >
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  id={`tab-${t.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === t.id}
+                  aria-controls={t.id}
+                  tabIndex={activeTab === t.id ? 0 : -1}
+                  onClick={() => selectTab(t.id)}
+                  className={`-mb-px shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition ${
+                    activeTab === t.id
+                      ? 'border-ink text-charcoal'
+                      : 'border-transparent text-charcoal/55 hover:text-charcoal'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <section
+              id="share"
+              role="tabpanel"
+              aria-labelledby="tab-share"
+              hidden={activeTab !== 'share'}
+              className="pt-6"
+            >
+              <p className="text-sm text-charcoal/60">{TABS[0].blurb}</p>
+
 
               {/* First thing in the band, and never hidden. It used to render
                   below the gallery-style card, behind a Show/Hide button — so
@@ -766,7 +890,7 @@ function AdminDashboardPage() {
               {/* The printables, beside the code they print. They used to be
                   two links in the header of the settings card, four screens
                   below the QR code they carry. */}
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <div id="printables" className="scroll-mt-24 mt-6 flex flex-wrap justify-center gap-2">
                 <Link
                   href={`/event/${event.id}/table-tent`}
                   target="_blank"
@@ -792,16 +916,24 @@ function AdminDashboardPage() {
               {/* Moments mint their own QR codes, one per part of the event,
                   so they belong beside the main code rather than eight
                   sections below it — which is where they were. */}
-              <MomentsManager eventId={event.id} origin={origin} branding={event} />
+              <div id="moments" className="scroll-mt-24">
+                <MomentsManager eventId={event.id} origin={origin} branding={event} />
+              </div>
 
               {photos.length > 0 ? (
                 <HostGuide event={event} onShowQR={scrollToQR} />
               ) : null}
             </section>
 
-            <section id="watch" className="scroll-mt-24 pt-12">
-              <p className="spx-eyebrow">{BANDS[1].label}</p>
-              <p className="mt-2 text-sm text-charcoal/60">{BANDS[1].blurb}</p>
+            <section
+              id="photos"
+              role="tabpanel"
+              aria-labelledby="tab-photos"
+              hidden={activeTab !== 'photos'}
+              className="pt-6"
+            >
+              <p className="text-sm text-charcoal/60">{TABS[1].blurb}</p>
+
 
               <div className="mt-6 grid grid-cols-2 gap-4 sm:max-w-md">
                 <div className="spx-card p-5">
@@ -867,14 +999,14 @@ function AdminDashboardPage() {
                   queue for a feature the host switched off is a panel that
                   explains nothing and worries them. */}
               {commentsEnabled(event) ? (
-                <div className="mt-8">
+                <div id="comments" className="scroll-mt-24 mt-8">
                   <CommentModeration eventId={event.id} />
                 </div>
               ) : null}
 
               {guestBookAvailable(event) ? <GuestBookModeration eventId={event.id} /> : null}
 
-              <div className="mt-6">
+              <div id="download-share" className="scroll-mt-24 mt-6">
                 <DownloadShareBuilder
                   event={event}
                   selectedIds={selectedApprovedIds}
@@ -884,7 +1016,7 @@ function AdminDashboardPage() {
                 />
               </div>
 
-              <div className="mt-6">
+              <div id="photo-grid" className="scroll-mt-24 mt-6">
                 <AdminPhotoGrid
                   photos={photos}
                   onChanged={load}
@@ -895,117 +1027,30 @@ function AdminDashboardPage() {
               </div>
             </section>
 
-            <section id="setup" className="scroll-mt-24 pt-12">
-              <p className="spx-eyebrow">{BANDS[2].label}</p>
-              <p className="mt-2 text-sm text-charcoal/60">{BANDS[2].blurb}</p>
+            <section
+              id="design"
+              role="tabpanel"
+              aria-labelledby="tab-design"
+              hidden={activeTab !== 'design'}
+              className="pt-6"
+            >
+              <p className="text-sm text-charcoal/60">{TABS[2].blurb}</p>
 
-              {/* Name, date and place, in a card of their own. These used to
-                  open a single settings card that ran to three screens and
-                  ended with Delete event. */}
-              <div className="spx-card mt-6 p-6">
-                <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Event details</h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="text-sm font-medium">Event name</span>
-                    <input
-                      type="text"
-                      value={editName}
-                      disabled={detailsLocked || savingDetails}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-sm font-medium">Event date</span>
-                    <input
-                      type="date"
-                      value={editDate}
-                      disabled={detailsLocked || savingDetails}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      // Same ceiling the server applies on save. The window
-                      // follows this date while the event has no photos, so a
-                      // date nobody could reach is a save that fails for a
-                      // reason the form never mentioned.
-                      max={latestEventDate()}
-                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
-                    />
-                    {!detailsLocked ? (
-                      <span className="mt-1.5 block text-sm text-charcoal/70">
-                        Uploads run for {UPLOAD_WINDOW_DAYS} days from this date. It locks
-                        once the first photo arrives.
-                      </span>
-                    ) : null}
-                  </label>
-                </div>
-
-                <div className="mt-4">
-                  <span className="text-sm font-medium">
-                    Where it happened <span className="text-charcoal/50">(optional)</span>
-                  </span>
-                  <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                    <input
-                      type="text"
-                      value={editCity}
-                      maxLength={60}
-                      disabled={savingDetails}
-                      onChange={(e) => setEditCity(e.target.value)}
-                      placeholder="City"
-                      aria-label="City"
-                      className="spx-input disabled:bg-sand"
-                    />
-                    <input
-                      type="text"
-                      value={editState}
-                      maxLength={40}
-                      disabled={savingDetails}
-                      onChange={(e) => setEditState(e.target.value)}
-                      placeholder="State"
-                      aria-label="State"
-                      className="spx-input disabled:bg-sand"
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-charcoal/60">
-                    City and state only — never a street address. Photos&apos; own location data
-                    is always removed when they&apos;re uploaded.
-                  </p>
-                </div>
-
-                {detailsLocked ? (
-                  <p className="mt-2 text-xs text-charcoal/60">
-                    The name and date lock once the first photo is uploaded, so guests&apos;
-                    memories keep the details they saw. You can still change the location.
-                  </p>
-                ) : null}
-
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={handleSaveDetails}
-                    disabled={savingDetails}
-                    className="bg-ink px-5 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
-                  >
-                    {savingDetails ? 'Saving…' : 'Save details'}
-                  </button>
-                </div>
-                {/* Confirmations land in the card that raised them. */}
-                {settingsMsg?.where === 'details' ? (
-                  <p
-                    className={`mt-4 text-sm ${settingsMsg.ok ? 'text-green-700' : 'text-red-700'}`}
-                  >
-                    {settingsMsg.text}
-                  </p>
-                ) : null}
+              <div id="look-and-feel" className="scroll-mt-24 mt-6">
+                <GalleryStyleSettings event={event} onSaved={load} requestedTab={lookTabRequest} />
               </div>
+            </section>
 
-              {/* Fonts, layout and accent colour. Down here rather than at the
-                  top of the page, where it used to be the first thing a host
-                  met: this is a thing you set once and it should not stand
-                  between anyone and their QR code. */}
-              <div className="mt-6">
-                <GalleryStyleSettings event={event} onSaved={load} />
-              </div>
+            <section
+              id="guests"
+              role="tabpanel"
+              aria-labelledby="tab-guests"
+              hidden={activeTab !== 'guests'}
+              className="pt-6"
+            >
+              <p className="text-sm text-charcoal/60">{TABS[3].blurb}</p>
 
-              <div className="spx-card mt-6 p-6">
+              <div id="guest-settings" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                   What guests can do
                 </h2>
@@ -1044,7 +1089,7 @@ function AdminDashboardPage() {
                   </p>
                 </div>
 
-                <div className="mt-4 border-t border-ink/10 pt-4">
+                <div id="photo-screening" className="scroll-mt-24 mt-4 border-t border-ink/10 pt-4">
                   <p className="text-sm font-medium">Photo screening</p>
                   <p className="text-xs text-charcoal/60">
                     Uploads are checked for explicit content. Alcohol, smoking, and kissing are
@@ -1079,7 +1124,7 @@ function AdminDashboardPage() {
                       : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
                   </p>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+                  <div id="guest-downloads" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Guest downloads</p>
                       <p className="text-xs text-charcoal/60">
@@ -1107,7 +1152,7 @@ function AdminDashboardPage() {
                     </button>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+                  <div id="guest-videos" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Guest videos</p>
                       <p className="text-xs text-charcoal/60">
@@ -1180,10 +1225,28 @@ function AdminDashboardPage() {
                 ) : null}
               </div>
 
+              <div id="reminders" className="scroll-mt-24">
+                <HostReminderSettings event={event} onSaved={load} />
+              </div>
+
+              <div id="challenges" className="scroll-mt-24">
+                <ChallengesManager event={event} photos={photos} onSettingsSaved={load} />
+              </div>
+            </section>
+
+            <section
+              id="extras"
+              role="tabpanel"
+              aria-labelledby="tab-extras"
+              hidden={activeTab !== 'extras'}
+              className="pt-6"
+            >
+              <p className="text-sm text-charcoal/60">{TABS[4].blurb}</p>
+
               {/* SharePix Pro. Always here, because a host books a photographer
                   before the event rather than after it — unlike Featured Events
                   below, which needs photos to exist first. */}
-              <div className="spx-card mt-6 p-6">
+              <div id="photographer" className="spx-card scroll-mt-24 mt-6 p-6">
                 <p className="spx-eyebrow">SharePix Pro</p>
                 <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">
                   Add your photographer
@@ -1246,11 +1309,7 @@ function AdminDashboardPage() {
                 ) : null}
               </div>
 
-              <HostReminderSettings event={event} onSaved={load} />
-
-              <ChallengesManager event={event} photos={photos} onSettingsSaved={load} />
-
-              <div className="spx-card mt-6 p-6">
+              <div id="addons" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Add-ons</h2>
                 <p className="text-xs text-charcoal/60">
                   Tick what you want and pay once.{' '}
@@ -1380,7 +1439,7 @@ function AdminDashboardPage() {
               {/* Not on a free event: the offer is part of what was paid back,
                   and nothing was paid. */}
               {photos.length > 0 && !isTrialTier(event.tier) ? (
-                <div className="spx-card mt-6 p-6">
+                <div id="featured" className="spx-card scroll-mt-24 mt-6 p-6">
                   <p className="spx-eyebrow">Featured Events</p>
                   <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">
                     Show future hosts what this looked like
@@ -1396,6 +1455,114 @@ function AdminDashboardPage() {
                   </Link>
                 </div>
               ) : null}
+            </section>
+
+            <section
+              id="event"
+              role="tabpanel"
+              aria-labelledby="tab-event"
+              hidden={activeTab !== 'event'}
+              className="pt-6"
+            >
+              <p className="text-sm text-charcoal/60">{TABS[5].blurb}</p>
+
+              {/* Name, date and place, in a card of their own. These used to
+                  open a single settings card that ran to three screens and
+                  ended with Delete event. */}
+              <div id="event-details" className="spx-card scroll-mt-24 mt-6 p-6">
+                <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Event details</h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="text-sm font-medium">Event name</span>
+                    <input
+                      type="text"
+                      value={editName}
+                      disabled={detailsLocked || savingDetails}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium">Event date</span>
+                    <input
+                      type="date"
+                      value={editDate}
+                      disabled={detailsLocked || savingDetails}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      // Same ceiling the server applies on save. The window
+                      // follows this date while the event has no photos, so a
+                      // date nobody could reach is a save that fails for a
+                      // reason the form never mentioned.
+                      max={latestEventDate()}
+                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+                    />
+                    {!detailsLocked ? (
+                      <span className="mt-1.5 block text-sm text-charcoal/70">
+                        Uploads run for {UPLOAD_WINDOW_DAYS} days from this date. It locks
+                        once the first photo arrives.
+                      </span>
+                    ) : null}
+                  </label>
+                </div>
+
+                <div className="mt-4">
+                  <span className="text-sm font-medium">
+                    Where it happened <span className="text-charcoal/50">(optional)</span>
+                  </span>
+                  <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                    <input
+                      type="text"
+                      value={editCity}
+                      maxLength={60}
+                      disabled={savingDetails}
+                      onChange={(e) => setEditCity(e.target.value)}
+                      placeholder="City"
+                      aria-label="City"
+                      className="spx-input disabled:bg-sand"
+                    />
+                    <input
+                      type="text"
+                      value={editState}
+                      maxLength={40}
+                      disabled={savingDetails}
+                      onChange={(e) => setEditState(e.target.value)}
+                      placeholder="State"
+                      aria-label="State"
+                      className="spx-input disabled:bg-sand"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-charcoal/60">
+                    City and state only — never a street address. Photos&apos; own location data
+                    is always removed when they&apos;re uploaded.
+                  </p>
+                </div>
+
+                {detailsLocked ? (
+                  <p className="mt-2 text-xs text-charcoal/60">
+                    The name and date lock once the first photo is uploaded, so guests&apos;
+                    memories keep the details they saw. You can still change the location.
+                  </p>
+                ) : null}
+
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveDetails}
+                    disabled={savingDetails}
+                    className="bg-ink px-5 py-3 text-sm font-medium text-canvas transition hover:bg-night disabled:opacity-50"
+                  >
+                    {savingDetails ? 'Saving…' : 'Save details'}
+                  </button>
+                </div>
+                {/* Confirmations land in the card that raised them. */}
+                {settingsMsg?.where === 'details' ? (
+                  <p
+                    className={`mt-4 text-sm ${settingsMsg.ok ? 'text-green-700' : 'text-red-700'}`}
+                  >
+                    {settingsMsg.text}
+                  </p>
+                ) : null}
+              </div>
 
               {/* Something went wrong.
 
@@ -1502,7 +1669,7 @@ function AdminDashboardPage() {
               {/* Closing and deleting, alone at the bottom in a card that
                   looks like what it is. Delete event used to share a card
                   with the Event name field. */}
-              <div className="spx-card mt-6 border-red-200 p-6">
+              <div id="ending" className="spx-card scroll-mt-24 mt-6 border-red-200 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                   Ending the event
                 </h2>

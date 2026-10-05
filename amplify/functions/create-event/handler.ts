@@ -19,6 +19,7 @@ import {
   isCorporateStatusActive,
   isTrialTier,
   newEventRow,
+  normalizeEventType,
   normalizeTier,
   ownerStringFor,
   planFor,
@@ -583,6 +584,11 @@ export const handler: Handler = async (event) => {
     if (audience === 'guests' || audience === 'host-only') {
       item.uploadAudience = { S: audience };
     }
+  }
+  // Wedding, birthday and so on — a closed set, or left off.
+  {
+    const eventType = normalizeEventType(event.arguments.eventType);
+    if (eventType) item.eventType = { S: eventType };
   }
   // A missing limit means unlimited, which is what Premium and Corporate get —
   // so the attribute is left off rather than written as null.

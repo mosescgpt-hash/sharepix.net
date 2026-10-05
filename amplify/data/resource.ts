@@ -2274,6 +2274,9 @@ const schema = a.schema({
       // closed set — anything unrecognised becomes 'direct' rather than being
       // stored. See lib/attribution.ts.
       source: a.string(),
+      // 'wedding', 'birthday' and so on, from the closed set in
+      // lib/eventTypes.ts. Anything else is stored as absent, never as sent.
+      eventType: a.string(),
     })
     .returns(a.ref('CreatedEvent'))
     .authorization((allow) => [allow.authenticated()])
