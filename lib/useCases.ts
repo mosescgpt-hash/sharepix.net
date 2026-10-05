@@ -14,7 +14,13 @@
  * number that keeps saying $79 six months after the price moved.
  */
 import type { ImageSlot } from './imagery';
-import { CORPORATE_PLAN, PRICING_TIERS, UPLOAD_WINDOW_DAYS } from './pricing';
+import {
+  CORPORATE_PLAN,
+  PRICING_TIERS,
+  TRIAL_GALLERY_DAYS,
+  TRIAL_UPLOAD_WINDOW_DAYS,
+  UPLOAD_WINDOW_DAYS,
+} from './pricing';
 
 const FREE_TIER = PRICING_TIERS.find((tier) => tier.price === 0);
 
@@ -25,6 +31,19 @@ export interface UseCaseFaq {
   question: string;
   answer: string;
 }
+
+/**
+ * A picture on a use-case page: a slot from lib/imagery.ts, or a photo from
+ * one of the sample galleries (GALLERY_SETS) with alt text that describes that
+ * photo. The second exists because the generic slots carry alt text for a
+ * specific shot ("a guest pointing a phone at a QR code") that the sample
+ * photos do not show — a page should use a real photo of its own kind of
+ * event, described as what it is, rather than a placeholder.
+ *
+ * A test checks that every slot named here has a photo and every photo path
+ * is in a sample gallery, so no page can render an empty tile.
+ */
+export type UseCaseImage = { slot: ImageSlot } | { photo: string; alt: string };
 
 export interface UseCase {
   /** The route, without a leading slash: 'weddings' → /weddings. */
@@ -39,11 +58,13 @@ export interface UseCase {
   h1First: string;
   h1Second: string;
   heroBody: string;
-  /** The image slot beside the hero copy — see lib/imagery.ts. Renders a
-   *  palette placeholder until real photography exists for the slot. */
-  heroSlot: ImageSlot;
-  /** Two or three slots shown lower on the page, each with its own caption. */
-  gallery: { slot: ImageSlot; caption: string }[];
+  /** The picture beside the hero copy. */
+  hero: UseCaseImage;
+  /**
+   * Two or three pictures lower on the page, each with its own caption. The
+   * grid has as many columns as there are pictures, so two never leave a hole.
+   */
+  gallery: (UseCaseImage & { caption: string })[];
   /** Short, single-line claims — rendered as a grid, not full paragraphs. */
   benefits: string[];
   faqs: UseCaseFaq[];
@@ -59,11 +80,23 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'in one place.',
     heroBody:
       'Put one QR code on every table. Guests point a camera at it and start sending photos — no app, no account, nothing to explain. You get the originals, at the size the camera recorded them.',
-    heroSlot: 'occasion-wedding',
+    hero: { slot: 'occasion-wedding' },
     gallery: [
-      { slot: 'how-it-works-scan', caption: 'Scan the code on the table' },
-      { slot: 'guest-book-spread', caption: 'Sign the guest book' },
-      { slot: 'live-slideshow', caption: 'Watch it fill up on a screen at the reception' },
+      {
+        photo: '/site/gallery/wedding/06-toasts.webp',
+        alt: 'A guest at a candlelit reception table holds up a phone during the toasts',
+        caption: 'Phones out at every table',
+      },
+      {
+        photo: '/site/gallery/wedding/02-with-the-newlyweds.webp',
+        alt: 'A guest photographs the newlyweds with friends under string lights',
+        caption: 'Every guest’s angle, in one gallery',
+      },
+      {
+        photo: '/site/gallery/wedding/11-on-the-big-screen.webp',
+        alt: 'Guests dance while their photos play on a screen behind them',
+        caption: 'Watch it fill up on a screen at the reception',
+      },
     ],
     benefits: [
       'The candids your photographer missed',
@@ -103,10 +136,10 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'Every photo from the grad party.',
     heroBody:
       'Put the code out where people are already taking pictures. Friends, family and neighbors add theirs straight from their phone — no app, no account, and nothing for you to collect afterward.',
-    heroSlot: 'occasion-graduation',
+    hero: { slot: 'occasion-graduation' },
     gallery: [
-      { slot: 'how-it-works-scan', caption: 'Scan the code, no app to open first' },
-      { slot: 'home-gallery-preview', caption: 'Every guest’s photos, one gallery' },
+      { slot: 'occasion-birthday', caption: 'Every phone at the party, one gallery' },
+      { slot: 'occasion-reunion', caption: 'Family from out of town, all in one place' },
     ],
     benefits: [
       'Works for open houses with people coming and going',
@@ -125,7 +158,7 @@ export const USE_CASES: UseCase[] = [
       },
       {
         question: 'Is there a free option for a smaller party?',
-        answer: `Yes — a free event covers up to ${FREE_PHOTO_LIMIT} photos and one video, with a 30-day gallery afterward.`,
+        answer: `Yes — a free event covers up to ${FREE_PHOTO_LIMIT} photos and one video, with a ${TRIAL_UPLOAD_WINDOW_DAYS}-day upload window and the gallery up for ${TRIAL_GALLERY_DAYS} days after that.`,
       },
     ],
   },
@@ -138,10 +171,23 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'without chasing anyone.',
     heroBody:
       'One QR code on a slide, a table, or a badge. Employees and guests upload straight from their phone, and everything lands in a gallery you control before it goes anywhere.',
-    heroSlot: 'occasion-corporate',
+    hero: { slot: 'occasion-corporate' },
     gallery: [
-      { slot: 'how-it-works-gallery', caption: 'Review and approve from your dashboard' },
-      { slot: 'live-slideshow', caption: 'Live on the screen at the venue' },
+      {
+        photo: '/site/gallery/business/04-a-closer-look.webp',
+        alt: 'Colleagues laugh together while looking at a product',
+        caption: 'You decide what stays in the gallery',
+      },
+      {
+        photo: '/site/gallery/business/10-the-quiet-hour.webp',
+        alt: 'Colleagues chat at a stand while photos play on a screen behind them',
+        caption: 'Live on the screen at the venue',
+      },
+      {
+        photo: '/site/gallery/business/07-comparing-notes.webp',
+        alt: 'Colleagues with coffee compare notes beside a small table',
+        caption: 'One gallery for the whole team',
+      },
     ],
     benefits: [
       'Moderation and deletion before anything goes public',
@@ -173,10 +219,26 @@ export const USE_CASES: UseCase[] = [
     h1Second: 'for your con, meetup or fan event.',
     heroBody:
       'One code, thousands of attendees. Cosplay, panels, meetups and contests all feed the same gallery — nobody installs anything to add a photo.',
-    heroSlot: 'live-slideshow',
+    hero: {
+      photo: '/site/gallery/business/09-across-the-hall.webp',
+      alt: 'Attendees talk at a stand in a busy exhibition hall',
+    },
     gallery: [
-      { slot: 'how-it-works-scan', caption: 'No app for anyone to install' },
-      { slot: 'home-gallery-preview', caption: 'Every panel, one gallery' },
+      {
+        photo: '/site/gallery/business/11-a-group-shot.webp',
+        alt: 'Four attendees take a selfie together at an exhibition stand',
+        caption: 'No app for anyone to install',
+      },
+      {
+        photo: '/site/gallery/business/01-setting-up.webp',
+        alt: 'Two exhibitors set out products on their stand before the doors open',
+        caption: 'Every stand and panel, one gallery',
+      },
+      {
+        photo: '/site/gallery/business/08-on-the-screen.webp',
+        alt: 'Attendees talk at a standing table while photos play on a screen behind them',
+        caption: 'Live on screens around the hall',
+      },
     ],
     benefits: [
       'Cosplay photo walls on a live slideshow',

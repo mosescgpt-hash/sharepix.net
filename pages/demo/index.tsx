@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import Layout from '@/components/Layout';
+import SamplePhoto from '@/components/SamplePhoto';
 import { DEMO_EVENT } from '@/lib/demoEvent';
 import { TENT_HEIGHT_IN, TENT_WIDTH_IN, tentContent } from '@/lib/tableTent';
 
@@ -35,16 +36,22 @@ const SETUP_STEPS = [
 const NEXT_STOPS = [
   {
     href: '/demo/gallery',
+    photo: '/site/gallery/wedding/02-with-the-newlyweds.webp',
+    alt: 'A guest photographs the newlyweds with friends under string lights',
     title: 'The gallery',
     body: 'What guests and the host see afterwards. Sort by uploader or by time, open a photo full size, and select a batch to download.',
   },
   {
     href: '/demo/live',
+    photo: '/site/gallery/wedding/11-on-the-big-screen.webp',
+    alt: 'Guests dance while their photos play on a screen behind them',
     title: 'The live slideshow',
     body: 'A venue screen that cycles photos as they arrive, with the QR code in the corner so anyone watching can add theirs.',
   },
   {
     href: '/demo/guestbook',
+    photo: '/site/gallery/wedding/06-toasts.webp',
+    alt: 'A guest at a candlelit table holds up a phone to record the toasts',
     title: 'The guest book',
     body: 'Signed notes guests leave alongside their photos — a message, a picture, or a short video message.',
   },
@@ -66,7 +73,8 @@ export default function DemoPage() {
   return (
     <Layout title="See how it works" width="bleed">
       <section className="spx-section-canvas">
-        <div className="spx-inner">
+        <div className="spx-inner grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <div>
           <p className="spx-eyebrow">A worked example</p>
           <h1 className="mt-3">
             <span className="spx-display block">This is what</span>
@@ -84,6 +92,13 @@ export default function DemoPage() {
               Open the sample gallery
             </Link>
           </div>
+          </div>
+          <SamplePhoto
+            src="/site/gallery/wedding/04-the-reception.webp"
+            alt="Guests laugh with the bride and groom at a reception under string lights"
+            className="spx-arch aspect-[4/5] w-full"
+            priority
+          />
         </div>
       </section>
 
@@ -166,12 +181,15 @@ export default function DemoPage() {
               <Link
                 key={stop.href}
                 href={stop.href}
-                className="spx-card group p-6 transition hover:border-charcoal/30"
+                className="spx-card group overflow-hidden transition hover:border-charcoal/30"
               >
-                <h3 className="font-sans text-lg font-semibold text-charcoal">
-                  {stop.title} <span aria-hidden>&rarr;</span>
-                </h3>
-                <p className="spx-body mt-2 text-sm">{stop.body}</p>
+                <SamplePhoto src={stop.photo} alt={stop.alt} className="aspect-[4/3]" />
+                <div className="p-6">
+                  <h3 className="font-sans text-lg font-semibold text-charcoal">
+                    {stop.title} <span aria-hidden>&rarr;</span>
+                  </h3>
+                  <p className="spx-body mt-2 text-sm">{stop.body}</p>
+                </div>
               </Link>
             ))}
           </div>
