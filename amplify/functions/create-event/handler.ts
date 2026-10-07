@@ -48,12 +48,18 @@ const QUOTA_TABLE = process.env.QUOTA_TABLE_NAME as string;
  * The number is a setting, not a constant: a global admin changes it on the
  * dashboard (AppSetting `free-events-per-day`), next to a chart of how close
  * each day came to it. FREE_EVENTS_PER_DAY in the environment is only the
- * fallback for when no setting has been saved, and 25 is the fallback for that.
- * 0 is allowed and means free events are paused.
+ * fallback for when no setting has been saved.
+ *
+ * The default is NO daily limit (null): the operator chose not to turn real
+ * hosts away while the per-account claim already stops one person taking more
+ * than one. The setting stays as the brake for a run of scripted signups —
+ * any number caps the day, 0 pauses free events, and 'none' (what the
+ * dashboard saves for an empty box) removes the cap again.
  */
-const DEFAULT_FREE_EVENTS_PER_DAY = 25;
+const DEFAULT_FREE_EVENTS_PER_DAY: number | null = null;
 const MAX_FREE_EVENTS_PER_DAY = 1000;
 const FREE_EVENTS_SETTING_KEY = 'free-events-per-day';
+const NO_DAILY_LIMIT = 'none';
 const SETTING_TABLE = process.env.SETTING_TABLE_NAME ?? '';
 
 /** A whole number from 0 to the maximum, or null for anything else. */
@@ -66,13 +72,14 @@ function parseDailyLimit(raw: string | undefined | null): number | null {
 
 /**
  * Today's limit: the admin's setting, else the environment, else the default.
+ * null means no limit.
  *
  * Read on every free-event request rather than cached, so a change on the
  * dashboard applies to the very next one. It is one small GetItem on a path
  * that runs a handful of times a day. A setting that cannot be read falls
  * back rather than refusing: the fallback is still a limit.
  */
-async function freeEventsPerDay(): Promise<number> {
+async function freeEventsPerDay(): Promise<number | null> {
   if (SETTING_TABLE) {
     const found = await dynamo
       .send(
@@ -82,7 +89,9 @@ async function freeEventsPerDay(): Promise<number> {
         }),
       )
       .catch(() => null);
-    const saved = parseDailyLimit(found?.Item?.value?.S);
+    const raw = found?.Item?.value?.S;
+    if (raw?.trim() === NO_DAILY_LIMIT) return null;
+    const saved = parseDailyLimit(raw);
     if (saved !== null) return saved;
   }
   return parseDailyLimit(process.env.FREE_EVENTS_PER_DAY) ?? DEFAULT_FREE_EVENTS_PER_DAY;
@@ -240,6 +249,30 @@ async function takeTrialAllowance(nowISO: string): Promise<void> {
     throw new Error('Free events are unavailable right now. Please try again later.');
   }
   const cap = await freeEventsPerDay();
+  if (cap === null) {
+    // No limit: still count the day, so the dashboard chart keeps working,
+    // but with nothing to refuse against. The limit attribute is removed so
+    // the chart does not draw yesterday's cap across today.
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: QUOTA_TABLE,
+        Key: { id: { S: trialDayKey(nowISO) } },
+        UpdateExpression:
+          'ADD #count :one SET #typename = if_not_exists(#typename, :typename), updatedAt = :now, createdAt = if_not_exists(createdAt, :now) REMOVE #limit',
+        ExpressionAttributeNames: {
+          '#count': 'count',
+          '#limit': 'limit',
+          '#typename': '__typename',
+        },
+        ExpressionAttributeValues: {
+          ':one': { N: '1' },
+          ':now': { S: nowISO },
+          ':typename': { S: 'QuotaCounter' },
+        },
+      }),
+    );
+    return;
+  }
   try {
     await dynamo.send(
       new UpdateItemCommand({

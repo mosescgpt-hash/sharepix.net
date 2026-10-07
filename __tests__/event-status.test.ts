@@ -117,7 +117,9 @@ describe('reading a counter row', () => {
 
   it('uses the same default daily allowance as create-event', () => {
     const handler = codeOnly(readSource('amplify/functions/create-event/handler.ts'));
-    expect(handler).toContain(`const DEFAULT_FREE_EVENTS_PER_DAY = ${DEFAULT_FREE_EVENTS_PER_DAY};`);
+    expect(handler).toContain(
+      `const DEFAULT_FREE_EVENTS_PER_DAY: number | null = ${DEFAULT_FREE_EVENTS_PER_DAY};`,
+    );
   });
 
   it('lists only this month’s Corporate counters that have been used', () => {

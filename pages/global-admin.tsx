@@ -79,10 +79,11 @@ import {
 import FreeEventsChart from '@/components/FreeEventsChart';
 import UploadEvidenceList from '@/components/UploadEvidenceList';
 import {
-  DEFAULT_FREE_EVENTS_PER_DAY,
   MAX_FREE_EVENTS_PER_DAY,
+  NO_DAILY_LIMIT,
   freeEventAdvice,
   freeEventSeries,
+  limitInForce,
   parseDailyLimit,
   guestBookLimitReached,
   quotaKind,
@@ -316,7 +317,8 @@ function GlobalAdminPage() {
   // The daily free-event limit as saved in AppSetting ('' = never saved), and
   // what is in the box.
   const [freeLimitSaved, setFreeLimitSaved] = useState('');
-  const [freeLimitDraft, setFreeLimitDraft] = useState('');
+  // What is in the box; null until edited, when the box shows the limit in force.
+  const [freeLimitDraft, setFreeLimitDraft] = useState<string | null>(null);
   const [freeLimitError, setFreeLimitError] = useState<string | null>(null);
   const [incentives, setIncentives] = useState<ResearchIncentiveRow[] | null>(null);
   const [incentivesError, setIncentivesError] = useState<string | null>(null);
@@ -565,7 +567,7 @@ function GlobalAdminPage() {
         setCountFrom(await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => ''));
         const freeLimit = await readSetting(SETTING_KEYS.freeEventsPerDay).catch(() => '');
         setFreeLimitSaved(freeLimit);
-        setFreeLimitDraft(freeLimit);
+        setFreeLimitDraft(null);
         const alertOn = (await readSetting(SETTING_KEYS.signupAlertEnabled).catch(() => '')) === 'true';
         const alertTo = await readSetting(SETTING_KEYS.signupAlertRecipient).catch(() => '');
         setSignupAlertOn(alertOn);
@@ -1033,9 +1035,13 @@ function GlobalAdminPage() {
   }
 
   async function handleSaveFreeLimit() {
-    const value = parseDailyLimit(freeLimitDraft);
+    // An empty box removes the limit.
+    const text = (freeLimitDraft ?? '').trim();
+    const value = text === '' ? NO_DAILY_LIMIT : parseDailyLimit(text);
     if (value === null) {
-      setFreeLimitError(`Enter a whole number from 0 to ${MAX_FREE_EVENTS_PER_DAY}.`);
+      setFreeLimitError(
+        `Enter a whole number from 0 to ${MAX_FREE_EVENTS_PER_DAY}, or leave it empty for no limit.`,
+      );
       return;
     }
     if (value === 0 && !window.confirm('Pause free events? Nobody can start one until you set a limit above 0.')) {
@@ -1047,7 +1053,7 @@ function GlobalAdminPage() {
       const me = await getCurrentUserInfo();
       await writeSetting(SETTING_KEYS.freeEventsPerDay, String(value), me?.loginId ?? 'admin');
       setFreeLimitSaved(String(value));
-      setFreeLimitDraft(String(value));
+      setFreeLimitDraft(null);
     } catch (err) {
       setFreeLimitError(err instanceof Error ? err.message : 'The limit could not be saved.');
     } finally {
@@ -3240,23 +3246,23 @@ function GlobalAdminPage() {
                 effect immediately.
               </p>
               {(() => {
-                // The limit in force: the saved setting, else what today's row
-                // recorded (a deploy-time override), else the default.
+                // The limit in force (null = no limit): the saved setting, else
+                // what today's row recorded (a deploy-time override), else none.
                 const series = freeEventSeries(quotas ?? []);
                 const today = series[series.length - 1];
-                const limit =
-                  parseDailyLimit(freeLimitSaved) ?? today?.limit ?? DEFAULT_FREE_EVENTS_PER_DAY;
+                const limit = limitInForce(freeLimitSaved, today?.limit);
                 const advice = freeEventAdvice(series, limit);
-                // An empty box shows the limit in force, so it is not a change.
-                const draft = freeLimitDraft === '' ? String(limit) : freeLimitDraft;
-                const dirty = draft.trim() !== String(limit);
+                const inForce = limit === null ? '' : String(limit);
+                const draft = freeLimitDraft ?? inForce;
+                const dirty = draft.trim() !== inForce;
                 return (
                   <div className="mt-5 border-t border-charcoal/10 pt-5">
                     <h3 className="font-sans text-base font-semibold">Free events per day</h3>
                     <p className="mt-1 text-sm text-charcoal/70">
                       How many free events the whole site hands out each day (midnight to
-                      midnight UTC). A change applies to the very next request. 0 pauses free
-                      events.
+                      midnight UTC), on top of the one free event each account gets. Leave it
+                      empty for no daily limit. A change applies to the very next request. 0
+                      pauses free events.
                     </p>
                     <div className="mt-3 flex flex-wrap items-end gap-3">
                       <label className="text-sm font-medium">
@@ -3268,6 +3274,7 @@ function GlobalAdminPage() {
                           max={MAX_FREE_EVENTS_PER_DAY}
                           step={1}
                           value={draft}
+                          placeholder="No limit"
                           onChange={(e) => setFreeLimitDraft(e.target.value)}
                           className="spx-input mt-1 block w-28"
                         />
@@ -3281,7 +3288,12 @@ function GlobalAdminPage() {
                         {working === 'free-limit' ? 'Saving…' : 'Save'}
                       </button>
                       <p className="text-sm text-charcoal/70">
-                        Today: {quotas === null ? '…' : `${today?.given ?? 0} of ${limit} given out`}
+                        Today:{' '}
+                        {quotas === null
+                          ? '…'
+                          : limit === null
+                            ? `${today?.given ?? 0} given out, no limit`
+                            : `${today?.given ?? 0} of ${limit} given out`}
                         {today && today.refused > 0 ? `, ${today.refused} turned away` : ''}
                       </p>
                     </div>

@@ -49,8 +49,8 @@ describe('the daily free-event allowance', () => {
     expect(handler).toContain('trial-day#');
   });
 
-  it('defaults to 25 a day and refuses when its table is missing', () => {
-    expect(handler).toContain('const DEFAULT_FREE_EVENTS_PER_DAY = 25;');
+  it('defaults to no daily limit and refuses when its table is missing', () => {
+    expect(handler).toContain('const DEFAULT_FREE_EVENTS_PER_DAY: number | null = null;');
     const take = handler.slice(
       handler.indexOf('async function takeTrialAllowance'),
       handler.indexOf('function trialDayKey'),

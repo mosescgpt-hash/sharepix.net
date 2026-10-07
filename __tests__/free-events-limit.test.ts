@@ -2,7 +2,9 @@ import {
   DEFAULT_FREE_EVENTS_PER_DAY,
   FREE_EVENTS_SETTING_KEY,
   MAX_FREE_EVENTS_PER_DAY,
+  NO_DAILY_LIMIT,
   freeEventAdvice,
+  limitInForce,
   freeEventSeries,
   parseDailyLimit,
   type FreeEventDay,
@@ -31,7 +33,9 @@ describe('the setting', () => {
       `freeEventsPerDay: '${FREE_EVENTS_SETTING_KEY}'`,
     );
     expect(handler).toContain(`const FREE_EVENTS_SETTING_KEY = '${FREE_EVENTS_SETTING_KEY}';`);
-    expect(handler).toContain(`const DEFAULT_FREE_EVENTS_PER_DAY = ${DEFAULT_FREE_EVENTS_PER_DAY};`);
+    expect(handler).toContain(
+      `const DEFAULT_FREE_EVENTS_PER_DAY: number | null = ${DEFAULT_FREE_EVENTS_PER_DAY};`,
+    );
     expect(handler).toContain(`const MAX_FREE_EVENTS_PER_DAY = ${MAX_FREE_EVENTS_PER_DAY};`);
   });
 
@@ -106,5 +110,34 @@ describe('the advice', () => {
 
   it('says plainly when free events are paused', () => {
     expect(freeEventAdvice(quiet(30), 0).message).toMatch(/paused/);
+  });
+
+  it('says there is no daily limit, and still names the abuse signal', () => {
+    const advice = freeEventAdvice(quiet(30), null);
+    expect(advice.tone).toBe('info');
+    expect(advice.message).toMatch(/No daily limit/);
+    expect(advice.message).toMatch(/one person with many email addresses/);
+  });
+});
+
+describe('no daily limit', () => {
+  it('is the default, and an explicit "none" overrides a recorded cap', () => {
+    expect(DEFAULT_FREE_EVENTS_PER_DAY).toBeNull();
+    expect(limitInForce('', undefined)).toBeNull();
+    expect(limitInForce(NO_DAILY_LIMIT, 25)).toBeNull();
+    expect(limitInForce('10', null)).toBe(10);
+    expect(limitInForce('0', null)).toBe(0);
+    // A deploy-time override recorded on today's row still counts.
+    expect(limitInForce('', 40)).toBe(40);
+  });
+
+  it('is honoured by create-event without refusing anyone', () => {
+    expect(handler).toContain(`const NO_DAILY_LIMIT = '${NO_DAILY_LIMIT}';`);
+    const take = handler.slice(
+      handler.indexOf('async function takeTrialAllowance'),
+      handler.indexOf('async function countRefusal'),
+    );
+    const unlimited = take.slice(take.indexOf('if (cap === null)'), take.indexOf('return;'));
+    expect(unlimited).not.toContain('ConditionExpression');
   });
 });

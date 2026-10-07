@@ -704,6 +704,13 @@ whether to raise it. `FREE_EVENTS_PER_DAY` is only the fallback when no
 setting has been saved. The per-account claim stops one person farming; the daily cap is
 what stops a script with many email addresses.
 
+**Update: no daily limit by default.** The operator chose not to turn real
+hosts away: one free event per account already applies, and a host refused on a
+busy day is a lost customer. With no setting saved, create-event now counts
+the day (so the chart still works) and refuses nobody. The setting remains as
+the brake for a run of scripted signups — a number caps the day again, 0 pauses
+free events, and an empty box (saved as `none`) removes the cap.
+
 It is a **new tier id, `trial`**. Retention is read from the tier id rather
 than stamped on the row, so shortening `free` in place would have cut short the
 gallery of every free event already running. `free` is retired at 60 + 30 and
