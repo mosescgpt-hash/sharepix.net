@@ -24,6 +24,7 @@ import {
   listAllEvents,
   listDiscountCodes,
   listFreeEventClaims,
+  listAccountEmails,
   listPaymentsCount,
   decideRefund,
   listRefunds,
@@ -132,7 +133,7 @@ import { reviewEvent } from '@/lib/eventReview';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
 import { assessUsage, formatBytes, totalBytes } from '@/lib/fairUse';
 import { OWNER_EMAIL_PLACEHOLDER } from '@/lib/businessInfo';
-import { countCreatedWithin, freeTrialEvents } from '@/lib/freeTrials';
+import { countCreatedWithin, freeTrialEvents, ownerSub } from '@/lib/freeTrials';
 import {
   DiscountCode,
   FreeEventClaimRow,
@@ -631,6 +632,25 @@ function GlobalAdminPage() {
   }, [events, search, phaseFilter]);
 
   const trials = useMemo(() => freeTrialEvents(events), [events]);
+  // Account emails for the Free trials tab, keyed by sub. null until looked
+  // up — only once the tab is opened, since it reads the whole user pool.
+  const [trialEmails, setTrialEmails] = useState<Map<string, string> | null>(null);
+  const [trialEmailsError, setTrialEmailsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (adminTab !== 'trials' || trialEmails !== null || trials.length === 0) return;
+    const subs = [...new Set(trials.map((e) => ownerSub(e.owner)).filter(Boolean))];
+    listAccountEmails(subs)
+      .then((emails) => {
+        setTrialEmails(emails);
+        setTrialEmailsError(null);
+      })
+      .catch((err) => {
+        setTrialEmails(new Map());
+        setTrialEmailsError(
+          err instanceof Error ? err.message : 'Account emails could not be loaded.',
+        );
+      });
+  }, [adminTab, trialEmails, trials]);
 
   const archivedCount = useMemo(
     () => events.filter((event) => lifecyclePhase(event).group !== 'live').length,
@@ -3197,12 +3217,19 @@ function GlobalAdminPage() {
                 {countCreatedWithin(trials, 7)} in the last 7 days ·{' '}
                 {countCreatedWithin(trials, 30)} in the last 30. Newest first.
               </p>
+              {trialEmailsError ? (
+                <Notice tone="warn" className="mt-3">
+                  Account emails could not be loaded: {trialEmailsError}
+                </Notice>
+              ) : null}
               {trials.length === 0 ? (
                 <p className="mt-4 text-sm text-charcoal/55">No free trial events yet.</p>
               ) : (
                 <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
                   {trials.map((event) => {
                     const progress = successProgress(event);
+                    const sub = ownerSub(event.owner);
+                    const accountEmail = trialEmails?.get(sub);
                     return (
                       <li
                         key={event.id}
@@ -3210,9 +3237,25 @@ function GlobalAdminPage() {
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-charcoal">{event.name}</p>
+                          <p className="truncate text-sm text-charcoal">
+                            {accountEmail ? (
+                              <a href={`mailto:${accountEmail}`} className="underline">
+                                {accountEmail}
+                              </a>
+                            ) : trialEmails === null ? (
+                              <span className="text-charcoal/55">Looking up account email…</span>
+                            ) : (
+                              <span className="text-charcoal/55">
+                                {sub ? 'No account email (account deleted?)' : 'No account recorded'}
+                              </span>
+                            )}
+                          </p>
                           <p className="text-sm text-charcoal/60">
                             {event.createdBy ?? 'Unknown host'}
-                            {event.alertEmail ? ` · ${event.alertEmail}` : ''} · Created{' '}
+                            {event.alertEmail && event.alertEmail !== accountEmail
+                              ? ` · alerts to ${event.alertEmail}`
+                              : ''}{' '}
+                            · Created{' '}
                             {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
                           </p>
                           <p className="text-xs text-charcoal/60">

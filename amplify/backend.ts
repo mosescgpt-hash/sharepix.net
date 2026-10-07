@@ -47,6 +47,7 @@ import { saveMoment } from './functions/save-moment/resource';
 import { listMoments } from './functions/list-moments/resource';
 import { listGuestBookEntries } from './functions/list-guest-book-entries/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
+import { accountEmails } from './functions/account-emails/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { corporateSeats } from './functions/corporate-seats/resource';
@@ -107,6 +108,7 @@ const backend = defineBackend({
   listMoments,
   listGuestBookEntries,
   adminUserActions,
+  accountEmails,
   stripeWebhook,
   corporatePortal,
   corporateSeats,
@@ -754,6 +756,17 @@ adminFn.addToRolePolicy(
       'cognito-idp:AdminEnableUser',
       'cognito-idp:AdminDisableUser',
     ],
+    resources: [userPool.userPoolArn],
+  }),
+);
+
+// Account emails for the Free trials tab. Read-only: ListUsers and nothing
+// else, so this function can see who an account is but never change it.
+const accountEmailsFn = backend.accountEmails.resources.lambda as LambdaFunction;
+accountEmailsFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+accountEmailsFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['cognito-idp:ListUsers'],
     resources: [userPool.userPoolArn],
   }),
 );

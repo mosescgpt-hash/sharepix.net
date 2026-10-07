@@ -1965,6 +1965,24 @@ export async function manageUser(
 }
 
 /**
+ * Global-admin: the account email behind each Cognito sub, as a map. Subs with
+ * no account (a deleted user) are absent from the result.
+ */
+export async function listAccountEmails(subs: string[]): Promise<Map<string, string>> {
+  const emails = new Map<string, string>();
+  if (subs.length === 0) return emails;
+  const { data, errors } = await getClient().queries.accountEmails(
+    { subs },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  for (const row of data ?? []) {
+    if (row?.sub && row.email) emails.set(row.sub.toLowerCase(), row.email);
+  }
+  return emails;
+}
+
+/**
  * Global-admin health check of the print provider. Unlike the other admin
  * actions this does NOT throw when it fails — a failing check's message is the
  * whole point of running it, so both outcomes come back to the caller.

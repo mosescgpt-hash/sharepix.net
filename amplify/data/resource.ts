@@ -9,6 +9,7 @@ import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout
 import { printCheckout as printCheckoutFn } from '../functions/print-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
+import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -2111,6 +2112,20 @@ const schema = a.schema({
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(adminUserActionsFn)),
+
+  AccountEmail: a.customType({
+    sub: a.string().required(),
+    email: a.string().required(),
+  }),
+
+  // Global-admin only: the account email behind each Cognito sub, for the Free
+  // trials tab — an event row carries its host's sub, not their address.
+  accountEmails: a
+    .query()
+    .arguments({ subs: a.string().array().required() })
+    .returns(a.ref('AccountEmail').array())
+    .authorization((allow) => [allow.group('ADMINS')])
+    .handler(a.handler.function(accountEmailsFn)),
 
   // Global-admin only: price a one-print order through Prodigi's quotes
   // endpoint to confirm the live key, network path and SKUs work. Creates
