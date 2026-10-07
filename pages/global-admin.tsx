@@ -184,6 +184,7 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'refund-review', label: 'Refund review', tab: 'events' },
   { id: 'storage', label: 'Storage and fair use', tab: 'metrics' },
   { id: 'report-recipient', label: 'Report recipient', tab: 'events' },
+  { id: 'signup-alerts', label: 'Signup alerts', tab: 'events' },
   { id: 'testimonials', label: 'Ratings', tab: 'metrics' },
   { id: 'surveys', label: 'Survey responses', tab: 'metrics' },
   { id: 'funnel', label: 'Product health', tab: 'metrics' },
@@ -358,6 +359,11 @@ function GlobalAdminPage() {
   const [reportTo, setReportTo] = useState('');
   const [reportSaved, setReportSaved] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  // Signup alerts: the box and address as saved, and as currently edited.
+  const [signupAlertOn, setSignupAlertOn] = useState(false);
+  const [signupAlertTo, setSignupAlertTo] = useState('');
+  const [signupAlertSaved, setSignupAlertSaved] = useState({ on: false, to: '' });
+  const [signupAlertError, setSignupAlertError] = useState<string | null>(null);
   const [nexus, setNexus] = useState<NexusAssessment | null>(null);
 
   const [code, setCode] = useState('');
@@ -553,6 +559,11 @@ function GlobalAdminPage() {
         const freeLimit = await readSetting(SETTING_KEYS.freeEventsPerDay).catch(() => '');
         setFreeLimitSaved(freeLimit);
         setFreeLimitDraft(freeLimit);
+        const alertOn = (await readSetting(SETTING_KEYS.signupAlertEnabled).catch(() => '')) === 'true';
+        const alertTo = await readSetting(SETTING_KEYS.signupAlertRecipient).catch(() => '');
+        setSignupAlertOn(alertOn);
+        setSignupAlertTo(alertTo);
+        setSignupAlertSaved({ on: alertOn, to: alertTo });
         setSettingsError(null);
       } catch (err) {
         setSettingsError(err instanceof Error ? err.message : 'Settings could not be loaded.');
@@ -1030,6 +1041,28 @@ function GlobalAdminPage() {
       setFreeLimitDraft(String(value));
     } catch (err) {
       setFreeLimitError(err instanceof Error ? err.message : 'The limit could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleSaveSignupAlerts() {
+    const to = signupAlertTo.trim();
+    if (signupAlertOn && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      setSignupAlertError('Enter the email address the alerts should go to.');
+      return;
+    }
+    setWorking('signup-alerts');
+    setSignupAlertError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      const by = me?.loginId ?? 'admin';
+      await writeSetting(SETTING_KEYS.signupAlertRecipient, to, by);
+      await writeSetting(SETTING_KEYS.signupAlertEnabled, signupAlertOn ? 'true' : 'false', by);
+      setSignupAlertTo(to);
+      setSignupAlertSaved({ on: signupAlertOn, to });
+    } catch (err) {
+      setSignupAlertError(err instanceof Error ? err.message : 'That could not be saved.');
     } finally {
       setWorking(null);
     }
@@ -2098,6 +2131,57 @@ function GlobalAdminPage() {
                 A recipient is not enough on its own: the report also needs a verified
                 sender (<code>ALERT_FROM_ADDRESS</code>), and if SES is still in sandbox
                 mode only verified addresses receive anything at all.
+              </p>
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
+              <h2 id="signup-alerts" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Signup alerts</h2>
+              <p className="text-sm text-charcoal/70">
+                An email each time someone creates a host account — handy while signups are
+                few, easy to switch off once they are not. Takes effect on the next signup —
+                no deploy.
+              </p>
+              {signupAlertError ? (
+                <Notice tone="warn" className="mt-3">
+                  {signupAlertError}
+                </Notice>
+              ) : null}
+              <label className="mt-4 flex items-center gap-2 text-sm text-charcoal">
+                <input
+                  type="checkbox"
+                  checked={signupAlertOn}
+                  onChange={(e) => setSignupAlertOn(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Email me about new signups
+              </label>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="email"
+                  value={signupAlertTo}
+                  onChange={(e) => setSignupAlertTo(e.target.value)}
+                  placeholder={OWNER_EMAIL_PLACEHOLDER}
+                  className="spx-input w-full sm:flex-1"
+                  aria-label="Signup alert recipient"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    working === 'signup-alerts' ||
+                    (signupAlertOn === signupAlertSaved.on &&
+                      signupAlertTo.trim() === signupAlertSaved.to)
+                  }
+                  onClick={() => void handleSaveSignupAlerts()}
+                  className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                >
+                  {working === 'signup-alerts' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-charcoal/60">
+                {signupAlertSaved.on
+                  ? `On — new signups are emailed to ${signupAlertSaved.to}.`
+                  : 'Off — no signup emails are sent.'}{' '}
+                Like the report, it needs a verified sender (<code>ALERT_FROM_ADDRESS</code>).
               </p>
             </div>
 

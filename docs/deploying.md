@@ -54,8 +54,6 @@ resources it creates — do not set those by hand.
 | `ALERT_REPLY_TO` | Replies go to the from-address. |
 | `ALERT_EMAIL` | Nobody is paged when a Lambda starts failing — see [alerting.md](alerting.md). |
 | `REPORT_TO_ADDRESS` | The monthly report is generated and sent nowhere. |
-| `SIGNUP_ALERT_TO` | New-signup emails go to `REPORT_TO_ADDRESS`, or nowhere if that is unset too. |
-| `SIGNUP_ALERT_LIMIT` | New-signup emails stop once there are 100 accounts. Set a number to change that, or `0` to stop them now. |
 
 ### Frontend, and therefore baked in at build time
 

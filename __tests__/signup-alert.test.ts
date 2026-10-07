@@ -1,64 +1,67 @@
 import {
-  DEFAULT_SIGNUP_ALERT_LIMIT,
+  SIGNUP_ALERT_ENABLED_KEY,
+  SIGNUP_ALERT_RECIPIENT_KEY,
   buildSignupAlert,
-  shouldSendSignupAlert,
-  signupAlertLimit,
-  signupAlertRecipient,
+  settingTableParameterName,
+  signupAlertTarget,
 } from '../amplify/auth/signup-alert/rules';
+import { readSource } from './sourceGuards';
 
 const SIGNUP = 'PostConfirmation_ConfirmSignUp';
 
 describe('signup alert', () => {
-  it('sends for real signups up to and including the limit', () => {
-    expect(shouldSendSignupAlert({ triggerSource: SIGNUP, accounts: 1, limit: 100 })).toBe(true);
-    expect(shouldSendSignupAlert({ triggerSource: SIGNUP, accounts: 100, limit: 100 })).toBe(true);
-    expect(shouldSendSignupAlert({ triggerSource: SIGNUP, accounts: 101, limit: 100 })).toBe(false);
+  it('emails the saved address only when the box is ticked', () => {
+    const on = { triggerSource: SIGNUP, enabled: 'true', recipient: ' me@example.com ' };
+    expect(signupAlertTarget(on)).toBe('me@example.com');
+    expect(signupAlertTarget({ ...on, enabled: 'false' })).toBeNull();
+    // Never saved means off.
+    expect(signupAlertTarget({ ...on, enabled: '' })).toBeNull();
+    expect(signupAlertTarget({ ...on, recipient: '' })).toBeNull();
+    expect(signupAlertTarget({ ...on, recipient: 'not-an-address' })).toBeNull();
   });
 
   it('ignores password-reset confirmations, which fire the same trigger', () => {
     expect(
-      shouldSendSignupAlert({
+      signupAlertTarget({
         triggerSource: 'PostConfirmation_ConfirmForgotPassword',
-        accounts: 1,
-        limit: 100,
+        enabled: 'true',
+        recipient: 'me@example.com',
       }),
-    ).toBe(false);
+    ).toBeNull();
   });
 
-  it('sends when the count is unreadable, and never when the limit is 0', () => {
-    expect(shouldSendSignupAlert({ triggerSource: SIGNUP, accounts: null, limit: 100 })).toBe(true);
-    expect(shouldSendSignupAlert({ triggerSource: SIGNUP, accounts: null, limit: 0 })).toBe(false);
+  it('reads the same settings the dashboard writes', () => {
+    const api = readSource('lib/api.ts');
+    expect(api).toContain(`signupAlertEnabled: '${SIGNUP_ALERT_ENABLED_KEY}'`);
+    expect(api).toContain(`signupAlertRecipient: '${SIGNUP_ALERT_RECIPIENT_KEY}'`);
   });
 
-  it('reads the limit, falling back to the default rather than to forever', () => {
-    expect(signupAlertLimit(undefined)).toBe(DEFAULT_SIGNUP_ALERT_LIMIT);
-    expect(signupAlertLimit('')).toBe(DEFAULT_SIGNUP_ALERT_LIMIT);
-    expect(signupAlertLimit('lots')).toBe(DEFAULT_SIGNUP_ALERT_LIMIT);
-    expect(signupAlertLimit('-5')).toBe(DEFAULT_SIGNUP_ALERT_LIMIT);
-    expect(signupAlertLimit('250')).toBe(250);
-    expect(signupAlertLimit('0')).toBe(0);
-  });
-
-  it('prefers SIGNUP_ALERT_TO, falls back to REPORT_TO_ADDRESS, else nobody', () => {
-    expect(
-      signupAlertRecipient({ SIGNUP_ALERT_TO: 'a@x.com', REPORT_TO_ADDRESS: 'b@x.com' }),
-    ).toBe('a@x.com');
-    expect(signupAlertRecipient({ SIGNUP_ALERT_TO: '', REPORT_TO_ADDRESS: 'b@x.com' })).toBe(
-      'b@x.com',
+  it('keys the table lookup by user pool, so branches never share settings', () => {
+    expect(settingTableParameterName('us-east-1_abc')).toBe(
+      '/sharepix/signup-alert/us-east-1_abc/setting-table',
     );
-    expect(signupAlertRecipient({})).toBeNull();
-    expect(signupAlertRecipient({ SIGNUP_ALERT_TO: 'not-an-address' })).toBeNull();
+    const backend = readSource('amplify/backend.ts');
+    expect(backend).toContain('parameterName: settingTableParameterName(userPool.userPoolId)');
+    expect(backend).toContain("'parameter/sharepix/signup-alert/*'");
   });
 
-  it('keeps the customer address out of the subject and flags the last alert', () => {
-    const at = new Date('2026-10-07T12:00:00Z');
-    const normal = buildSignupAlert({ email: 'host@example.com', accounts: 7, limit: 100, at });
-    expect(normal.subject).not.toContain('host@example.com');
-    expect(normal.text).toContain('host@example.com');
-    expect(normal.text).toContain('account #7');
+  it('keeps the customer address out of the subject', () => {
+    const alert = buildSignupAlert({
+      email: 'host@example.com',
+      accounts: 7,
+      at: new Date('2026-10-07T12:00:00Z'),
+      appUrl: 'https://www.sharepix.net',
+    });
+    expect(alert.subject).not.toContain('host@example.com');
+    expect(alert.text).toContain('host@example.com');
+    expect(alert.text).toContain('about 7 accounts');
+    expect(alert.text).toContain('https://www.sharepix.net/global-admin');
+  });
 
-    const last = buildSignupAlert({ email: 'host@example.com', accounts: 100, limit: 100, at });
-    expect(last.subject).toContain('last alert');
-    expect(last.text).toContain('SIGNUP_ALERT_LIMIT');
+  it('has its controls on the dashboard', () => {
+    const page = readSource('pages/global-admin.tsx');
+    expect(page).toContain('Email me about new signups');
+    expect(page).toContain('aria-label="Signup alert recipient"');
+    expect(page).toContain('handleSaveSignupAlerts()');
   });
 });
