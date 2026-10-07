@@ -23,6 +23,7 @@ import {
 } from 'aws-cdk-lib/aws-logs';
 import { auth } from './auth/resource';
 import { adminMfaGate } from './auth/admin-mfa-gate/resource';
+import { signupAlert } from './auth/signup-alert/resource';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
@@ -82,6 +83,7 @@ const backend = defineBackend({
   connectPhotographer,
   auth,
   adminMfaGate,
+  signupAlert,
   data,
   storage,
   deleteEventPhoto,
@@ -696,6 +698,29 @@ const mfaGateFn = backend.adminMfaGate.resources.lambda as LambdaFunction;
     }),
   );
 }
+
+// Signup alert (post-confirmation trigger): one email to the operator per new
+// account, until the pool has SIGNUP_ALERT_LIMIT accounts. Same wildcard ARN
+// as the MFA gate, for the same reason — naming the pool here is a cycle.
+const signupAlertFn = backend.signupAlert.resources.lambda as LambdaFunction;
+{
+  const stack = Stack.of(signupAlertFn);
+  signupAlertFn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['cognito-idp:DescribeUserPool'],
+      resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
+    }),
+  );
+}
+signupAlertFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+// The recipient. Falls back to REPORT_TO_ADDRESS; neither set means no email.
+signupAlertFn.addEnvironment('SIGNUP_ALERT_TO', process.env.SIGNUP_ALERT_TO ?? '');
+signupAlertFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
+// Accounts after which the alerts stop (default 100; 0 turns them off).
+signupAlertFn.addEnvironment('SIGNUP_ALERT_LIMIT', process.env.SIGNUP_ALERT_LIMIT ?? '');
+signupAlertFn.addToRolePolicy(
+  new PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
+);
 const adminFn = backend.adminUserActions.resources.lambda as LambdaFunction;
 adminFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 adminFn.addToRolePolicy(
