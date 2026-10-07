@@ -7,6 +7,7 @@ import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Topic } from 'aws-cdk-lib/aws-sns';
 import { EmailSubscription } from 'aws-cdk-lib/aws-sns-subscriptions';
+import { StringParameter } from 'aws-cdk-lib/aws-ssm';
 import {
   Alarm,
   ComparisonOperator,
@@ -23,6 +24,8 @@ import {
 } from 'aws-cdk-lib/aws-logs';
 import { auth } from './auth/resource';
 import { adminMfaGate } from './auth/admin-mfa-gate/resource';
+import { signupAlert } from './auth/signup-alert/resource';
+import { settingTableParameterName } from './auth/signup-alert/rules';
 import { data } from './data/resource';
 import { storage } from './storage/resource';
 import { deleteEventPhoto } from './functions/delete-event-photo/resource';
@@ -82,6 +85,7 @@ const backend = defineBackend({
   connectPhotographer,
   auth,
   adminMfaGate,
+  signupAlert,
   data,
   storage,
   deleteEventPhoto,
@@ -696,6 +700,50 @@ const mfaGateFn = backend.adminMfaGate.resources.lambda as LambdaFunction;
     }),
   );
 }
+
+// Signup alert (post-confirmation trigger): one email to the operator per new
+// account, switched on and addressed from /global-admin ("Signup alerts").
+//
+// The settings live in AppSetting, in the data stack, which depends on auth —
+// so neither the pool nor the table can be named here without a cycle. The
+// grants are wildcards scoped by service, and the table's real name reaches
+// the trigger through an SSM parameter the data stack writes, keyed by pool id.
+const signupAlertFn = backend.signupAlert.resources.lambda as LambdaFunction;
+{
+  const stack = Stack.of(signupAlertFn);
+  const arn = (service: string, resource: string) =>
+    `arn:aws:${service}:${stack.region}:${stack.account}:${resource}`;
+  signupAlertFn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['cognito-idp:DescribeUserPool'],
+      resources: [arn('cognito-idp', 'userpool/*')],
+    }),
+  );
+  signupAlertFn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['ssm:GetParameter'],
+      resources: [arn('ssm', 'parameter/sharepix/signup-alert/*')],
+    }),
+  );
+  // Read-only, one row at a time: the trigger never lists or writes settings.
+  signupAlertFn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ['dynamodb:GetItem'],
+      resources: [arn('dynamodb', 'table/AppSetting-*')],
+    }),
+  );
+}
+new StringParameter(Stack.of(settingTable), 'SignupAlertSettingTable', {
+  parameterName: settingTableParameterName(userPool.userPoolId),
+  // A path (it starts with '/'), which CDK cannot tell from an unresolved token.
+  simpleName: false,
+  stringValue: settingTable.tableName,
+});
+signupAlertFn.addEnvironment('ALERT_FROM_ADDRESS', process.env.ALERT_FROM_ADDRESS ?? '');
+signupAlertFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+signupAlertFn.addToRolePolicy(
+  new PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
+);
 const adminFn = backend.adminUserActions.resources.lambda as LambdaFunction;
 adminFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 adminFn.addToRolePolicy(

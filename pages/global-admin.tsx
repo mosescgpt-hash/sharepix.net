@@ -79,10 +79,11 @@ import {
 import FreeEventsChart from '@/components/FreeEventsChart';
 import UploadEvidenceList from '@/components/UploadEvidenceList';
 import {
-  DEFAULT_FREE_EVENTS_PER_DAY,
   MAX_FREE_EVENTS_PER_DAY,
+  NO_DAILY_LIMIT,
   freeEventAdvice,
   freeEventSeries,
+  limitInForce,
   parseDailyLimit,
   guestBookLimitReached,
   quotaKind,
@@ -131,6 +132,7 @@ import { reviewEvent } from '@/lib/eventReview';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
 import { assessUsage, formatBytes, totalBytes } from '@/lib/fairUse';
 import { OWNER_EMAIL_PLACEHOLDER } from '@/lib/businessInfo';
+import { countCreatedWithin, freeTrialEvents } from '@/lib/freeTrials';
 import {
   DiscountCode,
   FreeEventClaimRow,
@@ -162,11 +164,16 @@ import {
  * scrolling — and a second array to keep in step would be the easiest way to
  * lose one.
  */
-export type AdminTab = 'events' | 'discounts' | 'metrics' | 'costs' | 'tests';
+export type AdminTab = 'events' | 'trials' | 'discounts' | 'metrics' | 'costs' | 'tests';
 
 export const ADMIN_TABS: Array<{ id: AdminTab; label: string; blurb: string }> = [
   // Events opens first: it is the only one with something to do on a normal day.
   { id: 'events', label: 'Events', blurb: 'Events, the people who host them, and the money that moves.' },
+  {
+    id: 'trials',
+    label: 'Free trials',
+    blurb: 'Every free trial event, newest first, and the controls on how many are given out.',
+  },
   { id: 'discounts', label: 'Discounts', blurb: 'Codes that take a percentage off anything paid on the site.' },
   { id: 'metrics', label: 'Metrics', blurb: 'What is actually happening, and what it is costing.' },
   {
@@ -184,13 +191,15 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'refund-review', label: 'Refund review', tab: 'events' },
   { id: 'storage', label: 'Storage and fair use', tab: 'metrics' },
   { id: 'report-recipient', label: 'Report recipient', tab: 'events' },
+  { id: 'signup-alerts', label: 'Signup alerts', tab: 'events' },
   { id: 'testimonials', label: 'Ratings', tab: 'metrics' },
   { id: 'surveys', label: 'Survey responses', tab: 'metrics' },
   { id: 'funnel', label: 'Product health', tab: 'metrics' },
   { id: 'featured', label: 'Featured Events', tab: 'events' },
   { id: 'jobs', label: 'Scheduled jobs', tab: 'tests' },
   { id: 'rewards', label: 'Research rewards', tab: 'events' },
-  { id: 'free-claims', label: 'Free event claims', tab: 'events' },
+  { id: 'free-trials', label: 'Free trial events', tab: 'trials' },
+  { id: 'free-claims', label: 'Free event claims', tab: 'trials' },
   { id: 'content-review', label: 'Content review', tab: 'events' },
   { id: 'limits', label: 'Limits', tab: 'events' },
   { id: 'print-check', label: 'Print check', tab: 'tests' },
@@ -308,7 +317,8 @@ function GlobalAdminPage() {
   // The daily free-event limit as saved in AppSetting ('' = never saved), and
   // what is in the box.
   const [freeLimitSaved, setFreeLimitSaved] = useState('');
-  const [freeLimitDraft, setFreeLimitDraft] = useState('');
+  // What is in the box; null until edited, when the box shows the limit in force.
+  const [freeLimitDraft, setFreeLimitDraft] = useState<string | null>(null);
   const [freeLimitError, setFreeLimitError] = useState<string | null>(null);
   const [incentives, setIncentives] = useState<ResearchIncentiveRow[] | null>(null);
   const [incentivesError, setIncentivesError] = useState<string | null>(null);
@@ -358,6 +368,11 @@ function GlobalAdminPage() {
   const [reportTo, setReportTo] = useState('');
   const [reportSaved, setReportSaved] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  // Signup alerts: the box and address as saved, and as currently edited.
+  const [signupAlertOn, setSignupAlertOn] = useState(false);
+  const [signupAlertTo, setSignupAlertTo] = useState('');
+  const [signupAlertSaved, setSignupAlertSaved] = useState({ on: false, to: '' });
+  const [signupAlertError, setSignupAlertError] = useState<string | null>(null);
   const [nexus, setNexus] = useState<NexusAssessment | null>(null);
 
   const [code, setCode] = useState('');
@@ -552,7 +567,12 @@ function GlobalAdminPage() {
         setCountFrom(await readSetting(SETTING_KEYS.analyticsCountFrom).catch(() => ''));
         const freeLimit = await readSetting(SETTING_KEYS.freeEventsPerDay).catch(() => '');
         setFreeLimitSaved(freeLimit);
-        setFreeLimitDraft(freeLimit);
+        setFreeLimitDraft(null);
+        const alertOn = (await readSetting(SETTING_KEYS.signupAlertEnabled).catch(() => '')) === 'true';
+        const alertTo = await readSetting(SETTING_KEYS.signupAlertRecipient).catch(() => '');
+        setSignupAlertOn(alertOn);
+        setSignupAlertTo(alertTo);
+        setSignupAlertSaved({ on: alertOn, to: alertTo });
         setSettingsError(null);
       } catch (err) {
         setSettingsError(err instanceof Error ? err.message : 'Settings could not be loaded.');
@@ -609,6 +629,8 @@ function GlobalAdminPage() {
         .some((value) => value?.toLowerCase().includes(query));
     });
   }, [events, search, phaseFilter]);
+
+  const trials = useMemo(() => freeTrialEvents(events), [events]);
 
   const archivedCount = useMemo(
     () => events.filter((event) => lifecyclePhase(event).group !== 'live').length,
@@ -1013,9 +1035,13 @@ function GlobalAdminPage() {
   }
 
   async function handleSaveFreeLimit() {
-    const value = parseDailyLimit(freeLimitDraft);
+    // An empty box removes the limit.
+    const text = (freeLimitDraft ?? '').trim();
+    const value = text === '' ? NO_DAILY_LIMIT : parseDailyLimit(text);
     if (value === null) {
-      setFreeLimitError(`Enter a whole number from 0 to ${MAX_FREE_EVENTS_PER_DAY}.`);
+      setFreeLimitError(
+        `Enter a whole number from 0 to ${MAX_FREE_EVENTS_PER_DAY}, or leave it empty for no limit.`,
+      );
       return;
     }
     if (value === 0 && !window.confirm('Pause free events? Nobody can start one until you set a limit above 0.')) {
@@ -1027,9 +1053,31 @@ function GlobalAdminPage() {
       const me = await getCurrentUserInfo();
       await writeSetting(SETTING_KEYS.freeEventsPerDay, String(value), me?.loginId ?? 'admin');
       setFreeLimitSaved(String(value));
-      setFreeLimitDraft(String(value));
+      setFreeLimitDraft(null);
     } catch (err) {
       setFreeLimitError(err instanceof Error ? err.message : 'The limit could not be saved.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  async function handleSaveSignupAlerts() {
+    const to = signupAlertTo.trim();
+    if (signupAlertOn && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      setSignupAlertError('Enter the email address the alerts should go to.');
+      return;
+    }
+    setWorking('signup-alerts');
+    setSignupAlertError(null);
+    try {
+      const me = await getCurrentUserInfo();
+      const by = me?.loginId ?? 'admin';
+      await writeSetting(SETTING_KEYS.signupAlertRecipient, to, by);
+      await writeSetting(SETTING_KEYS.signupAlertEnabled, signupAlertOn ? 'true' : 'false', by);
+      setSignupAlertTo(to);
+      setSignupAlertSaved({ on: signupAlertOn, to });
+    } catch (err) {
+      setSignupAlertError(err instanceof Error ? err.message : 'That could not be saved.');
     } finally {
       setWorking(null);
     }
@@ -2101,6 +2149,57 @@ function GlobalAdminPage() {
               </p>
             </div>
 
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
+              <h2 id="signup-alerts" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Signup alerts</h2>
+              <p className="text-sm text-charcoal/70">
+                An email each time someone creates a host account — handy while signups are
+                few, easy to switch off once they are not. Takes effect on the next signup —
+                no deploy.
+              </p>
+              {signupAlertError ? (
+                <Notice tone="warn" className="mt-3">
+                  {signupAlertError}
+                </Notice>
+              ) : null}
+              <label className="mt-4 flex items-center gap-2 text-sm text-charcoal">
+                <input
+                  type="checkbox"
+                  checked={signupAlertOn}
+                  onChange={(e) => setSignupAlertOn(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Email me about new signups
+              </label>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="email"
+                  value={signupAlertTo}
+                  onChange={(e) => setSignupAlertTo(e.target.value)}
+                  placeholder={OWNER_EMAIL_PLACEHOLDER}
+                  className="spx-input w-full sm:flex-1"
+                  aria-label="Signup alert recipient"
+                />
+                <button
+                  type="button"
+                  disabled={
+                    working === 'signup-alerts' ||
+                    (signupAlertOn === signupAlertSaved.on &&
+                      signupAlertTo.trim() === signupAlertSaved.to)
+                  }
+                  onClick={() => void handleSaveSignupAlerts()}
+                  className="border border-charcoal/25 px-4 py-2 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-40"
+                >
+                  {working === 'signup-alerts' ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-charcoal/60">
+                {signupAlertSaved.on
+                  ? `On — new signups are emailed to ${signupAlertSaved.to}.`
+                  : 'Off — no signup emails are sent.'}{' '}
+                Like the report, it needs a verified sender (<code>ALERT_FROM_ADDRESS</code>).
+              </p>
+            </div>
+
             <div className="spx-card mt-8 p-5" hidden={adminTab !== 'metrics'}>
               <h2 id="testimonials" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">
                 Ratings and testimonials
@@ -3091,7 +3190,53 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'trials'}>
+              <h2 id="free-trials" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free trial events</h2>
+              <p className="text-sm text-charcoal/70">
+                {trials.length} free trial{trials.length === 1 ? '' : 's'} in all ·{' '}
+                {countCreatedWithin(trials, 7)} in the last 7 days ·{' '}
+                {countCreatedWithin(trials, 30)} in the last 30. Newest first.
+              </p>
+              {trials.length === 0 ? (
+                <p className="mt-4 text-sm text-charcoal/55">No free trial events yet.</p>
+              ) : (
+                <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                  {trials.map((event) => {
+                    const progress = successProgress(event);
+                    return (
+                      <li
+                        key={event.id}
+                        className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-charcoal">{event.name}</p>
+                          <p className="text-sm text-charcoal/60">
+                            {event.createdBy ?? 'Unknown host'}
+                            {event.alertEmail ? ` · ${event.alertEmail}` : ''} · Created{' '}
+                            {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
+                          </p>
+                          <p className="text-xs text-charcoal/60">
+                            {event.photoCount ?? 0} photo{event.photoCount === 1 ? '' : 's'} ·{' '}
+                            {progress.contributors} contributor{progress.contributors === 1 ? '' : 's'} ·{' '}
+                            {lifecyclePhase(event).label} · {sourceLabel(event.source)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2 text-xs">
+                          <Link href={`/event/${event.id}`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
+                            Gallery
+                          </Link>
+                          <Link href={`/event/${event.id}/admin`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
+                            Manage
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'trials'}>
               <h2 id="free-claims" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
               <p className="text-sm text-charcoal/70">
                 One free event per account, and taking it is permanent — the claim is not
@@ -3101,23 +3246,23 @@ function GlobalAdminPage() {
                 effect immediately.
               </p>
               {(() => {
-                // The limit in force: the saved setting, else what today's row
-                // recorded (a deploy-time override), else the default.
+                // The limit in force (null = no limit): the saved setting, else
+                // what today's row recorded (a deploy-time override), else none.
                 const series = freeEventSeries(quotas ?? []);
                 const today = series[series.length - 1];
-                const limit =
-                  parseDailyLimit(freeLimitSaved) ?? today?.limit ?? DEFAULT_FREE_EVENTS_PER_DAY;
+                const limit = limitInForce(freeLimitSaved, today?.limit);
                 const advice = freeEventAdvice(series, limit);
-                // An empty box shows the limit in force, so it is not a change.
-                const draft = freeLimitDraft === '' ? String(limit) : freeLimitDraft;
-                const dirty = draft.trim() !== String(limit);
+                const inForce = limit === null ? '' : String(limit);
+                const draft = freeLimitDraft ?? inForce;
+                const dirty = draft.trim() !== inForce;
                 return (
                   <div className="mt-5 border-t border-charcoal/10 pt-5">
                     <h3 className="font-sans text-base font-semibold">Free events per day</h3>
                     <p className="mt-1 text-sm text-charcoal/70">
                       How many free events the whole site hands out each day (midnight to
-                      midnight UTC). A change applies to the very next request. 0 pauses free
-                      events.
+                      midnight UTC), on top of the one free event each account gets. Leave it
+                      empty for no daily limit. A change applies to the very next request. 0
+                      pauses free events.
                     </p>
                     <div className="mt-3 flex flex-wrap items-end gap-3">
                       <label className="text-sm font-medium">
@@ -3129,6 +3274,7 @@ function GlobalAdminPage() {
                           max={MAX_FREE_EVENTS_PER_DAY}
                           step={1}
                           value={draft}
+                          placeholder="No limit"
                           onChange={(e) => setFreeLimitDraft(e.target.value)}
                           className="spx-input mt-1 block w-28"
                         />
@@ -3142,7 +3288,12 @@ function GlobalAdminPage() {
                         {working === 'free-limit' ? 'Saving…' : 'Save'}
                       </button>
                       <p className="text-sm text-charcoal/70">
-                        Today: {quotas === null ? '…' : `${today?.given ?? 0} of ${limit} given out`}
+                        Today:{' '}
+                        {quotas === null
+                          ? '…'
+                          : limit === null
+                            ? `${today?.given ?? 0} given out, no limit`
+                            : `${today?.given ?? 0} of ${limit} given out`}
                         {today && today.refused > 0 ? `, ${today.refused} turned away` : ''}
                       </p>
                     </div>

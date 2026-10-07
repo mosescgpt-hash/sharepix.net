@@ -52,10 +52,14 @@ export function trialDayId(now: Date = new Date()): string {
 }
 
 /**
- * The daily free-event limit when no admin setting has been saved. Mirrors
- * DEFAULT_FREE_EVENTS_PER_DAY in create-event; a test pins the two together.
+ * The daily free-event limit when no admin setting has been saved: none.
+ * Mirrors DEFAULT_FREE_EVENTS_PER_DAY in create-event; a test pins the two
+ * together. One free event per account still applies either way.
  */
-export const DEFAULT_FREE_EVENTS_PER_DAY = 25;
+export const DEFAULT_FREE_EVENTS_PER_DAY: number | null = null;
+
+/** What the setting holds when an admin has explicitly removed the limit. */
+export const NO_DAILY_LIMIT = 'none';
 
 /** The highest daily limit the setting accepts. Mirrors create-event. */
 export const MAX_FREE_EVENTS_PER_DAY = 1000;
@@ -74,6 +78,18 @@ export function parseDailyLimit(raw: string | null | undefined): number | null {
   if (!/^\d+$/.test(text)) return null;
   const value = Number(text);
   return value <= MAX_FREE_EVENTS_PER_DAY ? value : null;
+}
+
+/**
+ * The limit in force: the saved setting, else what today's counter recorded
+ * (a deploy-time override), else the default. null means no limit.
+ */
+export function limitInForce(
+  saved: string | null | undefined,
+  todayRecorded: number | null | undefined,
+): number | null {
+  if ((saved ?? '').trim() === NO_DAILY_LIMIT) return null;
+  return parseDailyLimit(saved) ?? todayRecorded ?? DEFAULT_FREE_EVENTS_PER_DAY;
 }
 
 /** One day of the free-event chart. */
@@ -130,7 +146,17 @@ export interface FreeEventAdvice {
  * farming free events looks like, and the free event claims list is where
  * that shows.
  */
-export function freeEventAdvice(series: FreeEventDay[], currentLimit: number): FreeEventAdvice {
+export function freeEventAdvice(
+  series: FreeEventDay[],
+  currentLimit: number | null,
+): FreeEventAdvice {
+  if (currentLimit === null) {
+    const peak = Math.max(0, ...series.map((d) => d.given));
+    return {
+      tone: 'info',
+      message: `No daily limit — each account still gets one free event. The busiest day in the last ${series.length} gave out ${peak}. If a run of free event claims looks like one person with many email addresses, set a limit here.`,
+    };
+  }
   if (currentLimit === 0) {
     return { tone: 'warn', message: 'Free events are paused. Nobody can start one until you set a limit above 0.' };
   }

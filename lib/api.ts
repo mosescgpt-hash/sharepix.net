@@ -1335,6 +1335,13 @@ export const SETTING_KEYS = {
    * create-event on every free-event request; see lib/quotaCounters.ts.
    */
   freeEventsPerDay: 'free-events-per-day',
+  /**
+   * 'true' when the operator wants an email for every new account, and the
+   * address it goes to. Read by the post-confirmation trigger; see
+   * amplify/auth/signup-alert.
+   */
+  signupAlertEnabled: 'signup-alert-enabled',
+  signupAlertRecipient: 'signup-alert-recipient',
 } as const;
 
 export async function readSetting(key: string): Promise<string> {

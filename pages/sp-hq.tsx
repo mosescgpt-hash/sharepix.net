@@ -21,10 +21,9 @@ import {
   needsContentReview,
 } from '@/lib/contentReview';
 import {
-  DEFAULT_FREE_EVENTS_PER_DAY,
   corporateMonthInUse,
   freeEventSeries,
-  parseDailyLimit,
+  limitInForce,
   type QuotaCounterRow,
 } from '@/lib/quotaCounters';
 import { getTier } from '@/lib/pricing';
@@ -62,7 +61,7 @@ function AdminPortal() {
   const [state, setState] = useState<'checking' | 'admin' | 'no-mfa' | 'not-admin'>('checking');
   const [events, setEvents] = useState<QREvent[]>([]);
   const [quotas, setQuotas] = useState<QuotaCounterRow[]>([]);
-  const [freeLimit, setFreeLimit] = useState<number>(DEFAULT_FREE_EVENTS_PER_DAY);
+  const [freeLimitSaved, setFreeLimitSaved] = useState('');
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -79,7 +78,7 @@ function AdminPortal() {
       ]);
       setEvents(all);
       setQuotas(rows);
-      setFreeLimit(parseDailyLimit(limit) ?? DEFAULT_FREE_EVENTS_PER_DAY);
+      setFreeLimitSaved(limit);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The dashboard could not be loaded.');
     } finally {
@@ -137,7 +136,7 @@ function AdminPortal() {
     .sort((a, b) => flaggedSinceCleared(b) - flaggedSinceCleared(a));
   const closed = events.filter((e) => e.takenDownAt);
   const today = freeEventSeries(quotas, 1)[0];
-  const todayLimit = today?.limit ?? freeLimit;
+  const todayLimit = limitInForce(freeLimitSaved, today?.limit);
   const corporateThisMonth = quotas.filter((row) => corporateMonthInUse(row)).length;
   const recent = [...events]
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''))
@@ -193,7 +192,7 @@ function AdminPortal() {
               <Tile label="Closed events" value={loading ? '…' : String(closed.length)} />
               <Tile
                 label="Free events today"
-                value={loading ? '…' : `${today?.given ?? 0} / ${todayLimit}`}
+                value={loading ? '…' : `${today?.given ?? 0}${todayLimit === null ? '' : ` / ${todayLimit}`}`}
                 warn={(today?.refused ?? 0) > 0}
               />
               <Tile label="Corporate active this month" value={loading ? '…' : String(corporateThisMonth)} />

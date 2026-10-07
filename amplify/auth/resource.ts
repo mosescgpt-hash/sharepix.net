@@ -1,5 +1,6 @@
 import { defineAuth } from '@aws-amplify/backend';
 import { adminMfaGate } from './admin-mfa-gate/resource';
+import { signupAlert } from './signup-alert/resource';
 
 /**
  * Host sign-in via email (Gen 2 standard).
@@ -24,5 +25,7 @@ export const auth = defineAuth({
   // gets tokens without the ADMINS group. MFA stays optional for hosts.
   triggers: {
     preTokenGeneration: adminMfaGate,
+    // Emails the operator about each new account until the site gets busy.
+    postConfirmation: signupAlert,
   },
 });
