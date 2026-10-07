@@ -15,7 +15,7 @@ describe('the tab', () => {
   it('exists, and opens on Events rather than on Costs', () => {
     // Events is the tab with something to do on a normal day. Costs is a thing
     // you go and look at.
-    expect(page).toContain("export type AdminTab = 'events' | 'discounts' | 'metrics' | 'costs' | 'tests'");
+    expect(page).toContain("export type AdminTab = 'events' | 'trials' | 'discounts' | 'metrics' | 'costs' | 'tests'");
     expect(page).toContain("useState<AdminTab>('events')");
   });
 

@@ -131,6 +131,7 @@ import { reviewEvent } from '@/lib/eventReview';
 import { summarize as summarizeRatings } from '@/lib/customerRating';
 import { assessUsage, formatBytes, totalBytes } from '@/lib/fairUse';
 import { OWNER_EMAIL_PLACEHOLDER } from '@/lib/businessInfo';
+import { countCreatedWithin, freeTrialEvents } from '@/lib/freeTrials';
 import {
   DiscountCode,
   FreeEventClaimRow,
@@ -162,11 +163,16 @@ import {
  * scrolling — and a second array to keep in step would be the easiest way to
  * lose one.
  */
-export type AdminTab = 'events' | 'discounts' | 'metrics' | 'costs' | 'tests';
+export type AdminTab = 'events' | 'trials' | 'discounts' | 'metrics' | 'costs' | 'tests';
 
 export const ADMIN_TABS: Array<{ id: AdminTab; label: string; blurb: string }> = [
   // Events opens first: it is the only one with something to do on a normal day.
   { id: 'events', label: 'Events', blurb: 'Events, the people who host them, and the money that moves.' },
+  {
+    id: 'trials',
+    label: 'Free trials',
+    blurb: 'Every free trial event, newest first, and the controls on how many are given out.',
+  },
   { id: 'discounts', label: 'Discounts', blurb: 'Codes that take a percentage off anything paid on the site.' },
   { id: 'metrics', label: 'Metrics', blurb: 'What is actually happening, and what it is costing.' },
   {
@@ -191,7 +197,8 @@ const ADMIN_SECTIONS: Array<{ id: string; label: string; tab: AdminTab }> = [
   { id: 'featured', label: 'Featured Events', tab: 'events' },
   { id: 'jobs', label: 'Scheduled jobs', tab: 'tests' },
   { id: 'rewards', label: 'Research rewards', tab: 'events' },
-  { id: 'free-claims', label: 'Free event claims', tab: 'events' },
+  { id: 'free-trials', label: 'Free trial events', tab: 'trials' },
+  { id: 'free-claims', label: 'Free event claims', tab: 'trials' },
   { id: 'content-review', label: 'Content review', tab: 'events' },
   { id: 'limits', label: 'Limits', tab: 'events' },
   { id: 'print-check', label: 'Print check', tab: 'tests' },
@@ -620,6 +627,8 @@ function GlobalAdminPage() {
         .some((value) => value?.toLowerCase().includes(query));
     });
   }, [events, search, phaseFilter]);
+
+  const trials = useMemo(() => freeTrialEvents(events), [events]);
 
   const archivedCount = useMemo(
     () => events.filter((event) => lifecyclePhase(event).group !== 'live').length,
@@ -3175,7 +3184,53 @@ function GlobalAdminPage() {
               )}
             </div>
 
-            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'events'}>
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'trials'}>
+              <h2 id="free-trials" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free trial events</h2>
+              <p className="text-sm text-charcoal/70">
+                {trials.length} free trial{trials.length === 1 ? '' : 's'} in all ·{' '}
+                {countCreatedWithin(trials, 7)} in the last 7 days ·{' '}
+                {countCreatedWithin(trials, 30)} in the last 30. Newest first.
+              </p>
+              {trials.length === 0 ? (
+                <p className="mt-4 text-sm text-charcoal/55">No free trial events yet.</p>
+              ) : (
+                <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
+                  {trials.map((event) => {
+                    const progress = successProgress(event);
+                    return (
+                      <li
+                        key={event.id}
+                        className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-charcoal">{event.name}</p>
+                          <p className="text-sm text-charcoal/60">
+                            {event.createdBy ?? 'Unknown host'}
+                            {event.alertEmail ? ` · ${event.alertEmail}` : ''} · Created{' '}
+                            {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
+                          </p>
+                          <p className="text-xs text-charcoal/60">
+                            {event.photoCount ?? 0} photo{event.photoCount === 1 ? '' : 's'} ·{' '}
+                            {progress.contributors} contributor{progress.contributors === 1 ? '' : 's'} ·{' '}
+                            {lifecyclePhase(event).label} · {sourceLabel(event.source)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap gap-2 text-xs">
+                          <Link href={`/event/${event.id}`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
+                            Gallery
+                          </Link>
+                          <Link href={`/event/${event.id}/admin`} className="border border-charcoal/25 px-3 py-1.5 text-charcoal transition hover:border-charcoal/60">
+                            Manage
+                          </Link>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="spx-card mt-8 p-5" hidden={adminTab !== 'trials'}>
               <h2 id="free-claims" className="scroll-mt-24 font-sans text-xl font-bold tracking-[-0.02em]">Free event claims</h2>
               <p className="text-sm text-charcoal/70">
                 One free event per account, and taking it is permanent — the claim is not
