@@ -1,9 +1,10 @@
 # The SharePix Pro uploader API
 
 What a program has to do to get a photograph from a camera into an event
-gallery. Written for the DSLR/bridge uploader that does not exist yet — a
-tethered laptop watching a folder, or a box beside the photographer — so the
-contract is written down before something is built against a guess.
+gallery. Written for any DSLR/bridge uploader — a tethered laptop watching a folder,
+or a box beside the photographer — so the contract is written down before
+something is built against a guess. The first one, the browser watch folder, is
+described at the end.
 
 Everything here is the public GraphQL API. There is no separate uploader
 endpoint and no API key: an uploader is a photographer's client, signs in as
@@ -183,6 +184,46 @@ mutation Publishing($eventId: ID!, $livePublishing: Boolean) {
   the resolution the preview is made from.
 - **Expect `That event could not be found.`** for every authorization failure.
   Do not try to distinguish them; there is nothing to distinguish.
+
+## The one that exists: the watch folder
+
+The first uploader built against this is not a separate program. It is the
+**Watch a folder** panel on the pro review page
+(`components/WatchFolderUploader.tsx`, rules in `lib/watchFolder.ts`). The
+photographer opens their event's review page in Chrome or Edge on the laptop,
+picks the folder their tether software, camera transfer app or Lightroom export
+writes JPEGs into, and leaves the tab open.
+
+It follows the advice above:
+
+- **Same three calls.** It sends through the page's `sendOne`, the function
+  "Add photos" uses, so there is one upload path and not two.
+- **Signed in as the photographer** by being the dashboard — no API key, no
+  stored password, nothing to install, no new backend.
+- **One at a time, oldest first,** and a file is only sent once its size has held
+  still across two listings (every 3 seconds), so a JPEG still being written is
+  never sent half-finished.
+- **JPEG and PNG only.** RAW files, macOS `._` files and anything over the
+  processor's size limit are left alone.
+- **Only new files by default.** Whatever is in the folder at Start is ignored
+  unless "Also send photos already in it" is ticked.
+- **Remembers what it sent,** per event, in that browser's localStorage, so
+  reloading the page and choosing the folder again does not resend. Only sent
+  files are remembered.
+- **Retries** a failed file on the next scan, up to 3 tries, and stops watching
+  outright on `That event could not be found.`
+- **Keeps the screen awake** with a wake lock while watching.
+
+Limits, stated plainly:
+
+- Chrome and Edge only (the File System Access API). Safari and Firefox see a
+  note saying so.
+- The tab has to stay open. When it is in the background or the window is
+  hidden, Chrome throttles timers, so a scan can be up to about a minute apart.
+- Top level of the folder only; subfolders are not walked.
+
+Direct camera-to-cloud upload (FTP/SFTP from the camera) is the next step if
+photographers ask for it; it needs new infrastructure and a fixed monthly cost.
 
 ## What this is not
 

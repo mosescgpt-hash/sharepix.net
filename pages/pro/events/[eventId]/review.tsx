@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import { FallbackImage } from '@/components/FallbackMedia';
+import WatchFolderUploader from '@/components/WatchFolderUploader';
 import {
   decideProPhoto,
   fetchEventPhotos,
@@ -106,13 +107,30 @@ export default function ProReviewPage() {
   );
 
   /**
-   * Send photographs straight from this page.
+   * One photograph: slot, PUT, process — the same three steps docs/pro-uploader.md
+   * describes for any uploader. Shared by "Add photos" and the watch folder so
+   * the two cannot drift apart.
    *
-   * The real client for this is the desktop uploader that does not exist yet;
-   * this is the browser fallback, and it is also the only way to see the whole
-   * path work today. Each file is a slot, a PUT, and a process call, in that
-   * order — the same three steps the Bridge will make, so exercising this
-   * exercises that.
+   * Process is a separate call on purpose: once the PUT succeeds the original is
+   * safe, so a processing failure is retryable rather than a lost photograph,
+   * and processProPhoto is idempotent on the upload id.
+   */
+  const sendOne = useCallback(
+    async (file: File, contentType: string) => {
+      const slot = await requestProUploadSlot(eventId, contentType);
+      const put = await fetch(slot.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': contentType },
+      });
+      if (!put.ok) throw new Error(`Upload failed (${put.status}).`);
+      await processProPhoto(eventId, slot.uploadId);
+    },
+    [eventId],
+  );
+
+  /**
+   * Send photographs picked by hand.
    *
    * Sequential rather than parallel: a photographer on venue wifi pushing
    * thirty frames at once gets thirty stalled connections and no feedback. One
@@ -124,17 +142,7 @@ export default function ProReviewPage() {
     for (const file of Array.from(files)) {
       setUploading((n) => n + 1);
       try {
-        const slot = await requestProUploadSlot(eventId, file.type || 'image/jpeg');
-        const put = await fetch(slot.uploadUrl, {
-          method: 'PUT',
-          body: file,
-          headers: { 'Content-Type': file.type || 'image/jpeg' },
-        });
-        if (!put.ok) throw new Error(`Upload failed (${put.status}).`);
-        // Separate call on purpose: the upload is done and the original is
-        // safe at this point, so a processing failure is retryable rather than
-        // a lost photograph.
-        await processProPhoto(eventId, slot.uploadId);
+        await sendOne(file, file.type || 'image/jpeg');
       } catch (err) {
         setMessage(err instanceof Error ? err.message : `${file.name} did not upload.`);
       } finally {
@@ -287,6 +295,8 @@ export default function ProReviewPage() {
               {uploading > 0 ? ` Uploading ${uploading}…` : ''}
             </p>
           </div>
+
+          <WatchFolderUploader eventId={eventId} send={sendOne} onSent={load} />
 
           <nav className="mt-6 flex flex-wrap gap-2" aria-label="Queues">
             {QUEUES.map((entry) => (
