@@ -13,6 +13,14 @@ export function freeTrialEvents(events: readonly QREvent[]): QREvent[] {
     .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
 }
 
+/**
+ * The host's Cognito sub from an event's owner string (`<sub>::<username>`,
+ * or a bare sub on older rows), lower-cased, or '' when there is none.
+ */
+export function ownerSub(owner: string | null | undefined): string {
+  return (owner ?? '').split('::')[0].trim().toLowerCase();
+}
+
 /** How many of them were created in the last `days` days. */
 export function countCreatedWithin(
   events: readonly QREvent[],

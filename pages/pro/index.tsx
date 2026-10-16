@@ -131,6 +131,13 @@ export default function ProHomePage() {
             </ul>
           )}
 
+          <p className="mt-6 text-sm text-charcoal/70">
+            Your name, links and watermark on every shot:{' '}
+            <Link href="/pro/profile" className="font-medium text-pine underline">
+              Edit your profile
+            </Link>
+          </p>
+
           {/* Below the list, because somebody with events already knows. */}
           <div className="mt-10 border border-ink/15 bg-sage/25 p-5">
             <p className="spx-body font-medium">Got a pairing code?</p>

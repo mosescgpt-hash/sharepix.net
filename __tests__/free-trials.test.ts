@@ -34,3 +34,46 @@ describe('free trials tab', () => {
     expect(page).toContain("{ id: 'free-claims', label: 'Free event claims', tab: 'trials' }");
   });
 });
+
+describe('account emails on the free trials tab', () => {
+  // Imported here so the describe above stays about the list itself.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const lookup = require('../amplify/functions/account-emails/lookup');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { ownerSub } = require('../lib/freeTrials');
+  const SUB = '0f8fad5b-d9cb-469f-a165-70867728950e';
+
+  it('reads the sub out of an owner string, old or new', () => {
+    expect(ownerSub(`${SUB}::${SUB}`)).toBe(SUB);
+    expect(ownerSub(SUB.toUpperCase())).toBe(SUB);
+    expect(ownerSub(null)).toBe('');
+  });
+
+  it('accepts only distinct, well-formed subs, capped', () => {
+    expect(lookup.requestedSubs([SUB, SUB.toUpperCase(), 'x"; drop', '', null])).toEqual([SUB]);
+    const many = Array.from({ length: lookup.MAX_SUBS + 10 }, (_, i) =>
+      `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+    );
+    expect(lookup.requestedSubs(many)).toHaveLength(lookup.MAX_SUBS);
+  });
+
+  it('pairs sub and email from Cognito attributes', () => {
+    expect(
+      lookup.subAndEmail([
+        { Name: 'sub', Value: SUB },
+        { Name: 'email', Value: 'host@example.com' },
+      ]),
+    ).toEqual({ sub: SUB, email: 'host@example.com' });
+    expect(lookup.subAndEmail([{ Name: 'sub', Value: SUB }])).toBeNull();
+  });
+
+  it('is admin-only, and can read accounts but never change them', () => {
+    const schema = readSource('amplify/data/resource.ts');
+    const query = schema.slice(schema.indexOf('accountEmails: a'), schema.indexOf('checkPrintProvider: a'));
+    expect(query).toContain("allow.group('ADMINS')");
+    expect(query).not.toContain('allow.authenticated()');
+    const backend = readSource('amplify/backend.ts');
+    const grant = backend.slice(backend.indexOf('const accountEmailsFn'), backend.indexOf('// Stripe webhook'));
+    expect(grant).toContain("actions: ['cognito-idp:ListUsers']");
+  });
+});

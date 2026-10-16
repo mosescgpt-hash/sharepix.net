@@ -27,6 +27,8 @@ import {
   buildThumbKey,
 } from '@/lib/validation';
 import type { CostSummaryResult } from '@/lib/costs';
+import type { PhotographerProfileForm } from '@/lib/photographerProfile';
+import { previewLongEdge } from '@/lib/professionalMedia';
 import { isGlobalAdmin } from '@/lib/admin';
 import { ownerCandidatesFor, ownerIsSubject } from '@/lib/eventOwner';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
@@ -681,6 +683,15 @@ export async function getMyPhotographerProfile(): Promise<{
   id: string;
   keepOriginals: boolean;
 } | null> {
+  const profile = await getMyPhotographerProfileForm();
+  return profile ? { id: profile.id, keepOriginals: profile.form.keepOriginals } : null;
+}
+
+/** Everything on /pro/profile, or null when signed out or never saved. */
+export async function getMyPhotographerProfileForm(): Promise<{
+  id: string;
+  form: PhotographerProfileForm;
+} | null> {
   const user = await getCurrentUserInfo();
   if (!user) return null;
   const { data, errors } = await getClient().models.PhotographerProfile.get(
@@ -689,7 +700,49 @@ export async function getMyPhotographerProfile(): Promise<{
   );
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' \u00b7 '));
   if (!data) return null;
-  return { id: String(data.id), keepOriginals: data.keepOriginals === true };
+  return {
+    id: String(data.id),
+    form: {
+      businessName: data.businessName ?? '',
+      website: data.website ?? '',
+      contactUrl: data.contactUrl ?? '',
+      purchaseGalleryUrl: data.purchaseGalleryUrl ?? '',
+      watermarkEnabled: data.watermarkEnabled === true,
+      watermarkText: data.watermarkText ?? '',
+      previewLongEdge: previewLongEdge(data.defaultPreviewResolution),
+      keepOriginals: data.keepOriginals === true,
+    },
+  };
+}
+
+/**
+ * Save the whole profile. Create first, then update — the same two-step as
+ * setKeepOriginals below, for the same reason.
+ */
+export async function saveMyPhotographerProfile(form: PhotographerProfileForm): Promise<void> {
+  const user = await getCurrentUserInfo();
+  if (!user) throw new Error('Sign in to change this.');
+  const input = {
+    id: user.userId,
+    businessName: form.businessName,
+    website: form.website,
+    contactUrl: form.contactUrl,
+    purchaseGalleryUrl: form.purchaseGalleryUrl,
+    watermarkEnabled: form.watermarkEnabled,
+    watermarkText: form.watermarkText,
+    defaultPreviewResolution: form.previewLongEdge,
+    keepOriginals: form.keepOriginals,
+  };
+  const created = await getClient().models.PhotographerProfile.create(input, {
+    authMode: 'userPool',
+  });
+  if (!created.errors?.length) return;
+  const updated = await getClient().models.PhotographerProfile.update(input, {
+    authMode: 'userPool',
+  });
+  if (updated.errors?.length) {
+    throw new Error(updated.errors.map((e) => e.message).join(' \u00b7 '));
+  }
 }
 
 /**
@@ -1962,6 +2015,24 @@ export async function manageUser(
   if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   if (!data?.success) throw new Error(data?.message ?? 'The action could not be completed.');
   return data.message ?? 'Done.';
+}
+
+/**
+ * Global-admin: the account email behind each Cognito sub, as a map. Subs with
+ * no account (a deleted user) are absent from the result.
+ */
+export async function listAccountEmails(subs: string[]): Promise<Map<string, string>> {
+  const emails = new Map<string, string>();
+  if (subs.length === 0) return emails;
+  const { data, errors } = await getClient().queries.accountEmails(
+    { subs },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  for (const row of data ?? []) {
+    if (row?.sub && row.email) emails.set(row.sub.toLowerCase(), row.email);
+  }
+  return emails;
 }
 
 /**
