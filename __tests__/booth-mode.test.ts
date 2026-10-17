@@ -29,7 +29,8 @@ describe('booth sign-up rules', () => {
   });
 
   it('keeps an abuse ceiling per event', () => {
-    expect(MAX_ATTENDEES_PER_EVENT).toBeGreaterThan(0);
+    // Sized for a trade-show floor like CES.
+    expect(MAX_ATTENDEES_PER_EVENT).toBe(10000);
     const handler = codeOnly(readSource('amplify/functions/booth-signup/handler.ts'));
     expect(handler).toContain('boothAttendeeCount < :max');
   });

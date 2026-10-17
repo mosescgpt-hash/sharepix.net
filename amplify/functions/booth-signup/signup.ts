@@ -3,7 +3,7 @@
  */
 
 /** Sign-ups one event accepts. An abuse ceiling, not a product limit. */
-export const MAX_ATTENDEES_PER_EVENT = 5000;
+export const MAX_ATTENDEES_PER_EVENT = 10000;
 
 export const MAX_NAME_LENGTH = 80;
 export const MAX_EMAIL_LENGTH = 254;

@@ -108,7 +108,7 @@ for this plan, deliberately and only for booth events:
 Each step is one PR and works on its own.
 
 1. **Attendee sign-up — built.** The admin switch, the `BoothAttendee` table,
-   the `boothSignUp` function (one row per email per event, 5,000 sign-ups per
+   the `boothSignUp` function (one row per email per event, 10,000 sign-ups per
    event at most), the sign-up and kiosk page, and the host's attendee list.
    The paid plan itself waits for the price.
 2. **Scan mode and matching.** Scanning in the Pro app, capture-time matching
