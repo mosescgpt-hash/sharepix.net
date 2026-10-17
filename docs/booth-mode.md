@@ -1,7 +1,10 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **plan, not built.** Decided so far: email delivery only (no texting
-for now), and this plan delivers **full resolution**.
+Status: **step 1 built** (sign-up and QR codes); steps 2–5 not yet.
+Decided: email only (no texting for now), **full resolution**, a **flat fee
+per event**, originals kept **30 days**, the **host can see** attendees'
+photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
+computer at the booth.
 
 ## What it is
 
@@ -18,14 +21,20 @@ file itself, and there is no shared gallery at all.
 
 ## The flow
 
-**1. The host sets up a booth event.** A new plan (see Pricing). Booth events
-use everything below instead of the shared gallery. The host invites the
-photographer with the existing pairing code.
+**1. The host sets up a booth event.** Until the plan is priced and sold,
+a global admin switches booth mode on for the event (the **Booth off/on**
+button in the Events list). Booth events use everything below instead of the
+shared gallery. The host invites the photographer with the existing pairing
+code, and finds the sign-up links under **Extras → Booth mode**.
 
-**2. Attendees sign up once.** They scan a sign at the booth or at check-in
-and enter their name and email, then tick a consent box ("Email me the photos
-taken of me at this event"). They get a personal QR code on screen, which
-they keep on their phone or which can be printed on a badge.
+**2. Attendees sign up once,** at `/booth/<eventId>`: on their own phone from
+a sign or badge, or at the booth on a tablet or computer running kiosk mode
+(`?kiosk=1`). They enter their name and email and tick the consent box
+("Email me the photos taken of me at this event. The event host can also see
+them."). They get a personal QR code on screen. Their phone remembers it; the
+kiosk remembers nothing, shows the code large for the photographer, and
+clears itself after 90 seconds or "Done — next person". Signing up again with
+the same email returns the same code.
 
 The QR code holds a **random token, never the email address.** Badge codes
 get photographed and passed around; a token can be revoked and says nothing on
@@ -84,7 +93,7 @@ for this plan, deliberately and only for booth events:
 
 | Piece | What it is |
 | --- | --- |
-| Booth plan | A new tier with a `booth` capability flag, priced separately. |
+| Booth plan | A flat-fee tier with a `booth` capability flag, wired to checkout once priced. Until then an admin switch on the event (built). |
 | `BoothAttendee` table | Event, name, email, consent time, random QR token. Readable only by the host, the event's photographers and admins. |
 | Sign-up page | Public page per event: name, email, consent, then the QR code. |
 | Scan mode | In the Pro review page: read a QR code, show who is next, record the scan time. |
@@ -98,8 +107,10 @@ for this plan, deliberately and only for booth events:
 
 Each step is one PR and works on its own.
 
-1. **Booth plan and attendee sign-up.** The tier, the table, the sign-up page
-   and the QR code. Nothing is matched or sent yet.
+1. **Attendee sign-up — built.** The admin switch, the `BoothAttendee` table,
+   the `boothSignUp` function (one row per email per event, 5,000 sign-ups per
+   event at most), the sign-up and kiosk page, and the host's attendee list.
+   The paid plan itself waits for the price.
 2. **Scan mode and matching.** Scanning in the Pro app, capture-time matching
    and the clock offset. Photos land assigned to people.
 3. **Fix-up screen.** Move, multi-assign, remove.
@@ -108,17 +119,15 @@ Each step is one PR and works on its own.
 5. **Delivery emails and retention.** Approval sends the email; the cleanup
    job and its reminder.
 
-## Decisions still open
+## Decisions
 
-1. **Price.** Per event or per attendee? A headshot booth's value scales with
-   people photographed; a flat fee is simpler to sell.
-2. **Retention window.** 30 days proposed. Longer costs storage.
-3. **Host access.** Should the event host (the company running the booth) see
-   every attendee's photos, or only counts? Seeing them is useful for a
-   company's own staff headshots, and a privacy question for a public trade
-   show.
-4. **Attendee without email access on site.** Is sign-up on their phone
-   enough, or does the booth need a kiosk/tablet sign-up too?
+1. **Price:** a flat fee per event. The amount is still to be set; until
+   then booth mode is switched on by an admin, so nothing is sold at a
+   placeholder price.
+2. **Retention:** 30 days after the event.
+3. **Host access:** the host sees every attendee and their photos. Attendees
+   are told so in the consent line at sign-up.
+4. **Kiosk sign-up:** yes, on any tablet or computer at the booth.
 
 ## Not in this plan
 

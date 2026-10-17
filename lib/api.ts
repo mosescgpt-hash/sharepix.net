@@ -18,6 +18,7 @@ import {
   GuestBookEntry,
   HostGuestBookEntry,
   QREvent,
+  BoothAttendeeRow,
   QRPhoto,
 } from '@/lib/types';
 import {
@@ -2728,6 +2729,61 @@ export async function setResearchIncentiveOffered(
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error('The gift-card setting could not be updated.');
+}
+
+/**
+ * Global-admin: switch booth mode on or off for an event. A direct model
+ * write, admin-only for the same reason as setEventTheme: it is not on the
+ * updateEventSettings allow-list.
+ */
+export async function setEventBoothMode(eventId: string, on: boolean): Promise<void> {
+  const { errors } = await getClient().models.Event.update(
+    { id: eventId, boothMode: on },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('Booth mode could not be changed.');
+}
+
+/**
+ * Sign up at a booth. Public; every rule is re-applied by the function, which
+ * returns a message rather than throwing for anything the attendee can fix.
+ */
+export async function boothSignUp(input: {
+  eventId: string;
+  name: string;
+  email: string;
+  consent: boolean;
+}): Promise<{ ok: boolean; message: string; token: string | null; name: string | null }> {
+  const { data, errors } = await getClient().mutations.boothSignUp(input, {
+    authMode: await authModeFor(),
+  });
+  if (errors?.length) throw new Error('Sign-up did not go through. Please try again.');
+  return {
+    ok: data?.ok === true,
+    message: data?.message ?? '',
+    token: data?.token ?? null,
+    name: data?.name ?? null,
+  };
+}
+
+/** The host's attendees for one booth event, newest first. */
+export async function listBoothAttendees(eventId: string): Promise<BoothAttendeeRow[]> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      getClient().models.BoothAttendee.listBoothAttendeeByEventId(
+        { eventId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'Attendees could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>)
+    .map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ''),
+      email: String(row.email ?? ''),
+      consentedAt: (row.consentedAt as string | null) ?? null,
+    }))
+    .sort((a, b) => (b.consentedAt ?? '').localeCompare(a.consentedAt ?? ''));
 }
 
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {

@@ -48,6 +48,7 @@ import { listMoments } from './functions/list-moments/resource';
 import { listGuestBookEntries } from './functions/list-guest-book-entries/resource';
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { accountEmails } from './functions/account-emails/resource';
+import { boothSignup } from './functions/booth-signup/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { corporateSeats } from './functions/corporate-seats/resource';
@@ -109,6 +110,7 @@ const backend = defineBackend({
   listGuestBookEntries,
   adminUserActions,
   accountEmails,
+  boothSignup,
   stripeWebhook,
   corporatePortal,
   corporateSeats,
@@ -770,6 +772,16 @@ accountEmailsFn.addToRolePolicy(
     resources: [userPool.userPoolArn],
   }),
 );
+
+// Booth mode sign-up (docs/booth-mode.md). Reads the event to check it is a
+// booth and writes it only to keep the sign-up ceiling; the only writer of
+// attendee rows.
+const boothAttendeeTable = backend.data.resources.tables.BoothAttendee;
+const boothSignupFn = backend.boothSignup.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(boothSignupFn);
+boothAttendeeTable.grantReadWriteData(boothSignupFn);
+boothSignupFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+boothSignupFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 
 // Stripe webhook: a public Function URL Stripe calls when a checkout completes.
 // It verifies the signature, then writes a Payment row (table write only — no

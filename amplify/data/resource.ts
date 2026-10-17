@@ -10,6 +10,7 @@ import { printCheckout as printCheckoutFn } from '../functions/print-checkout/re
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
+import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -330,6 +331,13 @@ const schema = a.schema({
       // an admin can put an event into a branded experience, so a host can't
       // dress their event up as someone else's.
       themeKey: a.string(),
+      // Booth mode (docs/booth-mode.md): photos go to each attendee rather
+      // than a shared gallery. Like themeKey, NOT on the updateEventSettings
+      // allow-list — only an admin switches it on until the plan is sold.
+      // boothAttendeeCount is the sign-up ceiling, kept atomically by
+      // boothSignUp.
+      boothMode: a.boolean(),
+      boothAttendeeCount: a.integer(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })
@@ -545,6 +553,29 @@ const schema = a.schema({
     })
     .secondaryIndexes((index) => [index('eventId')])
     .authorization((allow) => [allow.group('ADMINS')]),
+
+  // One person signed up at a booth-mode event (docs/booth-mode.md). Written
+  // only by boothSignUp, which is the only thing that can check the event is a
+  // booth and keep the per-event ceiling. The id is derived from the event and
+  // the email, so one person is one row however often they sign up.
+  //
+  // The host reads their own attendees (eventOwner) and may delete one; there
+  // is no guest read, because these rows are names and email addresses. The
+  // token is what the attendee's QR code carries.
+  BoothAttendee: a
+    .model({
+      eventId: a.id().required(),
+      eventOwner: a.string(),
+      name: a.string().required(),
+      email: a.string().required(),
+      token: a.string().required(),
+      consentedAt: a.datetime(),
+    })
+    .secondaryIndexes((index) => [index('eventId'), index('token')])
+    .authorization((allow) => [
+      allow.ownerDefinedIn('eventOwner').to(['get', 'list', 'delete']),
+      allow.group('ADMINS'),
+    ]),
 
   GuestBookEntry: a
     .model({
@@ -1535,6 +1566,27 @@ const schema = a.schema({
   // whole control surface: it re-derives whether the event is paid, open and
   // entitled to a guest book, re-applies every validation rule, and proves any
   // attached photo belongs to this event before storing a reference to it.
+  BoothSignupResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    token: a.string(),
+    name: a.string(),
+  }),
+
+  // Booth mode sign-up, public: an attendee needs no account. Everything is
+  // re-derived from the event row; see amplify/functions/booth-signup.
+  boothSignUp: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      name: a.string().required(),
+      email: a.string().required(),
+      consent: a.boolean().required(),
+    })
+    .returns(a.ref('BoothSignupResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothSignupFn)),
+
   signGuestBook: a
     .mutation()
     .arguments({
