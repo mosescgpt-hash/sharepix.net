@@ -49,6 +49,7 @@ import { listGuestBookEntries } from './functions/list-guest-book-entries/resour
 import { adminUserActions } from './functions/admin-user-actions/resource';
 import { accountEmails } from './functions/account-emails/resource';
 import { boothSignup } from './functions/booth-signup/resource';
+import { boothScan } from './functions/booth-scan/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { corporateSeats } from './functions/corporate-seats/resource';
@@ -111,6 +112,7 @@ const backend = defineBackend({
   adminUserActions,
   accountEmails,
   boothSignup,
+  boothScan,
   stripeWebhook,
   corporatePortal,
   corporateSeats,
@@ -782,6 +784,32 @@ eventTable.grantReadWriteData(boothSignupFn);
 boothAttendeeTable.grantReadWriteData(boothSignupFn);
 boothSignupFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothSignupFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
+
+// Booth mode for photographers. Reads the event and the photographer's
+// connection to authorize, writes the connection only for the clock offset,
+// reads attendees by token, writes scans, and reads photos for the labels.
+const boothScanTable = backend.data.resources.tables.BoothScan;
+const boothScanFn = backend.boothScan.resources.lambda as LambdaFunction;
+eventTable.grantReadData(boothScanFn);
+backend.data.resources.tables.EventPhotographer.grantReadWriteData(boothScanFn);
+boothAttendeeTable.grantReadData(boothScanFn);
+boothScanTable.grantReadWriteData(boothScanFn);
+photoTable.grantReadData(boothScanFn);
+boothScanFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+boothScanFn.addEnvironment(
+  'CONNECTION_TABLE_NAME',
+  backend.data.resources.tables.EventPhotographer.tableName,
+);
+boothScanFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
+boothScanFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
+boothScanFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// The photo processor matches booth photos to the latest scan: it reads the
+// event (is it a booth?) and the scans, nothing more.
+eventTable.grantReadData(processProFn);
+boothScanTable.grantReadData(processProFn);
+processProFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+processProFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
 
 // Stripe webhook: a public Function URL Stripe calls when a checkout completes.
 // It verifies the signature, then writes a Payment row (table write only — no

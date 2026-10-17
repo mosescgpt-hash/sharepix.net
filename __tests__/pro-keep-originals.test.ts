@@ -34,10 +34,13 @@ describe('the field the pipeline reads actually exists', () => {
     expect(pipeline).toContain('p?.keepOriginals?.BOOL === true');
   });
 
-  it('still defaults to discarding', () => {
+  it('still defaults to discarding, except where the original is the deliverable', () => {
     // Absent means delete. Holding somebody else's copyrighted work has to be
-    // asked for, not inherited.
-    expect(pipeline).toContain('const keepOriginal = p?.keepOriginals?.BOOL === true;');
+    // asked for, not inherited. The one exception is a booth-mode event
+    // (docs/booth-mode.md), whose whole product is the full-resolution file —
+    // and that is read from the event row, never from the request.
+    expect(pipeline).toContain('const keepOriginal = booth || p?.keepOriginals?.BOOL === true;');
+    expect(pipeline).toContain('const booth = await isBoothEvent(eventId);');
   });
 });
 

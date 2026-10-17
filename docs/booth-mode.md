@@ -1,6 +1,6 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **step 1 built** (sign-up and QR codes); steps 2–5 not yet.
+Status: **steps 1–2 built** (sign-up, QR codes, scanning and matching); steps 3–5 not yet.
 Decided: email only (no texting for now), **full resolution**, a **flat fee
 per event**, originals kept **30 days**, the **host can see** attendees'
 photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
@@ -111,8 +111,18 @@ Each step is one PR and works on its own.
    the `boothSignUp` function (one row per email per event, 10,000 sign-ups per
    event at most), the sign-up and kiosk page, and the host's attendee list.
    The paid plan itself waits for the price.
-2. **Scan mode and matching.** Scanning in the Pro app, capture-time matching
-   and the clock offset. Photos land assigned to people.
+2. **Scan mode and matching — built.** A Booth mode panel on the Pro review
+   page: **Scan next person** opens the phone camera (jsQR, because iPhone
+   Safari has no BarcodeDetector); each scan is a `BoothScan` row. Photo
+   processing reads the capture time (`lib/captureTime.ts`, no dependency),
+   corrects it by the camera clock offset, and assigns the photo to the latest
+   scan at or before it. **Sync camera clock** measures the offset from one
+   photo taken right after tapping it; until then the phone's time zone is
+   assumed, and a guess never replaces a measurement. Photos without a
+   believable capture time fall back to upload time and are labelled "check".
+   Booth photos are always kept at full resolution and can never be published
+   to the event's shared gallery. Until step 5's cleanup exists, those
+   originals are not yet deleted after 30 days.
 3. **Fix-up screen.** Move, multi-assign, remove.
 4. **Private galleries and full-resolution download.** The attendee page and
    the download rule.

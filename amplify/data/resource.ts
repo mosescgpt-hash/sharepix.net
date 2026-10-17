@@ -11,6 +11,7 @@ import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-ph
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
+import { boothScan as boothScanFn } from '../functions/booth-scan/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -437,6 +438,13 @@ const schema = a.schema({
       thumbnailObjectKey: a.string(),
       // The photographer's Cognito sub. Null on guest media.
       photographerId: a.string(),
+      // Booth mode (docs/booth-mode.md), written by process-pro-photo: who the
+      // photo was matched to, how ('capture' time, 'upload' time, or
+      // 'unassigned' when nobody had been scanned yet), and when it was taken.
+      boothAttendeeId: a.string(),
+      boothAttendeeName: a.string(),
+      boothMatch: a.string(),
+      capturedAt: a.datetime(),
       // One of PUBLISH_STATUSES. Guests see 'published' and nothing else.
       publishStatus: a.string(),
       publishedAt: a.datetime(),
@@ -571,11 +579,34 @@ const schema = a.schema({
       token: a.string().required(),
       consentedAt: a.datetime(),
     })
-    .secondaryIndexes((index) => [index('eventId'), index('token')])
+    .secondaryIndexes((index) => [
+      index('eventId'),
+      // Named, because booth-scan queries it by this name.
+      index('token').name('boothAttendeesByToken'),
+    ])
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner').to(['get', 'list', 'delete']),
       allow.group('ADMINS'),
     ]),
+
+  // One QR scan by a photographer at a booth event: from this moment, their
+  // photos belong to this attendee until the next scan. Written only by
+  // boothScan; read only by it and by process-pro-photo, which finds the
+  // latest scan at or before a photo's capture time. Admin-only otherwise.
+  BoothScan: a
+    .model({
+      /** `<eventId>#<photographerId>`; see boothScanKey. */
+      scanKey: a.string().required(),
+      eventId: a.id().required(),
+      photographerId: a.string().required(),
+      attendeeId: a.string().required(),
+      attendeeName: a.string(),
+      scannedAt: a.datetime().required(),
+    })
+    .secondaryIndexes((index) => [
+      index('scanKey').sortKeys(['scannedAt']).name('boothScansByScanKey'),
+    ])
+    .authorization((allow) => [allow.group('ADMINS')]),
 
   GuestBookEntry: a
     .model({
@@ -720,6 +751,11 @@ const schema = a.schema({
       publishingMode: a.string(),
       // Who ended it, when someone did. For support conversations.
       removedBy: a.string(),
+      // Booth mode: camera clock minus true time, in ms, so capture times can
+      // be corrected. Synced means measured; otherwise it is this phone's time
+      // zone, assumed. Written only by setBoothClock.
+      boothClockOffsetMs: a.integer(),
+      boothClockSynced: a.boolean(),
     })
     .secondaryIndexes((index) => [index('eventId'), index('photographerId')])
     .authorization((allow) => [
@@ -1586,6 +1622,54 @@ const schema = a.schema({
     .returns(a.ref('BoothSignupResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(boothSignupFn)),
+
+  BoothScanResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    attendeeName: a.string(),
+  }),
+
+  BoothAssignment: a.customType({
+    uploadId: a.string().required(),
+    attendeeName: a.string(),
+    match: a.string(),
+  }),
+
+  BoothStatus: a.customType({
+    booth: a.boolean().required(),
+    currentName: a.string(),
+    currentScannedAt: a.string(),
+    clockSynced: a.boolean(),
+    clockOffsetMs: a.integer(),
+    assignments: a.ref('BoothAssignment').array(),
+  }),
+
+  // Booth mode for photographers. Each re-checks that the caller is an
+  // accepted photographer on a booth event; see amplify/functions/booth-scan.
+  boothScan: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), token: a.string().required() })
+    .returns(a.ref('BoothScanResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(boothScanFn)),
+
+  setBoothClock: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      offsetMs: a.integer().required(),
+      synced: a.boolean().required(),
+    })
+    .returns(a.ref('BoothScanResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(boothScanFn)),
+
+  boothStatus: a
+    .query()
+    .arguments({ eventId: a.id().required() })
+    .returns(a.ref('BoothStatus'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(boothScanFn)),
 
   signGuestBook: a
     .mutation()
