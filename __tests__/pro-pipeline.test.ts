@@ -25,6 +25,8 @@ describe('the duplicated modules have not drifted', () => {
     ['professionalMedia', 'decide-pro-photo'],
     ['photographerAccess', 'decide-pro-photo'],
     ['photographerAccess', 'connect-photographer'],
+    ['photographerAccess', 'booth-scan'],
+    ['captureTime', 'process-pro-photo'],
   ])('%s in %s', (name, fn) => {
     const original = readSource(`lib/${name}.ts`);
     const copy = readSource(`amplify/functions/${fn}/${name}.ts`);

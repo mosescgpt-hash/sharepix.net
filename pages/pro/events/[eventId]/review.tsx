@@ -4,9 +4,12 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import { FallbackImage } from '@/components/FallbackMedia';
+import BoothPanel from '@/components/BoothPanel';
 import {
   decideProPhoto,
+  fetchBoothStatus,
   fetchEventPhotos,
+  type BoothStatusView,
   fetchMyProConnections,
   processProPhoto,
   requestProUploadSlot,
@@ -63,6 +66,13 @@ export default function ProReviewPage() {
   // in a queue had nothing on screen telling them which wedding they were
   // approving into.
   const [event, setEvent] = useState<{ name: string | null; code: string | null } | null>(null);
+  // Booth mode (docs/booth-mode.md): null until known; booth false on any
+  // ordinary event, which hides the panel.
+  const [booth, setBooth] = useState<BoothStatusView | null>(null);
+  const loadBooth = useCallback(async () => {
+    if (!eventId) return;
+    setBooth(await fetchBoothStatus(eventId).catch(() => null));
+  }, [eventId]);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -76,12 +86,13 @@ export default function ProReviewPage() {
     setEvent({ name: mine.eventName, code: mine.eventCode });
     setMode(isPublishingMode(mine.publishingMode) ? mine.publishingMode : DEFAULT_PUBLISHING_MODE);
     setPhotos(await fetchEventPhotos(eventId, { useThumbs: true }).catch(() => []));
+    await loadBooth();
     // A photographer who has never changed a setting has no profile row, and
     // that reads as "discard" — which is the default and what the copy says.
     const profile = await getMyPhotographerProfile().catch(() => null);
     setKeepOriginals(profile?.keepOriginals === true);
     setPhase('ready');
-  }, [eventId]);
+  }, [eventId, loadBooth]);
 
   useEffect(() => {
     void load();
@@ -221,6 +232,10 @@ export default function ProReviewPage() {
             <p className="mt-1 text-sm text-charcoal/55">Event code {event.code}</p>
           ) : null}
 
+          {booth?.booth && eventId ? (
+            <BoothPanel eventId={eventId} status={booth} onChange={() => void loadBooth()} />
+          ) : null}
+
           {/* One banner instead of a button whose label was also the status.
               "Paused — go live" had to be read as both at once, and the thing
               it did not say is the thing that matters: whether anybody can see
@@ -317,6 +332,7 @@ export default function ProReviewPage() {
                 const status = ((photo as { publishStatus?: string }).publishStatus ??
                   'awaiting_review') as PublishStatus;
                 const working = busy === photo.id;
+                const assigned = booth?.booth ? booth.assignments.get(photo.id) : undefined;
                 return (
                   <li key={photo.id} className="border border-charcoal/15">
                     <FallbackImage
@@ -324,6 +340,22 @@ export default function ProReviewPage() {
                       alt=""
                       className="aspect-[4/3] w-full bg-charcoal/5 object-cover"
                     />
+                    {booth?.booth ? (
+                      <p className="border-b border-charcoal/10 px-3 py-2 text-sm">
+                        {assigned?.attendeeName ? (
+                          <>
+                            For <span className="font-medium">{assigned.attendeeName}</span>
+                            {assigned.match === 'upload' ? (
+                              <span className="ml-2 bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
+                                check — matched by upload time
+                              </span>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-amber-800">Not matched to anyone yet</span>
+                        )}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-2 p-3">
                       {status === 'awaiting_review' ? (
                         <>
@@ -345,7 +377,12 @@ export default function ProReviewPage() {
                           </button>
                         </>
                       ) : null}
-                      {status === 'approved' ? (
+                      {status === 'approved' && booth?.booth ? (
+                        <p className="text-xs text-charcoal/60">
+                          Approved — it goes to this person, not to a gallery.
+                        </p>
+                      ) : null}
+                      {status === 'approved' && !booth?.booth ? (
                         <button
                           type="button"
                           disabled={working}

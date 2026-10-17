@@ -10,6 +10,7 @@ import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
+import BoothAttendees from '@/components/BoothAttendees';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
 import CommentModeration from '@/components/CommentModeration';
 import { commentsEnabled } from '@/lib/photoEngagement';
@@ -1243,6 +1244,10 @@ function AdminDashboardPage() {
             >
               <p className="text-sm text-charcoal/60">{TABS[4].blurb}</p>
 
+              {/* Booth mode: only on events an admin has switched it on for. */}
+              {event.boothMode === true && origin ? (
+                <BoothAttendees eventId={event.id} origin={origin} />
+              ) : null}
               {/* SharePix Pro. Always here, because a host books a photographer
                   before the event rather than after it — unlike Featured Events
                   below, which needs photos to exist first. */}
