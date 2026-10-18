@@ -153,7 +153,7 @@ export default function BoothPanel({
  * jsQR rather than the browser's BarcodeDetector, because iPhone Safari does
  * not have BarcodeDetector and most photographers' phones are iPhones.
  */
-function QrScanner({ onToken, onClose }: { onToken: (token: string) => void; onClose: () => void }) {
+export function QrScanner({ onToken, onClose }: { onToken: (token: string) => void; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [wrongCode, setWrongCode] = useState(false);

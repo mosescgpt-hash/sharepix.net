@@ -1,6 +1,6 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **steps 1–2 built** (sign-up, QR codes, scanning and matching); steps 3–5 not yet.
+Status: **steps 1–3 built** (sign-up, QR codes, scanning, matching and the fix-up screen); steps 4–5 not yet.
 Decided: email only (no texting for now), **full resolution**, a **flat fee
 per event**, originals kept **30 days**, the **host can see** attendees'
 photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
@@ -123,7 +123,15 @@ Each step is one PR and works on its own.
    Booth photos are always kept at full resolution and can never be published
    to the event's shared gallery. Until step 5's cleanup exists, those
    originals are not yet deleted after 30 days.
-3. **Fix-up screen.** Move, multi-assign, remove.
+3. **Fix-up screen — built.** "Sort photos by person" on the Pro review page:
+   groups for *Check* (matched by upload time), *Not matched*, then each person
+   in scan order. Select photos and move them to someone, also send them to
+   someone (a group shot, up to 20 people), take someone off, or unassign; a
+   person is picked from those this photographer scanned, or by scanning
+   their code. Photos now carry a recipient list (`boothAttendeeIds`/`Names`),
+   and a fixed photo is marked `manual`. The `assignBoothPhotos` call
+   re-checks every photo is the photographer's own booth photo at this event,
+   up to 100 at a time.
 4. **Private galleries and full-resolution download.** The attendee page and
    the download rule.
 5. **Delivery emails and retention.** Approval sends the email; the cleanup

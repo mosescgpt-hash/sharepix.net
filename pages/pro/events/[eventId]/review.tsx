@@ -5,6 +5,7 @@ import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import { FallbackImage } from '@/components/FallbackMedia';
 import BoothPanel from '@/components/BoothPanel';
+import BoothFixUp from '@/components/BoothFixUp';
 import {
   decideProPhoto,
   fetchBoothStatus,
@@ -233,7 +234,17 @@ export default function ProReviewPage() {
           ) : null}
 
           {booth?.booth && eventId ? (
-            <BoothPanel eventId={eventId} status={booth} onChange={() => void loadBooth()} />
+            <>
+              <BoothPanel eventId={eventId} status={booth} onChange={() => void loadBooth()} />
+              <BoothFixUp
+                eventId={eventId}
+                photos={mine.filter(
+                  (p) => ((p as { publishStatus?: string }).publishStatus ?? '') !== 'rejected',
+                )}
+                status={booth}
+                onChange={() => void loadBooth()}
+              />
+            </>
           ) : null}
 
           {/* One banner instead of a button whose label was also the status.
@@ -344,7 +355,12 @@ export default function ProReviewPage() {
                       <p className="border-b border-charcoal/10 px-3 py-2 text-sm">
                         {assigned?.attendeeName ? (
                           <>
-                            For <span className="font-medium">{assigned.attendeeName}</span>
+                            For{' '}
+                            <span className="font-medium">
+                              {assigned.attendeeNames.length > 1
+                                ? assigned.attendeeNames.join(', ')
+                                : assigned.attendeeName}
+                            </span>
                             {assigned.match === 'upload' ? (
                               <span className="ml-2 bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">
                                 check — matched by upload time
