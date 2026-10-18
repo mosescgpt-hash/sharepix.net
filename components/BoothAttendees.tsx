@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Notice from '@/components/Notice';
 import { listBoothAttendees } from '@/lib/api';
-import { boothSignupPath } from '@/lib/booth';
+import { boothGalleryPath, boothSignupPath } from '@/lib/booth';
 import type { BoothAttendeeRow } from '@/lib/types';
 
 /**
@@ -78,6 +78,16 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
             <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm">
               <span className="min-w-0 truncate font-medium">{row.name}</span>
               <span className="min-w-0 truncate text-charcoal/60">{row.email}</span>
+              {row.galleryKey ? (
+                <a
+                  href={`${origin}${boothGalleryPath(row.galleryKey)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 text-xs text-pine underline"
+                >
+                  Their photos
+                </a>
+              ) : null}
             </li>
           ))}
         </ul>

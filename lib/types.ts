@@ -327,4 +327,6 @@ export interface BoothAttendeeRow {
   name: string;
   email: string;
   consentedAt: string | null;
+  /** Their private gallery key; null for sign-ups from before galleries. */
+  galleryKey: string | null;
 }

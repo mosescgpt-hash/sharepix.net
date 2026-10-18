@@ -1,4 +1,10 @@
-import { DynamoDBClient, GetItemCommand, QueryCommand, ScanCommand } from '@aws-sdk/client-dynamodb';
+import {
+  BatchGetItemCommand,
+  DynamoDBClient,
+  GetItemCommand,
+  QueryCommand,
+  ScanCommand,
+} from '@aws-sdk/client-dynamodb';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import {
@@ -14,6 +20,51 @@ const dynamo = new DynamoDBClient({});
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
+const PROFILE_TABLE = process.env.PROFILE_TABLE_NAME ?? '';
+
+interface Credit {
+  name: string | null;
+  website: string | null;
+  purchaseUrl: string | null;
+  contactUrl: string | null;
+}
+
+/**
+ * The photographers' current names and links, read live so a profile edit
+ * shows on photos already in the gallery. One batch read per 100
+ * photographers, which for any real event is one read. A failed read falls
+ * back to what was copied onto each photo when it was made.
+ */
+async function liveCredits(photographerIds: string[]): Promise<Map<string, Credit>> {
+  const credits = new Map<string, Credit>();
+  if (!PROFILE_TABLE || photographerIds.length === 0) return credits;
+  for (let i = 0; i < photographerIds.length; i += 100) {
+    const ids = photographerIds.slice(i, i + 100);
+    const res = await dynamo
+      .send(
+        new BatchGetItemCommand({
+          RequestItems: {
+            [PROFILE_TABLE]: {
+              Keys: ids.map((id) => ({ id: { S: id } })),
+              ProjectionExpression: 'id, businessName, website, purchaseGalleryUrl, contactUrl',
+            },
+          },
+        }),
+      )
+      .catch(() => null);
+    for (const row of res?.Responses?.[PROFILE_TABLE] ?? []) {
+      const id = row.id?.S;
+      if (!id) continue;
+      credits.set(id, {
+        name: row.businessName?.S || null,
+        website: row.website?.S || null,
+        purchaseUrl: row.purchaseGalleryUrl?.S || null,
+        contactUrl: row.contactUrl?.S || null,
+      });
+    }
+  }
+  return credits;
+}
 
 interface EventFacts {
   takenDown: boolean;
@@ -196,14 +247,28 @@ export const handler: Handler = async (event) => {
   // for review is withheld here; the host reads the Photo model directly (owner
   // auth) and still sees everything, which is how flagged photos stay
   // reviewable and how the host keeps every video.
-  return items
+  const visible = items
     .filter((item) => item.approved?.BOOL !== false)
     .filter((item) => item.moderationStatus?.S !== 'flagged')
     .filter((item) =>
       isVisibleTo({ s3Key: item.s3Key?.S, eventOwner: item.eventOwner?.S }, identity),
     )
-    .filter(audienceFilter)
-    .map((item) => ({
+    .filter(audienceFilter);
+
+  const photographerIds = [
+    ...new Set(
+      visible
+        .filter((item) => item.sourceType?.S === 'professional')
+        .map((item) => item.photographerId?.S ?? '')
+        .filter(Boolean),
+    ),
+  ];
+  const credits = await liveCredits(photographerIds);
+
+  return visible.map((item) => {
+    const professional = item.sourceType?.S === 'professional';
+    const live = professional ? credits.get(item.photographerId?.S ?? '') : undefined;
+    return {
       id: item.id?.S ?? '',
       eventId: item.eventId?.S ?? '',
       s3Key: item.s3Key?.S ?? '',
@@ -217,5 +282,13 @@ export const handler: Handler = async (event) => {
       momentId: item.momentId?.S ?? null,
       challengeId: item.challengeId?.S ?? null,
       createdAt: item.createdAt?.S ?? null,
-    }));
+      sourceType: item.sourceType?.S ?? null,
+      // Live from the profile when it could be read; otherwise what the photo
+      // was made with. A link the photographer removed is removed here too.
+      photographerName: professional ? (live ? live.name : item.photographerName?.S ?? null) : null,
+      photographerWebsite: professional ? (live ? live.website : item.photographerWebsite?.S ?? null) : null,
+      purchaseUrl: professional ? (live ? live.purchaseUrl : item.purchaseUrl?.S ?? null) : null,
+      contactUrl: professional ? (live ? live.contactUrl : item.contactUrl?.S ?? null) : null,
+    };
+  });
 };

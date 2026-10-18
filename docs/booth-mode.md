@@ -1,6 +1,6 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **steps 1–3 built** (sign-up, QR codes, scanning, matching and the fix-up screen); steps 4–5 not yet.
+Status: **steps 1–4 built** (sign-up, QR codes, scanning, matching, fix-ups and private galleries); step 5 (emails and cleanup) not yet.
 Decided: email only (no texting for now), **full resolution**, a **flat fee
 per event**, originals kept **30 days**, the **host can see** attendees'
 photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
@@ -132,8 +132,16 @@ Each step is one PR and works on its own.
    and a fixed photo is marked `manual`. The `assignBoothPhotos` call
    re-checks every photo is the photographer's own booth photo at this event,
    up to 100 at a time.
-4. **Private galleries and full-resolution download.** The attendee page and
-   the download rule.
+4. **Private galleries — built.** `/booth/photos/<galleryKey>`: one person's
+   photos, only those the photographer **approved**, each downloadable at full
+   resolution, plus "Download all" as a zip. The gallery key is separate from
+   the QR token (24 random bytes, issued at sign-up; earlier sign-ups get one
+   when they sign up again) and will be sent only by email in step 5. Until
+   then the host's attendee list has a "Their photos" link per person, for
+   testing. The `boothGallery` lookup signs links itself, reading only under
+   `pro/`. Booth originals now have their location and camera metadata
+   stripped during processing (the same stripper as guest uploads; orientation
+   kept), since the sanitizer never covered `pro/`.
 5. **Delivery emails and retention.** Approval sends the email; the cleanup
    job and its reminder.
 

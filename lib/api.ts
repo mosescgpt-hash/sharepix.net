@@ -30,6 +30,13 @@ import {
 import type { CostSummaryResult } from '@/lib/costs';
 import type { PhotographerProfileForm } from '@/lib/photographerProfile';
 import { previewLongEdge } from '@/lib/professionalMedia';
+import {
+  DEFAULT_WATERMARK_POSITION,
+  clampOpacity,
+  isLogoDataUrl,
+  isWatermarkPosition,
+  isWatermarkStyle,
+} from '@/lib/watermark';
 import { isGlobalAdmin } from '@/lib/admin';
 import { ownerCandidatesFor, ownerIsSubject } from '@/lib/eventOwner';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
@@ -710,6 +717,12 @@ export async function getMyPhotographerProfileForm(): Promise<{
       purchaseGalleryUrl: data.purchaseGalleryUrl ?? '',
       watermarkEnabled: data.watermarkEnabled === true,
       watermarkText: data.watermarkText ?? '',
+      watermarkStyle: isWatermarkStyle(data.watermarkStyle) ? data.watermarkStyle : 'text',
+      watermarkLogo: isLogoDataUrl(data.watermarkLogo) ? data.watermarkLogo : '',
+      watermarkPosition: isWatermarkPosition(data.watermarkPosition)
+        ? data.watermarkPosition
+        : DEFAULT_WATERMARK_POSITION,
+      watermarkOpacity: clampOpacity(data.watermarkOpacity),
       previewLongEdge: previewLongEdge(data.defaultPreviewResolution),
       keepOriginals: data.keepOriginals === true,
     },
@@ -731,6 +744,10 @@ export async function saveMyPhotographerProfile(form: PhotographerProfileForm): 
     purchaseGalleryUrl: form.purchaseGalleryUrl,
     watermarkEnabled: form.watermarkEnabled,
     watermarkText: form.watermarkText,
+    watermarkStyle: form.watermarkStyle,
+    watermarkLogo: form.watermarkLogo,
+    watermarkPosition: form.watermarkPosition,
+    watermarkOpacity: form.watermarkOpacity,
     defaultPreviewResolution: form.previewLongEdge,
     keepOriginals: form.keepOriginals,
   };
@@ -772,6 +789,18 @@ export async function setKeepOriginals(keepOriginals: boolean): Promise<void> {
   if (updated.errors?.length) {
     throw new Error(updated.errors.map((e) => e.message).join(' \u00b7 '));
   }
+}
+
+/**
+ * Redo the watermark on the caller's posted photos with their current
+ * settings. Queued server-side; returns at once.
+ */
+export async function refreshProWatermarks(): Promise<string> {
+  const { data, errors } = await getClient().mutations.refreshProWatermarks({}, { authMode: 'userPool' });
+  if (errors?.length || !data?.success) {
+    throw new Error(data?.message || 'Your photos could not be updated. Your settings are saved.');
+  }
+  return data.message ?? '';
 }
 
 /** This photographer's connections, for the /pro event list. */
@@ -2862,6 +2891,37 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
   };
 }
 
+export interface BoothGalleryView {
+  ok: boolean;
+  message: string;
+  eventName: string | null;
+  attendeeName: string | null;
+  photos: { id: string; previewUrl: string | null; downloadUrl: string | null; capturedAt: string | null }[];
+}
+
+/** An attendee's private gallery, by the key in their email. Public. */
+export async function fetchBoothGallery(key: string): Promise<BoothGalleryView> {
+  const { data, errors } = await getClient().queries.boothGallery(
+    { key },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error('Your photos could not be loaded. Try again in a moment.');
+  return {
+    ok: data?.ok === true,
+    message: data?.message ?? '',
+    eventName: data?.eventName ?? null,
+    attendeeName: data?.attendeeName ?? null,
+    photos: (data?.photos ?? [])
+      .filter((p): p is NonNullable<typeof p> => Boolean(p?.id))
+      .map((p) => ({
+        id: p.id,
+        previewUrl: p.previewUrl ?? null,
+        downloadUrl: p.downloadUrl ?? null,
+        capturedAt: p.capturedAt ?? null,
+      })),
+  };
+}
+
 /** The host's attendees for one booth event, newest first. */
 export async function listBoothAttendees(eventId: string): Promise<BoothAttendeeRow[]> {
   const rows = await listAllPages(
@@ -2878,6 +2938,7 @@ export async function listBoothAttendees(eventId: string): Promise<BoothAttendee
       name: String(row.name ?? ''),
       email: String(row.email ?? ''),
       consentedAt: (row.consentedAt as string | null) ?? null,
+      galleryKey: (row.galleryKey as string | null) ?? null,
     }))
     .sort((a, b) => (b.consentedAt ?? '').localeCompare(a.consentedAt ?? ''));
 }

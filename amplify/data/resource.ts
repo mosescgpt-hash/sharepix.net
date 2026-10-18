@@ -12,6 +12,8 @@ import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-
 import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
 import { boothScan as boothScanFn } from '../functions/booth-scan/resource';
+import { boothGallery as boothGalleryFn } from '../functions/booth-gallery/resource';
+import { refreshProWatermarks as refreshProWatermarksFn } from '../functions/refresh-pro-watermarks/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -441,6 +443,9 @@ const schema = a.schema({
       // Booth mode (docs/booth-mode.md), written by process-pro-photo: who the
       // photo was matched to, how ('capture' time, 'upload' time, or
       // 'unassigned' when nobody had been scanned yet), and when it was taken.
+      // The unmarked preview, kept so a changed watermark can be redone on
+      // photos already posted (restamp-pro-photos). Absent on older photos.
+      cleanPreviewObjectKey: a.string(),
       boothAttendeeId: a.string(),
       boothAttendeeName: a.string(),
       // Everyone the photo goes to (a group shot can go to several), in order;
@@ -582,12 +587,16 @@ const schema = a.schema({
       name: a.string().required(),
       email: a.string().required(),
       token: a.string().required(),
+      // The key to this person's private gallery (step 4). Separate from the
+      // QR token, which is shown and printed; this one is only emailed.
+      galleryKey: a.string(),
       consentedAt: a.datetime(),
     })
     .secondaryIndexes((index) => [
       index('eventId'),
       // Named, because booth-scan queries it by this name.
       index('token').name('boothAttendeesByToken'),
+      index('galleryKey').name('boothAttendeesByGalleryKey'),
     ])
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner').to(['get', 'list', 'delete']),
@@ -700,6 +709,14 @@ const schema = a.schema({
       // applied to generated previews only — never to a stored original.
       watermarkEnabled: a.boolean(),
       watermarkText: a.string(),
+      // 'text' | 'logo' | 'both' (lib/watermark.ts); absent means text.
+      watermarkStyle: a.string(),
+      // The logo as a small PNG/JPEG data URL, downscaled in the browser.
+      watermarkLogo: a.string(),
+      // A corner or 'center'; absent means bottom-left.
+      watermarkPosition: a.string(),
+      // 10–100; absent means 70.
+      watermarkOpacity: a.integer(),
       // One of PUBLISHING_MODES. Absent means DEFAULT_PUBLISHING_MODE, which
       // is approve_first; nobody gets auto-publishing by not choosing.
       defaultPublishingMode: a.string(),
@@ -1566,6 +1583,13 @@ const schema = a.schema({
     momentId: a.string(),
     challengeId: a.string(),
     createdAt: a.string(),
+    // SharePix Pro: so the gallery can credit the photographer. The name and
+    // links are read live from their profile on every listing.
+    sourceType: a.string(),
+    photographerName: a.string(),
+    photographerWebsite: a.string(),
+    purchaseUrl: a.string(),
+    contactUrl: a.string(),
   }),
 
   // Scoped read of one event's approved photos for the public gallery, so the
@@ -1697,6 +1721,39 @@ const schema = a.schema({
     .returns(a.ref('BoothAssignResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(boothScanFn)),
+
+  BoothGalleryPhoto: a.customType({
+    id: a.string().required(),
+    previewUrl: a.string(),
+    downloadUrl: a.string(),
+    capturedAt: a.string(),
+  }),
+
+  BoothGalleryResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    eventName: a.string(),
+    attendeeName: a.string(),
+    photos: a.ref('BoothGalleryPhoto').array(),
+  }),
+
+  // One attendee's private gallery (step 4). Public — the attendee has no
+  // account — and authorized entirely by the secret key in their email.
+  boothGallery: a
+    .query()
+    .arguments({ key: a.string().required() })
+    .returns(a.ref('BoothGalleryResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothGalleryFn)),
+
+  // A photographer's own "redo my watermarks", after changing them on
+  // /pro/profile. Queues the work and returns at once.
+  refreshProWatermarks: a
+    .mutation()
+    .arguments({})
+    .returns(a.ref('UserActionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(refreshProWatermarksFn)),
 
   boothStatus: a
     .query()
