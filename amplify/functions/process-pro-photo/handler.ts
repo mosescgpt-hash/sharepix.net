@@ -13,10 +13,12 @@ import {
   DeleteObjectCommand,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
-import { Jimp, loadFont } from 'jimp';
+import { Jimp } from 'jimp';
 import type { Schema } from '../../data/resource';
 import { connectionId, mayUploadToEvent } from './photographerAccess';
 import { exifCaptureTime } from './captureTime';
+import { applyWatermark } from './stamp';
+import { cleanPreviewKey, watermarkSpec } from './watermark';
 import { isHeic, isJpeg, stripHeicGps, stripJpegMetadata } from './exif';
 import { boothScanKey, photoInstant } from './boothMatch';
 import {
@@ -31,7 +33,6 @@ import {
   canProcess,
   discardDecision,
   scaleToLongEdge,
-  watermarkFor,
 } from './proProcessing';
 
 const dynamo = new DynamoDBClient({});
@@ -209,11 +210,17 @@ export const handler: Handler = async (event) => {
   // A booth event delivers the original itself, so it is always kept there.
   const booth = await isBoothEvent(eventId);
   const keepOriginal = booth || p?.keepOriginals?.BOOL === true;
-  const watermark = watermarkFor({
+  const watermark = watermarkSpec({
     watermarkEnabled: p?.watermarkEnabled?.BOOL ?? false,
     watermarkText: p?.watermarkText?.S ?? null,
     businessName: p?.businessName?.S ?? null,
+    watermarkStyle: p?.watermarkStyle?.S ?? null,
+    watermarkLogo: p?.watermarkLogo?.S ?? null,
+    watermarkPosition: p?.watermarkPosition?.S ?? null,
+    watermarkOpacity: p?.watermarkOpacity?.N ? Number(p.watermarkOpacity.N) : null,
   });
+  const cleanKey = cleanPreviewKey(keys.preview);
+  let cleanWritten = false;
   const longEdge = previewLongEdge(
     p?.defaultPreviewResolution?.N ? Number(p.defaultPreviewResolution.N) : null,
   );
@@ -242,10 +249,22 @@ export const handler: Handler = async (event) => {
 
     const preview = scaleToLongEdge(width, height, longEdge);
     if (preview.resized) image.resize({ w: preview.width, h: preview.height });
+    // The unmarked preview, kept so the watermark can be redone live when the
+    // photographer changes it (restamp-pro-photos). Best-effort: without it
+    // this one photo keeps the watermark it was made with.
+    if (cleanKey) {
+      const cleanBody = await image.getBuffer('image/jpeg', { quality: PREVIEW_QUALITY });
+      cleanWritten = await s3
+        .send(
+          new PutObjectCommand({ Bucket: BUCKET, Key: cleanKey, Body: cleanBody, ContentType: 'image/jpeg' }),
+        )
+        .then(() => true)
+        .catch(() => false);
+    }
     if (watermark) {
       // Applied to the derivative only. The original, if it is kept at all, is
       // returned to the photographer exactly as they sent it.
-      await stampWatermark(image, watermark);
+      await applyWatermark(image, watermark);
     }
     const previewBody = await image.getBuffer('image/jpeg', { quality: PREVIEW_QUALITY });
     await s3.send(
@@ -302,6 +321,7 @@ export const handler: Handler = async (event) => {
           reducedResolutionEnabled: { BOOL: defaults.reducedResolutionEnabled },
           previewResolution: { N: String(defaults.previewResolution) },
           watermarkEnabled: { BOOL: Boolean(watermark) },
+          ...(cleanWritten && cleanKey ? { cleanPreviewObjectKey: { S: cleanKey } } : {}),
           photographerId: { S: sub },
           ...(p?.businessName?.S ? { photographerName: { S: p.businessName.S } } : {}),
           ...(p?.website?.S ? { photographerWebsite: { S: p.website.S } } : {}),
@@ -364,23 +384,3 @@ export const handler: Handler = async (event) => {
     message: 'Ready for review.',
   };
 };
-
-/**
- * Burn the photographer's name across the bottom of a preview.
- *
- * Deliberately plain: bottom-left, small, semi-transparent. A watermark that
- * dominates the frame makes the photographer's work look worse, which is the
- * opposite of why they turned it on.
- */
-async function stampWatermark(image: Awaited<ReturnType<typeof Jimp.read>>, text: string) {
-  const { SANS_16_WHITE, SANS_32_WHITE } = await import('jimp/fonts');
-  const big = image.width > 1200;
-  const font = await loadFont(big ? SANS_32_WHITE : SANS_16_WHITE);
-  const pad = Math.round(image.width * 0.02);
-  image.print({
-    font,
-    x: pad,
-    y: Math.max(0, image.height - pad - (big ? 32 : 16)),
-    text,
-  });
-}
