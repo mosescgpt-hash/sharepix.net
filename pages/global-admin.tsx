@@ -53,6 +53,7 @@ import {
   setEventUploadWindowEnd,
   setResearchIncentiveOffered,
   setEventTheme,
+  setEventBoothMode,
   startCheckout,
 } from '@/lib/api';
 import {
@@ -1458,6 +1459,31 @@ function GlobalAdminPage() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The event theme could not be updated.');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  /**
+   * Switch booth mode on or off (docs/booth-mode.md). Admin-only, like the
+   * theme: until the booth plan is sold, an admin turns it on per event.
+   */
+  async function handleBoothMode(event: QREvent, on: boolean) {
+    if (
+      on &&
+      !window.confirm(
+        `Turn on booth mode for “${event.name}”? Attendees can then sign up to have photos sent to them.`,
+      )
+    ) {
+      return;
+    }
+    setWorking(`booth-${event.id}`);
+    setError(null);
+    try {
+      await setEventBoothMode(event.id, on);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Booth mode could not be changed.');
     } finally {
       setWorking(null);
     }
@@ -4242,6 +4268,21 @@ function GlobalAdminPage() {
                               Add photos
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            disabled={working === `booth-${event.id}`}
+                            onClick={() => void handleBoothMode(event, event.boothMode !== true)}
+                            title="Booth mode: attendees sign up and photos are sent to each person"
+                            className={`border px-3 py-1.5 transition disabled:opacity-50 ${
+                              event.boothMode
+                                ? 'border-pine bg-sage/40 text-pine'
+                                : 'border-charcoal/25 text-charcoal hover:border-charcoal/60'
+                            }`}
+                          >
+                            {event.boothMode
+                              ? `Booth on (${event.boothAttendeeCount ?? 0})`
+                              : 'Booth off'}
+                          </button>
                           <button
                             type="button"
                             disabled={working === `incentive-${event.id}`}

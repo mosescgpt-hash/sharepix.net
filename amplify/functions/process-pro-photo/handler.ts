@@ -2,6 +2,7 @@ import {
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
+  QueryCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import {
@@ -14,6 +15,8 @@ import {
 import { Jimp, loadFont } from 'jimp';
 import type { Schema } from '../../data/resource';
 import { connectionId, mayUploadToEvent } from './photographerAccess';
+import { exifCaptureTime } from './captureTime';
+import { boothScanKey, photoInstant } from './boothMatch';
 import {
   defaultsFor,
   previewLongEdge,
@@ -36,6 +39,71 @@ const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const PROFILE_TABLE = process.env.PROFILE_TABLE_NAME as string;
 const BUCKET = process.env.PHOTO_BUCKET_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
+const SCAN_TABLE = process.env.BOOTH_SCAN_TABLE_NAME ?? '';
+const SCANS_BY_KEY = 'boothScansByScanKey';
+
+/** Whether this event is in booth mode (docs/booth-mode.md). */
+async function isBoothEvent(eventId: string): Promise<boolean> {
+  if (!EVENT_TABLE) return false;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        ProjectionExpression: 'id, boothMode',
+      }),
+    )
+    .catch(() => null);
+  return found?.Item?.boothMode?.BOOL === true;
+}
+
+/**
+ * Who a booth photo belongs to: the latest scan by this photographer at or
+ * before the moment it was taken. Never throws — an unmatched photo is still
+ * a photo, and the photographer can assign it by hand.
+ */
+async function boothAssignment(input: {
+  eventId: string;
+  sub: string;
+  source: Buffer;
+  offsetMs: number | null;
+}): Promise<Record<string, { S: string }>> {
+  const captureText = exifCaptureTime(input.source);
+  const { atMs, match } = photoInstant({
+    captureText,
+    offsetMs: input.offsetMs,
+    uploadedAtMs: Date.now(),
+  });
+  const capturedAt = new Date(atMs).toISOString();
+  const latest = SCAN_TABLE
+    ? await dynamo
+        .send(
+          new QueryCommand({
+            TableName: SCAN_TABLE,
+            IndexName: SCANS_BY_KEY,
+            KeyConditionExpression: 'scanKey = :key AND scannedAt <= :at',
+            ExpressionAttributeValues: {
+              ':key': { S: boothScanKey(input.eventId, input.sub) },
+              ':at': { S: capturedAt },
+            },
+            ScanIndexForward: false,
+            Limit: 1,
+          }),
+        )
+        .catch(() => null)
+    : null;
+  const scan = latest?.Items?.[0];
+  if (!scan?.attendeeId?.S) {
+    return { boothMatch: { S: 'unassigned' }, capturedAt: { S: capturedAt } };
+  }
+  return {
+    boothAttendeeId: { S: scan.attendeeId.S },
+    ...(scan.attendeeName?.S ? { boothAttendeeName: { S: scan.attendeeName.S } } : {}),
+    boothMatch: { S: match },
+    capturedAt: { S: capturedAt },
+  };
+}
 
 type Handler = Schema['processProPhoto']['functionHandler'];
 
@@ -133,7 +201,9 @@ export const handler: Handler = async (event) => {
     .send(new GetItemCommand({ TableName: PROFILE_TABLE, Key: { id: { S: sub } } }))
     .catch(() => null);
   const p = profile?.Item;
-  const keepOriginal = p?.keepOriginals?.BOOL === true;
+  // A booth event delivers the original itself, so it is always kept there.
+  const booth = await isBoothEvent(eventId);
+  const keepOriginal = booth || p?.keepOriginals?.BOOL === true;
   const watermark = watermarkFor({
     watermarkEnabled: p?.watermarkEnabled?.BOOL ?? false,
     watermarkText: p?.watermarkText?.S ?? null,
@@ -145,6 +215,16 @@ export const handler: Handler = async (event) => {
 
   const source = await bodyOf(keys.original);
   if (!source) throw new Error('That upload could not be read.');
+
+  const offsetN = connectionRow?.Item?.boothClockOffsetMs?.N;
+  const boothFields = booth
+    ? await boothAssignment({
+        eventId,
+        sub,
+        source,
+        offsetMs: offsetN !== undefined ? Number(offsetN) : null,
+      })
+    : {};
 
   let previewWritten = false;
   let thumbnailWritten = false;
@@ -223,6 +303,7 @@ export const handler: Handler = async (event) => {
           ...(p?.purchaseGalleryUrl?.S ? { purchaseUrl: { S: p.purchaseGalleryUrl.S } } : {}),
           ...(p?.contactUrl?.S ? { contactUrl: { S: p.contactUrl.S } } : {}),
           previewFileSize: { N: String(previewBytes) },
+          ...boothFields,
           approved: { BOOL: false },
           createdAt: { S: now },
           updatedAt: { S: now },

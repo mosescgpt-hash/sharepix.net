@@ -10,6 +10,7 @@ Disallow: /event/
 Disallow: /featured/
 Disallow: /global-admin
 Disallow: /my-events
+Disallow: /booth/
 Disallow: /pro/join
 Disallow: /pro/profile
 Disallow: /pro/events/

@@ -18,6 +18,7 @@ import {
   GuestBookEntry,
   HostGuestBookEntry,
   QREvent,
+  BoothAttendeeRow,
   QRPhoto,
 } from '@/lib/types';
 import {
@@ -2728,6 +2729,121 @@ export async function setResearchIncentiveOffered(
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error('The gift-card setting could not be updated.');
+}
+
+/**
+ * Global-admin: switch booth mode on or off for an event. A direct model
+ * write, admin-only for the same reason as setEventTheme: it is not on the
+ * updateEventSettings allow-list.
+ */
+export async function setEventBoothMode(eventId: string, on: boolean): Promise<void> {
+  const { errors } = await getClient().models.Event.update(
+    { id: eventId, boothMode: on },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('Booth mode could not be changed.');
+}
+
+/**
+ * Sign up at a booth. Public; every rule is re-applied by the function, which
+ * returns a message rather than throwing for anything the attendee can fix.
+ */
+export async function boothSignUp(input: {
+  eventId: string;
+  name: string;
+  email: string;
+  consent: boolean;
+}): Promise<{ ok: boolean; message: string; token: string | null; name: string | null }> {
+  const { data, errors } = await getClient().mutations.boothSignUp(input, {
+    authMode: await authModeFor(),
+  });
+  if (errors?.length) throw new Error('Sign-up did not go through. Please try again.');
+  return {
+    ok: data?.ok === true,
+    message: data?.message ?? '',
+    token: data?.token ?? null,
+    name: data?.name ?? null,
+  };
+}
+
+/** Photographer: record a scanned attendee code. Every rule is re-checked server-side. */
+export async function scanBoothCode(
+  eventId: string,
+  token: string,
+): Promise<{ ok: boolean; message: string; attendeeName: string | null }> {
+  const { data, errors } = await getClient().mutations.boothScan(
+    { eventId, token },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('That scan did not go through. Try again.');
+  return { ok: data?.ok === true, message: data?.message ?? '', attendeeName: data?.attendeeName ?? null };
+}
+
+/** Photographer: store the camera clock offset; `synced` means it was measured. */
+export async function setBoothClock(
+  eventId: string,
+  offsetMs: number,
+  synced: boolean,
+): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await getClient().mutations.setBoothClock(
+    { eventId, offsetMs: Math.round(offsetMs), synced },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The camera clock could not be saved.');
+  return { ok: data?.ok === true, message: data?.message ?? '' };
+}
+
+export interface BoothStatusView {
+  booth: boolean;
+  currentName: string | null;
+  currentScannedAt: string | null;
+  clockSynced: boolean;
+  clockOffsetMs: number | null;
+  /** uploadId → who it was matched to, and how. */
+  assignments: Map<string, { attendeeName: string | null; match: string }>;
+}
+
+/** Photographer: who is being shot now, the clock, and each photo's match. */
+export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView> {
+  const { data, errors } = await getClient().queries.boothStatus(
+    { eventId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('Booth status could not be loaded.');
+  const assignments = new Map<string, { attendeeName: string | null; match: string }>();
+  for (const row of data?.assignments ?? []) {
+    if (row?.uploadId) {
+      assignments.set(row.uploadId, { attendeeName: row.attendeeName ?? null, match: row.match ?? 'unassigned' });
+    }
+  }
+  return {
+    booth: data?.booth === true,
+    currentName: data?.currentName ?? null,
+    currentScannedAt: data?.currentScannedAt ?? null,
+    clockSynced: data?.clockSynced === true,
+    clockOffsetMs: data?.clockOffsetMs ?? null,
+    assignments,
+  };
+}
+
+/** The host's attendees for one booth event, newest first. */
+export async function listBoothAttendees(eventId: string): Promise<BoothAttendeeRow[]> {
+  const rows = await listAllPages(
+    (nextToken) =>
+      getClient().models.BoothAttendee.listBoothAttendeeByEventId(
+        { eventId },
+        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+      ),
+    'Attendees could not be loaded.',
+  );
+  return (rows as Array<Record<string, unknown>>)
+    .map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ''),
+      email: String(row.email ?? ''),
+      consentedAt: (row.consentedAt as string | null) ?? null,
+    }))
+    .sort((a, b) => (b.consentedAt ?? '').localeCompare(a.consentedAt ?? ''));
 }
 
 export async function fetchEvent(eventId: string): Promise<QREvent | null> {

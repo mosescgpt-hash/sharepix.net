@@ -79,6 +79,14 @@ export const handler: DecideHandler = async (event) => {
   const connection = await loadConnection(photoEventId, sub);
   if (!mayReviewEvent(connection, photoEventId, sub)) throw new Error(DENIED);
 
+  // A booth photo (docs/booth-mode.md) is delivered to the one person it was
+  // taken of. It is never published to the event's shared gallery: approving
+  // it is the photographer's whole decision.
+  const boothPhoto = photo.boothMatch?.S !== undefined;
+  if (boothPhoto && target === 'published') {
+    throw new Error('Booth photos are sent to each person, not published to a gallery.');
+  }
+
   const from = photo.publishStatus?.S ?? '';
   if (!isPublishStatus(from) || !canTransition(from, target)) {
     throw new Error(`That photo cannot go from ${from || 'unknown'} to ${target}.`);
@@ -90,7 +98,10 @@ export const handler: DecideHandler = async (event) => {
     ? connection.publishingMode
     : DEFAULT_PUBLISHING_MODE;
   const landing: PublishStatus =
-    target === 'approved' && decision === 'approve' && shouldPublishOnApproval({ livePublishing: live, mode })
+    !boothPhoto &&
+    target === 'approved' &&
+    decision === 'approve' &&
+    shouldPublishOnApproval({ livePublishing: live, mode })
       ? 'published'
       : target;
 

@@ -102,6 +102,9 @@ export interface QREvent {
   qrColor?: string | null;
   /** A downscaled data URL, small enough to live on the row. */
   qrLogo?: string | null;
+  /** Booth mode: photos go to each attendee. Admin-only switch; see docs/booth-mode.md. */
+  boothMode?: boolean | null;
+  boothAttendeeCount?: number | null;
   createdBy?: string | null;
   owner?: string | null;
   /**
@@ -316,4 +319,12 @@ export interface DiscountRedemption {
   percentOff?: number | null;
   amountOffCents?: number | null;
   remainingUses?: number | null;
+}
+
+/** Someone signed up at a booth-mode event, as the host sees them. */
+export interface BoothAttendeeRow {
+  id: string;
+  name: string;
+  email: string;
+  consentedAt: string | null;
 }
