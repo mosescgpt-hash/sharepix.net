@@ -443,6 +443,11 @@ const schema = a.schema({
       // 'unassigned' when nobody had been scanned yet), and when it was taken.
       boothAttendeeId: a.string(),
       boothAttendeeName: a.string(),
+      // Everyone the photo goes to (a group shot can go to several), in order;
+      // the single fields above mirror the first. Edited by assignBoothPhotos.
+      boothAttendeeIds: a.string().array(),
+      boothAttendeeNames: a.string().array(),
+      // 'capture' | 'upload' | 'manual' (the photographer fixed it) | 'unassigned'.
       boothMatch: a.string(),
       capturedAt: a.datetime(),
       // One of PUBLISH_STATUSES. Guests see 'published' and nothing else.
@@ -1632,7 +1637,20 @@ const schema = a.schema({
   BoothAssignment: a.customType({
     uploadId: a.string().required(),
     attendeeName: a.string(),
+    attendeeIds: a.string().array(),
+    attendeeNames: a.string().array(),
     match: a.string(),
+  }),
+
+  BoothPerson: a.customType({
+    attendeeId: a.string().required(),
+    name: a.string(),
+  }),
+
+  BoothAssignResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    updated: a.integer(),
   }),
 
   BoothStatus: a.customType({
@@ -1642,6 +1660,7 @@ const schema = a.schema({
     clockSynced: a.boolean(),
     clockOffsetMs: a.integer(),
     assignments: a.ref('BoothAssignment').array(),
+    people: a.ref('BoothPerson').array(),
   }),
 
   // Booth mode for photographers. Each re-checks that the caller is an
@@ -1661,6 +1680,21 @@ const schema = a.schema({
       synced: a.boolean().required(),
     })
     .returns(a.ref('BoothScanResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(boothScanFn)),
+
+  // The fix-up screen: move, add, remove or clear who photos go to. The target
+  // is named by attendee id (from the people list) or a scanned code.
+  assignBoothPhotos: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      uploadIds: a.string().array().required(),
+      action: a.string().required(),
+      attendeeId: a.string(),
+      token: a.string(),
+    })
+    .returns(a.ref('BoothAssignResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(boothScanFn)),
 

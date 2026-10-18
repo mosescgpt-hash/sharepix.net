@@ -2799,8 +2799,35 @@ export interface BoothStatusView {
   currentScannedAt: string | null;
   clockSynced: boolean;
   clockOffsetMs: number | null;
-  /** uploadId → who it was matched to, and how. */
-  assignments: Map<string, { attendeeName: string | null; match: string }>;
+  /** uploadId → who it goes to (first is the main one), and how it was matched. */
+  assignments: Map<string, BoothAssignmentView>;
+  /** People this photographer has scanned, newest first. */
+  people: { attendeeId: string; name: string }[];
+}
+
+export interface BoothAssignmentView {
+  attendeeName: string | null;
+  attendeeIds: string[];
+  attendeeNames: string[];
+  match: string;
+}
+
+/**
+ * Photographer: change who booth photos go to (the fix-up screen). The target
+ * is an attendee id from the people list, or a scanned code.
+ */
+export async function assignBoothPhotos(input: {
+  eventId: string;
+  uploadIds: string[];
+  action: 'set' | 'add' | 'remove' | 'clear';
+  attendeeId?: string;
+  token?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await getClient().mutations.assignBoothPhotos(input, {
+    authMode: 'userPool',
+  });
+  if (errors?.length) throw new Error('That change did not go through. Try again.');
+  return { ok: data?.ok === true, message: data?.message ?? '' };
 }
 
 /** Photographer: who is being shot now, the clock, and each photo's match. */
@@ -2810,12 +2837,20 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error('Booth status could not be loaded.');
-  const assignments = new Map<string, { attendeeName: string | null; match: string }>();
+  const assignments = new Map<string, BoothAssignmentView>();
   for (const row of data?.assignments ?? []) {
     if (row?.uploadId) {
-      assignments.set(row.uploadId, { attendeeName: row.attendeeName ?? null, match: row.match ?? 'unassigned' });
+      assignments.set(row.uploadId, {
+        attendeeName: row.attendeeName ?? null,
+        attendeeIds: (row.attendeeIds ?? []).filter((v): v is string => Boolean(v)),
+        attendeeNames: (row.attendeeNames ?? []).map((v) => v ?? 'Guest'),
+        match: row.match ?? 'unassigned',
+      });
     }
   }
+  const people = (data?.people ?? [])
+    .filter((p): p is NonNullable<typeof p> => Boolean(p?.attendeeId))
+    .map((p) => ({ attendeeId: p.attendeeId, name: p.name ?? 'Guest' }));
   return {
     booth: data?.booth === true,
     currentName: data?.currentName ?? null,
@@ -2823,6 +2858,7 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
     clockSynced: data?.clockSynced === true,
     clockOffsetMs: data?.clockOffsetMs ?? null,
     assignments,
+    people,
   };
 }
 

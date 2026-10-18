@@ -4,6 +4,7 @@ import {
   PutItemCommand,
   QueryCommand,
   UpdateItemCommand,
+  type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 import {
   S3Client,
@@ -68,7 +69,7 @@ async function boothAssignment(input: {
   sub: string;
   source: Buffer;
   offsetMs: number | null;
-}): Promise<Record<string, { S: string }>> {
+}): Promise<Record<string, AttributeValue>> {
   const captureText = exifCaptureTime(input.source);
   const { atMs, match } = photoInstant({
     captureText,
@@ -100,6 +101,9 @@ async function boothAssignment(input: {
   return {
     boothAttendeeId: { S: scan.attendeeId.S },
     ...(scan.attendeeName?.S ? { boothAttendeeName: { S: scan.attendeeName.S } } : {}),
+    // The recipient list the fix-up screen edits; one person to start.
+    boothAttendeeIds: { L: [{ S: scan.attendeeId.S }] },
+    boothAttendeeNames: { L: [{ S: scan.attendeeName?.S ?? 'Guest' }] },
     boothMatch: { S: match },
     capturedAt: { S: capturedAt },
   };
