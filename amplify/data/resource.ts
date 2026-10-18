@@ -12,6 +12,7 @@ import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-
 import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
 import { boothScan as boothScanFn } from '../functions/booth-scan/resource';
+import { boothGallery as boothGalleryFn } from '../functions/booth-gallery/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -582,12 +583,16 @@ const schema = a.schema({
       name: a.string().required(),
       email: a.string().required(),
       token: a.string().required(),
+      // The key to this person's private gallery (step 4). Separate from the
+      // QR token, which is shown and printed; this one is only emailed.
+      galleryKey: a.string(),
       consentedAt: a.datetime(),
     })
     .secondaryIndexes((index) => [
       index('eventId'),
       // Named, because booth-scan queries it by this name.
       index('token').name('boothAttendeesByToken'),
+      index('galleryKey').name('boothAttendeesByGalleryKey'),
     ])
     .authorization((allow) => [
       allow.ownerDefinedIn('eventOwner').to(['get', 'list', 'delete']),
@@ -1697,6 +1702,30 @@ const schema = a.schema({
     .returns(a.ref('BoothAssignResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(boothScanFn)),
+
+  BoothGalleryPhoto: a.customType({
+    id: a.string().required(),
+    previewUrl: a.string(),
+    downloadUrl: a.string(),
+    capturedAt: a.string(),
+  }),
+
+  BoothGalleryResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    eventName: a.string(),
+    attendeeName: a.string(),
+    photos: a.ref('BoothGalleryPhoto').array(),
+  }),
+
+  // One attendee's private gallery (step 4). Public — the attendee has no
+  // account — and authorized entirely by the secret key in their email.
+  boothGallery: a
+    .query()
+    .arguments({ key: a.string().required() })
+    .returns(a.ref('BoothGalleryResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothGalleryFn)),
 
   boothStatus: a
     .query()

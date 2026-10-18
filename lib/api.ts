@@ -2862,6 +2862,37 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
   };
 }
 
+export interface BoothGalleryView {
+  ok: boolean;
+  message: string;
+  eventName: string | null;
+  attendeeName: string | null;
+  photos: { id: string; previewUrl: string | null; downloadUrl: string | null; capturedAt: string | null }[];
+}
+
+/** An attendee's private gallery, by the key in their email. Public. */
+export async function fetchBoothGallery(key: string): Promise<BoothGalleryView> {
+  const { data, errors } = await getClient().queries.boothGallery(
+    { key },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error('Your photos could not be loaded. Try again in a moment.');
+  return {
+    ok: data?.ok === true,
+    message: data?.message ?? '',
+    eventName: data?.eventName ?? null,
+    attendeeName: data?.attendeeName ?? null,
+    photos: (data?.photos ?? [])
+      .filter((p): p is NonNullable<typeof p> => Boolean(p?.id))
+      .map((p) => ({
+        id: p.id,
+        previewUrl: p.previewUrl ?? null,
+        downloadUrl: p.downloadUrl ?? null,
+        capturedAt: p.capturedAt ?? null,
+      })),
+  };
+}
+
 /** The host's attendees for one booth event, newest first. */
 export async function listBoothAttendees(eventId: string): Promise<BoothAttendeeRow[]> {
   const rows = await listAllPages(
@@ -2878,6 +2909,7 @@ export async function listBoothAttendees(eventId: string): Promise<BoothAttendee
       name: String(row.name ?? ''),
       email: String(row.email ?? ''),
       consentedAt: (row.consentedAt as string | null) ?? null,
+      galleryKey: (row.galleryKey as string | null) ?? null,
     }))
     .sort((a, b) => (b.consentedAt ?? '').localeCompare(a.consentedAt ?? ''));
 }

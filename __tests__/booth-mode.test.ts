@@ -37,9 +37,12 @@ describe('booth sign-up rules', () => {
 
   it('never lets a repeat sign-up overwrite someone else\'s row', () => {
     const handler = codeOnly(readSource('amplify/functions/booth-signup/handler.ts'));
-    // No update ever touches an attendee row: it is written once, conditionally.
-    expect(handler).not.toMatch(/new UpdateItemCommand\(\{\s*TableName: ATTENDEE_TABLE/);
-    expect(handler).toContain("if (known) return { ok: true, message: 'Welcome back.', token: known, name };");
+    // The only update to an existing attendee row adds a missing gallery key;
+    // it can never rename anyone or replace a key.
+    const updates = [...handler.matchAll(/new UpdateItemCommand\(\{\s*TableName: ATTENDEE_TABLE[\s\S]*?\}\)/g)].map((m) => m[0]);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toContain("UpdateExpression: 'SET galleryKey = if_not_exists(galleryKey, :key)'");
+    expect(handler).toContain("return { ok: true, message: 'Welcome back.', token: known, name };");
     expect(handler).toContain("ConditionExpression: 'attribute_not_exists(id)'");
   });
 });

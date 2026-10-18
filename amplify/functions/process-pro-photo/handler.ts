@@ -17,6 +17,7 @@ import { Jimp, loadFont } from 'jimp';
 import type { Schema } from '../../data/resource';
 import { connectionId, mayUploadToEvent } from './photographerAccess';
 import { exifCaptureTime } from './captureTime';
+import { isHeic, isJpeg, stripHeicGps, stripJpegMetadata } from './exif';
 import { boothScanKey, photoInstant } from './boothMatch';
 import {
   defaultsFor,
@@ -320,6 +321,32 @@ export const handler: Handler = async (event) => {
   } catch (error) {
     if ((error as { name?: string }).name !== 'ConditionalCheckFailedException') throw error;
     return { uploadId, publishStatus: 'awaiting_review', message: 'That photo was already processed.' };
+  }
+
+  // A booth original is downloaded by the person in it (docs/booth-mode.md),
+  // so its location and camera metadata go before anyone can fetch it. The
+  // capture time was already read for matching. Orientation is kept. A file
+  // that does not parse is left as it is rather than risked.
+  if (booth) {
+    const cleaned = isJpeg(source)
+      ? stripJpegMetadata(source)
+      : isHeic(source)
+        ? stripHeicGps(source)
+        : null;
+    if (cleaned) {
+      await s3
+        .send(
+          new PutObjectCommand({
+            Bucket: BUCKET,
+            Key: keys.original,
+            Body: cleaned,
+            ContentType: head.ContentType ?? 'image/jpeg',
+          }),
+        )
+        .catch((error) => {
+          console.error('Booth original could not be cleaned', { uploadId, error: (error as Error).message });
+        });
+    }
   }
 
   const discard = discardDecision({ previewWritten, thumbnailWritten, keepOriginal });

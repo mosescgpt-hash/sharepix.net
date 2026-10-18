@@ -32,6 +32,15 @@ function newToken(): string {
   return randomBytes(15).toString('base64url');
 }
 
+/**
+ * The key to the attendee's private gallery (docs/booth-mode.md, step 4).
+ * Separate from the QR token on purpose: the QR code is shown to the
+ * photographer and printed on badges, and this is sent only to their email.
+ */
+function newGalleryKey(): string {
+  return randomBytes(24).toString('base64url');
+}
+
 async function existingToken(id: string): Promise<string | null> {
   const found = await dynamo.send(
     new GetItemCommand({
@@ -75,7 +84,21 @@ export const handler: Handler = async (event) => {
   // Already signed up: hand back the same token. The stored row is left as it
   // was — typing somebody else's email must not let you rename them.
   const known = await existingToken(id);
-  if (known) return { ok: true, message: 'Welcome back.', token: known, name };
+  if (known) {
+    // Rows from before galleries existed get a key now. if_not_exists means a
+    // key is never replaced, and nothing else on the row is touched.
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: ATTENDEE_TABLE,
+          Key: { id: { S: id } },
+          UpdateExpression: 'SET galleryKey = if_not_exists(galleryKey, :key)',
+          ExpressionAttributeValues: { ':key': { S: newGalleryKey() } },
+        }),
+      )
+      .catch(() => undefined);
+    return { ok: true, message: 'Welcome back.', token: known, name };
+  }
 
   // The event's ceiling, taken atomically before the row is written.
   try {
@@ -112,6 +135,7 @@ export const handler: Handler = async (event) => {
           name: { S: name },
           email: { S: email },
           token: { S: token },
+          galleryKey: { S: newGalleryKey() },
           consentedAt: { S: now },
           createdAt: { S: now },
           updatedAt: { S: now },

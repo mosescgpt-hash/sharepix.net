@@ -34,6 +34,14 @@ describe('the duplicated modules have not drifted', () => {
   });
 });
 
+describe('the metadata stripper used on booth originals', () => {
+  it('is the same code that strips guest uploads', () => {
+    expect(readSource('amplify/functions/process-pro-photo/exif.ts')).toBe(
+      readSource('amplify/functions/sanitize-upload/exif.ts'),
+    );
+  });
+});
+
 describe('nothing but a Lambda can reach the pro prefix', () => {
   it('has no storage access rule for it', () => {
     // This is what makes "an original is never publicly exposed" a fact about

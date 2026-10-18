@@ -34,6 +34,11 @@ export function boothStorageKey(eventId: string): string {
   return `sharepix-booth:${eventId}`;
 }
 
+/** An attendee's private gallery link. Sent only to their email. */
+export function boothGalleryPath(galleryKey: string): string {
+  return `/booth/photos/${galleryKey}`;
+}
+
 /** The public sign-up link for an event, and its kiosk version. */
 export function boothSignupPath(eventId: string, kiosk = false): string {
   return `/booth/${eventId}${kiosk ? '?kiosk=1' : ''}`;

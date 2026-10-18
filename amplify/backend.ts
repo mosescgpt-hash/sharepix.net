@@ -50,6 +50,7 @@ import { adminUserActions } from './functions/admin-user-actions/resource';
 import { accountEmails } from './functions/account-emails/resource';
 import { boothSignup } from './functions/booth-signup/resource';
 import { boothScan } from './functions/booth-scan/resource';
+import { boothGallery } from './functions/booth-gallery/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { corporateSeats } from './functions/corporate-seats/resource';
@@ -113,6 +114,7 @@ const backend = defineBackend({
   accountEmails,
   boothSignup,
   boothScan,
+  boothGallery,
   stripeWebhook,
   corporatePortal,
   corporateSeats,
@@ -803,6 +805,19 @@ boothScanFn.addEnvironment(
 boothScanFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothScanFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
 boothScanFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+
+// An attendee's private gallery: reads their row by gallery key, the event,
+// and the photos, and signs links under pro/ — read-only, and nothing outside
+// that prefix.
+const boothGalleryFn = backend.boothGallery.resources.lambda as LambdaFunction;
+eventTable.grantReadData(boothGalleryFn);
+boothAttendeeTable.grantReadData(boothGalleryFn);
+photoTable.grantReadData(boothGalleryFn);
+bucket.grantRead(boothGalleryFn, 'pro/*');
+boothGalleryFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+boothGalleryFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
+boothGalleryFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+boothGalleryFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
 
 // The photo processor matches booth photos to the latest scan: it reads the
 // event (is it a booth?) and the scans, nothing more.
