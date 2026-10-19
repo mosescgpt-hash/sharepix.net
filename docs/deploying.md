@@ -117,6 +117,20 @@ cache and only the Refresh button spends one.
 In **Hosting → Custom domains**, tick **"Setup redirect from
 https://sharepix.net to https://www.sharepix.net"**.
 
+That checkbox only redirects the homepage: the rule it creates has the source
+`https://sharepix.net` with no path, so `sharepix.net/pro` and every other
+page on the bare domain come up "Not Found". Fix it in **Hosting → Rewrites
+and redirects**: edit that rule (or add one) to
+
+| Source address | Target address | Type |
+| --- | --- | --- |
+| `https://sharepix.net/<*>` | `https://www.sharepix.net/<*>` | 301 (Redirect - Permanent) |
+
+and keep it at the **top** of the list, since rules apply in order. Check
+`https://sharepix.net/pro` afterwards: it should land on
+`https://www.sharepix.net/pro`. The app itself can't do this redirect,
+because requests to the bare domain never reach it.
+
 Do *not* use "Include root" to serve both. QR codes are printed from whichever
 host the dashboard was open on, so serving both hostnames means printed codes
 split across two origins with no way to tell from the paper which one a given
