@@ -1,6 +1,6 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **steps 1–4 built** (sign-up, QR codes, scanning, matching, fix-ups and private galleries); step 5 (emails and cleanup) not yet.
+Status: **all five steps built** (sign-up, QR codes, scanning, matching, fix-ups, private galleries, delivery emails and the 30-day cleanup). The flat-fee price is still to be set, so an admin switches booth mode on.
 Decided: email only (no texting for now), **full resolution**, a **flat fee
 per event**, originals kept **30 days**, the **host can see** attendees'
 photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
@@ -121,8 +121,7 @@ Each step is one PR and works on its own.
    assumed, and a guess never replaces a measurement. Photos without a
    believable capture time fall back to upload time and are labelled "check".
    Booth photos are always kept at full resolution and can never be published
-   to the event's shared gallery. Until step 5's cleanup exists, those
-   originals are not yet deleted after 30 days.
+   to the event's shared gallery; step 5 removes them after 30 days.
 3. **Fix-up screen — built.** "Sort photos by person" on the Pro review page:
    groups for *Check* (matched by upload time), *Not matched*, then each person
    in scan order. Select photos and move them to someone, also send them to
@@ -142,8 +141,25 @@ Each step is one PR and works on its own.
    `pro/`. Booth originals now have their location and camera metadata
    stripped during processing (the same stripper as guest uploads; orientation
    kept), since the sanitizer never covered `pro/`.
-5. **Delivery emails and retention.** Approval sends the email; the cleanup
-   job and its reminder.
+5. **Delivery emails and retention — built.** `booth-deliveries` runs hourly
+   (at :20). For each booth event it counts each person's approved photos;
+   the first time someone has any it emails "Your photos are ready" with
+   their gallery link, and when the count grows it sends one "More of your
+   photos" email, so a photographer approving a stream of shots sends at
+   most one email per person per hour. Each send is claimed with a
+   conditional write first (`deliveredCount`), so overlapping runs or retries
+   never double-send, and a failed send is released and retried. A week
+   before removal, everyone who was sent photos gets one reminder
+   (`reminderSentAt`). Thirty days after the end of the event day (UTC), the
+   job deletes every booth original under `pro/`, clears `originalObjectKey`,
+   and marks the event `boothOriginalsRemovedAt`; previews stay, so the
+   gallery still shows what was taken. Every email has a "Stop these emails"
+   link (`/booth/photos/<key>?stop=1`, also the `List-Unsubscribe` header),
+   which sets `emailsStopped`. The gallery shows the removal date. The host's
+   attendee list shows who was emailed and has a **Resend** button (owner or
+   admin only, never to someone who stopped emails, at most once in five
+   minutes). All of it sends nothing unless `EMAIL_SENDING_ENABLED` is
+   `true`; removal runs regardless, because it is cleanup, not mail.
 
 ## Decisions
 

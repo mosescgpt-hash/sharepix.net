@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Notice from '@/components/Notice';
-import { listBoothAttendees } from '@/lib/api';
+import { listBoothAttendees, resendBoothEmail } from '@/lib/api';
 import { boothGalleryPath, boothSignupPath } from '@/lib/booth';
 import type { BoothAttendeeRow } from '@/lib/types';
 
@@ -12,6 +12,28 @@ import type { BoothAttendeeRow } from '@/lib/types';
 export default function BoothAttendees({ eventId, origin }: { eventId: string; origin: string }) {
   const [rows, setRows] = useState<BoothAttendeeRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Per-row Resend: the row being sent, then what happened.
+  const [sending, setSending] = useState<string | null>(null);
+  const [sent, setSent] = useState<Record<string, { ok: boolean; message: string }>>({});
+
+  async function resend(row: BoothAttendeeRow) {
+    setSending(row.id);
+    try {
+      const result = await resendBoothEmail(eventId, row.id);
+      setSent((current) => ({ ...current, [row.id]: result }));
+      if (result.ok) {
+        const now = new Date().toISOString();
+        setRows((current) => current?.map((r) => (r.id === row.id ? { ...r, lastDeliveredAt: now } : r)) ?? null);
+      }
+    } catch (err) {
+      setSent((current) => ({
+        ...current,
+        [row.id]: { ok: false, message: err instanceof Error ? err.message : 'The email could not be sent.' },
+      }));
+    } finally {
+      setSending(null);
+    }
+  }
 
   useEffect(() => {
     listBoothAttendees(eventId)
@@ -34,7 +56,8 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
       <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">Attendee sign-up</h2>
       <p className="spx-body mt-2 text-sm">
         Each person signs up once and gets a code. The photographer scans it before their
-        photo, and their photos are sent to them — not to a shared gallery.
+        photo, and their photos are sent to them — not to a shared gallery. Each person is
+        emailed within the hour once the photographer approves their photos.
       </p>
 
       <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -78,15 +101,39 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
             <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm">
               <span className="min-w-0 truncate font-medium">{row.name}</span>
               <span className="min-w-0 truncate text-charcoal/60">{row.email}</span>
-              {row.galleryKey ? (
-                <a
-                  href={`${origin}${boothGalleryPath(row.galleryKey)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 text-xs text-pine underline"
-                >
-                  Their photos
-                </a>
+              <span className="flex shrink-0 items-baseline gap-3 text-xs">
+                <span className="text-charcoal/55">
+                  {row.emailsStopped
+                    ? 'Stopped emails'
+                    : row.lastDeliveredAt
+                      ? `Emailed ${new Date(row.lastDeliveredAt).toLocaleDateString()}`
+                      : 'Not emailed yet'}
+                </span>
+                {row.galleryKey ? (
+                  <a
+                    href={`${origin}${boothGalleryPath(row.galleryKey)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-pine underline"
+                  >
+                    Their photos
+                  </a>
+                ) : null}
+                {row.galleryKey && !row.emailsStopped ? (
+                  <button
+                    type="button"
+                    onClick={() => void resend(row)}
+                    disabled={sending !== null}
+                    className="text-pine underline disabled:opacity-50"
+                  >
+                    {sending === row.id ? 'Sending…' : 'Resend'}
+                  </button>
+                ) : null}
+              </span>
+              {sent[row.id] ? (
+                <span className={`basis-full text-xs ${sent[row.id].ok ? 'text-pine' : 'text-red-700'}`}>
+                  {sent[row.id].message}
+                </span>
               ) : null}
             </li>
           ))}

@@ -4,6 +4,9 @@ import { deleteEventPhoto, releaseFlaggedPhoto, setPhotoApproval } from '@/lib/a
 import { isVideoFilename } from '@/lib/validation';
 import { FallbackImage, FallbackVideo } from '@/components/FallbackMedia';
 
+/** How many deletes run at once when deleting a selection. */
+const BULK_DELETE_CONCURRENCY = 4;
+
 interface AdminPhotoGridProps {
   photos: DisplayPhoto[];
   onChanged: () => void;
@@ -25,6 +28,60 @@ export default function AdminPhotoGrid({
 }: AdminPhotoGridProps) {
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Select-to-delete: separate from the download-QR selection, so picking
+  // photos to share can never delete them.
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [toDelete, setToDelete] = useState<Set<string>>(new Set());
+  const [bulkProgress, setBulkProgress] = useState<string | null>(null);
+
+  function toggleDelete(id: string) {
+    setToDelete((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitDeleteMode() {
+    setDeleteMode(false);
+    setToDelete(new Set());
+  }
+
+  async function handleBulkDelete() {
+    const chosen = photos.filter((p) => toDelete.has(p.id));
+    if (chosen.length === 0) return;
+    const label = `${chosen.length} item${chosen.length === 1 ? '' : 's'}`;
+    if (!window.confirm(`Delete ${label} permanently? This removes the files and their records.`)) return;
+    setError(null);
+    const failed: string[] = [];
+    let done = 0;
+    setBulkProgress(`Deleting… 0 of ${chosen.length}`);
+    // A few at a time: quick for a big batch without flooding the API.
+    const queue = [...chosen];
+    async function worker() {
+      for (let photo = queue.shift(); photo; photo = queue.shift()) {
+        try {
+          await deleteEventPhoto(photo);
+        } catch {
+          failed.push(photo.id);
+        }
+        done += 1;
+        setBulkProgress(`Deleting… ${done} of ${chosen.length}`);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(BULK_DELETE_CONCURRENCY, chosen.length) }, worker));
+    setBulkProgress(null);
+    if (failed.length > 0) {
+      setError(
+        `${failed.length} of ${chosen.length} could not be deleted. They are still selected; try again.`,
+      );
+      setToDelete(new Set(failed));
+    } else {
+      exitDeleteMode();
+    }
+    onChanged();
+  }
 
   async function handleToggleApproval(photo: DisplayPhoto) {
     setWorkingId(photo.id);
@@ -81,6 +138,50 @@ export default function AdminPhotoGrid({
       {error ? (
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       ) : null}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        {deleteMode ? (
+          <>
+            <span className="font-medium">
+              {toDelete.size} selected
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setToDelete(toDelete.size === photos.length ? new Set() : new Set(photos.map((p) => p.id)))
+              }
+              disabled={bulkProgress !== null}
+              className="border border-charcoal/25 px-3 py-1 hover:border-charcoal/60 disabled:opacity-50"
+            >
+              {toDelete.size === photos.length ? 'Select none' : 'Select all'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkDelete()}
+              disabled={toDelete.size === 0 || bulkProgress !== null}
+              className="rounded-full bg-red-600 px-3 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              Delete selected
+            </button>
+            <button
+              type="button"
+              onClick={exitDeleteMode}
+              disabled={bulkProgress !== null}
+              className="px-2 py-1 text-charcoal/70 underline disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            {bulkProgress ? <span className="text-charcoal/65">{bulkProgress}</span> : null}
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setDeleteMode(true)}
+            className="rounded-full border border-red-200 px-3 py-1 font-medium text-red-600 hover:bg-red-50"
+          >
+            Select photos to delete
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
         {photos.map((photo) => {
           const hidden = photo.approved === false;
@@ -89,13 +190,20 @@ export default function AdminPhotoGrid({
           const busy = workingId === photo.id;
           const isVideo = isVideoFilename(photo.s3Key);
           // Only approved photos can be shared, so the toggle is offered on them.
-          const canSelect = selectable && !hidden;
+          const canSelect = selectable && !hidden && !deleteMode;
           const isSelected = selectedIds?.has(photo.id) ?? false;
+          const markedForDelete = deleteMode && toDelete.has(photo.id);
           return (
             <figure
               key={photo.id}
               className={`overflow-hidden rounded-xl border bg-white ${
-                hidden ? 'border-amber-500' : isSelected ? 'border-ink' : 'border-charcoal/10'
+                markedForDelete
+                  ? 'border-red-600 ring-2 ring-red-600'
+                  : hidden
+                    ? 'border-amber-500'
+                    : isSelected && !deleteMode
+                      ? 'border-ink'
+                      : 'border-charcoal/10'
               }`}
             >
               <div className="relative">
@@ -127,6 +235,27 @@ export default function AdminPhotoGrid({
                     }`}
                   >
                     {isSelected ? '✓' : ''}
+                  </button>
+                ) : null}
+                {deleteMode ? (
+                  // Covers the whole tile, so a tap anywhere picks it (and a
+                  // video doesn't start playing instead).
+                  <button
+                    type="button"
+                    onClick={() => toggleDelete(photo.id)}
+                    aria-pressed={markedForDelete}
+                    aria-label={markedForDelete ? 'Unselect for deletion' : 'Select for deletion'}
+                    className={`absolute inset-0 flex items-start justify-end p-2 ${
+                      markedForDelete ? 'bg-red-600/20' : ''
+                    }`}
+                  >
+                    <span
+                      className={`grid h-7 w-7 place-items-center rounded-full border-2 border-white text-sm font-bold shadow ${
+                        markedForDelete ? 'bg-red-600 text-white' : 'bg-black/40 text-white/90'
+                      }`}
+                    >
+                      {markedForDelete ? '✓' : ''}
+                    </span>
                   </button>
                 ) : null}
               </div>

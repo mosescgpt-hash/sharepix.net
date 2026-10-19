@@ -2,18 +2,21 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
-import { fetchBoothGallery, type BoothGalleryView } from '@/lib/api';
+import { fetchBoothGallery, stopBoothEmails, type BoothGalleryView } from '@/lib/api';
 
 /**
  * One booth attendee's private gallery (docs/booth-mode.md, step 4), opened
  * from the link in their email. Only their photos, only ones the photographer
- * approved, each downloadable at full resolution.
+ * approved, each downloadable at full resolution. `?stop=1` (the "Stop these
+ * emails" link) turns their emails off and still shows the gallery.
  */
 export default function BoothGalleryPage() {
   const router = useRouter();
   const key = typeof router.query.key === 'string' ? router.query.key : null;
   const [gallery, setGallery] = useState<BoothGalleryView | null | undefined>(undefined);
   const [zipping, setZipping] = useState<string | null>(null);
+  const [stopNote, setStopNote] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const stopAsked = router.query.stop === '1';
 
   useEffect(() => {
     if (!key) return;
@@ -21,6 +24,32 @@ export default function BoothGalleryPage() {
       .then(setGallery)
       .catch(() => setGallery(null));
   }, [key]);
+
+  async function stopEmails() {
+    if (!key) return;
+    try {
+      const result = await stopBoothEmails(key);
+      setStopNote({ tone: result.ok ? 'success' : 'error', text: result.message });
+      if (result.ok) setGallery((g) => (g ? { ...g, emailsStopped: true } : g));
+    } catch (err) {
+      setStopNote({ tone: 'error', text: err instanceof Error ? err.message : 'That did not work.' });
+    }
+  }
+
+  // From the email's stop link: act once, as soon as the key is known.
+  useEffect(() => {
+    if (key && stopAsked) void stopEmails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, stopAsked]);
+
+  const removeOn = gallery?.removeOriginalsAt
+    ? new Date(gallery.removeOriginalsAt).toLocaleDateString(undefined, {
+        timeZone: 'UTC',
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
 
   const downloadable = gallery?.photos.filter((p) => p.downloadUrl) ?? [];
 
@@ -59,6 +88,11 @@ export default function BoothGalleryPage() {
     <Layout title={gallery?.eventName ? `${gallery.eventName} · Your photos` : 'Your photos'} noindex>
       <section className="spx-section-canvas">
         <div className="mx-auto w-full max-w-5xl">
+          {stopNote ? (
+            <Notice tone={stopNote.tone} className="mb-6">
+              {stopNote.text}
+            </Notice>
+          ) : null}
           {gallery === undefined ? (
             <p className="text-sm text-charcoal/55">Loading your photos&hellip;</p>
           ) : gallery === null ? (
@@ -95,6 +129,13 @@ export default function BoothGalleryPage() {
                     ) : null}
                   </div>
                   {zipping ? <p className="mt-2 text-sm text-charcoal/65">{zipping}</p> : null}
+                  {removeOn ? (
+                    <p className="mt-2 text-sm font-medium">
+                      {gallery.originalsRemoved
+                        ? `The full-resolution files were removed on ${removeOn}.`
+                        : `Full-resolution downloads are available until ${removeOn}. Save any you want to keep.`}
+                    </p>
+                  ) : null}
                   <ul className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {gallery.photos.map((photo) => (
                       <li key={photo.id} className="border border-charcoal/15">
@@ -120,6 +161,16 @@ export default function BoothGalleryPage() {
                   </ul>
                   <p className="mt-6 text-xs text-charcoal/55">
                     Links on this page expire after an hour; reload it for fresh ones.
+                    {gallery.emailsStopped ? (
+                      ' You have turned off emails about these photos.'
+                    ) : (
+                      <>
+                        {' '}
+                        <button type="button" onClick={() => void stopEmails()} className="underline">
+                          Stop emails about these photos
+                        </button>
+                      </>
+                    )}
                   </p>
                 </>
               )}

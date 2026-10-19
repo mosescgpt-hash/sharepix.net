@@ -2866,6 +2866,10 @@ export interface BoothGalleryView {
   eventName: string | null;
   attendeeName: string | null;
   photos: { id: string; previewUrl: string | null; downloadUrl: string | null; capturedAt: string | null }[];
+  /** When the full-resolution originals are (or were) removed. */
+  removeOriginalsAt: string | null;
+  originalsRemoved: boolean;
+  emailsStopped: boolean;
 }
 
 /** An attendee's private gallery, by the key in their email. Public. */
@@ -2888,7 +2892,33 @@ export async function fetchBoothGallery(key: string): Promise<BoothGalleryView> 
         downloadUrl: p.downloadUrl ?? null,
         capturedAt: p.capturedAt ?? null,
       })),
+    removeOriginalsAt: data?.removeOriginalsAt ?? null,
+    originalsRemoved: data?.originalsRemoved === true,
+    emailsStopped: data?.emailsStopped === true,
   };
+}
+
+/** "Stop these emails", by the key in the email. Public. */
+export async function stopBoothEmails(key: string): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await getClient().mutations.boothStopEmails(
+    { key },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error('That did not work. Try again in a moment.');
+  return { ok: data?.ok === true, message: data?.message ?? '' };
+}
+
+/** Host: email one attendee their gallery link again. */
+export async function resendBoothEmail(
+  eventId: string,
+  attendeeId: string,
+): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await getClient().mutations.boothResendEmail(
+    { eventId, attendeeId },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length) throw new Error('The email could not be sent. Try again in a moment.');
+  return { ok: data?.ok === true, message: data?.message ?? '' };
 }
 
 /** The host's attendees for one booth event, newest first. */
@@ -2908,6 +2938,8 @@ export async function listBoothAttendees(eventId: string): Promise<BoothAttendee
       email: String(row.email ?? ''),
       consentedAt: (row.consentedAt as string | null) ?? null,
       galleryKey: (row.galleryKey as string | null) ?? null,
+      lastDeliveredAt: (row.lastDeliveredAt as string | null) ?? null,
+      emailsStopped: row.emailsStopped === true,
     }))
     .sort((a, b) => (b.consentedAt ?? '').localeCompare(a.consentedAt ?? ''));
 }

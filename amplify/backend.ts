@@ -51,6 +51,7 @@ import { accountEmails } from './functions/account-emails/resource';
 import { boothSignup } from './functions/booth-signup/resource';
 import { boothScan } from './functions/booth-scan/resource';
 import { boothGallery } from './functions/booth-gallery/resource';
+import { boothDeliveries } from './functions/booth-deliveries/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { corporateSeats } from './functions/corporate-seats/resource';
@@ -115,6 +116,7 @@ const backend = defineBackend({
   boothSignup,
   boothScan,
   boothGallery,
+  boothDeliveries,
   stripeWebhook,
   corporatePortal,
   corporateSeats,
@@ -808,16 +810,39 @@ boothScanFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 
 // An attendee's private gallery: reads their row by gallery key, the event,
 // and the photos, and signs links under pro/ — read-only, and nothing outside
-// that prefix.
+// that prefix. Writes the attendee row only for "Stop these emails".
 const boothGalleryFn = backend.boothGallery.resources.lambda as LambdaFunction;
 eventTable.grantReadData(boothGalleryFn);
-boothAttendeeTable.grantReadData(boothGalleryFn);
+boothAttendeeTable.grantReadWriteData(boothGalleryFn);
 photoTable.grantReadData(boothGalleryFn);
 bucket.grantRead(boothGalleryFn, 'pro/*');
 boothGalleryFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothGalleryFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Booth delivery emails and the 30-day cleanup (step 5). Writes attendee rows
+// to claim each email, photo rows and the event to record removed originals,
+// and deletes only under pro/. Sending shares EMAIL_SENDING_ENABLED with all
+// customer mail.
+const boothDeliveriesFn = backend.boothDeliveries.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(boothDeliveriesFn);
+boothAttendeeTable.grantReadWriteData(boothDeliveriesFn);
+photoTable.grantReadWriteData(boothDeliveriesFn);
+bucket.grantDelete(boothDeliveriesFn, 'pro/*');
+boothDeliveriesFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+boothDeliveriesFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
+boothDeliveriesFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+boothDeliveriesFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+boothDeliveriesFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
+boothDeliveriesFn.addEnvironment(
+  'REMINDER_FROM_ADDRESS',
+  process.env.REMINDER_FROM_ADDRESS ?? 'SharePix <noreply@sharepix.net>',
+);
+boothDeliveriesFn.addEnvironment('EMAIL_SENDING_ENABLED', process.env.EMAIL_SENDING_ENABLED ?? '');
+boothDeliveriesFn.addToRolePolicy(
+  new PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
+);
 
 // The public gallery credits the photographer live from their profile.
 backend.data.resources.tables.PhotographerProfile.grantReadData(listFn);

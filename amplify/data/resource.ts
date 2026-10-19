@@ -13,6 +13,7 @@ import { accountEmails as accountEmailsFn } from '../functions/account-emails/re
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
 import { boothScan as boothScanFn } from '../functions/booth-scan/resource';
 import { boothGallery as boothGalleryFn } from '../functions/booth-gallery/resource';
+import { boothDeliveries as boothDeliveriesFn } from '../functions/booth-deliveries/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -340,6 +341,9 @@ const schema = a.schema({
       // boothSignUp.
       boothMode: a.boolean(),
       boothAttendeeCount: a.integer(),
+      // Set by booth-deliveries once the event's full-resolution originals
+      // are removed (30 days after the event).
+      boothOriginalsRemovedAt: a.datetime(),
       createdBy: a.string(),
       photos: a.hasMany('Photo', 'eventId'),
     })
@@ -587,6 +591,12 @@ const schema = a.schema({
       // QR token, which is shown and printed; this one is only emailed.
       galleryKey: a.string(),
       consentedAt: a.datetime(),
+      // Delivery (step 5), written only by booth-deliveries and booth-gallery.
+      // deliveredCount is how many approved photos the last email covered.
+      deliveredCount: a.integer(),
+      lastDeliveredAt: a.datetime(),
+      reminderSentAt: a.datetime(),
+      emailsStopped: a.boolean(),
     })
     .secondaryIndexes((index) => [
       index('eventId'),
@@ -1725,6 +1735,15 @@ const schema = a.schema({
     eventName: a.string(),
     attendeeName: a.string(),
     photos: a.ref('BoothGalleryPhoto').array(),
+    // When the full-resolution originals go (or went), and whether they have.
+    removeOriginalsAt: a.string(),
+    originalsRemoved: a.boolean(),
+    emailsStopped: a.boolean(),
+  }),
+
+  BoothActionResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
   }),
 
   // One attendee's private gallery (step 4). Public — the attendee has no
@@ -1735,6 +1754,23 @@ const schema = a.schema({
     .returns(a.ref('BoothGalleryResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(boothGalleryFn)),
+
+  // The "Stop these emails" link (step 5). Public, by the same secret key.
+  boothStopEmails: a
+    .mutation()
+    .arguments({ key: a.string().required() })
+    .returns(a.ref('BoothActionResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothGalleryFn)),
+
+  // The host's Resend button. booth-deliveries checks the caller owns the
+  // event (or is an admin).
+  boothResendEmail: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), attendeeId: a.string().required() })
+    .returns(a.ref('BoothActionResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(boothDeliveriesFn)),
 
   boothStatus: a
     .query()
