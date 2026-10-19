@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState, type MouseEvent } from 'react';
 import { DisplayPhoto } from '@/lib/types';
 import { deleteEventPhoto, releaseFlaggedPhoto, setPhotoApproval } from '@/lib/api';
 import { isVideoFilename } from '@/lib/validation';
+import { applyClick } from '@/lib/rangeSelect';
 import { FallbackImage, FallbackVideo } from '@/components/FallbackMedia';
 
 /** How many deletes run at once when deleting a selection. */
@@ -34,18 +35,38 @@ export default function AdminPhotoGrid({
   const [toDelete, setToDelete] = useState<Set<string>>(new Set());
   const [bulkProgress, setBulkProgress] = useState<string | null>(null);
 
-  function toggleDelete(id: string) {
-    setToDelete((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  // The last photo clicked in each selection: where a shift-click range starts.
+  const deleteAnchor = useRef<string | null>(null);
+  const shareAnchor = useRef<string | null>(null);
+
+  function clickDelete(id: string, e: MouseEvent) {
+    const ids = photos.map((p) => p.id);
+    // Read now: the updater runs later, after the anchor has moved.
+    const anchor = deleteAnchor.current;
+    const shift = e.shiftKey;
+    setToDelete((prev) => applyClick(prev, ids, anchor, id, shift));
+    deleteAnchor.current = id;
+  }
+
+  /**
+   * The download-QR picks live in the parent, which toggles one at a time, so
+   * a range is applied as a toggle of each photo whose state must change.
+   * Only approved photos can be shared, so only they are in the range.
+   */
+  function clickShare(id: string, e: MouseEvent) {
+    if (!selectedIds || !onToggleSelected) return;
+    const ids = photos.filter((p) => p.approved !== false).map((p) => p.id);
+    const next = applyClick(selectedIds, ids, shareAnchor.current, id, e.shiftKey);
+    for (const each of ids) {
+      if (next.has(each) !== selectedIds.has(each)) onToggleSelected(each);
+    }
+    shareAnchor.current = id;
   }
 
   function exitDeleteMode() {
     setDeleteMode(false);
     setToDelete(new Set());
+    deleteAnchor.current = null;
   }
 
   async function handleBulkDelete() {
@@ -170,7 +191,13 @@ export default function AdminPhotoGrid({
             >
               Cancel
             </button>
-            {bulkProgress ? <span className="text-charcoal/65">{bulkProgress}</span> : null}
+            {bulkProgress ? (
+              <span className="text-charcoal/65">{bulkProgress}</span>
+            ) : (
+              <span className="hidden text-xs text-charcoal/55 sm:inline">
+                Tip: hold Shift and click to select everything in between.
+              </span>
+            )}
           </>
         ) : (
           <button
@@ -182,7 +209,8 @@ export default function AdminPhotoGrid({
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      {/* select-none: a shift-click would otherwise highlight the text between. */}
+      <div className="grid select-none grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
         {photos.map((photo) => {
           const hidden = photo.approved === false;
           // Held back by content screening — visible to the host only.
@@ -227,7 +255,7 @@ export default function AdminPhotoGrid({
                 {canSelect ? (
                   <button
                     type="button"
-                    onClick={() => onToggleSelected?.(photo.id)}
+                    onClick={(e) => clickShare(photo.id, e)}
                     aria-pressed={isSelected}
                     aria-label={isSelected ? 'Remove from download QR' : 'Add to download QR'}
                     className={`absolute left-2 top-2 grid h-7 w-7 place-items-center rounded-full border-2 border-white text-sm font-bold shadow ${
@@ -242,7 +270,7 @@ export default function AdminPhotoGrid({
                   // video doesn't start playing instead).
                   <button
                     type="button"
-                    onClick={() => toggleDelete(photo.id)}
+                    onClick={(e) => clickDelete(photo.id, e)}
                     aria-pressed={markedForDelete}
                     aria-label={markedForDelete ? 'Unselect for deletion' : 'Select for deletion'}
                     className={`absolute inset-0 flex items-start justify-end p-2 ${
