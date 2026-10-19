@@ -871,6 +871,25 @@ that is not in the tab it names.
 this change (`5fc6b99`). To revert, merge a revert of this change's merge
 commit, or reset main to that branch.
 
+## 20. No watermarks
+
+**SharePix never watermarks photos** — a guest's, a host's, or a SharePix Pro
+photographer's. Previews are the photo, reduced, and nothing is drawn on them.
+Supersedes the optional photographer watermark (text, then text/logo with
+position and opacity), which shipped briefly and is removed: there is no
+setting, process-pro-photo stamps nothing, and the re-stamp functions are gone.
+The reason is simplicity, and that marketing says Pro has no watermarks; the
+two must agree.
+
+What protects a photographer's work instead is unchanged: guests see
+reduced-resolution previews, can never download a professional photo, and the
+photographer's name and purchase link sit under every shot (read live from
+their profile).
+
+Previews stamped while the feature existed keep their mark; there is no way to
+take one off without the original. In practice that is the few photographers,
+if any, who switched it on during those days.
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

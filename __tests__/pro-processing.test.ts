@@ -7,7 +7,6 @@ import {
   discardDecision,
   isAcceptedInput,
   scaleToLongEdge,
-  watermarkFor,
 } from '../lib/proProcessing';
 
 describe('never destroy a photographer’s only copy', () => {
@@ -157,40 +156,5 @@ describe('scaling', () => {
       expect(Number.isFinite(result.width)).toBe(true);
       expect(result.resized).toBe(false);
     }
-  });
-});
-
-describe('watermarks', () => {
-  it('is off unless switched on', () => {
-    expect(watermarkFor({})).toBeNull();
-    expect(watermarkFor({ watermarkEnabled: false, watermarkText: 'Studio' })).toBeNull();
-  });
-
-  it('uses the given text when there is some', () => {
-    expect(watermarkFor({ watermarkEnabled: true, watermarkText: 'Studio Nine' })).toBe(
-      'Studio Nine',
-    );
-  });
-
-  it('falls back to the business name rather than rendering nothing', () => {
-    // An enabled watermark that draws nothing looks like a bug to whoever
-    // enabled it.
-    expect(watermarkFor({ watermarkEnabled: true, businessName: 'Studio Nine' })).toBe(
-      'Studio Nine',
-    );
-    expect(
-      watermarkFor({ watermarkEnabled: true, watermarkText: '   ', businessName: 'Nine' }),
-    ).toBe('Nine');
-  });
-
-  it('is null when switched on with nothing to draw', () => {
-    expect(watermarkFor({ watermarkEnabled: true })).toBeNull();
-    expect(watermarkFor({ watermarkEnabled: true, watermarkText: '  ', businessName: '' })).toBeNull();
-  });
-
-  it('bounds the length, since it is drawn across an image', () => {
-    expect(watermarkFor({ watermarkEnabled: true, watermarkText: 'x'.repeat(500) })).toHaveLength(
-      60,
-    );
   });
 });

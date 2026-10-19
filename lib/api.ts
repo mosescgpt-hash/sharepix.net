@@ -30,13 +30,6 @@ import {
 import type { CostSummaryResult } from '@/lib/costs';
 import type { PhotographerProfileForm } from '@/lib/photographerProfile';
 import { previewLongEdge } from '@/lib/professionalMedia';
-import {
-  DEFAULT_WATERMARK_POSITION,
-  clampOpacity,
-  isLogoDataUrl,
-  isWatermarkPosition,
-  isWatermarkStyle,
-} from '@/lib/watermark';
 import { isGlobalAdmin } from '@/lib/admin';
 import { ownerCandidatesFor, ownerIsSubject } from '@/lib/eventOwner';
 import { createSignedUrlCache } from '@/lib/signedUrlCache';
@@ -715,14 +708,6 @@ export async function getMyPhotographerProfileForm(): Promise<{
       website: data.website ?? '',
       contactUrl: data.contactUrl ?? '',
       purchaseGalleryUrl: data.purchaseGalleryUrl ?? '',
-      watermarkEnabled: data.watermarkEnabled === true,
-      watermarkText: data.watermarkText ?? '',
-      watermarkStyle: isWatermarkStyle(data.watermarkStyle) ? data.watermarkStyle : 'text',
-      watermarkLogo: isLogoDataUrl(data.watermarkLogo) ? data.watermarkLogo : '',
-      watermarkPosition: isWatermarkPosition(data.watermarkPosition)
-        ? data.watermarkPosition
-        : DEFAULT_WATERMARK_POSITION,
-      watermarkOpacity: clampOpacity(data.watermarkOpacity),
       previewLongEdge: previewLongEdge(data.defaultPreviewResolution),
       keepOriginals: data.keepOriginals === true,
     },
@@ -742,12 +727,8 @@ export async function saveMyPhotographerProfile(form: PhotographerProfileForm): 
     website: form.website,
     contactUrl: form.contactUrl,
     purchaseGalleryUrl: form.purchaseGalleryUrl,
-    watermarkEnabled: form.watermarkEnabled,
-    watermarkText: form.watermarkText,
-    watermarkStyle: form.watermarkStyle,
-    watermarkLogo: form.watermarkLogo,
-    watermarkPosition: form.watermarkPosition,
-    watermarkOpacity: form.watermarkOpacity,
+    // SharePix never watermarks; switch off any setting left from before.
+    watermarkEnabled: false,
     defaultPreviewResolution: form.previewLongEdge,
     keepOriginals: form.keepOriginals,
   };
@@ -789,18 +770,6 @@ export async function setKeepOriginals(keepOriginals: boolean): Promise<void> {
   if (updated.errors?.length) {
     throw new Error(updated.errors.map((e) => e.message).join(' \u00b7 '));
   }
-}
-
-/**
- * Redo the watermark on the caller's posted photos with their current
- * settings. Queued server-side; returns at once.
- */
-export async function refreshProWatermarks(): Promise<string> {
-  const { data, errors } = await getClient().mutations.refreshProWatermarks({}, { authMode: 'userPool' });
-  if (errors?.length || !data?.success) {
-    throw new Error(data?.message || 'Your photos could not be updated. Your settings are saved.');
-  }
-  return data.message ?? '';
 }
 
 /** This photographer's connections, for the /pro event list. */

@@ -212,27 +212,3 @@ export const KEEP_ORIGINALS_EXPLANATION =
  */
 export const KEEP_ORIGINALS_CHANGE_NOTE =
   'This applies to photos you upload from now on. Originals we already hold stay until you delete them.';
-
-export interface WatermarkFacts {
-  watermarkEnabled?: boolean | null;
-  watermarkText?: string | null;
-  businessName?: string | null;
-}
-
-/**
- * The watermark to burn into a preview, or null for none.
- *
- * Off unless switched on, and applied only to generated derivatives — never to
- * a stored original, which is the photographer's file and is returned to them
- * exactly as sent.
- *
- * Falls back to the business name when the switch is on but no text was given,
- * because an enabled watermark that renders nothing looks like a bug to the
- * person who enabled it.
- */
-export function watermarkFor(profile: WatermarkFacts): string | null {
-  if (profile.watermarkEnabled !== true) return null;
-  const text = (profile.watermarkText ?? '').trim() || (profile.businessName ?? '').trim();
-  if (!text) return null;
-  return text.slice(0, 60);
-}

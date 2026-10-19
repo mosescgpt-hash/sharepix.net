@@ -5,34 +5,22 @@ import Notice from '@/components/Notice';
 import {
   getCurrentUserInfo,
   getMyPhotographerProfileForm,
-  refreshProWatermarks,
   saveMyPhotographerProfile,
 } from '@/lib/api';
 import {
   EMPTY_PROFILE,
   LINK_FIELDS,
   MAX_NAME_LENGTH,
-  MAX_WATERMARK_LENGTH,
   PREVIEW_SIZE_OPTIONS,
   prepareProfile,
-  watermarkChanged,
   type PhotographerProfileForm,
 } from '@/lib/photographerProfile';
-import {
-  MAX_LOGO_DATA_URL_LENGTH,
-  MAX_WATERMARK_OPACITY,
-  MIN_WATERMARK_OPACITY,
-  WATERMARK_POSITIONS,
-  watermarkSpec,
-  type WatermarkPosition,
-  type WatermarkStyle,
-} from '@/lib/watermark';
 import { galleryLinksFor } from '@/lib/professionalMedia';
 
 type Problems = Partial<Record<keyof PhotographerProfileForm, string>>;
 
 /**
- * A photographer's profile: the credit, links and watermark that go on their
+ * A photographer's profile: the credit and links that go on their
  * shots in every event gallery, and what happens to their originals.
  *
  * One form, one Save, because these are read together when a photo is
@@ -84,20 +72,9 @@ export default function ProProfilePage() {
     setSaving(true);
     try {
       await saveMyPhotographerProfile(prepared.value);
-      const redo = watermarkChanged(prepared.value, saved);
       setForm(prepared.value);
       setSaved(prepared.value);
-      let text = 'Saved. Your name and links are updated on all your photos.';
-      if (redo) {
-        // The watermark is burned into each preview, so changing it means
-        // redoing them; that runs in the background.
-        try {
-          text = `Saved. ${await refreshProWatermarks()}`;
-        } catch (err) {
-          text = err instanceof Error ? err.message : 'Saved, but your photos could not be updated yet.';
-        }
-      }
-      setStatus({ tone: 'success', text });
+      setStatus({ tone: 'success', text: 'Saved. Your name and links are updated on all your photos.' });
     } catch (err) {
       setStatus({
         tone: 'error',
@@ -114,24 +91,6 @@ export default function ProProfilePage() {
     contactUrl: prepareLinkForPreview(form.contactUrl),
     purchaseGalleryUrl: prepareLinkForPreview(form.purchaseGalleryUrl),
   });
-  // The same rules the server stamps with, so the sample below is honest.
-  const previewSpec = watermarkSpec(form);
-
-  async function chooseLogo(file: File | undefined) {
-    if (!file) return;
-    try {
-      const logo = await shrinkLogo(file);
-      set('watermarkLogo', logo);
-      if (form.watermarkStyle === 'text') set('watermarkStyle', 'both');
-      setProblems((current) => ({ ...current, watermarkLogo: undefined }));
-    } catch {
-      setProblems((current) => ({
-        ...current,
-        watermarkLogo: 'That image could not be used. Try a PNG or JPEG.',
-      }));
-    }
-  }
-
   return (
     <Layout title="Your photographer profile">
       <section className="spx-section-canvas">
@@ -147,8 +106,7 @@ export default function ProProfilePage() {
           </h1>
           <p className="spx-body mt-5">
             Your name and links appear under each of your photos in every event gallery you
-            shoot, and your watermark on every preview. Changes show on photos you have
-            already posted too.
+            shoot. Changes show on photos you have already posted too.
           </p>
 
           {signedIn === false ? (
@@ -201,114 +159,6 @@ export default function ProProfilePage() {
 
               <fieldset>
                 <legend className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/55">
-                  Watermark
-                </legend>
-                <label className="mt-3 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={form.watermarkEnabled}
-                    onChange={(e) => set('watermarkEnabled', e.target.checked)}
-                    className="mt-1"
-                  />
-                  <span className="text-sm">
-                    <span className="font-medium">Watermark my previews</span>
-                    <span className="mt-1 block text-charcoal/65">
-                      Added to the previews guests see, never to your original files.
-                    </span>
-                  </span>
-                </label>
-                {form.watermarkEnabled ? (
-                  <div className="mt-2 space-y-4">
-                    <Field label="Show">
-                      <select
-                        value={form.watermarkStyle}
-                        onChange={(e) => set('watermarkStyle', e.target.value as WatermarkStyle)}
-                        className="spx-input mt-1 w-full sm:w-60"
-                      >
-                        <option value="text">Text</option>
-                        <option value="logo">Logo</option>
-                        <option value="both">Logo and text</option>
-                      </select>
-                    </Field>
-                    {form.watermarkStyle !== 'logo' ? (
-                      <Field
-                        label="Watermark text"
-                        hint="Leave empty to use the name above."
-                        problem={problems.watermarkText}
-                      >
-                        <input
-                          value={form.watermarkText}
-                          maxLength={MAX_WATERMARK_LENGTH}
-                          onChange={(e) => set('watermarkText', e.target.value)}
-                          placeholder={form.businessName || '© Your name'}
-                          className="spx-input mt-1 w-full"
-                        />
-                      </Field>
-                    ) : null}
-                    {form.watermarkStyle !== 'text' ? (
-                      <div>
-                        <span className="text-sm font-medium">Logo</span>
-                        <div className="mt-1 flex flex-wrap items-center gap-3">
-                          {form.watermarkLogo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={form.watermarkLogo}
-                              alt="Your logo"
-                              className="h-12 max-w-[10rem] border border-charcoal/15 bg-charcoal/10 object-contain p-1"
-                            />
-                          ) : null}
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg"
-                            onChange={(e) => void chooseLogo(e.target.files?.[0])}
-                            className="text-sm"
-                          />
-                          {form.watermarkLogo ? (
-                            <button
-                              type="button"
-                              onClick={() => set('watermarkLogo', '')}
-                              className="text-sm text-charcoal/60 underline"
-                            >
-                              Remove
-                            </button>
-                          ) : null}
-                        </div>
-                        <span className={`mt-1 block text-xs ${problems.watermarkLogo ? 'text-red-700' : 'text-charcoal/60'}`}>
-                          {problems.watermarkLogo ??
-                            'A PNG with a transparent background looks best. It is resized for you.'}
-                        </span>
-                      </div>
-                    ) : null}
-                    <Field label="Position">
-                      <select
-                        value={form.watermarkPosition}
-                        onChange={(e) => set('watermarkPosition', e.target.value as WatermarkPosition)}
-                        className="spx-input mt-1 w-full sm:w-60"
-                      >
-                        {WATERMARK_POSITIONS.map((position) => (
-                          <option key={position} value={position}>
-                            {POSITION_LABELS[position]}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label={`Opacity: ${form.watermarkOpacity}%`}>
-                      <input
-                        type="range"
-                        min={MIN_WATERMARK_OPACITY}
-                        max={MAX_WATERMARK_OPACITY}
-                        step={5}
-                        value={form.watermarkOpacity}
-                        onChange={(e) => set('watermarkOpacity', Number(e.target.value))}
-                        className="mt-2 w-full sm:w-72"
-                      />
-                    </Field>
-                  </div>
-                ) : null}
-              </fieldset>
-
-              <fieldset>
-                <legend className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/55">
                   Your files
                 </legend>
                 <Field
@@ -349,7 +199,6 @@ export default function ProProfilePage() {
                   What guests see under your photos
                 </p>
                 <div className="mt-3 text-sm">
-                  <WatermarkSample spec={previewSpec} />
                   <p className="text-charcoal/60">
                     {form.businessName.trim()
                       ? `Photo by ${form.businessName.trim()}`
@@ -390,66 +239,6 @@ export default function ProProfilePage() {
         </div>
       </section>
     </Layout>
-  );
-}
-
-const POSITION_LABELS: Record<WatermarkPosition, string> = {
-  'bottom-left': 'Bottom left',
-  'bottom-right': 'Bottom right',
-  'top-left': 'Top left',
-  'top-right': 'Top right',
-  center: 'Centre',
-};
-
-/**
- * A logo, downscaled in the browser to something small enough to store on the
- * profile: at most 600 pixels wide, PNG to keep transparency, smaller still if
- * the file is too big.
- */
-async function shrinkLogo(file: File): Promise<string> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const el = new Image();
-      el.onload = () => resolve(el);
-      el.onerror = reject;
-      el.src = url;
-    });
-    for (const maxWidth of [600, 400, 280]) {
-      const scale = Math.min(1, maxWidth / img.naturalWidth);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-      canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const data = canvas.toDataURL('image/png');
-      if (data.length <= MAX_LOGO_DATA_URL_LENGTH) return data;
-    }
-    throw new Error('too big');
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-/** A stand-in photo with the watermark where the server will put it. */
-function WatermarkSample({ spec }: { spec: ReturnType<typeof watermarkSpec> }) {
-  if (!spec) return <p className="mb-2 text-xs text-charcoal/55">No watermark on your previews.</p>;
-  const pos = spec.position;
-  const place =
-    pos === 'center'
-      ? 'inset-0 items-center justify-center text-center'
-      : `${pos.startsWith('top') ? 'top-[3%]' : 'bottom-[3%]'} ${
-          pos.endsWith('right') ? 'right-[3%] items-end text-right' : 'left-[3%] items-start text-left'
-        }`;
-  return (
-    <div className="relative mb-3 aspect-[3/2] w-full max-w-md overflow-hidden bg-gradient-to-br from-slate-500 to-slate-700">
-      <div className={`absolute flex flex-col gap-1 ${place}`} style={{ opacity: spec.opacity }}>
-        {spec.logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={spec.logo} alt="" className="w-24 object-contain sm:w-28" />
-        ) : null}
-        {spec.text ? <span className="text-sm font-medium text-white">{spec.text}</span> : null}
-      </div>
-    </div>
   );
 }
 

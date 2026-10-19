@@ -104,8 +104,8 @@ mutation Process($eventId: ID!, $uploadId: String!) {
 ```
 
 This is where the photograph becomes a gallery tile. The function reads the
-original, makes a reduced-resolution preview and a thumbnail with Jimp, applies
-the photographer's watermark if they have set one, writes the `Photo` row, and
+original, makes a reduced-resolution preview and a thumbnail with Jimp (no
+watermark — SharePix never adds one), writes the `Photo` row, and
 then — unless the photographer has ticked "keep my originals" — **deletes the
 original**.
 

@@ -435,7 +435,7 @@ export default function ProReviewPage() {
 
           <div className="mt-10 border-t border-charcoal/15 pt-6">
             <p className="mb-6 text-sm text-charcoal/70">
-              Your name, links and watermark on these shots come from{' '}
+              Your name and links on these shots come from{' '}
               <Link href="/pro/profile" className="font-medium text-pine underline">
                 your profile
               </Link>

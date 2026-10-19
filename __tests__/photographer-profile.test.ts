@@ -38,13 +38,6 @@ describe('photographer profile', () => {
     expect(Object.keys(result.problems)).toEqual(['purchaseGalleryUrl']);
   });
 
-  it('will not switch on a watermark with nothing to print', () => {
-    const empty = prepareProfile({ ...EMPTY_PROFILE, watermarkEnabled: true });
-    expect(empty.ok).toBe(false);
-    const named = prepareProfile({ ...EMPTY_PROFILE, watermarkEnabled: true, businessName: 'Rivera' });
-    expect(named.ok).toBe(true);
-  });
-
   it('offers only preview sizes the processor accepts', () => {
     for (const size of PREVIEW_SIZE_OPTIONS) {
       expect(size).toBeGreaterThanOrEqual(MIN_PREVIEW_LONG_EDGE);
@@ -61,8 +54,6 @@ describe('photographer profile', () => {
       'website',
       'contactUrl',
       'purchaseGalleryUrl',
-      'watermarkEnabled',
-      'watermarkText',
       'defaultPreviewResolution',
       'keepOriginals',
     ]) {

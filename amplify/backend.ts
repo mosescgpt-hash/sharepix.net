@@ -51,8 +51,6 @@ import { accountEmails } from './functions/account-emails/resource';
 import { boothSignup } from './functions/booth-signup/resource';
 import { boothScan } from './functions/booth-scan/resource';
 import { boothGallery } from './functions/booth-gallery/resource';
-import { refreshProWatermarks } from './functions/refresh-pro-watermarks/resource';
-import { restampProPhotos } from './functions/restamp-pro-photos/resource';
 import { stripeWebhook } from './functions/stripe-webhook/resource';
 import { corporatePortal } from './functions/corporate-portal/resource';
 import { corporateSeats } from './functions/corporate-seats/resource';
@@ -117,8 +115,6 @@ const backend = defineBackend({
   boothSignup,
   boothScan,
   boothGallery,
-  refreshProWatermarks,
-  restampProPhotos,
   stripeWebhook,
   corporatePortal,
   corporateSeats,
@@ -822,23 +818,6 @@ boothGalleryFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothGalleryFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
-
-// Live watermarks. The worker re-stamps one photographer's previews from the
-// clean copies: it reads their profile and connections, reads and writes
-// under pro/, and updates their photo rows. Only the request function, which
-// takes the photographer from the caller's token, may invoke it.
-const restampFn = backend.restampProPhotos.resources.lambda as LambdaFunction;
-backend.data.resources.tables.PhotographerProfile.grantReadData(restampFn);
-backend.data.resources.tables.EventPhotographer.grantReadData(restampFn);
-photoTable.grantReadWriteData(restampFn);
-bucket.grantReadWrite(restampFn, 'pro/*');
-restampFn.addEnvironment('PROFILE_TABLE_NAME', backend.data.resources.tables.PhotographerProfile.tableName);
-restampFn.addEnvironment('CONNECTION_TABLE_NAME', backend.data.resources.tables.EventPhotographer.tableName);
-restampFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
-restampFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
-const refreshWatermarksFn = backend.refreshProWatermarks.resources.lambda as LambdaFunction;
-restampFn.grantInvoke(refreshWatermarksFn);
-refreshWatermarksFn.addEnvironment('RESTAMP_FUNCTION_NAME', restampFn.functionName);
 
 // The public gallery credits the photographer live from their profile.
 backend.data.resources.tables.PhotographerProfile.grantReadData(listFn);

@@ -13,7 +13,6 @@ import { accountEmails as accountEmailsFn } from '../functions/account-emails/re
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
 import { boothScan as boothScanFn } from '../functions/booth-scan/resource';
 import { boothGallery as boothGalleryFn } from '../functions/booth-gallery/resource';
-import { refreshProWatermarks as refreshProWatermarksFn } from '../functions/refresh-pro-watermarks/resource';
 import { corporatePortal as corporatePortalFn } from '../functions/corporate-portal/resource';
 import { corporateSeats as corporateSeatsFn } from '../functions/corporate-seats/resource';
 import { moderatePhoto as moderatePhotoFn } from '../functions/moderate-photo/resource';
@@ -443,9 +442,6 @@ const schema = a.schema({
       // Booth mode (docs/booth-mode.md), written by process-pro-photo: who the
       // photo was matched to, how ('capture' time, 'upload' time, or
       // 'unassigned' when nobody had been scanned yet), and when it was taken.
-      // The unmarked preview, kept so a changed watermark can be redone on
-      // photos already posted (restamp-pro-photos). Absent on older photos.
-      cleanPreviewObjectKey: a.string(),
       boothAttendeeId: a.string(),
       boothAttendeeName: a.string(),
       // Everyone the photo goes to (a group shot can go to several), in order;
@@ -707,16 +703,10 @@ const schema = a.schema({
       purchaseGalleryUrl: a.string(),
       // Watermarking is off unless the photographer turns it on, and it is
       // applied to generated previews only — never to a stored original.
+      // Kept for rows written while watermarks existed. SharePix no longer
+      // watermarks anything (docs/decisions.md); nothing reads these.
       watermarkEnabled: a.boolean(),
       watermarkText: a.string(),
-      // 'text' | 'logo' | 'both' (lib/watermark.ts); absent means text.
-      watermarkStyle: a.string(),
-      // The logo as a small PNG/JPEG data URL, downscaled in the browser.
-      watermarkLogo: a.string(),
-      // A corner or 'center'; absent means bottom-left.
-      watermarkPosition: a.string(),
-      // 10–100; absent means 70.
-      watermarkOpacity: a.integer(),
       // One of PUBLISHING_MODES. Absent means DEFAULT_PUBLISHING_MODE, which
       // is approve_first; nobody gets auto-publishing by not choosing.
       defaultPublishingMode: a.string(),
@@ -1745,15 +1735,6 @@ const schema = a.schema({
     .returns(a.ref('BoothGalleryResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(boothGalleryFn)),
-
-  // A photographer's own "redo my watermarks", after changing them on
-  // /pro/profile. Queues the work and returns at once.
-  refreshProWatermarks: a
-    .mutation()
-    .arguments({})
-    .returns(a.ref('UserActionResult'))
-    .authorization((allow) => [allow.authenticated()])
-    .handler(a.handler.function(refreshProWatermarksFn)),
 
   boothStatus: a
     .query()
