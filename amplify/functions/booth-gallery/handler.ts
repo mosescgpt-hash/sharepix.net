@@ -2,6 +2,7 @@ import {
   DynamoDBClient,
   GetItemCommand,
   QueryCommand,
+  UpdateItemCommand,
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -13,6 +14,7 @@ import {
   inGallery,
   isGalleryKey,
 } from './gallery';
+import { originalsRemovedAt } from './retention';
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -32,7 +34,45 @@ const NOT_FOUND = {
   eventName: null,
   attendeeName: null,
   photos: [],
+  removeOriginalsAt: null,
+  originalsRemoved: false,
+  emailsStopped: false,
 };
+
+async function attendeeByKey(key: string): Promise<Record<string, AttributeValue> | null> {
+  const found = await dynamo.send(
+    new QueryCommand({
+      TableName: ATTENDEE_TABLE,
+      IndexName: ATTENDEES_BY_GALLERY_KEY,
+      KeyConditionExpression: 'galleryKey = :key',
+      ExpressionAttributeValues: { ':key': { S: key } },
+      Limit: 2,
+    }),
+  );
+  return found.Items?.[0] ?? null;
+}
+
+/**
+ * "Stop these emails", from the link in every booth email. The key is the
+ * whole authorization, as for the gallery. The gallery itself stays open.
+ */
+async function stopEmails(key: string): Promise<{ ok: boolean; message: string }> {
+  const notFound = { ok: false, message: 'This link is not valid. Check the email it came in.' };
+  if (!isGalleryKey(key)) return notFound;
+  const attendee = await attendeeByKey(key);
+  const attendeeId = attendee?.id?.S;
+  if (!attendeeId) return notFound;
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: ATTENDEE_TABLE,
+      Key: { id: { S: attendeeId } },
+      UpdateExpression: 'SET emailsStopped = :true, updatedAt = :now',
+      ConditionExpression: 'attribute_exists(id)',
+      ExpressionAttributeValues: { ':true': { BOOL: true }, ':now': { S: new Date().toISOString() } },
+    }),
+  );
+  return { ok: true, message: 'Done. You will not get any more emails about these photos.' };
+}
 
 function recipientsOf(item: Record<string, AttributeValue>): string[] {
   const list = item.boothAttendeeIds?.L?.map((v) => v.S ?? '').filter(Boolean) ?? [];
@@ -61,20 +101,15 @@ function sign(key: string, filename?: string): Promise<string> {
  * returned, with links signed here — the pro/ prefix has no browser access
  * rule, so these links are the only way in.
  */
-export const handler = async (event: { arguments: { key?: string | null } }) => {
+export const handler = async (event: {
+  arguments: { key?: string | null };
+  info?: { fieldName?: string };
+}) => {
   const key = String(event.arguments.key ?? '').trim();
+  if (event.info?.fieldName === 'boothStopEmails') return stopEmails(key);
   if (!isGalleryKey(key)) return NOT_FOUND;
 
-  const found = await dynamo.send(
-    new QueryCommand({
-      TableName: ATTENDEE_TABLE,
-      IndexName: ATTENDEES_BY_GALLERY_KEY,
-      KeyConditionExpression: 'galleryKey = :key',
-      ExpressionAttributeValues: { ':key': { S: key } },
-      Limit: 2,
-    }),
-  );
-  const attendee = found.Items?.[0];
+  const attendee = await attendeeByKey(key);
   const attendeeId = attendee?.id?.S;
   const eventId = attendee?.eventId?.S;
   if (!attendeeId || !eventId) return NOT_FOUND;
@@ -83,12 +118,15 @@ export const handler = async (event: { arguments: { key?: string | null } }) => 
     new GetItemCommand({
       TableName: EVENT_TABLE,
       Key: { id: { S: eventId } },
-      ProjectionExpression: 'id, #name, boothMode, takenDownAt',
-      ExpressionAttributeNames: { '#name': 'name' },
+      ProjectionExpression: 'id, #name, #date, createdAt, boothMode, takenDownAt, boothOriginalsRemovedAt',
+      ExpressionAttributeNames: { '#name': 'name', '#date': 'date' },
     }),
   );
   if (!ev.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S) return NOT_FOUND;
   const eventName = ev.Item.name?.S ?? 'Your photos';
+  const removedAt = ev.Item.boothOriginalsRemovedAt?.S ?? null;
+  const removeOriginalsAt =
+    removedAt ?? originalsRemovedAt({ date: ev.Item.date?.S ?? null, createdAt: ev.Item.createdAt?.S ?? null });
 
   const mine: Record<string, AttributeValue>[] = [];
   let start: Record<string, AttributeValue> | undefined;
@@ -140,5 +178,8 @@ export const handler = async (event: { arguments: { key?: string | null } }) => 
     eventName,
     attendeeName: attendee.name?.S ?? null,
     photos,
+    removeOriginalsAt,
+    originalsRemoved: Boolean(removedAt),
+    emailsStopped: attendee.emailsStopped?.BOOL === true,
   };
 };

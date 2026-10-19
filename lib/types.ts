@@ -329,4 +329,8 @@ export interface BoothAttendeeRow {
   consentedAt: string | null;
   /** Their private gallery key; null for sign-ups from before galleries. */
   galleryKey: string | null;
+  /** When they were last emailed their photos; null if never. */
+  lastDeliveredAt: string | null;
+  /** They used "Stop these emails". */
+  emailsStopped: boolean;
 }
