@@ -132,7 +132,7 @@ export default function ProHomePage() {
           )}
 
           <p className="mt-6 text-sm text-charcoal/70">
-            Your name, links and watermark on every shot:{' '}
+            Your name and links on every shot:{' '}
             <Link href="/pro/profile" className="font-medium text-pine underline">
               Edit your profile
             </Link>

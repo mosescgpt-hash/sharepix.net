@@ -17,6 +17,8 @@
 
 Stack: Next.js (pages router), TypeScript, Tailwind, Amplify Gen 2 (Cognito, AppSync + DynamoDB, S3), Stripe Checkout + webhooks.
 
+Product fact for all copy: **SharePix never watermarks photos** — guest, host or SharePix Pro. Don't claim or offer a watermark anywhere. (`docs/decisions.md` §20.)
+
 Brand: navy `#123851`, mint `#7AD8C0`, green `#099361` (interactive), coral `#F96742`, yellow `#FCBD08`, cream `#FBEFD1`, black `#09080D`.
 
 ---

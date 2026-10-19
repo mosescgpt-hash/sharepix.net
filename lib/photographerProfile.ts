@@ -4,57 +4,24 @@ import {
   MIN_PREVIEW_LONG_EDGE,
   previewLongEdge,
 } from './professionalMedia';
-import {
-  DEFAULT_WATERMARK_OPACITY,
-  DEFAULT_WATERMARK_POSITION,
-  clampOpacity,
-  isLogoDataUrl,
-  type WatermarkPosition,
-  type WatermarkStyle,
-} from './watermark';
 
 /**
  * What a photographer can set about themselves on /pro/profile.
  *
- * Every field here was already read by process-pro-photo — the name, the three
- * links, the watermark and the preview size are stamped onto each photo as it
- * is processed — but nothing let a photographer set them, so every gallery tile
- * went out with no credit, no links and no watermark. This is that form.
+ * The name and the three links appear under each of the photographer's shots,
+ * and the preview size sets how large the gallery copy is.
  *
- * All of it is live: the gallery reads the name and links from the profile
- * on every load, and saving a changed watermark re-stamps the photographer's
- * existing previews (restamp-pro-photos) — every photo uploaded since live
- * watermarks shipped; older ones keep the mark they were made with.
+ * The name and links are live: the gallery reads them from the profile on
+ * every load, so an edit shows on photos already posted. SharePix never
+ * watermarks photos (docs/decisions.md), so there is no watermark setting.
  */
 export interface PhotographerProfileForm {
   businessName: string;
   website: string;
   contactUrl: string;
   purchaseGalleryUrl: string;
-  watermarkEnabled: boolean;
-  watermarkText: string;
-  watermarkStyle: WatermarkStyle;
-  /** A PNG/JPEG data URL, or '' for none. */
-  watermarkLogo: string;
-  watermarkPosition: WatermarkPosition;
-  /** 10–100. */
-  watermarkOpacity: number;
   previewLongEdge: number;
   keepOriginals: boolean;
-}
-
-/** Whether saving this change should redo the watermark on posted photos. */
-export function watermarkChanged(a: PhotographerProfileForm, b: PhotographerProfileForm): boolean {
-  return (
-    a.watermarkEnabled !== b.watermarkEnabled ||
-    a.watermarkText !== b.watermarkText ||
-    a.watermarkStyle !== b.watermarkStyle ||
-    a.watermarkLogo !== b.watermarkLogo ||
-    a.watermarkPosition !== b.watermarkPosition ||
-    a.watermarkOpacity !== b.watermarkOpacity ||
-    // The text mark falls back to the business name.
-    (a.watermarkEnabled && !a.watermarkText && a.businessName !== b.businessName)
-  );
 }
 
 export const EMPTY_PROFILE: PhotographerProfileForm = {
@@ -62,12 +29,6 @@ export const EMPTY_PROFILE: PhotographerProfileForm = {
   website: '',
   contactUrl: '',
   purchaseGalleryUrl: '',
-  watermarkEnabled: false,
-  watermarkText: '',
-  watermarkStyle: 'text',
-  watermarkLogo: '',
-  watermarkPosition: DEFAULT_WATERMARK_POSITION,
-  watermarkOpacity: DEFAULT_WATERMARK_OPACITY,
   previewLongEdge: DEFAULT_PREVIEW_LONG_EDGE,
   keepOriginals: false,
 };
@@ -77,9 +38,8 @@ export const PREVIEW_SIZE_OPTIONS: readonly number[] = [1200, 1500, 1800, 2100, 
   (n) => n >= MIN_PREVIEW_LONG_EDGE && n <= MAX_PREVIEW_LONG_EDGE,
 );
 
-/** Longest name or watermark accepted; the watermark itself is cut at 60. */
+/** Longest business name accepted. */
 export const MAX_NAME_LENGTH = 80;
-export const MAX_WATERMARK_LENGTH = 60;
 
 /** The three link fields, with what each is for, in the order they appear. */
 export const LINK_FIELDS: ReadonlyArray<{
@@ -139,21 +99,6 @@ export function prepareProfile(form: PhotographerProfileForm):
     if (link === null) problems[field.key] = 'That does not look like a web address.';
     else links[field.key] = link;
   }
-  const watermarkText = form.watermarkText.trim();
-  if (watermarkText.length > MAX_WATERMARK_LENGTH) {
-    problems.watermarkText = `Keep it under ${MAX_WATERMARK_LENGTH} characters.`;
-  }
-  const usesText = form.watermarkStyle !== 'logo';
-  const usesLogo = form.watermarkStyle !== 'text';
-  if (form.watermarkLogo && !isLogoDataUrl(form.watermarkLogo)) {
-    problems.watermarkLogo = 'That logo could not be used. Try a smaller PNG or JPEG.';
-  }
-  if (form.watermarkEnabled && form.watermarkStyle === 'logo' && !form.watermarkLogo) {
-    problems.watermarkLogo = 'Upload a logo, or switch the watermark to text.';
-  }
-  if (form.watermarkEnabled && usesText && !watermarkText && !businessName && !(usesLogo && form.watermarkLogo)) {
-    problems.watermarkText = 'Add the text to show, or a business name above to use instead.';
-  }
   if (Object.keys(problems).length > 0) return { ok: false, problems };
   return {
     ok: true,
@@ -161,8 +106,6 @@ export function prepareProfile(form: PhotographerProfileForm):
       ...form,
       businessName,
       ...links,
-      watermarkText,
-      watermarkOpacity: clampOpacity(form.watermarkOpacity),
       previewLongEdge: previewLongEdge(form.previewLongEdge),
     },
   };

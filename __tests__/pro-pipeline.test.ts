@@ -27,22 +27,10 @@ describe('the duplicated modules have not drifted', () => {
     ['photographerAccess', 'connect-photographer'],
     ['photographerAccess', 'booth-scan'],
     ['captureTime', 'process-pro-photo'],
-    ['watermark', 'process-pro-photo'],
-    ['watermark', 'restamp-pro-photos'],
-    ['proProcessing', 'restamp-pro-photos'],
-    ['professionalMedia', 'restamp-pro-photos'],
   ])('%s in %s', (name, fn) => {
     const original = readSource(`lib/${name}.ts`);
     const copy = readSource(`amplify/functions/${fn}/${name}.ts`);
     expect(bodyOf(copy)).toBe(bodyOf(original));
-  });
-});
-
-describe('the watermark stamper', () => {
-  it('is the same code for new uploads and live re-stamps', () => {
-    expect(readSource('amplify/functions/restamp-pro-photos/stamp.ts')).toBe(
-      readSource('amplify/functions/process-pro-photo/stamp.ts'),
-    );
   });
 });
 
@@ -150,14 +138,10 @@ describe('the processor', () => {
     expect(handler).not.toMatch(/downloadAllowed: \{ BOOL: true \}/);
   });
 
-  it('applies a watermark to the derivative only', () => {
-    const stamp = handler.indexOf('applyWatermark(image');
-    expect(stamp).toBeGreaterThan(-1);
-    // It happens after the resize and before the preview is encoded, so the
-    // stored original is untouched whatever the setting says. (The unmarked
-    // copy for live re-stamping is encoded just before it.)
-    expect(stamp).toBeGreaterThan(handler.indexOf('image.resize'));
-    expect(stamp).toBeLessThan(handler.indexOf("const previewBody = await image.getBuffer('image/jpeg'"));
+  it('never watermarks the preview', () => {
+    // SharePix never watermarks photos (docs/decisions.md).
+    expect(handler).not.toContain('applyWatermark');
+    expect(handler).not.toContain('image.print');
   });
 });
 
