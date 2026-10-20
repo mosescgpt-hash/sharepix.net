@@ -679,7 +679,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (with a fair-use ceiling of 5,000 per event, raised free on request) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (with a fair-use ceiling of 5,000 per event, raised free on request) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book, the live slideshow, SharePix Pro for your photographer and booth mode — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',
@@ -1120,11 +1120,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     audience: 'host',
     category: 'Photographers and booth mode',
     summary: 'Give your photographer a one-time code and their shots appear in your gallery as previews they approve.',
-    keywords: ['photographer', 'professional', 'pro', 'invite', 'pairing code', 'connect', 'remove photographer', 'videographer'],
+    keywords: ['photographer', 'professional', 'pro', 'invite', 'pairing code', 'connect', 'remove photographer', 'videographer', 'pro cost', 'pro price'],
     blocks: [
       {
         kind: 'text',
-        text: 'Your photographer\'s shots can appear in the same gallery as your guests\' photos, within minutes of being taken, as previews they approve one by one. Guests can see them but not download them, so the photographer keeps their originals and their print sales.',
+        text: 'Your photographer\'s shots can appear in the same gallery as your guests\' photos, within minutes of being taken, as previews they approve one by one. Guests can see them but not download them, so the photographer keeps their originals and their print sales. SharePix Pro is included with every event: there is nothing extra to pay, for you or your photographer.',
       },
       {
         kind: 'steps',
@@ -1172,7 +1172,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       },
       {
         kind: 'note',
-        text: 'SharePix never watermarks photos, and guests can never download your shots or your originals from the gallery.',
+        text: 'SharePix Pro is included with the host\'s event, so there is nothing for you to pay. SharePix never watermarks photos, and guests can never download your shots or your originals from the gallery.',
       },
     ],
     related: ['add-photographer', 'booth-mode'],
