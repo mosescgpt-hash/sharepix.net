@@ -3,6 +3,7 @@
 import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { authModeFor, getClient, type DataAuthMode } from '@/lib/dataClient';
 import type { QuotaCounterRow } from '@/lib/quotaCounters';
+import { needsContentReview } from '@/lib/contentReview';
 import { uploadData, getUrl, downloadData, getProperties } from 'aws-amplify/storage';
 import type { Schema } from '@/amplify/data/resource';
 import {
@@ -2631,11 +2632,31 @@ export async function setEventUploadsClosed(eventId: string, closed: boolean): P
 
 
 /**
- * Fully remove an event: delete each photo's S3 objects + record (through the
- * ownership-checked function), then the event itself. Works for the event's
- * host (owner) and for global admins.
+ * Host: delete one of their own events from its dashboard.
+ *
+ * Hosts have no `delete` on the Event model (see its authorization), so the
+ * row goes through removeHostedEvent, which also refuses to destroy an event
+ * SharePix has closed or that is in content review: those are taken out of
+ * the host's account and their media preserved, as the privacy policy says.
+ * Their photos are therefore only deleted here for an ordinary event, and
+ * before the row, because deleteEventPhoto checks ownership via the event.
  */
 export async function deleteEventWithPhotos(eventId: string): Promise<void> {
+  const { data: event } = await getClient().models.Event.get({ id: eventId }, { authMode: 'userPool' });
+  const preserved =
+    Boolean(event?.takenDownAt) ||
+    needsContentReview({
+      flaggedCount: event?.flaggedCount ?? null,
+      photoCount: event?.photoCount ?? null,
+      contentReviewClearedCount: event?.contentReviewClearedCount ?? null,
+      takenDownAt: event?.takenDownAt ?? null,
+    });
+  if (!preserved) await deleteAllEventPhotos(eventId);
+  await deleteMyEvent(eventId);
+}
+
+/** Every photo of an event, through the function that checks ownership. */
+async function deleteAllEventPhotos(eventId: string): Promise<void> {
   // Every photo, not the first page of them. This asked for 1000 and then
   // deleted the event row, so an event past that lost its remaining photo
   // records to nothing: the rows stayed, their S3 and R2 objects stayed, and
@@ -2660,17 +2681,19 @@ export async function deleteEventWithPhotos(eventId: string): Promise<void> {
     );
     if (errors?.length || !data?.success) throw new Error('A photo record could not be removed.');
   }
+}
 
+/**
+ * Global admin: delete an event and every photo outright. Admins keep full
+ * model access, so the row is deleted directly after the photos.
+ */
+export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
+  await deleteAllEventPhotos(eventId);
   const { errors } = await getClient().models.Event.delete(
     { id: eventId },
     { authMode: 'userPool' },
   );
   if (errors?.length) throw new Error('The event could not be removed.');
-}
-
-/** Backwards-compatible alias used by the global-admin dashboard. */
-export async function deleteEventAsGlobalAdmin(eventId: string): Promise<void> {
-  return deleteEventWithPhotos(eventId);
 }
 
 /**

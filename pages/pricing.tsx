@@ -46,7 +46,7 @@ const faqs = [
   },
   {
     q: 'What is the free event?',
-    a: `A real event, not a demo — your own QR code, your own guests, your own gallery. It holds up to 50 photos and 1 video, guests can upload for ${TRIAL_UPLOAD_WINDOW_DAYS} days, and the gallery stays up for ${TRIAL_GALLERY_DAYS} days after that. One per account, and a limited number are handed out each day, so it is there to try SharePix at something small before you pay for something that matters.`,
+    a: `A real event, not a demo — your own QR code, your own guests, your own gallery. It holds up to 50 photos and 1 video, guests can upload for ${TRIAL_UPLOAD_WINDOW_DAYS} days, and the gallery stays up for ${TRIAL_GALLERY_DAYS} days after that. One per account, so it is there to try SharePix at something small before you pay for something that matters.`,
   },
   {
     q: 'How does Corporate work?',
