@@ -90,6 +90,8 @@ export interface SettingsRequest {
   videoUploadsEnabled?: boolean | null;
   guestDownloadsBlocked?: boolean | null;
   uploadsClosed?: boolean | null;
+  /** Booth mode (docs/booth-mode.md), included with every event. */
+  boothMode?: boolean | null;
   qrDotStyle?: string | null;
   qrColor?: string | null;
   /** A data URL, '' to clear the logo, or absent to leave the style alone. */
@@ -318,6 +320,7 @@ export function buildPatch(
     'uploadsClosed',
     'reactionsEnabled',
     'commentsEnabled',
+    'boothMode',
   ] as const) {
     const value = request[flag];
     if (!provided(value)) continue;
@@ -365,6 +368,9 @@ export const EDITABLE_FIELDS = [
   'videoUploadsEnabled',
   'guestDownloadsBlocked',
   'uploadsClosed',
+  // Booth mode is included with every event, so it is the host's to switch.
+  // The sign-up ceiling (boothAttendeeCount) stays server-kept.
+  'boothMode',
   // Presentation only. None of these touch price, limits, counters or dates,
   // which is the rule this list exists to keep.
   'qrDotStyle',

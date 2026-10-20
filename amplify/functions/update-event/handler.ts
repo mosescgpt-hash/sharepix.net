@@ -129,6 +129,7 @@ export const handler: Handler = async (event) => {
       videoUploadsEnabled: event.arguments.videoUploadsEnabled,
       guestDownloadsBlocked: event.arguments.guestDownloadsBlocked,
       uploadsClosed: event.arguments.uploadsClosed,
+      boothMode: event.arguments.boothMode,
       qrDotStyle: event.arguments.qrDotStyle,
       qrColor: event.arguments.qrColor,
       qrLogo: event.arguments.qrLogo,

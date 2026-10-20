@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
+  BatchGetItemCommand,
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
@@ -22,10 +23,71 @@ const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
 const CODE_TABLE = process.env.PAIRING_TABLE_NAME as string;
+const PROFILE_TABLE = process.env.PROFILE_TABLE_NAME ?? '';
 
 const DENIED = 'That event could not be found.';
 
 type Handler = Schema['connectPhotographer']['functionHandler'];
+type NamesArgs = Schema['eventPhotographerNames']['args'];
+type NamesResult = Array<{ photographerId: string; name: string | null }>;
+
+/**
+ * The names a host sees beside each photographer on their event, read live
+ * from each photographer's profile. Hosts have no read on PhotographerProfile
+ * (they must not be able to list every photographer on the platform), so this
+ * returns only the business name, and only for the photographer ids the
+ * caller asks about that really are connected to an event they own.
+ */
+async function photographerNames(
+  args: NamesArgs,
+  sub: string,
+  groups: string[],
+): Promise<NamesResult> {
+  const eventId = String(args.eventId ?? '');
+  const row = await dynamo
+    .send(new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }))
+    .catch(() => null);
+  const owner = row?.Item?.owner?.S ?? '';
+  if (!row?.Item || (owner.split('::')[0] !== sub && !groups.includes('ADMINS'))) throw new Error(DENIED);
+
+  const asked = [...new Set((args.photographerIds ?? []).filter((id): id is string => Boolean(id)))].slice(0, 50);
+  if (asked.length === 0) return [];
+  // Only ids with a connection row on this event: a host can't use this to
+  // look up an arbitrary photographer's name by guessing their id.
+  const connections = await dynamo.send(
+    new BatchGetItemCommand({
+      RequestItems: {
+        [CONNECTION_TABLE]: {
+          Keys: asked.map((id) => ({ id: { S: connectionId(eventId, id) } })),
+          ProjectionExpression: 'photographerId',
+        },
+      },
+    }),
+  );
+  const connected = (connections.Responses?.[CONNECTION_TABLE] ?? [])
+    .map((item) => item.photographerId?.S ?? '')
+    .filter(Boolean);
+  if (connected.length === 0 || !PROFILE_TABLE) return connected.map((photographerId) => ({ photographerId, name: null }));
+
+  const profiles = await dynamo
+    .send(
+      new BatchGetItemCommand({
+        RequestItems: {
+          [PROFILE_TABLE]: {
+            Keys: connected.map((id) => ({ id: { S: id } })),
+            ProjectionExpression: 'id, businessName, displayName',
+          },
+        },
+      }),
+    )
+    .catch(() => null);
+  const names = new Map<string, string>();
+  for (const item of profiles?.Responses?.[PROFILE_TABLE] ?? []) {
+    const name = item.businessName?.S?.trim() || item.displayName?.S?.trim();
+    if (item.id?.S && name) names.set(item.id.S, name);
+  }
+  return connected.map((photographerId) => ({ photographerId, name: names.get(photographerId) ?? null }));
+}
 
 /** Uniform over the alphabet. Modulo bias would shrink the keyspace quietly. */
 function pairingCode(): string {
@@ -63,6 +125,12 @@ export const handler: Handler = async (event) => {
       ? ((event.identity.groups as string[] | null) ?? [])
       : [];
   if (!sub) throw new Error(DENIED);
+
+  // Also backs eventPhotographerNames; same function, so it shares the
+  // ownership rule above rather than restating it somewhere new.
+  if ((event as { info?: { fieldName?: string } }).info?.fieldName === 'eventPhotographerNames') {
+    return photographerNames(event.arguments as unknown as NamesArgs, sub, groups) as never;
+  }
 
   const action = String(event.arguments.action ?? '');
 

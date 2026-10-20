@@ -21,6 +21,9 @@ describe('the allow-list is the whole surface', () => {
   it('names only the settings a host owns', () => {
     expect(EDITABLE_FIELDS.sort()).toEqual([
       'alertEmail',
+      // Booth mode is included with every event, so the host switches it.
+      // The sign-up count it relies on stays server-kept.
+      'boothMode',
       // Presentation only — the cover over the event's pages, one validated
       // JSON value. See lib/eventCover.ts.
       'coverStyle',

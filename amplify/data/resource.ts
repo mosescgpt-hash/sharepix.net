@@ -335,9 +335,8 @@ const schema = a.schema({
       // dress their event up as someone else's.
       themeKey: a.string(),
       // Booth mode (docs/booth-mode.md): photos go to each attendee rather
-      // than a shared gallery. Like themeKey, NOT on the updateEventSettings
-      // allow-list — only an admin switches it on until the plan is sold.
-      // boothAttendeeCount is the sign-up ceiling, kept atomically by
+      // than a shared gallery. Included with every event: the host switches
+      // it through updateEventSettings (an admin can too). boothAttendeeCount is the sign-up ceiling, kept atomically by
       // boothSignUp.
       boothMode: a.boolean(),
       boothAttendeeCount: a.integer(),
@@ -2141,6 +2140,22 @@ const schema = a.schema({
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(connectPhotographer)),
 
+  PhotographerName: a.customType({
+    photographerId: a.string().required(),
+    name: a.string(),
+  }),
+
+  // The business name of each photographer connected to a host's event, so the
+  // host's list says who they are. Hosts have no read on PhotographerProfile;
+  // connect-photographer checks the caller owns the event and returns names
+  // only for photographers actually connected to it.
+  eventPhotographerNames: a
+    .query()
+    .arguments({ eventId: a.id().required(), photographerIds: a.string().array().required() })
+    .returns(a.ref('PhotographerName').array())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(connectPhotographer)),
+
   claimGuestUploadPromise: a
     .mutation()
     .arguments({
@@ -2564,6 +2579,7 @@ const schema = a.schema({
       videoUploadsEnabled: a.boolean(),
       guestDownloadsBlocked: a.boolean(),
       uploadsClosed: a.boolean(),
+      boothMode: a.boolean(),
       qrDotStyle: a.string(),
       qrColor: a.string(),
       qrLogo: a.string(),

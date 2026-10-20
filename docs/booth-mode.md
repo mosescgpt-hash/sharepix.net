@@ -1,8 +1,8 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **all five steps built** (sign-up, QR codes, scanning, matching, fix-ups, private galleries, delivery emails and the 30-day cleanup). The flat-fee price is still to be set, so an admin switches booth mode on.
-Decided: email only (no texting for now), **full resolution**, a **flat fee
-per event**, originals kept **30 days**, the **host can see** attendees'
+Status: **all five steps built** (sign-up, QR codes, scanning, matching, fix-ups, private galleries, delivery emails and the 30-day cleanup). **Included with every event** at no extra cost: the host switches it on under **Extras → Booth mode**.
+Decided: email only (no texting for now), **full resolution**, **included
+with every event** (an option, not a separate plan), originals kept **30 days**, the **host can see** attendees'
 photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
 computer at the booth.
 
@@ -21,10 +21,10 @@ file itself, and there is no shared gallery at all.
 
 ## The flow
 
-**1. The host sets up a booth event.** Until the plan is priced and sold,
-a global admin switches booth mode on for the event (the **Booth off/on**
-button in the Events list). Booth events use everything below instead of the
-shared gallery. The host invites the photographer with the existing pairing
+**1. The host sets up a booth event.** Booth mode is included with every
+event: the host taps **Turn on booth mode** under **Extras** (a global admin
+can also use **Booth off/on** in the Events list). Booth events use
+everything below instead of the shared gallery. The host invites the photographer with the existing pairing
 code, and finds the sign-up links under **Extras → Booth mode**.
 
 **2. Attendees sign up once,** at `/booth/<eventId>`: on their own phone from
@@ -93,7 +93,7 @@ for this plan, deliberately and only for booth events:
 
 | Piece | What it is |
 | --- | --- |
-| Booth plan | A flat-fee tier with a `booth` capability flag, wired to checkout once priced. Until then an admin switch on the event (built). |
+| Booth switch | Included with every event; the host turns it on under Extras (built). |
 | `BoothAttendee` table | Event, name, email, consent time, random QR token. Readable only by the host, the event's photographers and admins. |
 | Sign-up page | Public page per event: name, email, consent, then the QR code. |
 | Scan mode | In the Pro review page: read a QR code, show who is next, record the scan time. |
@@ -110,7 +110,7 @@ Each step is one PR and works on its own.
 1. **Attendee sign-up — built.** The admin switch, the `BoothAttendee` table,
    the `boothSignUp` function (one row per email per event, 10,000 sign-ups per
    event at most), the sign-up and kiosk page, and the host's attendee list.
-   The paid plan itself waits for the price.
+   (Booth mode later became a host option included with every event.)
 2. **Scan mode and matching — built.** A Booth mode panel on the Pro review
    page: **Scan next person** opens the phone camera (jsQR, because iPhone
    Safari has no BarcodeDetector); each scan is a `BoothScan` row. Photo
@@ -163,9 +163,8 @@ Each step is one PR and works on its own.
 
 ## Decisions
 
-1. **Price:** a flat fee per event. The amount is still to be set; until
-   then booth mode is switched on by an admin, so nothing is sold at a
-   placeholder price.
+1. **Price:** included with every event, as an option the host turns on.
+   No separate plan or fee.
 2. **Retention:** 30 days after the event.
 3. **Host access:** the host sees every attendee and their photos. Attendees
    are told so in the consent line at sign-up.

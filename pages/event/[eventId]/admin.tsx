@@ -10,12 +10,15 @@ import AdminPhotoGrid from '@/components/AdminPhotoGrid';
 import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
-import BoothAttendees from '@/components/BoothAttendees';
+import BoothModeCard from '@/components/BoothModeCard';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
 import CommentModeration from '@/components/CommentModeration';
 import { commentsEnabled } from '@/lib/photoEngagement';
 import DownloadShareBuilder from '@/components/DownloadShareBuilder';
 import HostGuide from '@/components/HostGuide';
+import GuidedSetup, { useGuideProgress } from '@/components/GuidedSetup';
+import HelpChat from '@/components/HelpChat';
+import { guideStepsFor } from '@/lib/guidedSetup';
 import EventStatusNotices from '@/components/EventStatusNotices';
 import { eventStatusNotices, type CorporateSeatFacts } from '@/lib/eventStatus';
 import {
@@ -309,7 +312,15 @@ function AdminDashboardPage() {
       window.setTimeout(() => {
         const el = document.getElementById(jump.target);
         if (!el) return;
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // The guide's banner sticks to the top while it runs; land the card
+        // below it rather than under it.
+        const banner = document.querySelector('[data-guide-banner]');
+        if (banner) {
+          const offset = banner.getBoundingClientRect().height + 16;
+          window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: 'smooth' });
+        } else {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         el.classList.add('ring-2', 'ring-ink', 'ring-offset-4');
         window.setTimeout(() => el.classList.remove('ring-2', 'ring-ink', 'ring-offset-4'), 1600);
       }, 50);
@@ -326,6 +337,18 @@ function AdminDashboardPage() {
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
   }, []);
+
+  // Guided customization and the help chat share these: which cards this
+  // event has, and where the host is in the walkthrough.
+  const jumpConditions = useMemo(
+    () => ({
+      commentsOn: event ? commentsEnabled(event) : false,
+      featuredOffered: Boolean(event) && photos.length > 0 && !isTrialTier(event?.tier ?? ''),
+    }),
+    [event, photos.length],
+  );
+  const guideSteps = useMemo(() => guideStepsFor(jumpConditions), [jumpConditions]);
+  const [guideProgress, setGuideProgress] = useGuideProgress(eventId ?? '', guideSteps);
 
   useEffect(() => {
     if (!event || !router.asPath.endsWith('#event-qr-code')) return;
@@ -785,6 +808,16 @@ function AdminDashboardPage() {
               payError={payError}
             />
 
+            {/* Offered to a host who hasn't started it while the event is new;
+                the help chat can start it at any time. */}
+            <GuidedSetup
+              steps={guideSteps}
+              progress={guideProgress}
+              onProgress={setGuideProgress}
+              onOpen={jumpTo}
+              offer={photos.length === 0}
+            />
+
             {/* Expanded and first when the event has no photos yet: on day one
                 a host needs the instructions and very little else. Once photos
                 exist it drops to the quiet strip at the end of Share, where a
@@ -809,10 +842,7 @@ function AdminDashboardPage() {
                 className="spx-input mt-2"
               >
                 <option value="">Choose what to change</option>
-                {jumpsFor({
-                  commentsOn: commentsEnabled(event),
-                  featuredOffered: photos.length > 0 && !isTrialTier(event.tier),
-                }).map((group) => (
+                {jumpsFor(jumpConditions).map((group) => (
                   <optgroup key={group.label} label={group.label}>
                     {group.jumps.map((jump) => (
                       <option key={jump.key} value={jump.key}>
@@ -1244,10 +1274,13 @@ function AdminDashboardPage() {
             >
               <p className="text-sm text-charcoal/60">{TABS[4].blurb}</p>
 
-              {/* Booth mode: only on events an admin has switched it on for. */}
-              {event.boothMode === true && origin ? (
-                <BoothAttendees eventId={event.id} origin={origin} />
-              ) : null}
+              {/* Booth mode: included with every event, switched on here. */}
+              <BoothModeCard
+                eventId={event.id}
+                on={event.boothMode === true}
+                origin={origin}
+                onChanged={(on) => setEvent({ ...event, boothMode: on })}
+              />
               {/* SharePix Pro. Always here, because a host books a photographer
                   before the event rather than after it — unlike Featured Events
                   below, which needs photos to exist first. */}
@@ -1292,12 +1325,17 @@ function AdminDashboardPage() {
                         key={row.photographerId}
                         className="flex items-center justify-between gap-3 py-2.5"
                       >
-                        <span className="min-w-0 truncate text-sm">
-                          {row.status === 'accepted'
-                            ? row.livePublishing
-                              ? 'Connected · publishing'
-                              : 'Connected · paused'
-                            : row.status}
+                        <span className="min-w-0 text-sm">
+                          <span className="block truncate font-medium">
+                            {row.name ?? 'Photographer (no business name set yet)'}
+                          </span>
+                          <span className="block truncate text-xs text-charcoal/60">
+                            {row.status === 'accepted'
+                              ? row.livePublishing
+                                ? 'Connected · publishing'
+                                : 'Connected · paused'
+                              : row.status}
+                          </span>
                         </span>
                         {row.status === 'accepted' ? (
                           <button
@@ -1732,6 +1770,11 @@ function AdminDashboardPage() {
                 ) : null}
               </div>
             </section>
+            <HelpChat
+              conditions={jumpConditions}
+              onOpenJump={jumpTo}
+              onStartGuide={() => setGuideProgress({ status: 'active', step: 0 })}
+            />
           </>
         ) : null}
         </div>

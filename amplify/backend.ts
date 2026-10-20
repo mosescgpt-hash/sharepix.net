@@ -289,6 +289,9 @@ pairingTable.grantReadWriteData(connectFn);
 connectFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 connectFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
 connectFn.addEnvironment('PAIRING_TABLE_NAME', pairingTable.tableName);
+// Names only, for the host's photographer list (eventPhotographerNames).
+backend.data.resources.tables.PhotographerProfile.grantReadData(connectFn);
+connectFn.addEnvironment('PROFILE_TABLE_NAME', backend.data.resources.tables.PhotographerProfile.tableName);
 bucket.grantDelete(sanitizeFn);
 
 // The homepage demo's sweep. The only scheduled delete in the product, and the
