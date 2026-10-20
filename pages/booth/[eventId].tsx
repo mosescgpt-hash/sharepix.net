@@ -219,6 +219,13 @@ export default function BoothSignupPage() {
                   />
                   <span>{BOOTH_CONSENT_TEXT}</span>
                 </label>
+                <p className="pl-7 text-xs leading-relaxed text-charcoal/65">
+                  The host can see your sign-up and photos. The photographer uses your name and
+                  code to match your photos. Approved photos are emailed through a private link;
+                  anyone you share the link with can open it. Full-resolution files are removed
+                  30 days after the event. If you are under 13, ask a parent or guardian to enter
+                  your name and their email and sign up for you. Read our <a href="/privacy" className="underline">Privacy Policy</a>.
+                </p>
                 {error ? <Notice tone="error">{error}</Notice> : null}
                 <button
                   type="submit"

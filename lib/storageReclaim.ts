@@ -188,14 +188,16 @@ export function storedKeysOf(photo: {
  *
  * Guest book entries carry no media of their own: an entry references a Photo
  * in the same event by id, so its photo or video message is already among the
- * objects deleted above. That is worth knowing before someone "fixes" it by
- * adding a second delete pass against keys that were never there.
+ * objects deleted above. Booth attendee rows hold names and email addresses;
+ * they are removed with the rest of an event's guest records at the same
+ * retention boundary.
  */
 export const COMPANION_TABLES = [
   'PhotoReaction',
   'PhotoComment',
   'GuestBookEntry',
   'Moment',
+  'BoothAttendee',
 ] as const;
 
 export type CompanionTable = (typeof COMPANION_TABLES)[number];

@@ -35,6 +35,7 @@ const COMPANION_TABLES: Array<{ label: string; name: string }> = [
   { label: 'PhotoComment', name: process.env.COMMENT_TABLE_NAME ?? '' },
   { label: 'GuestBookEntry', name: process.env.GUEST_BOOK_TABLE_NAME ?? '' },
   { label: 'Moment', name: process.env.MOMENT_TABLE_NAME ?? '' },
+  { label: 'BoothAttendee', name: process.env.BOOTH_ATTENDEE_TABLE_NAME ?? '' },
 ];
 
 /**

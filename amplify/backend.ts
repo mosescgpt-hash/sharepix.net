@@ -1357,6 +1357,9 @@ reactionTable.grantReadWriteData(reclaimFn);
 commentTable.grantReadWriteData(reclaimFn);
 guestBookTable.grantReadWriteData(reclaimFn);
 momentTable.grantReadWriteData(reclaimFn);
+// Booth sign-up names and emails follow the same event retention boundary as
+// the photos and other guest records.
+boothAttendeeTable.grantReadWriteData(reclaimFn);
 bucket.grantDelete(reclaimFn);
 reclaimFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 reclaimFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
@@ -1365,6 +1368,7 @@ reclaimFn.addEnvironment('REACTION_TABLE_NAME', reactionTable.tableName);
 reclaimFn.addEnvironment('COMMENT_TABLE_NAME', commentTable.tableName);
 reclaimFn.addEnvironment('GUEST_BOOK_TABLE_NAME', guestBookTable.tableName);
 reclaimFn.addEnvironment('MOMENT_TABLE_NAME', momentTable.tableName);
+reclaimFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 reclaimFn.addEnvironment('BUCKET_NAME', bucket.bucketName);
 reclaimFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
 reclaimFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');

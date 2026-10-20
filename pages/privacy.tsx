@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'October 2, 2026';
+const LAST_UPDATED = 'October 20, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
@@ -25,9 +25,9 @@ export default function PrivacyPage() {
               Service, you agree to this Policy.
             </p>
             <p>
-              We designed SharePix so guests can contribute photos without creating an
-              account or handing over personal details. We collect only what we need to
-              run events, and we never sell your information.
+              Most guests can browse or contribute photos without an account. Some event
+              features ask for additional information, as explained below. We collect only
+              what we need to run events, and we never sell your information.
             </p>
           </div>
 
@@ -40,6 +40,10 @@ export default function PrivacyPage() {
               <li>
                 <strong>Guests</strong> — people who scan an event&rsquo;s QR code or link to
                 view a gallery or upload photos. Guests do not need an account.
+              </li>
+              <li>
+                <strong>Booth attendees</strong> — people who choose to sign up for photo
+                delivery at an event where the host has enabled booth mode.
               </li>
             </ul>
           </div>
@@ -70,14 +74,38 @@ export default function PrivacyPage() {
                 contributed (for example, &ldquo;Aunt Maya&rdquo;). This is optional and stored
                 on your own device to save you retyping it; it is attached to photos you upload.
               </li>
+              <li>
+                <strong>Booth sign-up details, when booth mode is enabled:</strong> your name,
+                email address, event, and the time you agreed to receive booth photos by email.
+                We also store a random QR token and a private gallery key; neither contains your
+                email address. The event host can view the sign-up details. The event photographer
+                uses your name and QR code to match photos.
+              </li>
             </ul>
             <p>
-              To upload photos or view a gallery, guests are not asked for an email address,
-              phone number, or account. That changes only if a guest chooses to order prints,
-              which is optional and separate &mdash; see <strong>If you order prints</strong>{' '}
-              below. Please note that photos and videos can themselves contain personal
-              information (faces, locations, or details visible in the image, and any metadata
-              the file carries).
+              Ordinary guest uploads and gallery viewing do not require an email address, phone
+              number, or account. Booth mode is different: if the host enables it, an attendee
+              enters a name and email address and agrees to receive photos from that event. A
+              guest who orders prints also provides the details described below. Photos and
+              videos can themselves contain personal information, including faces, locations,
+              details visible in the image, and file metadata.
+            </p>
+
+            <h3>Booth-mode sign-up</h3>
+            <p>
+              We use booth sign-up details to identify the attendee, match photos to them, and
+              email them when the photographer approves photos for delivery. The host can view
+              the attendee list and booth photos; the photographer uses the attendee&rsquo;s name
+              and QR code while matching and reviewing photos. Each attendee&rsquo;s gallery shows
+              only photos approved and assigned to that attendee. It opens through a unique link
+              sent by email, without an account. Anyone who receives or is given that link can
+              open it, so attendees should share it only with people they trust.
+            </p>
+            <p>
+              On a personal phone, the sign-up page stores the attendee&rsquo;s name and QR token
+              in that browser so the code can be reopened. Kiosk mode does not save the sign-up
+              on the shared device. Attendees can stop further booth emails using the link in an
+              email; this does not close the photo gallery.
             </p>
 
             <h3>If you order prints</h3>
@@ -111,15 +139,19 @@ export default function PrivacyPage() {
               Like most online services, our infrastructure providers automatically log
               technical information such as IP address, browser type, and request timestamps to
               operate the Service, keep it secure, and diagnose problems. We use essential
-              browser storage (for example, to keep you signed in and remember your uploader
-              nickname). We do not use advertising or cross-site tracking cookies.
+              browser storage (for example, to keep you signed in, remember your uploader
+              nickname, and save booth sign-up details or guided-setup progress on your own
+              device). We do not use advertising or cross-site tracking cookies.
             </p>
             <p>
               We use <strong>Cloudflare Web Analytics</strong> to count page views and see
               which pages people visit. It sets no cookies, stores no identifier in your
               browser, and does not follow you to other sites, so there is no
               &ldquo;accept cookies&rdquo; banner to dismiss and nothing to opt out of. It
-              tells us how many people looked at a page — not who they were.
+              tells us how many people looked at a page — not who they were. The help chat
+              matches questions in your browser; it does not send the text you type to SharePix.
+              Guided-setup progress is saved in your browser storage. If you choose to email
+              support, your email message is sent to us through your email provider.
             </p>
           </div>
 
@@ -128,6 +160,7 @@ export default function PrivacyPage() {
             <ul>
               <li>To create and operate events and galleries.</li>
               <li>To let guests upload photos and hosts view, moderate, and download them.</li>
+              <li>To operate booth sign-up, match photos to attendees, and deliver approved photos by email.</li>
               <li>To authenticate hosts and keep accounts secure.</li>
               <li>To process payments and provide receipts through Stripe.</li>
               <li>To detect, prevent, and respond to abuse, fraud, and security issues.</li>
@@ -139,11 +172,11 @@ export default function PrivacyPage() {
           <div>
             <h2>Photos and event content</h2>
             <p>
-              Photos and videos uploaded to an event are visible to the event&rsquo;s host and
-              to others who have access to that event (for example, guests with the link or QR
-              code, according to the event&rsquo;s settings). Hosts can view, download, moderate,
-              and delete content in their events. If you are a guest and want a photo you
-              uploaded removed, ask the event host, or contact us at{' '}
+              Photos and videos uploaded to a shared event gallery are visible to the event&rsquo;s
+              host and to others who have access to that event (for example, guests with the link
+              or QR code, according to the event&rsquo;s settings). Hosts can view, download,
+              moderate, and delete content in their events. If you are a guest and want a photo
+              you uploaded removed, ask the event host, or contact us at{' '}
               <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
             </p>
           </div>
@@ -154,17 +187,25 @@ export default function PrivacyPage() {
             <ul>
               <li>
                 <strong>With service providers</strong> that run the Service on our behalf,
-                namely <strong>Amazon Web Services</strong> (hosting, storage, databases, and
-                account management), <strong>Stripe</strong> (payment processing), and{' '}
-                <strong>Prodigi</strong> (print manufacturing and shipping). Prodigi is
-                involved only when you order a print: it receives the shipping name and
-                address for that order and retrieves the photo you chose, in order to make and
-                send it. These providers handle data under their own privacy and security
-                commitments, and are given only what they need to perform their part.
+                <strong>Amazon Web Services</strong> (application hosting, databases, and
+                transactional email), <strong>Cloudflare</strong> (photo storage and delivery
+                through R2, and page-view analytics), <strong>Stripe</strong> (payment
+                processing), and <strong>Prodigi</strong> (print manufacturing and shipping).
+                Prodigi is involved only when you order a print: it receives the shipping name
+                and address for that order and retrieves the photo you chose, in order to make
+                and send it. Each provider receives information needed for its part of the
+                Service and handles it under its own privacy and security commitments.
               </li>
               <li>
                 <strong>Within an event</strong> — content and any nickname you add are shared
                 with the host and others who have access to that event, as described above.
+              </li>
+              <li>
+                <strong>For booth mode</strong> — the host can access attendee names, email
+                addresses, and booth photos. The event photographer uses attendee names and QR
+                codes to match and review photos. Approved photos are delivered to each attendee
+                through their unique gallery link; other attendees cannot browse that gallery
+                through SharePix.
               </li>
               <li>
                 <strong>For legal reasons</strong> — if required by law, or to protect the
@@ -181,10 +222,13 @@ export default function PrivacyPage() {
           <div>
             <h2>Where your information is stored</h2>
             <p>
-              SharePix is hosted on Amazon Web Services in the United States. If you access the
-              Service from outside the United States, you understand that your information will
-              be processed in the United States, where privacy laws may differ from those in
-              your country.
+              SharePix uses Amazon Web Services and Cloudflare to operate the Service. Our
+              application and database infrastructure is hosted on Amazon Web Services in the
+              United States. Photos and videos may be stored and delivered through Cloudflare R2.
+              These providers may process information in other locations as needed to deliver
+              their services. If you access SharePix from outside the United States, information
+              may be processed in the United States and other locations where our providers
+              operate, where privacy laws may differ from those in your country.
             </p>
           </div>
 
@@ -211,6 +255,12 @@ export default function PrivacyPage() {
               </li>
             </ul>
             <p>
+              In booth mode, full-resolution originals are removed 30 days after the event date
+              (or, if no event date is set, 30 days after the event was created). Reduced-size
+              previews remain available under the event&rsquo;s gallery-retention period above.
+              Booth attendee names, email addresses, and sign-up records are removed with the
+              event&rsquo;s photos during scheduled cleanup after the gallery and 90-day archive
+              periods end. A host can delete an individual attendee record or event earlier.
               Hosts can delete their photos and events at any time. We may retain limited records
               (such as payment confirmations) as required for accounting, legal, or
               fraud-prevention purposes.
@@ -262,11 +312,13 @@ export default function PrivacyPage() {
           <div>
             <h2>Children&rsquo;s privacy</h2>
             <p>
-              The Service is not directed to children under 13, and we do not knowingly collect
-              personal information from them. Events often include photos of children uploaded by
-              adults (hosts and guests); the host is responsible for having the right to collect
-              and share that content. If you believe a child has provided us personal information
-              directly, contact us and we will delete it.
+              The Service is not directed to children under 13, and children should not sign up
+              for booth mode on their own. If a child under 13 is participating in a booth event,
+              a parent or guardian should provide the child&rsquo;s name and the adult&rsquo;s
+              email address and agree to receive the photos on the child&rsquo;s behalf. Events
+              often include photos of children uploaded by adults; the host is responsible for
+              having the right to collect and share that content. If you believe a child has
+              provided us personal information directly, contact us and we will delete it.
             </p>
           </div>
 
