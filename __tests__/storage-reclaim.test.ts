@@ -296,11 +296,12 @@ describe('the job itself', () => {
       'COMMENT_TABLE_NAME',
       'GUEST_BOOK_TABLE_NAME',
       'MOMENT_TABLE_NAME',
+      'BOOTH_ATTENDEE_TABLE_NAME',
     ]) {
       expect(backend).toContain(`reclaimFn.addEnvironment('${name}'`);
       expect(handler).toContain(`process.env.${name}`);
     }
-    for (const table of ['reactionTable', 'commentTable', 'guestBookTable', 'momentTable']) {
+    for (const table of ['reactionTable', 'commentTable', 'guestBookTable', 'momentTable', 'boothAttendeeTable']) {
       expect(backend).toContain(`${table}.grantReadWriteData(reclaimFn)`);
     }
   });

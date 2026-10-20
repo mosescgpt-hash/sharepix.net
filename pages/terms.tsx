@@ -3,7 +3,7 @@ import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 import { FAIR_USE_NOTICE } from '@/lib/fairUse';
 
 // Update this whenever the terms change.
-const LAST_UPDATED = 'October 2, 2026';
+const LAST_UPDATED = 'October 20, 2026';
 const CONTACT_EMAIL = 'support@sharepix.net';
 // The U.S. state whose law governs these terms — set to where the company is
 // registered. Still a placeholder rather than a named state.
@@ -92,6 +92,18 @@ export default function TermsPage() {
                 including obtaining any notices or consents appropriate for your event.
               </li>
             </ul>
+            <p>
+              <strong>Booth mode.</strong> On eligible events, the host may enable booth mode
+              for attendee sign-up and private photo delivery. The host must tell attendees how
+              their information and photos will be used and obtain any required consent, including
+              consent from a parent or guardian where required. Booth sign-up collects the
+              attendee&rsquo;s name and email address. The host can access the attendee list and
+              booth photos; the event photographer uses attendee names and QR codes to match and
+              review photos. Approved photos are emailed to attendees through a private gallery
+              link. Anyone who receives that link may be able to open it, so attendees should
+              share it only with people they trust. Booth mode carries no separate booth-mode
+              charge on eligible events; the event&rsquo;s plan terms and limits still apply.
+            </p>
           </div>
 
           <div>
