@@ -615,12 +615,24 @@ export async function fetchEventPhotographers(eventId: string) {
       ),
     'The photographers on this event could not be loaded.',
   );
-  return (rows as Array<Record<string, unknown>>).map((row) => ({
+  const list = (rows as Array<Record<string, unknown>>).map((row) => ({
     photographerId: String(row.photographerId ?? ''),
     status: String(row.status ?? ''),
     acceptedAt: (row.acceptedAt as string) ?? null,
     livePublishing: row.livePublishing === true,
+    name: null as string | null,
   }));
+  if (list.length === 0) return list;
+  // Names come from a separate lookup, because hosts can't read photographer
+  // profiles directly. A failed lookup just leaves the names off.
+  const { data } = await getClient()
+    .queries.eventPhotographerNames(
+      { eventId, photographerIds: list.map((row) => row.photographerId) },
+      { authMode: 'userPool' },
+    )
+    .catch(() => ({ data: null }));
+  const names = new Map((data ?? []).filter(Boolean).map((n) => [n!.photographerId, n!.name ?? null]));
+  return list.map((row) => ({ ...row, name: names.get(row.photographerId) ?? null }));
 }
 
 /** Ask for somewhere to put one professional photograph. */
@@ -2222,6 +2234,7 @@ async function updateEventSettings(
     videoUploadsEnabled?: boolean;
     guestDownloadsBlocked?: boolean;
     uploadsClosed?: boolean;
+    boothMode?: boolean;
     qrDotStyle?: string;
     qrColor?: string;
     /** '' clears the logo. Omit to leave the whole style alone. */
@@ -2254,6 +2267,7 @@ async function updateEventSettings(
       videoUploadsEnabled: changes.videoUploadsEnabled,
       guestDownloadsBlocked: changes.guestDownloadsBlocked,
       uploadsClosed: changes.uploadsClosed,
+      boothMode: changes.boothMode,
       qrDotStyle: changes.qrDotStyle,
       qrColor: changes.qrColor,
       qrLogo: changes.qrLogo,
@@ -2336,6 +2350,11 @@ export async function setEventAlertEmail(eventId: string, email: string): Promis
     { alertEmail: email.trim() },
     'The alert email could not be saved.',
   );
+}
+
+/** Host: switch booth mode on or off. Included with every event. */
+export async function setEventBoothModeAsHost(eventId: string, on: boolean): Promise<void> {
+  await updateEventSettings(eventId, { boothMode: on }, 'Booth mode could not be changed.');
 }
 
 /**

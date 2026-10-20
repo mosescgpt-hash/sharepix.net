@@ -71,9 +71,12 @@ describe('who can reach attendee rows', () => {
     expect(model).not.toContain('allow.authenticated()');
   });
 
-  it('keeps booth mode an admin-only switch', () => {
-    const settings = readSource('amplify/functions/update-event/settings.ts');
-    expect(settings).not.toContain('boothMode');
+  it('lets the host switch booth mode, but never set the sign-up count', () => {
+    const { EDITABLE_FIELDS } = require('../amplify/functions/update-event/settings') as {
+      EDITABLE_FIELDS: readonly string[];
+    };
+    expect(EDITABLE_FIELDS).toContain('boothMode');
+    expect(EDITABLE_FIELDS).not.toContain('boothAttendeeCount');
   });
 });
 
@@ -85,8 +88,11 @@ describe('the pages', () => {
     expect(page).toContain('KIOSK_RESET_SECONDS');
   });
 
-  it('shows the host card only on booth events', () => {
+  it('offers booth mode on every event, with the attendee list once it is on', () => {
     const admin = readSource('pages/event/[eventId]/admin.tsx');
-    expect(admin).toContain('event.boothMode === true && origin ?');
+    expect(admin).toContain('on={event.boothMode === true}');
+    const card = readSource('components/BoothModeCard.tsx');
+    expect(card).toContain('<BoothAttendees');
+    expect(card).toContain('Turn on booth mode');
   });
 });

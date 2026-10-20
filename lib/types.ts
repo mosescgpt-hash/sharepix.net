@@ -102,7 +102,7 @@ export interface QREvent {
   qrColor?: string | null;
   /** A downscaled data URL, small enough to live on the row. */
   qrLogo?: string | null;
-  /** Booth mode: photos go to each attendee. Admin-only switch; see docs/booth-mode.md. */
+  /** Booth mode: photos go to each attendee. The host's switch, on Extras; see docs/booth-mode.md. */
   boothMode?: boolean | null;
   boothAttendeeCount?: number | null;
   createdBy?: string | null;
