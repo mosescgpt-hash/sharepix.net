@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { pricingSourceFor } from './pricing';
+import { extensionAmountFor, pricingSourceFor } from './pricing';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import { effectiveAmountOffCents, distributeDiscount } from './discount-math';
@@ -370,10 +370,18 @@ export const handler: Handler = async (event) => {
   if ((event.arguments.kind ?? '') === 'extend_window') {
     const extEventId = event.arguments.eventId ?? '';
     if (!extEventId) throw new Error('Missing event for the extension.');
-    const extTier = (event.arguments.tier ?? '').toLowerCase();
-    const planPrice = TIER_PRICING[extTier]?.amount;
-    if (!planPrice) throw new Error('Unknown plan for the extension.');
-    const amount = Math.max(100, Math.round(planPrice / 2)); // half price, min $1
+    // Priced from the event's own row. `event.arguments.tier` is ignored here
+    // on purpose — see extensionAmountFor.
+    const extFound = await dynamo.send(
+      new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: extEventId } } }),
+    );
+    const amount = extensionAmountFor(
+      extFound.Item
+        ? { tier: extFound.Item.tier?.S, takenDown: Boolean(extFound.Item.takenDownAt?.S) }
+        : null,
+      (tier) => TIER_PRICING[tier]?.amount,
+    );
+    if (!amount) throw new Error('This event cannot be extended.');
     try {
       const stripe = new Stripe(secretKey);
       const disc = await buildDiscount(stripe, event.arguments.discountCode, ['extend'], amount);
@@ -483,9 +491,11 @@ export const handler: Handler = async (event) => {
 
     for (const key of requested) {
       if (key === 'extend') {
-        const planPrice = TIER_PRICING[evTier]?.amount;
-        if (!planPrice) throw new Error('This plan cannot be extended.');
-        const amount = Math.max(100, Math.round(planPrice / 2));
+        const amount = extensionAmountFor(
+          { tier: evTier, takenDown: Boolean(ev.takenDownAt?.S) },
+          (tier) => TIER_PRICING[tier]?.amount,
+        );
+        if (!amount) throw new Error('This plan cannot be extended.');
         lineItems.push({
           quantity: 1,
           price_data: {

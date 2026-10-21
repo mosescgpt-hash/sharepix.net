@@ -1,7 +1,9 @@
 import {
+  extensionAmountFor,
   isAdminCaller,
   pricingSourceFor,
 } from '../amplify/functions/stripe-checkout/pricing';
+import { codeOnly, readSource } from './sourceGuards';
 
 const SELLABLE = ['starter', 'standard', 'premium'];
 const sellableTier = (tier: string) => SELLABLE.includes(tier);
@@ -306,5 +308,34 @@ describe('a free event can never reach Stripe', () => {
       caller: admin,
     });
     expect(source.kind).toBe('refused');
+  });
+});
+
+describe('extensionAmountFor — the extension underpayment', () => {
+  // Cents per plan, shaped like TIER_PRICING: no trial, which is never sold.
+  const PRICES: Record<string, number> = { plus: 7900, starter: 1900, premium: 7900 };
+  const priceOf = (tier: string) => PRICES[tier];
+
+  it('charges half the stored plan', () => {
+    expect(extensionAmountFor({ tier: 'plus' }, priceOf)).toBe(3950);
+    expect(extensionAmountFor({ tier: 'STARTER' }, priceOf)).toBe(950);
+  });
+
+  it('never extends a trial, an unknown plan, a missing event or a closed one', () => {
+    expect(extensionAmountFor({ tier: 'trial' }, priceOf)).toBeNull();
+    expect(extensionAmountFor({ tier: '' }, priceOf)).toBeNull();
+    expect(extensionAmountFor(null, priceOf)).toBeNull();
+    expect(extensionAmountFor({ tier: 'plus', takenDown: true }, priceOf)).toBeNull();
+  });
+
+  it('is what both checkout paths use, and neither reads the request’s tier', () => {
+    const handler = codeOnly(readSource('amplify/functions/stripe-checkout/handler.ts'));
+    const standalone = handler.slice(
+      handler.indexOf("=== 'extend_window'"),
+      handler.indexOf("metadata: { kind: 'extend_window'"),
+    );
+    expect(standalone).toContain('extensionAmountFor(');
+    expect(standalone).not.toContain('event.arguments.tier');
+    expect(handler.match(/extensionAmountFor\(/g)).toHaveLength(2);
   });
 });

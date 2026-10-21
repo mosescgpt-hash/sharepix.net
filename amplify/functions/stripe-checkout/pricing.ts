@@ -101,3 +101,26 @@ export function pricingSourceFor({
 
   return { kind: 'event', tier };
 }
+
+/**
+ * What a 30-day upload-window extension costs, in cents, or null when this
+ * event cannot be extended.
+ *
+ * Half the price of the plan the event is STORED on, never one named in the
+ * request. The standalone extend_window checkout used to price from the
+ * request's tier, so a caller could send "starter" for a $79 event and pay
+ * $9.50 instead of $39.50 — or extend a free trial, which is never sold
+ * anything. Both checkout paths now come through here with the row's tier.
+ *
+ * A trial is not priceable (see TIER_PRICING in the handler), so it gets null,
+ * as does an unknown or missing tier and a closed event.
+ */
+export function extensionAmountFor(
+  stored: { tier?: string | null; takenDown?: boolean } | null | undefined,
+  priceOf: (tier: string) => number | undefined,
+): number | null {
+  if (!stored || stored.takenDown) return null;
+  const planPrice = priceOf((stored.tier ?? '').toLowerCase());
+  if (!planPrice) return null;
+  return Math.max(100, Math.round(planPrice / 2)); // half price, min $1
+}
