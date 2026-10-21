@@ -890,6 +890,14 @@ Previews stamped while the feature existed keep their mark; there is no way to
 take one off without the original. In practice that is the few photographers,
 if any, who switched it on during those days.
 
+## 21. Pro and booth mode are included with every event
+
+**SharePix Pro and booth mode cost nothing extra.** Both come with the price
+of each event: a host can invite a photographer, and switch booth mode on,
+on any event. There is no Pro plan, no per-photographer fee, and no booth
+fee. Nothing in the code gates either on plan or payment, and the help
+articles and marketing say "included".
+
 ## What has to exist first
 
 Roughly seven of the strategy documents key off a **Successful Event** metric

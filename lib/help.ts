@@ -46,6 +46,8 @@ export const HELP_CATEGORIES = [
   'Finding and viewing photos',
   'Prints',
   'Running your event',
+  'Customizing your event',
+  'Photographers and booth mode',
   'Plans, billing and add-ons',
   'Privacy and safety',
   'Your account',
@@ -453,15 +455,23 @@ export const HELP_ARTICLES: HelpArticle[] = [
     audience: 'host',
     category: 'Running your event',
     summary: 'Hosts can remove anything. Deleting an event is permanent.',
-    keywords: ['delete', 'remove', 'hide', 'take down', 'inappropriate'],
+    keywords: ['delete', 'remove', 'hide', 'take down', 'inappropriate', 'bulk', 'several', 'multiple', 'select all', 'shift', 'delete event', 'delete my event'],
     blocks: [
       {
         kind: 'text',
-        text: 'From your dashboard you can delete any photo or video in the event, whoever uploaded it. Deleting frees the slot, so removing a video makes room for another one.',
+        text: 'From your dashboard\'s Photos tab you can delete any photo or video in the event, whoever uploaded it. Deleting frees the slot, so removing a video makes room for another one. Hide keeps a photo but takes it out of the gallery; Approve brings it back.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'To delete several at once, tap Select photos to delete above the photos.',
+          'Tap each photo you want to remove, or Select all. On a computer, click one, then hold Shift and click another to select everything in between.',
+          'Tap Delete selected and confirm. Anything that could not be deleted stays selected so you can try again.',
+        ],
       },
       {
         kind: 'text',
-        text: 'Deleting the event removes every photo with it and cannot be undone. You are asked to confirm, and the confirmation tells you how many photos will go.',
+        text: 'To delete the whole event, go to the Event tab, then Ending the event, and tap Delete event. It removes every photo with it and cannot be undone. You are asked to confirm, and the confirmation tells you how many photos will go.',
       },
       {
         kind: 'note',
@@ -644,7 +654,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Photos you upload are visible to other guests at that event and to the host. Galleries are not indexed or searchable, but anyone with the code or QR image can open one — treat a photo as sharing with everyone at the party.',
+        text: 'Usually, photos you upload are visible to other guests at that event and to the host. Galleries are not indexed or searchable, but anyone with the code or QR image can open one — treat a photo as sharing with everyone at the party. Some hosts choose a private gallery instead, where each guest sees only their own photos, or only the host sees them.',
       },
       {
         kind: 'text',
@@ -669,11 +679,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (with a fair-use ceiling of 5,000 per event, raised free on request) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book and the live slideshow — nothing is sold as an add-on on top.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (with a fair-use ceiling of 5,000 per event, raised free on request) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book, the live slideshow, SharePix Pro for your photographer and booth mode — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',
-        text: 'The free event is a real event with your own QR code and gallery, limited to 50 photos and 1 video. Guests can upload for 14 days, and the gallery stays up for 14 days after that rather than 12 months. One per account, and a limited number are given out each day. It is for trying SharePix at something small before you pay for something that matters.',
+        text: 'The free event is a real event with your own QR code and gallery, limited to 50 photos and 1 video. Guests can upload for 14 days, and the gallery stays up for 14 days after that rather than 12 months. One per account. It is for trying SharePix at something small before you pay for something that matters.',
       },
       {
         kind: 'text',
@@ -955,6 +965,483 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
     related: ['find-the-gallery'],
   },
+  {
+    slug: 'edit-event-details',
+    title: 'Changing the event name, date or place',
+    audience: 'host',
+    category: 'Running your event',
+    summary: 'Edit them on the Event tab. The name and date lock once the first photo arrives.',
+    keywords: ['date', 'event date', 'rename', 'event name', 'wrong date', 'location', 'place', 'city', 'edit event', 'details'],
+    blocks: [
+      {
+        kind: 'steps',
+        steps: [
+          'Open your dashboard and go to the Event tab.',
+          'Under Event details, change the Event name, the Event date, or Where it happened (city and state).',
+          'Tap Save details.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'The name and date lock once the first photo is uploaded, so guests\' memories keep the details they saw. You can still change the location after that. Uploads run from the event date, so set it before you share your QR code.',
+      },
+      {
+        kind: 'note',
+        text: 'Only a city and state are shown, never a street address. Photos\' own location data is always removed when they are uploaded.',
+      },
+    ],
+    related: ['host-extend-window', 'create-event'],
+  },
+
+  // ── Customizing your event ─────────────────────────────────────────────────
+  {
+    slug: 'guided-customization',
+    title: 'Not sure what to set up? Use the guide or ask Help',
+    audience: 'host',
+    category: 'Customizing your event',
+    summary: 'A step-by-step walk through every option, and a Help button that answers questions on your dashboard.',
+    keywords: ['guide', 'walkthrough', 'tour', 'setup', 'set up', 'customize', 'customise', 'getting started', 'help chat', 'where do i start', 'options'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'On a new event, the top of your dashboard offers Guided customization. It walks you through each option one at a time (your QR code, the look, the cover photo, who can see the gallery, screening, downloads, videos, reminders, challenges, your photographer and printable signs) and opens the right card for each.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Tap Start guided customization.',
+          'Read the short note for each step and change the card it opens, or leave it as it is.',
+          'Tap Next to move on, Back to go back, or Skip this one. End guide stops at any time.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'The guide never changes a setting for you; it only shows you where each one is. It remembers where you stopped on that device.',
+      },
+      {
+        kind: 'text',
+        text: 'The Help button in the corner of your dashboard answers questions in your own words from these help articles, with a button that takes you straight to the setting. It can also start the guide. What you type stays on your device.',
+      },
+    ],
+    related: ['change-the-look', 'gallery-privacy'],
+  },
+  {
+    slug: 'change-the-look',
+    title: 'Changing how your event looks',
+    audience: 'host',
+    category: 'Customizing your event',
+    summary: 'Pick a ready-made look, add a cover photo, and choose fonts, layout and colour under Design.',
+    keywords: ['look', 'theme', 'style', 'design', 'cover', 'cover photo', 'banner', 'fonts', 'font', 'colour', 'color', 'accent', 'headline', 'layout', 'mosaic', 'grid', 'feed', 'countdown', 'background'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Open your dashboard, go to the Design tab and use the Look and feel card. A preview above the tabs shows what guests see at the top of the upload page and the gallery.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Looks: tap one of the nine ready-made looks (Signature, Romantic, Garden, Party and more) to set the fonts, colour and background together. You can change any part afterwards.',
+          'Cover: tap Use my photo to add a picture from your phone or computer (wide photos work best), or choose one of the backgrounds. Remove photo takes it off again.',
+          'Fonts: choose SharePix, Elegant, Classic or Statement.',
+          'Gallery: choose Grid, Mosaic or Feed, and who can see the gallery.',
+          'Custom: change the headline and the line underneath, move the photo position, the shade over the photo, alignment, height and the countdown, then tap Save these options.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Looks, Cover, Fonts and Gallery save as soon as you tap. Custom is saved only when you tap Save these options; Undo changes throws the draft away. Your accent colour has its own Save colour button.',
+      },
+      {
+        kind: 'note',
+        text: 'If faces are cut off in your cover photo, drag Photo position in the Custom tab. A look never removes your own cover photo.',
+      },
+    ],
+    related: ['gallery-privacy', 'likes-and-comments', 'share-qr-code'],
+  },
+  {
+    slug: 'gallery-privacy',
+    title: 'Choosing who can see the gallery',
+    audience: 'host',
+    category: 'Customizing your event',
+    summary: 'Everyone with the link, each guest only their own photos, or only you.',
+    keywords: ['private', 'privacy', 'who can see', 'hide gallery', 'only me', 'own photos', 'audience', 'memorial', 'children', 'work event', 'visible'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Go to Design → Look and feel → Gallery, then Who can see the gallery. It saves as soon as you choose.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Everyone with the link: guests see every photo as it arrives. The usual choice, and the default.',
+          'Each guest sees only their own: guests can add as many as they like but only see what they added. Good for work events, events with children, or a memorial.',
+          'Only you: guests add photos and never see the gallery. Everything comes straight to you.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'You always see every photo yourself. A guest\'s "own" photos are the ones uploaded from the same phone and browser, or while signed in.',
+      },
+      {
+        kind: 'note',
+        text: 'With either private option, open the live slideshow signed in as yourself so it shows everything. Download links you create still work and show exactly the photos you put in them.',
+      },
+    ],
+    related: ['change-the-look', 'host-guest-downloads', 'who-can-see'],
+  },
+  {
+    slug: 'likes-and-comments',
+    title: 'Likes and comments on photos',
+    audience: 'host',
+    category: 'Customizing your event',
+    summary: 'Both are on by default. Turn either off, and hide any comment you do not want shown.',
+    keywords: ['likes', 'like', 'hearts', 'reactions', 'comments', 'comment', 'turn off comments', 'turn off likes', 'hide comment', 'delete comment', 'moderate comments'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Guests can like photos and comment on them without an account. To turn either off, go to Design → Look and feel → Gallery → Likes and comments and untick Guests can like photos or Guests can comment on photos. Some events are better without them — a memorial, for instance.',
+      },
+      {
+        kind: 'text',
+        text: 'Comments are not screened automatically. While comments are on, the Photos tab has a Comments card listing everything guests have written. Tap Hide to remove a comment from the gallery; Show puts it back. Comments are hidden rather than deleted, so a hide can always be undone.',
+      },
+      {
+        kind: 'note',
+        text: 'Turning comments off also hides the ones already there.',
+      },
+    ],
+    related: ['change-the-look', 'host-delete-photo'],
+  },
+
+  // ── Photographers and booth mode ───────────────────────────────────────────
+  {
+    slug: 'add-photographer',
+    title: 'Adding your photographer',
+    audience: 'host',
+    category: 'Photographers and booth mode',
+    summary: 'Give your photographer a one-time code and their shots appear in your gallery as previews they approve.',
+    keywords: ['photographer', 'professional', 'pro', 'invite', 'pairing code', 'connect', 'remove photographer', 'videographer', 'pro cost', 'pro price'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Your photographer\'s shots can appear in the same gallery as your guests\' photos, within minutes of being taken, as previews they approve one by one. Guests can see them but not download them, so the photographer keeps their originals and their print sales. SharePix Pro is included with every event: there is nothing extra to pay, for you or your photographer.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Open your dashboard, go to the Extras tab and find Add your photographer.',
+          'Tap Invite a photographer. You get a code like ABCD-EFGH.',
+          'Give it to your photographer. They sign in to SharePix and enter it at sharepix.net/pro/join.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'The code works once and expires in 30 minutes. It cannot be shown again, but you can tap Make another code. Once they join, they appear in the list with their business name and Connected · publishing or Connected · paused.',
+      },
+      {
+        kind: 'note',
+        text: 'Remove stops a photographer sending or publishing straight away. Photos already in the gallery stay; delete those individually if you need to.',
+      },
+    ],
+    related: ['photographer-using-pro', 'booth-mode'],
+  },
+  {
+    slug: 'photographer-using-pro',
+    title: 'For photographers: shooting an event with SharePix Pro',
+    audience: 'host',
+    category: 'Photographers and booth mode',
+    summary: 'Join with the host\'s code, upload, approve, and go live. Your name and links go under every shot.',
+    keywords: ['photographer', 'pro', 'upload', 'approve', 'publish', 'go live', 'pause', 'profile', 'sell prints', 'purchase', 'credit', 'watermark', 'originals', 'preview size'],
+    blocks: [
+      {
+        kind: 'steps',
+        steps: [
+          'Sign in, open sharepix.net/pro/join and enter the code the host gave you. You go straight to the event\'s review page.',
+          'Tap Add photos to upload JPEG or PNG files. SharePix makes a preview for the gallery.',
+          'Approve or Reject each photo under To review. Rejected photos are never shown to guests.',
+          'Tap Go live when you are ready. While paused, nothing you approve is visible to anyone.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Under When you approve a photo you can choose Publish it (recommended), Hold it until I publish it, or Publish everything automatically. In every mode, nothing reaches the gallery while you are paused. Take down removes a photo from the gallery.',
+      },
+      {
+        kind: 'text',
+        text: 'At sharepix.net/pro/profile, set the name shown on your photos ("Photo by …") and links for Purchase photo, View photographer and Contact photographer. Changes show on photos you have already posted too. You can also choose the preview size and whether SharePix keeps your original files (off by default: the original is deleted once the preview is made).',
+      },
+      {
+        kind: 'note',
+        text: 'SharePix Pro is included with the host\'s event, so there is nothing for you to pay. SharePix never watermarks photos, and guests can never download your shots or your originals from the gallery.',
+      },
+    ],
+    related: ['add-photographer', 'booth-mode'],
+  },
+  {
+    slug: 'booth-mode',
+    title: 'Booth mode: headshots and trade shows',
+    audience: 'host',
+    category: 'Photographers and booth mode',
+    summary: 'Each person signs up, the photographer scans their code, and each person is emailed only their own photos.',
+    keywords: ['booth', 'booth mode', 'headshot', 'headshots', 'trade show', 'convention', 'expo', 'conference', 'kiosk', 'attendee', 'scan', 'badge', 'corporate', 'resend', 'sign up'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Booth mode is for a photographer shooting a stream of different people. Instead of a shared gallery, each person gets their own photos, full resolution, by email. It is included with every event.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'On your dashboard, go to Extras and tap Turn on booth mode.',
+          'Share the sign-up link on a sign or badge, or tap Open kiosk mode on a tablet or computer at the booth. People enter their name and email, agree to be emailed, and get a QR code.',
+          'Invite your photographer with Add your photographer, below.',
+          'Before each person\'s photo, the photographer taps Scan next person and scans their code. Photos are matched to people by when they were taken.',
+          'The photographer checks and approves the photos. Within the hour, each person is emailed a private link to theirs.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Kiosk mode remembers nothing between people and clears itself after each sign-up. Signing up again with the same email gives the same code. Up to 10,000 people can sign up per event.',
+      },
+      {
+        kind: 'text',
+        text: 'Your attendee list shows who has been emailed. Resend sends someone their link again (not more than once every five minutes, and never to someone who turned the emails off). As the host you can see everyone\'s photos, and attendees are told so when they sign up.',
+      },
+      {
+        kind: 'note',
+        text: 'Full-resolution files are deleted 30 days after the event, with a reminder email a week before. Delivery is by email only; there is no texting.',
+      },
+    ],
+    related: ['booth-photos-for-attendees', 'add-photographer', 'photographer-using-pro'],
+  },
+  {
+    slug: 'booth-photographer-tips',
+    title: 'For photographers: scanning and sorting booth photos',
+    audience: 'host',
+    category: 'Photographers and booth mode',
+    summary: 'Scan each person before their shot, sync the camera clock, and fix any mix-ups before approving.',
+    keywords: ['booth', 'scan', 'scan next person', 'camera clock', 'sync', 'sort photos', 'wrong person', 'group shot', 'move photos', 'unassigned', 'check'],
+    blocks: [
+      {
+        kind: 'steps',
+        steps: [
+          'On the event\'s review page, use the Booth mode panel. Tap Scan next person and point the phone at the person\'s code. It shows Now shooting with their name.',
+          'Every photo taken after a scan goes to that person until the next scan.',
+          'Once per session, tap Sync camera clock, take one photo with your camera, and choose it. This lets photos be matched by the moment they were taken, even if they upload late.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Open Sort photos by person to fix mix-ups. Photos marked Check were matched by upload time (they had no usable capture time). Select photos, choose someone, then Move to this person, Also send to this person (for group shots, up to 20 people), Take them off, or Unassign. Nothing is sent until you approve it.',
+      },
+      {
+        kind: 'note',
+        text: 'Booth photos never go to a shared gallery. Location and camera details are removed from the delivered files.',
+      },
+    ],
+    related: ['booth-mode', 'photographer-using-pro'],
+  },
+  {
+    slug: 'booth-photos-for-attendees',
+    title: 'Getting your photos from a booth',
+    audience: 'guest',
+    category: 'Photographers and booth mode',
+    summary: 'You get an email with a private link once the photographer approves your photos.',
+    keywords: ['booth', 'headshot', 'my photos', 'email', 'link expired', 'unsubscribe', 'trade show', 'where are my photos'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Once the photographer approves your photos you get an email, "Your photos from … are ready", with a link to a page of only your photos. If more are approved later, you get one more email.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Open the link in the email.',
+          'Tap Download under a photo, or Download all to save them as one file.',
+          'Save any you want to keep: full-resolution files are removed 30 days after the event. You get a reminder a week before.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Only you have this link, so keep it to yourself. Download links on the page last an hour; reload the page for fresh ones. If Download all does not work in your browser, use the Download button on each photo.',
+      },
+      {
+        kind: 'text',
+        text: 'To stop the emails, use Stop these emails in any of them, or Stop emails about these photos on the page. Your photos stay available until they are removed.',
+      },
+    ],
+    related: ['booth-mode'],
+  },
+
+  // ── Running your event (more) ──────────────────────────────────────────────
+  {
+    slug: 'photo-challenges',
+    title: 'Photo challenges',
+    audience: 'host',
+    category: 'Running your event',
+    summary: 'Optional prompts like "a toast" or "your whole table" that guests can try when they upload.',
+    keywords: ['challenge', 'challenges', 'prompts', 'scavenger hunt', 'games', 'ideas', 'photo hunt', 'shot list'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Guests see one random prompt on the upload page and can shuffle it or skip it. The gallery gets a filter for each challenge that has photos, and the live slideshow can show the challenge under its photos.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Go to the Guests tab and find Photo challenges.',
+          'Tick Show challenges to guests (off until you turn it on).',
+          'Add prompts from the Wedding or party or Convention presets, or type your own under Write your own and tap Add.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Up to 20 challenges can be active at once, each up to 60 characters. Untick one to retire it without deleting it. To change the wording, delete it and add a new one. Deleting a challenge keeps its photos in the gallery, just without the challenge.',
+      },
+    ],
+    related: ['moments', 'live-slideshow'],
+  },
+  {
+    slug: 'guest-reminders',
+    title: 'Reminding guests to add their photos',
+    audience: 'host',
+    category: 'Running your event',
+    summary: 'Offer guests an email the morning after, and again before uploads close. You never see their addresses.',
+    keywords: ['reminder', 'reminders', 'email guests', 'nudge', 'follow up', 'more photos', 'time zone', 'after the event'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'After a guest\'s first upload, SharePix can offer to email them a reminder to add more. You never see their address, and it is deleted 30 days after uploads close.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Go to the Guests tab and find Guest reminders.',
+          'Tick Offer guests a reminder (off until you turn it on).',
+          'Check the Event time zone, so reminders arrive at 10am where the event is.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'The first reminder goes out at 10am the morning after your event date, so your event needs a date. A second goes out three days before uploads close, if uploads stay open more than a week. The card previews both dates.',
+      },
+      {
+        kind: 'note',
+        text: 'Closing uploads stops any reminders still to come. Every reminder has a one-click unsubscribe link.',
+      },
+    ],
+    related: ['host-close-event', 'host-extend-window'],
+  },
+  {
+    slug: 'moments',
+    title: 'Moments: a QR code for each part of the day',
+    audience: 'host',
+    category: 'Running your event',
+    summary: 'Give the ceremony, dinner or dance floor their own QR code so the gallery groups photos by part of the day.',
+    keywords: ['moments', 'moment', 'sections', 'ceremony', 'reception', 'getting ready', 'group photos', 'albums', 'separate qr', 'organize', 'organise'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'Moments are the parts of your event — "Getting ready", "Ceremony", "Reception". Each one gets its own QR code, and the gallery shows a section for each. They are optional: without them, every photo lands in one gallery.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Go to the Share tab and find Moments.',
+          'Type a name, add a description if you like, and tap Add moment.',
+          'Tap QR code on a moment to show its code, then print or screenshot it for those tables.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'Scanning a moment\'s code opens the upload page with that moment already chosen. Guests can also pick it under Which part of the day? or skip it. Photos without a moment appear under Everything else.',
+      },
+      {
+        kind: 'note',
+        text: 'Up to 24 moments per event. Removing one keeps its photos in the gallery; they just stop being grouped.',
+      },
+    ],
+    related: ['share-qr-code', 'photo-challenges'],
+  },
+  {
+    slug: 'guest-book',
+    title: 'The guest book',
+    audience: 'host',
+    category: 'Running your event',
+    summary: 'Guests leave a signed note, with one of their photos or a video message if they like.',
+    keywords: ['guest book', 'guestbook', 'notes', 'messages', 'sign', 'wishes', 'video message', 'hide note'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'The guest book is included with the Full Event plan. Guests sign it from the Guest book button in the gallery, or Sign the guest book on the upload page while uploads are open. They give their name and a note, and can attach one of their photos or videos.',
+      },
+      {
+        kind: 'text',
+        text: 'Notes appear on your dashboard under Photos → Guest book. Notes that contain a link are held for you first. Tap Hide to take a note off the guest book, and Show to put it back or approve a held one.',
+      },
+      {
+        kind: 'note',
+        text: 'The words in notes are not checked automatically, so read new notes before showing the guest book on a screen.',
+      },
+    ],
+    related: ['plans-compared', 'likes-and-comments'],
+  },
+  {
+    slug: 'nfc-tags',
+    title: 'Tap-to-open NFC stickers on your signs',
+    audience: 'host',
+    category: 'Running your event',
+    summary: 'An optional sticker behind your sign lets guests tap their phone instead of scanning.',
+    keywords: ['nfc', 'tap', 'tag', 'sticker', 'tap to open', 'ntag', 'contactless'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'An NFC sticker behind the "or tap here" mark on your sign opens the same page as the QR code. It is optional: the QR code works on its own. SharePix does not sell the stickers.',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Buy NTAG213 or NTAG215 stickers (on-metal ones for a metal surface).',
+          'Install a free NFC writer app, such as NFC Tools.',
+          'From your Signs page, open NFC tap tags and tap Copy event link.',
+          'In the app, write a URL record with that link to the sticker.',
+          'Test it with an iPhone and an Android phone, then lock the tag in the app. Locking is permanent.',
+          'Stick it behind the "tap here" mark. Card is fine; a thick frame or metal stand is not.',
+        ],
+      },
+    ],
+    related: ['share-qr-code'],
+  },
+
+  // ── Plans, billing and add-ons (more) ──────────────────────────────────────
+  {
+    slug: 'featured-events',
+    title: 'Featuring your event and getting money back',
+    audience: 'host',
+    category: 'Plans, billing and add-ons',
+    summary: 'Offer a few photos for SharePix\'s own marketing and get part of what you paid back.',
+    keywords: ['featured', 'feature', 'spotlight', 'testimonial', 'marketing', 'refund', 'money back', 'showcase'],
+    blocks: [
+      {
+        kind: 'text',
+        text: 'If you are happy with how your event went, you can offer SharePix a few photos to show people what it does. You choose which photos; nothing is published unless we come back to you about it. It appears under Extras once your event has photos (not on a free event).',
+      },
+      {
+        kind: 'steps',
+        steps: [
+          'Go to Extras and tap See what is involved.',
+          'Choose Featured Event (8 to 15 photos and a few sentences, 25% back up to $25) or Spotlight Story (10 to 20 photos, a testimonial and a short conversation, 50% back up to $50).',
+          'Pick the photos, write a few sentences if you like, tick the confirmation, and tap Offer these photos.',
+        ],
+      },
+      {
+        kind: 'text',
+        text: 'A person looks at every photo and lets you know which we can use. Only those are ever used, and the rest of your gallery stays private. You can withdraw at any time by replying to that email.',
+      },
+    ],
+    related: ['plans-compared', 'billing-help'],
+  },
+
 ];
 
 /** Articles in a category, in the order they are declared. */

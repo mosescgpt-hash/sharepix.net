@@ -20,7 +20,9 @@ const STOPWORDS = new Set(
     'a an and are as at be but by can could do does for from get got have how i ' +
     'if in into is it its me my of on or our please should so that the their them ' +
     'then there this to too us want was we what when where which who why will with ' +
-    'would you your yours am any some just like make need help'
+    'would you your yours am any some just make need help ' +
+    // Verbs nearly every settings question has: "turn off", "switch on".
+    'turn turning switch off on'
   ).split(' '),
 );
 
@@ -53,7 +55,7 @@ interface Doc<T> {
  * more the fewer documents have it (so "cover" outweighs "photo", which is in
  * nearly every article), and more in a title than in a summary.
  */
-function rank<T>(docs: Doc<T>[], words: string[]): Array<{ item: T; score: number }> {
+function rank<T>(docs: Doc<T>[], words: string[]): Array<{ item: T; score: number; matched: number }> {
   const unique = [...new Set(words)];
   const rarity = new Map(
     unique.map((w) => {
@@ -64,11 +66,13 @@ function rank<T>(docs: Doc<T>[], words: string[]): Array<{ item: T; score: numbe
   return docs
     .map((doc) => {
       let score = 0;
+      let matched = 0;
       for (const w of unique) {
         const best = Math.max(0, ...doc.fields.filter((f) => f.words.has(w)).map((f) => f.weight));
         score += best * (rarity.get(w) ?? 0);
+        if (best > 0) matched += 1;
       }
-      return { item: doc.item, score };
+      return { item: doc.item, score, matched };
     })
     .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score);
@@ -129,8 +133,11 @@ export function answerQuestion(text: string, conditions: JumpConditions): HelpAn
     words,
   );
   const topJump = rankedJumps[0]?.score ?? 0;
+  // A shortcut is a promise of "this is the setting", so it has to match most
+  // of what was asked, not one shared word like "guest".
+  const asked = new Set(words).size;
   const jumps = rankedJumps
-    .filter((r) => r.score >= Math.max(1, topJump * 0.6))
+    .filter((r) => r.matched * 2 > asked && r.score >= Math.max(1, topJump * 0.6))
     .slice(0, 2)
     .map((r) => r.item);
 
