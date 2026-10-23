@@ -9,7 +9,6 @@ import {
 } from '@/lib/pricing';
 import {
   FAIR_USE_NOTICE,
-  FAIR_USE_PHOTO_CEILING,
   NO_PER_GUEST_LIMIT_LINE,
   UNLIMITED_PHOTOS_LINE,
 } from '@/lib/fairUse';
@@ -92,7 +91,6 @@ function comparisonRows(): Row[] {
   const trial = getTier('trial');
   const full = getTier('plus');
   if (!trial || !full) return [];
-  const ceiling = FAIR_USE_PHOTO_CEILING.toLocaleString('en-US');
   const corporateMonths = Math.round(CORPORATE_PLAN.retentionDays / 30.4);
   return [
     {
@@ -110,8 +108,8 @@ function comparisonRows(): Row[] {
     {
       label: 'Photos per event',
       trial: `${trial.photoLimit}`,
-      full: `Up to ${ceiling} (more free on request)`,
-      corporate: `Up to ${ceiling} (more free on request)`,
+      full: 'Unlimited',
+      corporate: 'Unlimited',
     },
     {
       label: 'Video per event',
@@ -197,7 +195,7 @@ export default function PricingCards() {
         </Link>
 
         <p className="mt-6 text-xs leading-relaxed text-canvas/75">
-          {/* No asterisk. The headline above already states the ceiling, so
+          {/* No asterisk. The headline above already says unlimited, so
               this is the same promise in full rather than a caveat on it. */}
           {FAIR_USE_NOTICE}{' '}
           <Link href="/fair-use" className="underline">

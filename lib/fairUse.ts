@@ -364,15 +364,13 @@ export function assessUsage(
   const video = Math.max(0, facts.videoBytes ?? 0);
   const perMinute = Math.max(0, facts.windowCount ?? 0);
 
+  // Photos are unlimited. Neither the photo count nor total storage blocks an
+  // upload any more — past photoAbuseThreshold / storageAbuseBytes an event is
+  // flagged for an admin to look at (see the review block below) and the
+  // operator is alerted at every 5,000 photos (photoAlert.ts). What still
+  // blocks: video volume, machine-rate velocity, concentration plus velocity,
+  // and an admin restriction.
   let blocked = false;
-  if (photos >= config.photoAbuseThreshold) {
-    reasons.push(`${photos.toLocaleString()} photos`);
-    blocked = true;
-  }
-  if (stored >= config.storageAbuseBytes) {
-    reasons.push(`${formatBytes(stored)} stored`);
-    blocked = true;
-  }
   if (video >= config.videoStorageAbuseBytes) {
     reasons.push(`${formatBytes(video)} of video`);
     blocked = true;
@@ -464,12 +462,14 @@ export const FAIR_USE_PHOTO_CEILING = CONCENTRATION_PHOTOS;
  * stated ceiling, and how the ceiling is raised. The one number is the one a
  * host can do something about; the hard limits stay on the fair-use page.
  */
+export const UNLIMITED_PHOTOS_NOTE =
+  "Built for real events. We may reach out if an event's uploads look like bulk storage or automated uploads.";
+
 export const FAIR_USE_NOTICE =
-  `Unlimited photos, with a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event that we raise free on any reasonable request — reaching it never pauses your guests. There is no per-guest limit: the ceiling is for the whole event, never for one person. SharePix may restrict automated uploads, bulk archival or backup use, and activity that is abusive or extraordinarily large.`;
+  `Unlimited photos. ${UNLIMITED_PHOTOS_NOTE} There is no per-guest photo limit. Video limits depend on your plan.`;
 
 /** The same promise in one short line, for feature lists. */
-export const UNLIMITED_PHOTOS_LINE =
-  `Unlimited photos — fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event, raised free on request`;
+export const UNLIMITED_PHOTOS_LINE = 'Unlimited photos';
 
 /**
  * No per-guest cap, said in so many words.

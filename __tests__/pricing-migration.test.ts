@@ -287,8 +287,8 @@ describe('the unlimited claim, and what makes it honest', () => {
 
   it('tells the customer what fair use means, in the plan copy', () => {
     // An asterisk with nothing behind it is worse than no asterisk.
-    expect(FAIR_USE_NOTICE).toMatch(/fair-use ceiling/i);
-    expect(FAIR_USE_NOTICE).toMatch(/raise free on any reasonable request/i);
+    expect(FAIR_USE_NOTICE).toMatch(/unlimited photos/i);
+    expect(FAIR_USE_NOTICE).toMatch(/bulk storage or automated uploads/i);
   });
 
   // Corporate is deliberately excluded from the rule above and still advertises

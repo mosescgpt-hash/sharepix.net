@@ -82,3 +82,29 @@ on the log line. Same reasoning as `webhook-handled-failures`.
 
 Stripe also emails you when a webhook endpoint is failing, so the
 `webhook-handled-failures` alarm is a second, faster signal — not the only one.
+
+## Photo milestone alerts (email + text)
+
+Photos are unlimited. Instead of a cap, `create-event-photo` alerts the operator
+when an event passes 5,000 photos and again at every further 5,000 (10,000,
+15,000…). Each step sends once: it is claimed with a conditional write on the
+event's `photoAlertStep` attribute. Nothing is paused.
+
+Set on the Amplify app (Environment variables), then redeploy:
+
+| Variable | What | If unset |
+| --- | --- | --- |
+| `ADMIN_ALERT_EMAIL` | Email recipient | Falls back to the dashboard report recipient / `REPORT_TO_ADDRESS` |
+| `ADMIN_ALERT_PHONE` | Mobile in E.164, e.g. `+15551234567` | No text is sent |
+| `ALERT_FROM_ADDRESS` | Verified SES sender (already used by other alerts) | No email is sent |
+
+The function role is granted `sns:Publish` (and already has `ses:SendEmail`).
+For texts to actually deliver, in the AWS account/region the app deploys to:
+
+1. **SNS → Text messaging (SMS)**: the account starts in the SMS sandbox. Either
+   add and verify the destination phone as a sandbox number, or request
+   production access.
+2. **Origination identity**: US numbers need a registered toll-free number (or
+   10DLC). Register one in AWS End User Messaging SMS and wait for approval.
+3. **Spend limit**: the default monthly SMS spend limit is $1. Raise it if needed.
+4. Default message type can stay as is; the function sends as Transactional.

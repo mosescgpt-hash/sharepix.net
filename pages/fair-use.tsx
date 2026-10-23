@@ -3,7 +3,6 @@ import Link from 'next/link';
 import {
   CAPACITY_ASK_PHOTOS,
   FAIR_USE_DEFAULTS,
-  FAIR_USE_PHOTO_CEILING,
   FAIR_USE_NOTICE,
   formatBytes,
 } from '@/lib/fairUse';
@@ -53,9 +52,7 @@ export default function FairUsePage() {
         <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
             <p>
-              The paid plan includes unlimited photo uploads with a fair-use ceiling of{' '}
-              {FAIR_USE_PHOTO_CEILING.toLocaleString()} photos per event, raised free on any
-              reasonable request. This page exists so you can check rather than take our word
+              Paid events include unlimited photo uploads. This page exists so you can check rather than take our word
               for it: below are the actual numbers, what happens at each one, and what we will
               never do.
             </p>
@@ -66,8 +63,8 @@ export default function FairUsePage() {
             <h2>The short version</h2>
             <p>
               <strong>
-                We will never restrict your event for being popular, and where we can we
-                will contact you before we stop your guests uploading.
+                We will never restrict your event for being popular. Photos are
+                unlimited, and where we can we will contact you before we stop anything.
               </strong>{' '}
               The limits below exist to catch someone using a one-off $79 purchase as a
               backup drive. They are set far above what a celebration produces.
@@ -95,9 +92,15 @@ export default function FairUsePage() {
                 <strong>
                   {abusePhotos} photos, or {abuseStorage} stored
                 </strong>{' '}
-                — the point at which uploads can actually be paused. For scale, a
-                300-guest wedding where a third of the room takes photos lands nearer two
-                thousand. We have never seen a real event approach this.
+                — a closer look, and we may reach out to you. Photo uploads are never
+                paused for how many photos an event has or how much they take up. For
+                scale, a 300-guest wedding where a third of the room takes photos lands
+                nearer two thousand.
+              </li>
+              <li>
+                <strong>What can pause uploads</strong> — uploads arriving at machine
+                speed (scripted or automated uploading), or an event&rsquo;s video going
+                far past its allowance. No real event reaches either.
               </li>
             </ul>
             <p>

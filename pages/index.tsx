@@ -1,3 +1,4 @@
+import { UNLIMITED_PHOTOS_NOTE } from '@/lib/fairUse';
 import { useEffect } from 'react';
 import Link from 'next/link';
 import Artwork from '@/components/Artwork';
@@ -126,7 +127,9 @@ function PriceSummary() {
   const full = getTier('plus');
   const items = [
     trial ? { name: trial.name, price: 'Free', note: 'Try it at something small' } : null,
-    full ? { name: full.name, price: `$${full.price} once`, note: 'Per event, no subscription' } : null,
+    full
+      ? { name: full.name, price: `$${full.price} once`, note: 'Per event, unlimited photos, no subscription' }
+      : null,
     {
       name: CORPORATE_PLAN.name,
       price: CORPORATE_PLAN.priceLabel,
@@ -147,7 +150,10 @@ function PriceSummary() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-sm">
+        <p className="mt-3 text-sm text-charcoal/70">
+          Unlimited photos on paid events. {UNLIMITED_PHOTOS_NOTE}
+        </p>
+        <p className="mt-2 text-sm">
           <Link href="/pricing" className="text-pine underline">
             Compare plans
           </Link>

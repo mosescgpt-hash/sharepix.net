@@ -8,7 +8,7 @@ import {
   TRIAL_UPLOAD_WINDOW_DAYS,
   VIDEO_GB_INCLUDED,
 } from '@/lib/pricing';
-import { FAIR_USE_PHOTO_CEILING } from '@/lib/fairUse';
+import { UNLIMITED_PHOTOS_NOTE } from '@/lib/fairUse';
 import { trackEvent } from '@/lib/trackEvent';
 import { pricingJsonLd } from '@/lib/seo';
 
@@ -35,7 +35,7 @@ const faqs = [
   },
   {
     q: 'How many photos can we upload?',
-    a: `Up to ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event. If your event gets close, tap the button on your dashboard and we raise it for free, and your guests keep uploading the whole time. What is not allowed is automated uploads, using it as a backup drive, or abuse.`,
+    a: `Unlimited photos on paid events, with no per-guest limit. ${UNLIMITED_PHOTOS_NOTE} Video has its own allowance per event, shown in the plan table.`,
   },
   {
     q: 'What about video?',
@@ -85,7 +85,7 @@ export default function PricingPage() {
           </div>
 
           <p className="mt-8 text-sm text-charcoal/70">
-            Unlimited guests · Up to {FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event · No per-guest limit · Full-resolution memories · Private from search, shared by QR code
+            Unlimited guests · Unlimited photos · No per-guest limit · Full-resolution memories · Private from search, shared by QR code
           </p>
         </div>
       </section>
