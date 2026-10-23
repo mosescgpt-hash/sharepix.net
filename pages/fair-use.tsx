@@ -93,9 +93,7 @@ export default function FairUsePage() {
                   {abusePhotos} photos, or {abuseStorage} stored
                 </strong>{' '}
                 — a closer look, and we may reach out to you. Photo uploads are never
-                paused for how many photos an event has or how much they take up. For
-                scale, a 300-guest wedding where a third of the room takes photos lands
-                nearer two thousand.
+                paused for how many photos an event has or how much they take up.
               </li>
               <li>
                 <strong>What can pause uploads</strong> — uploads arriving at machine
