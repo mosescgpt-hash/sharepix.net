@@ -5,9 +5,7 @@ import { join } from 'node:path';
 import {
   ABUSE_MARGIN,
   BREAK_EVEN_STORAGE_GB,
-  CAPACITY_ASK_PHOTOS,
   CONCENTRATION_PHOTOS,
-  capacityRequestState,
   isConcentrated,
   FAIR_USE_DEFAULTS,
   FAIR_USE_NOTICE,
@@ -261,84 +259,13 @@ describe('what a threshold does', () => {
   });
 });
 
-describe('asking for more room', () => {
-  const readSrc = (path: string) => readFileSync(join(root, path), 'utf8');
-
-  it('shows nothing at all on an ordinary event', () => {
-    // Offering more capacity to an event with forty photos invites a question
-    // nobody was asking and implies a limit they have not met.
-    expect(capacityRequestState({ photoCount: 40 })).toBe('hidden');
-    expect(capacityRequestState({ photoCount: CAPACITY_ASK_PHOTOS - 1 })).toBe('hidden');
-    expect(capacityRequestState(null)).toBe('hidden');
-    expect(capacityRequestState({})).toBe('hidden');
-  });
-
-  it('appears at 4,900, before anything is flagged', () => {
-    expect(CAPACITY_ASK_PHOTOS).toBe(4_900);
-    expect(capacityRequestState({ photoCount: CAPACITY_ASK_PHOTOS })).toBe('available');
-  });
-
-  it('gets in ahead of the flag rather than arriving with it', () => {
-    // The whole point of asking early. A host who finds the button at the same
-    // moment their event is flagged reads it as a reaction to being in
-    // trouble, which is not what it is.
-    expect(CAPACITY_ASK_PHOTOS).toBeLessThan(CONCENTRATION_PHOTOS);
-    expect(CAPACITY_ASK_PHOTOS).toBeLessThan(FAIR_USE_DEFAULTS.photoReviewThreshold);
-  });
-
-  it('is nowhere near the point anything actually stops', () => {
-    // If these ever converge, the button becomes a warning and the copy on the
-    // card ("nothing is going to stop") stops being true.
-    expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(CAPACITY_ASK_PHOTOS * 5);
-  });
-
-  it('remembers a request, and an admin decision beats it', () => {
-    const asked = { photoCount: 9_000, capacityRequestedAt: '2026-09-01T00:00:00Z' };
-    expect(capacityRequestState(asked)).toBe('pending');
-    // 'granted' wins whichever order the two fields were written in.
-    expect(
-      capacityRequestState({ ...asked, capacityGrantedAt: '2026-09-02T00:00:00Z' }),
-    ).toBe('granted');
-    // And a grant stands even if the count later drops below the threshold.
-    expect(
-      capacityRequestState({ photoCount: 10, capacityGrantedAt: '2026-09-02T00:00:00Z' }),
-    ).toBe('granted');
-  });
-
-  it('records the request and grants nothing', () => {
-    // The same posture as a refund: the code writes down what was asked for,
-    // and a person decides. A mutation that raised a limit by itself would be
-    // a self-service way to move our own cost ceiling.
-    const handler = readSrc('amplify/functions/update-event/handler.ts');
-    const branch = handler.slice(handler.indexOf("field === 'requestEventCapacity'"));
-    const body = branch.slice(0, branch.indexOf('const result = buildPatch'));
-    expect(body).toContain('SET capacityRequestedAt = :now');
-    expect(body).not.toContain('photoLimit');
-    expect(body).not.toContain('capacityGrantedAt = :now');
-  });
-
-  it('files the request against the caller\'s own event only', () => {
-    // Dispatched after the ownership check rather than in its own function, so
-    // it cannot drift away from it.
-    const handler = readSrc('amplify/functions/update-event/handler.ts');
-    expect(handler.indexOf('if (!mayEdit(caller')).toBeLessThan(
-      handler.indexOf("field === 'requestEventCapacity'"),
-    );
-  });
-
-  it('does not reset the clock when a host taps twice', () => {
-    // An admin triaging by request date must not have the queue reordered by
-    // an impatient second tap.
-    const handler = readSrc('amplify/functions/update-event/handler.ts');
-    expect(handler).toContain("ConditionExpression: 'attribute_not_exists(capacityRequestedAt)'");
-  });
-
-  it('is worded as an offer rather than a warning', () => {
-    // Nothing stops at this number, and a card that implies otherwise would be
-    // the product quietly walking back "unlimited".
-    const page = readSrc('pages/event/[eventId]/admin.tsx');
-    expect(page).toContain('Ask for more room');
-    expect(page).toMatch(/nothing is going to stop/i);
+describe('no "ask for more room" flow', () => {
+  it('is gone from the host dashboard, the API and the backend', () => {
+    const readSrc = (path: string) => readFileSync(join(root, path), 'utf8');
+    expect(readSrc('pages/event/[eventId]/admin.tsx')).not.toMatch(/more room|capacityRequest/i);
+    expect(readSrc('lib/api.ts')).not.toContain('requestEventCapacity');
+    expect(readSrc('amplify/data/resource.ts')).not.toContain('requestEventCapacity');
+    expect(readSrc('amplify/functions/update-event/handler.ts')).not.toContain('requestEventCapacity');
   });
 });
 
@@ -355,7 +282,6 @@ describe('the fair use page', () => {
     expect(page).toContain('FAIR_USE_DEFAULTS.photoAbuseThreshold');
     expect(page).toContain('FAIR_USE_DEFAULTS.storageReviewBytes');
     expect(page).toContain('FAIR_USE_DEFAULTS.storageAbuseBytes');
-    expect(page).toContain('CAPACITY_ASK_PHOTOS');
     expect(page).toContain('VIDEO_GB_INCLUDED');
   });
 
@@ -565,10 +491,9 @@ describe('what the customer is told', () => {
 
   it('puts the ceiling where the system actually reacts', () => {
     // A ceiling the code ignored would be a number for show. This one is where
-    // an event is flagged and where the host is offered more room.
+    // an event is flagged and the admin alerted.
     expect(FAIR_USE_PHOTO_CEILING).toBe(CONCENTRATION_PHOTOS);
     expect(FAIR_USE_PHOTO_CEILING).toBe(FAIR_USE_DEFAULTS.photoReviewThreshold);
-    expect(CAPACITY_ASK_PHOTOS).toBeLessThan(FAIR_USE_PHOTO_CEILING);
     // Raised, not a block: nothing stops anywhere near it.
     expect(FAIR_USE_DEFAULTS.photoAbuseThreshold).toBeGreaterThan(FAIR_USE_PHOTO_CEILING * 5);
   });

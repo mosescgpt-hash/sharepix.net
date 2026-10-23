@@ -195,9 +195,7 @@ export default function TermsPage() {
               general cloud storage, and it is not intended for automated or scripted uploading.
             </p>
             <p>
-              The ceiling stated above is where we check in, not where uploads stop: when an
-              event approaches it the host can ask for more room from their dashboard, and we
-              raise it free for any reasonable request. A wedding, a conference, a school
+              Photo uploads do not stop because an event is large. A wedding, a conference, a school
               fundraiser or a reunion producing thousands of photos is exactly what
               &ldquo;unlimited&rdquo; is for, and we will not restrict an event
               simply because it was popular. Where usage is far outside anything an event could

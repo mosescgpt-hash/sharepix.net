@@ -1,7 +1,6 @@
 import Layout from '@/components/Layout';
 import Link from 'next/link';
 import {
-  CAPACITY_ASK_PHOTOS,
   FAIR_USE_DEFAULTS,
   FAIR_USE_NOTICE,
   formatBytes,
@@ -74,12 +73,6 @@ export default function FairUsePage() {
           <div>
             <h2>The numbers</h2>
             <ul>
-              <li>
-                <strong>Around {CAPACITY_ASK_PHOTOS.toLocaleString()} photos</strong> — a
-                button appears on your dashboard offering more room. Nothing changes,
-                nothing pauses, and you do not have to press it. It is there because an
-                event this size is unusual and we would rather ask than assume.
-              </li>
               <li>
                 <strong>
                   {reviewPhotos} photos, or {reviewStorage} stored

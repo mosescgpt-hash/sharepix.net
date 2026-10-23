@@ -198,7 +198,6 @@ describe('nothing was dropped in the move', () => {
     'Add-ons',
     'addon-discount',
     'Something not right with this event?',
-    'Ask for more room',
     'Featured Events',
     'Close event',
     'Delete event',
