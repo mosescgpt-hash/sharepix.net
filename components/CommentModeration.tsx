@@ -71,24 +71,24 @@ export default function CommentModeration({ eventId }: { eventId: string }) {
       ) : null}
 
       {comments === null ? (
-        <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+        <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
       ) : comments.length === 0 ? (
-        <p className="mt-4 text-sm text-charcoal/55">Nobody has commented yet.</p>
+        <p className="mt-4 text-sm text-charcoal/70">Nobody has commented yet.</p>
       ) : (
         <>
-          <p className="mt-3 text-xs text-charcoal/55">
+          <p className="mt-3 text-xs text-charcoal/70">
             {comments.length} total{hiddenCount > 0 ? `, ${hiddenCount} hidden` : ''}
           </p>
           <ul className="mt-3 divide-y divide-charcoal/10 border-y border-charcoal/10">
             {comments.map((comment) => (
               <li key={comment.id} className="flex items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className={`text-sm ${comment.hidden ? 'text-charcoal/40' : 'text-charcoal'}`}>
+                  <p className={`text-sm ${comment.hidden ? 'text-charcoal/70' : 'text-charcoal'}`}>
                     <span className="font-medium">{comment.author || 'A guest'}</span>{' '}
                     {comment.body}
                   </p>
                   {comment.hidden ? (
-                    <p className="mt-0.5 text-xs text-charcoal/50">
+                    <p className="mt-0.5 text-xs text-charcoal/70">
                       Hidden — guests do not see this.
                     </p>
                   ) : null}

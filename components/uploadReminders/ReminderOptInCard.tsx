@@ -113,7 +113,7 @@ export default function ReminderOptInCard({ event }: { event: QREvent }) {
           {message}
         </p>
       ) : null}
-      <p id="reminder-consent" className="mt-3 text-xs text-charcoal/60">
+      <p id="reminder-consent" className="mt-3 text-xs text-charcoal/70">
         {consent}
       </p>
       <button

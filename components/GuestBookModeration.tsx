@@ -59,12 +59,12 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
         <h2 id="guest-book-heading" className="font-sans text-lg font-bold tracking-[-0.02em]">
           Guest book
         </h2>
-        <p className="text-sm text-charcoal/60">
+        <p className="text-sm text-charcoal/70">
           {entries.length} {entries.length === 1 ? 'note' : 'notes'}
           {held.length > 0 ? ` · ${held.length} waiting for you` : ''}
         </p>
       </div>
-      <p className="mt-2 text-xs text-charcoal/60">{GUEST_BOOK_SCREENING_NOTE}</p>
+      <p className="mt-2 text-xs text-charcoal/70">{GUEST_BOOK_SCREENING_NOTE}</p>
 
       {error ? (
         <Notice tone="error" className="mt-4">
@@ -73,9 +73,9 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
       ) : null}
 
       {loading ? (
-        <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+        <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
       ) : entries.length === 0 ? (
-        <p className="mt-4 text-sm text-charcoal/60">
+        <p className="mt-4 text-sm text-charcoal/70">
           No notes yet. Guests can sign it from the upload page or the gallery.
         </p>
       ) : (
@@ -101,12 +101,12 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
                         {entry.message}
                       </p>
                     ) : (
-                      <p className="mt-1 text-sm italic text-charcoal/60">
+                      <p className="mt-1 text-sm italic text-charcoal/70">
                         Left a photo or video message.
                       </p>
                     )}
                     {entry.photoId ? (
-                      <p className="mt-1 text-xs text-charcoal/60">With an attachment.</p>
+                      <p className="mt-1 text-xs text-charcoal/70">With an attachment.</p>
                     ) : null}
                     {waiting ? (
                       <p className="mt-2 text-xs font-medium text-amber-800">
@@ -115,7 +115,7 @@ export default function GuestBookModeration({ eventId }: { eventId: string }) {
                         can&apos;t see this yet.
                       </p>
                     ) : hidden ? (
-                      <p className="mt-2 text-xs font-medium text-charcoal/60">
+                      <p className="mt-2 text-xs font-medium text-charcoal/70">
                         Hidden from guests.
                       </p>
                     ) : null}

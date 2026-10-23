@@ -234,12 +234,12 @@ export default function FeaturedEventPage() {
             <h2 className="spx-body font-medium">
               Choose {tier.minAssets} to {tier.maxAssets} photos
             </h2>
-            <p className="mt-1 text-sm text-charcoal/60">
+            <p className="mt-1 text-sm text-charcoal/70">
               {chosen.length} chosen. Only these are offered — the rest of your gallery
               stays private.
             </p>
             {photos.length === 0 ? (
-              <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+              <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
                 There are no photos on this event yet.
               </p>
             ) : (
@@ -279,7 +279,7 @@ export default function FeaturedEventPage() {
           {tier.wantsTestimonial ? (
             <label className="mt-10 block">
               <span className="spx-body font-medium">A few sentences about your event</span>
-              <span className="mt-1 block text-sm text-charcoal/60">
+              <span className="mt-1 block text-sm text-charcoal/70">
                 What it was, and how SharePix went. We may quote this alongside the photos.
               </span>
               <textarea
@@ -323,11 +323,11 @@ export default function FeaturedEventPage() {
               {phase === 'sending' ? 'Sending…' : 'Offer these photos'}
             </button>
             {!enough ? (
-              <p className="mt-3 text-sm text-charcoal/60">
+              <p className="mt-3 text-sm text-charcoal/70">
                 Choose at least {tier.minAssets} photos to continue.
               </p>
             ) : null}
-            <p className="mt-4 text-sm text-charcoal/60">
+            <p className="mt-4 text-sm text-charcoal/70">
               We will tell you which ones we can use. Nothing is published unless we do, and
               you can withdraw at any time by replying to that email.
             </p>

@@ -86,7 +86,7 @@ export default function HostHeader({
               className={
                 section.id === current
                   ? 'font-medium text-charcoal underline underline-offset-4'
-                  : 'text-charcoal/60 transition hover:text-charcoal'
+                  : 'text-charcoal/70 transition hover:text-charcoal'
               }
             >
               {section.label}
@@ -101,7 +101,7 @@ export default function HostHeader({
             type="button"
             onClick={() => void handleSignOut()}
             disabled={signingOut}
-            className="ml-auto text-charcoal/60 transition hover:text-charcoal disabled:opacity-50"
+            className="ml-auto text-charcoal/70 transition hover:text-charcoal disabled:opacity-50"
           >
             {signingOut ? 'Signing out…' : 'Sign out'}
           </button>

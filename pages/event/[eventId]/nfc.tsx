@@ -80,7 +80,7 @@ function NfcPage() {
 
       <main className="mx-auto max-w-3xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-charcoal/60">Loading…</p>
+          <p className="text-center text-charcoal/70">Loading…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open this page.
@@ -90,7 +90,7 @@ function NfcPage() {
         ) : event ? (
           <>
             <h1 className="text-2xl font-bold tracking-[-0.02em]">Add a tap-to-open tag</h1>
-            <p className="mt-2 text-sm text-charcoal/60">
+            <p className="mt-2 text-sm text-charcoal/70">
               An NFC sticker behind the &ldquo;or tap here&rdquo; mark lets guests tap their phone on
               the sign instead of scanning. It opens the same page as the QR code. Optional: the QR
               works on its own.
@@ -118,7 +118,7 @@ function NfcPage() {
                   {copied === 'yes' ? 'Copied' : 'Copy event link'}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-charcoal/60" aria-live="polite">
+              <p className="mt-2 text-xs text-charcoal/70" aria-live="polite">
                 {copied === 'yes'
                   ? 'Copied. Paste it into the NFC app as a URL record.'
                   : copied === 'manual'

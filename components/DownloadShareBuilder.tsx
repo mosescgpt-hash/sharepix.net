@@ -60,7 +60,7 @@ export default function DownloadShareBuilder({
 
   if (approvedCount === 0) {
     return (
-      <p className="text-sm text-charcoal/60">
+      <p className="text-sm text-charcoal/70">
         Upload and approve media before creating a download QR code.
       </p>
     );
@@ -72,7 +72,7 @@ export default function DownloadShareBuilder({
         <div>
           <p className="spx-eyebrow">Guest downloads</p>
           <h2 className="font-sans text-2xl font-bold tracking-[-0.02em]">Create a download QR code</h2>
-          <p className="mt-1 max-w-2xl text-sm text-charcoal/60">
+          <p className="mt-1 max-w-2xl text-sm text-charcoal/70">
             Toggle photos in the gallery below to choose exactly what recipients may download,
             then create the code. A new QR keeps this selection even if you change it later.
           </p>
@@ -121,11 +121,11 @@ export default function DownloadShareBuilder({
           </div>
           <div className="min-w-0">
             <h3 className="font-sans text-xl font-bold tracking-[-0.02em]">Download QR code ready</h3>
-            <p className="mt-1 text-sm text-charcoal/60">
+            <p className="mt-1 text-sm text-charcoal/70">
               This link includes {share.photoIds.length} selected item
               {share.photoIds.length === 1 ? '' : 's'}.
             </p>
-            <p className="mt-2 break-all text-xs text-charcoal/60">{shareUrl}</p>
+            <p className="mt-2 break-all text-xs text-charcoal/70">{shareUrl}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={handleDownloadQr} className="bg-ink px-4 py-2 text-sm font-medium text-canvas transition hover:bg-night">
                 Download QR (PNG)

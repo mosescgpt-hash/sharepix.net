@@ -78,7 +78,7 @@ export default function ChallengeCard({
           </button>
         ) : null}
       </div>
-      <p className="mt-3 text-xs text-charcoal/55">Optional. You can upload anything below.</p>
+      <p className="mt-3 text-xs text-charcoal/70">Optional. You can upload anything below.</p>
     </div>
   );
 }

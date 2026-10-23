@@ -110,14 +110,14 @@ export default function ProProfilePage() {
           </p>
 
           {signedIn === false ? (
-            <p className="mt-8 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+            <p className="mt-8 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
               <Link href="/my-events" className="font-medium text-pine underline">
                 Sign in
               </Link>{' '}
               to set up your profile.
             </p>
           ) : signedIn === null ? (
-            <p className="mt-8 text-sm text-charcoal/55">Loading&hellip;</p>
+            <p className="mt-8 text-sm text-charcoal/70">Loading&hellip;</p>
           ) : (
             <form
               className="mt-8 space-y-8"
@@ -127,7 +127,7 @@ export default function ProProfilePage() {
               }}
             >
               <fieldset>
-                <legend className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/55">
+                <legend className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/70">
                   Credit and links
                 </legend>
                 <Field
@@ -158,7 +158,7 @@ export default function ProProfilePage() {
               </fieldset>
 
               <fieldset>
-                <legend className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/55">
+                <legend className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/70">
                   Your files
                 </legend>
                 <Field
@@ -195,11 +195,11 @@ export default function ProProfilePage() {
               </fieldset>
 
               <div className="border border-charcoal/15 bg-paper p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-charcoal/55">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-charcoal/70">
                   What guests see under your photos
                 </p>
                 <div className="mt-3 text-sm">
-                  <p className="text-charcoal/60">
+                  <p className="text-charcoal/70">
                     {form.businessName.trim()
                       ? `Photo by ${form.businessName.trim()}`
                       : 'No credit — add your name above.'}
@@ -219,7 +219,7 @@ export default function ProProfilePage() {
                       ))}
                     </p>
                   ) : (
-                    <p className="mt-1 text-charcoal/55">No links yet.</p>
+                    <p className="mt-1 text-charcoal/70">No links yet.</p>
                   )}
                 </div>
               </div>
@@ -267,7 +267,7 @@ function Field({
       {problem ? (
         <span className="mt-1 block text-xs text-red-700">{problem}</span>
       ) : hint ? (
-        <span className="mt-1 block text-xs text-charcoal/60">{hint}</span>
+        <span className="mt-1 block text-xs text-charcoal/70">{hint}</span>
       ) : null}
     </label>
   );

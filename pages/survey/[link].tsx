@@ -264,7 +264,7 @@ export default function SurveyPage() {
           {/* Progress. The bar is decorative; the text beside it is what a
               screen reader announces, so the two never disagree. */}
           <div className="mt-8">
-            <div className="flex items-center justify-between text-sm text-charcoal/60">
+            <div className="flex items-center justify-between text-sm text-charcoal/70">
               <span>{progressLabel(step + 1)}</span>
               <span>{percent}%</span>
             </div>
@@ -320,7 +320,7 @@ export default function SurveyPage() {
             )}
           </div>
 
-          <p className="mt-6 text-sm text-charcoal/60">
+          <p className="mt-6 text-sm text-charcoal/70">
             Your answers are saved as you go. You can close this and come back to the same
             link.
           </p>
@@ -358,7 +358,7 @@ function Question({
       <fieldset>
         <legend className="spx-body font-medium">{question.prompt}</legend>
         {question.kind === 'multi' ? (
-          <p className="mt-1 text-sm text-charcoal/60">Choose as many as apply.</p>
+          <p className="mt-1 text-sm text-charcoal/70">Choose as many as apply.</p>
         ) : null}
         <div className="mt-4 space-y-2">
           {(question.options ?? []).map((option) => {
@@ -398,7 +398,7 @@ function Question({
         </div>
         {showOther ? (
           <label className="mt-3 block">
-            <span className="text-sm text-charcoal/60">Tell us which</span>
+            <span className="text-sm text-charcoal/70">Tell us which</span>
             <input
               type="text"
               value={typeof answers[otherId] === 'string' ? (answers[otherId] as string) : ''}
@@ -444,7 +444,7 @@ function Question({
             );
           })}
         </div>
-        <div className="mt-2 flex justify-between text-sm text-charcoal/60">
+        <div className="mt-2 flex justify-between text-sm text-charcoal/70">
           <span>{minLabel}</span>
           <span>{maxLabel}</span>
         </div>

@@ -126,7 +126,7 @@ function EventBrochurePage() {
 
       <main className="mx-auto max-w-3xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-charcoal/60">Loading brochure…</p>
+          <p className="text-center text-charcoal/70">Loading brochure…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open this brochure.
@@ -137,7 +137,7 @@ function EventBrochurePage() {
           </p>
         ) : event ? (
           <>
-            <p className="print:hidden mb-4 text-center text-sm text-charcoal/60">
+            <p className="print:hidden mb-4 text-center text-sm text-charcoal/70">
               Print this and place it on tables, or share it digitally. Guests scan the
               code to{' '}
               {invitesUploads(parseAudience(event.uploadAudience))
@@ -155,7 +155,7 @@ function EventBrochurePage() {
                 {event.name}
               </h1>
               {formatDate(event.date) ? (
-                <p className="mt-2 text-lg text-charcoal/60">{formatDate(event.date)}</p>
+                <p className="mt-2 text-lg text-charcoal/70">{formatDate(event.date)}</p>
               ) : null}
 
               <div className="my-8 rounded-2xl border border-ink/10 bg-white p-4">
@@ -167,17 +167,17 @@ function EventBrochurePage() {
                   add your photos" is an instruction nobody is meant to follow
                   at an event where the host is the only uploader. */}
               <p className="font-serif text-2xl italic">{signHeadline(parseAudience(event.uploadAudience))}</p>
-              <p className="mt-2 max-w-sm text-charcoal/60">{signMessage(parseAudience(event.uploadAudience))}</p>
+              <p className="mt-2 max-w-sm text-charcoal/70">{signMessage(parseAudience(event.uploadAudience))}</p>
 
               <div className="mt-6 bg-sand px-5 py-3">
-                <p className="text-xs uppercase tracking-wide text-charcoal/60">Or visit</p>
+                <p className="text-xs uppercase tracking-wide text-charcoal/70">Or visit</p>
                 <p className="break-all font-mono text-sm text-ink">{uploadUrl}</p>
-                <p className="mt-1 text-xs text-charcoal/60">
+                <p className="mt-1 text-xs text-charcoal/70">
                   Event code: <span className="font-semibold text-ink">{event.eventCode}</span>
                 </p>
               </div>
 
-              <p className="mt-8 text-sm text-charcoal/60">
+              <p className="mt-8 text-sm text-charcoal/70">
                 Powered by <span className="font-semibold">sharepix.net</span>
               </p>
             </article>

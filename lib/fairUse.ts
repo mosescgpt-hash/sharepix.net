@@ -92,8 +92,7 @@ export const ABUSE_MARGIN = 0.85;
  * Photos at which we start asking whether this is really an event.
  *
  * Not a cap. An event past this keeps accepting uploads exactly as before —
- * what changes is that it is flagged, the host is told they are unusually
- * large and invited to ask for more room, and the concentration rule below
+ * what changes is that it is flagged, an admin is alerted, and the concentration rule below
  * gets a vote. The hard block stays at `photoAbuseThreshold`, which is where
  * the money actually runs out.
  *
@@ -103,43 +102,6 @@ export const ABUSE_MARGIN = 0.85;
  * host.
  */
 export const CONCENTRATION_PHOTOS = 5_000;
-
-/**
- * Photos at which the host is offered a button to ask for more room.
- *
- * A hundred short of CONCENTRATION_PHOTOS, deliberately. The point of asking
- * early is that the conversation happens BEFORE anything is flagged rather than
- * after — a host who finds the button at the same moment their event is
- * flagged experiences it as a reaction to being in trouble, which is not what
- * it is.
- *
- * It is not a warning and must not be worded as one. Nothing stops at 4,900,
- * nothing stops at 5,000, and the hard block is nearly eight times further out.
- */
-export const CAPACITY_ASK_PHOTOS = 4_900;
-
-/** Where a host's request for more room has got to. */
-export type CapacityRequestState = 'hidden' | 'available' | 'pending' | 'granted';
-
-/**
- * Whether to show the host the "ask for more room" button, and in what state.
- *
- * Hidden below the threshold: offering more capacity to an event with forty
- * photos invites a question nobody was asking and implies a limit they have
- * not met. 'granted' outranks 'pending' so an admin's decision is what the
- * host sees, whichever order the two fields were written in.
- */
-export function capacityRequestState(facts: {
-  photoCount?: number | null;
-  capacityRequestedAt?: string | null;
-  capacityGrantedAt?: string | null;
-} | null | undefined): CapacityRequestState {
-  if (!facts) return 'hidden';
-  if (facts.capacityGrantedAt) return 'granted';
-  if (facts.capacityRequestedAt) return 'pending';
-  const photos = Math.max(0, facts.photoCount ?? 0);
-  return photos >= CAPACITY_ASK_PHOTOS ? 'available' : 'hidden';
-}
 
 /**
  * Photos per contributor above which an event stops looking like a party.
@@ -364,15 +326,13 @@ export function assessUsage(
   const video = Math.max(0, facts.videoBytes ?? 0);
   const perMinute = Math.max(0, facts.windowCount ?? 0);
 
+  // Photos are unlimited. Neither the photo count nor total storage blocks an
+  // upload any more — past photoAbuseThreshold / storageAbuseBytes an event is
+  // flagged for an admin to look at (see the review block below) and the
+  // operator is alerted at every 5,000 photos (photoAlert.ts). What still
+  // blocks: video volume, machine-rate velocity, concentration plus velocity,
+  // and an admin restriction.
   let blocked = false;
-  if (photos >= config.photoAbuseThreshold) {
-    reasons.push(`${photos.toLocaleString()} photos`);
-    blocked = true;
-  }
-  if (stored >= config.storageAbuseBytes) {
-    reasons.push(`${formatBytes(stored)} stored`);
-    blocked = true;
-  }
   if (video >= config.videoStorageAbuseBytes) {
     reasons.push(`${formatBytes(video)} of video`);
     blocked = true;
@@ -396,8 +356,7 @@ export function assessUsage(
   }
   if (blocked) return { status: 'RESTRICTED', reasons, blocked: true };
 
-  // Flagged, not blocked. The host is told they are unusually large and can
-  // ask for more room; an admin can clear it with manualStatus NORMAL.
+  // Flagged, not blocked. An admin can clear it with manualStatus NORMAL.
   if (concentrated) {
     reasons.push(
       `${photos.toLocaleString()} photos from ${Math.max(0, facts.contributorCount ?? 0)} contributors`,
@@ -448,7 +407,7 @@ export function windowExpired(
  * The fair-use ceiling a customer is told about, in photos per event.
  *
  * The same number as CONCENTRATION_PHOTOS, on purpose: it is where an event is
- * flagged and where the host is offered more room, so the figure on the
+ * flagged and the admin alerted, so the figure on the
  * pricing page is the figure the system actually reacts at. It is a ceiling
  * that is raised on request, not one that stops uploads — nothing blocks
  * until photoAbuseThreshold, several times further out.
@@ -464,12 +423,14 @@ export const FAIR_USE_PHOTO_CEILING = CONCENTRATION_PHOTOS;
  * stated ceiling, and how the ceiling is raised. The one number is the one a
  * host can do something about; the hard limits stay on the fair-use page.
  */
+export const UNLIMITED_PHOTOS_NOTE =
+  "Built for real events. We may reach out if an event's uploads look like bulk storage or automated uploads.";
+
 export const FAIR_USE_NOTICE =
-  `Unlimited photos, with a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event that we raise free on any reasonable request — reaching it never pauses your guests. There is no per-guest limit: the ceiling is for the whole event, never for one person. SharePix may restrict automated uploads, bulk archival or backup use, and activity that is abusive or extraordinarily large.`;
+  `Unlimited photos. ${UNLIMITED_PHOTOS_NOTE} There is no per-guest photo limit. Video limits depend on your plan.`;
 
 /** The same promise in one short line, for feature lists. */
-export const UNLIMITED_PHOTOS_LINE =
-  `Unlimited photos — fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} per event, raised free on request`;
+export const UNLIMITED_PHOTOS_LINE = 'Unlimited photos';
 
 /**
  * No per-guest cap, said in so many words.

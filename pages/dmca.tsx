@@ -25,7 +25,7 @@ export default function DmcaPage() {
         <h1 className="spx-display">
           Copyright and DMCA Policy
         </h1>
-        <p className="mt-3 text-sm text-charcoal/60">Last updated: {LAST_UPDATED}</p>
+        <p className="mt-3 text-sm text-charcoal/70">Last updated: {LAST_UPDATED}</p>
 
         <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_ol]:mt-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
@@ -60,7 +60,7 @@ export default function DmcaPage() {
                 Email: <a href={`mailto:${AGENT.email}`}>{AGENT.email}</a>
               </p>
             </div>
-            <p className="text-sm text-charcoal/60">
+            <p className="text-sm text-charcoal/70">
               This address is for copyright notices only. For anything else, please use{' '}
               <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
             </p>
@@ -191,7 +191,7 @@ export default function DmcaPage() {
           </div>
         </div>
 
-        <p className="mt-10 text-xs text-charcoal/60">
+        <p className="mt-10 text-xs text-charcoal/70">
           Our designated-agent registration with the U.S. Copyright Office is due for renewal
           by {RENEWAL_DUE}.
         </p>

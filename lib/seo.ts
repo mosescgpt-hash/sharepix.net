@@ -91,7 +91,9 @@ export const SITE_NAME = 'SharePix';
  */
 export const INDEXABLE_ROUTES = [
   '/',
+  '/about',
   '/company-events',
+  '/contact',
   '/conventions',
   '/demo',
   '/demo/gallery',
@@ -186,6 +188,8 @@ export function isIndexable(route: string): boolean {
  */
 export const ROUTE_DESCRIPTIONS: Record<string, string> = {
   '/': DEFAULT_DESCRIPTION,
+  '/about': 'Who makes SharePix: SharePix LLC, a Minnesota company built and run by Seth Calvin, making shared event photo galleries with no app for guests.',
+  '/contact': 'How to reach SharePix: email for help with an event or payment, privacy requests, copyright notices, and our mailing address.',
   '/company-events':
     'Crowdsource photos from company parties, conferences and team events with a QR code. Moderation built in, plans for one event or year-round.',
   '/conventions':

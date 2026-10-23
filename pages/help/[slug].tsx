@@ -15,7 +15,7 @@ export default function HelpArticlePage({ article, related }: Props) {
   return (
     <Layout title={article.title} description={article.summary}>
       <article className="mx-auto max-w-2xl py-10">
-        <Link href="/help" className="text-sm text-charcoal/60 transition hover:text-charcoal">
+        <Link href="/help" className="text-sm text-charcoal/70 transition hover:text-charcoal">
           ← All help articles
         </Link>
 

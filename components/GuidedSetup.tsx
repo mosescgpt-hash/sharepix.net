@@ -107,13 +107,13 @@ export default function GuidedSetup({
       className="sticky top-0 z-30 -mx-4 mt-6 border-b border-ink/15 bg-paper/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:border sm:px-5"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-charcoal/55">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-charcoal/70">
           Guided customization · {active.step + 1} of {steps.length}
         </p>
         <button
           type="button"
           onClick={() => onProgress({ status: 'dismissed' })}
-          className="text-xs text-charcoal/60 underline"
+          className="text-xs text-charcoal/70 underline"
         >
           End guide
         </button>

@@ -503,6 +503,19 @@ const uploadEvidenceTable = backend.data.resources.tables.UploadEvidence;
 uploadEvidenceTable.grantWriteData(createFn);
 createFn.addEnvironment('UPLOAD_EVIDENCE_TABLE_NAME', uploadEvidenceTable.tableName);
 createFn.addEnvironment('REPORT_TO_ADDRESS', process.env.REPORT_TO_ADDRESS ?? '');
+// Photo-milestone alert (every 5,000 photos; photos are unlimited). Email
+// goes to ADMIN_ALERT_EMAIL (falling back to the operator report address);
+// the text goes to ADMIN_ALERT_PHONE in E.164 form. Either unset = that
+// channel is off. SMS needs SNS SMS set up in the account (see docs/alerting.md).
+createFn.addEnvironment('ADMIN_ALERT_EMAIL', process.env.ADMIN_ALERT_EMAIL ?? '');
+createFn.addEnvironment('ADMIN_ALERT_PHONE', process.env.ADMIN_ALERT_PHONE ?? '');
+createFn.addToRolePolicy(
+  new PolicyStatement({
+    // Direct-to-phone publish has no topic ARN to scope to, so it can only be '*'.
+    actions: ['sns:Publish'],
+    resources: ['*'],
+  }),
+);
 createFn.addToRolePolicy(
   new PolicyStatement({
     // The alert is raw MIME (preview inlined as multipart/related), and IAM

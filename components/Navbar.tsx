@@ -4,9 +4,11 @@ import { useRouter } from 'next/router';
 import Logo from '@/components/Logo';
 
 const LINKS = [
+  { href: '/weddings', label: 'Weddings' },
+  { href: '/company-events', label: 'Company events' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'Example' },
-  { href: '/my-events', label: 'Host access' },
+  { href: '/my-events', label: 'Sign in' },
 ];
 
 export default function Navbar() {
@@ -34,7 +36,7 @@ export default function Navbar() {
           <Logo />
           <span className="lowercase">
             share<span className="text-pine">pix</span>
-            <span className="text-charcoal/40">.net</span>
+            <span className="text-charcoal/70">.net</span>
           </span>
         </Link>
 

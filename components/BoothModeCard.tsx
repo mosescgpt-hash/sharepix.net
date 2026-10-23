@@ -53,7 +53,7 @@ export default function BoothModeCard({
               type="button"
               disabled={working}
               onClick={() => void change(false)}
-              className="text-charcoal/60 underline hover:text-charcoal disabled:opacity-50"
+              className="text-charcoal/70 underline hover:text-charcoal disabled:opacity-50"
             >
               {working ? 'Turning off…' : 'Turn booth mode off'}
             </button>

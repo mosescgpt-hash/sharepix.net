@@ -35,16 +35,16 @@ export default function UploadEvidenceList({ eventId }: { eventId: string }) {
         <div className="mt-2 overflow-x-auto">
           {error ? <p className="text-xs text-red-700">{error}</p> : null}
           {rows === null ? (
-            <p className="text-xs text-charcoal/55">Loading…</p>
+            <p className="text-xs text-charcoal/70">Loading…</p>
           ) : rows.length === 0 ? (
-            <p className="text-xs text-charcoal/55">
+            <p className="text-xs text-charcoal/70">
               No uploader details recorded. They are kept only for photos flagged after this
               feature shipped.
             </p>
           ) : (
             <table className="w-full min-w-[560px] border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-charcoal/15 text-charcoal/60">
+                <tr className="border-b border-charcoal/15 text-charcoal/70">
                   <th scope="col" className="py-1.5 pr-3 font-medium">When (UTC)</th>
                   <th scope="col" className="py-1.5 pr-3 font-medium">Uploader</th>
                   <th scope="col" className="py-1.5 pr-3 font-medium">IP address</th>
@@ -61,7 +61,7 @@ export default function UploadEvidenceList({ eventId }: { eventId: string }) {
                     <td className="py-1.5 pr-3 font-mono break-all">{row.callerId ?? '—'}</td>
                     <td className="py-1.5 font-mono break-all">
                       {row.photoId}
-                      {row.reasons ? <span className="font-sans text-charcoal/60"> · {row.reasons}</span> : null}
+                      {row.reasons ? <span className="font-sans text-charcoal/70"> · {row.reasons}</span> : null}
                     </td>
                   </tr>
                 ))}

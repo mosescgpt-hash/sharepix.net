@@ -76,12 +76,12 @@ export default function BoothPanel({
     <div className="mt-6 border border-pine/40 bg-sage/20 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-charcoal/55">Booth mode</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-charcoal/70">Booth mode</p>
           <p className="mt-1 truncate text-lg font-semibold">
             {status.currentName ? `Now shooting: ${status.currentName}` : 'Scan the first person’s code'}
           </p>
           {status.currentScannedAt ? (
-            <p className="text-xs text-charcoal/60">
+            <p className="text-xs text-charcoal/70">
               Scanned {new Date(status.currentScannedAt).toLocaleTimeString()}
             </p>
           ) : null}
@@ -118,7 +118,7 @@ export default function BoothPanel({
         ) : (
           <div>
             <p className="font-medium">Take one photo with your camera now, then choose it here.</p>
-            <p className="mt-1 text-xs text-charcoal/60">
+            <p className="mt-1 text-xs text-charcoal/70">
               Any subject works. Take it within a few seconds of tapping sync.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -128,7 +128,7 @@ export default function BoothPanel({
                 onChange={(e) => void handleSyncPhoto(e.target.files?.[0])}
                 className="text-sm"
               />
-              <button type="button" onClick={() => setSyncStartedAt(null)} className="text-sm text-charcoal/60 underline">
+              <button type="button" onClick={() => setSyncStartedAt(null)} className="text-sm text-charcoal/70 underline">
                 Cancel
               </button>
             </div>

@@ -102,7 +102,7 @@ export default function JoinPage() {
             </button>
           </form>
 
-          <p className="mt-8 text-sm text-charcoal/60">
+          <p className="mt-8 text-sm text-charcoal/70">
             Hosting rather than attending?{' '}
             <Link href="/my-events" className="text-pine underline">
               Your events

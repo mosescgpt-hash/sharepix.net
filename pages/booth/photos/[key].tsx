@@ -94,7 +94,7 @@ export default function BoothGalleryPage() {
             </Notice>
           ) : null}
           {gallery === undefined ? (
-            <p className="text-sm text-charcoal/55">Loading your photos&hellip;</p>
+            <p className="text-sm text-charcoal/70">Loading your photos&hellip;</p>
           ) : gallery === null ? (
             <Notice tone="error">Your photos could not be loaded. Try again in a moment.</Notice>
           ) : !gallery.ok ? (
@@ -151,7 +151,7 @@ export default function BoothGalleryPage() {
                               Download
                             </a>
                           ) : (
-                            <p className="text-xs text-charcoal/60">
+                            <p className="text-xs text-charcoal/70">
                               Only a preview is available for this one.
                             </p>
                           )}
@@ -159,7 +159,7 @@ export default function BoothGalleryPage() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-6 text-xs text-charcoal/55">
+                  <p className="mt-6 text-xs text-charcoal/70">
                     Links on this page expire after an hour; reload it for fresh ones.
                     {gallery.emailsStopped ? (
                       ' You have turned off emails about these photos.'

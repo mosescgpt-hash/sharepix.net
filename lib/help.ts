@@ -204,7 +204,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Each photo can be up to 25 MB. A free event holds 50 photos; a full event holds an unlimited number. Videos are counted separately. There is no per-guest limit — any limit is for the event as a whole, so share every photo you took.',
+        text: 'Each photo can be up to 25 MB. A free event holds 50 photos; paid events have unlimited photos. Built for real events. We may reach out if an event’s uploads look like bulk storage or automated uploads. Videos are counted separately and have their own limit per plan. There is no per-guest limit — any limit is for the event as a whole, so share every photo you took.',
       },
       {
         kind: 'text',
@@ -679,7 +679,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (with a fair-use ceiling of 5,000 per event, raised free on request) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book, the live slideshow, SharePix Pro for your photographer and booth mode — nothing is sold as an add-on on top.',
+        text: 'There is one plan: $79 for a single event, paid once. It covers unlimited photos (built for real events; we may reach out if an event’s uploads look like bulk storage or automated uploads) and up to 10 GB of video, a customizable QR code, event branding, approve-before-showing moderation, the guest book, the live slideshow, SharePix Pro for your photographer and booth mode — nothing is sold as an add-on on top.',
       },
       {
         kind: 'text',
@@ -854,7 +854,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Corporate is $149 a month and includes 10 new events every month under one account, each with unlimited photos under the same fair-use ceiling as a full event, 10 GB of video, company branding and a central dashboard. As many can run at once as you need. The count resets on the 1st (UTC) and unused events do not roll over. Need more in a month? Each extra event is $49, paid once when you create it.',
+        text: 'Corporate is $149 a month and includes 10 new events every month under one account, each with unlimited photos, the same as a full event, 10 GB of video, company branding and a central dashboard. As many can run at once as you need. The count resets on the 1st (UTC) and unused events do not roll over. Need more in a month? Each extra event is $49, paid once when you create it.',
       },
       {
         kind: 'text',

@@ -10,6 +10,7 @@ import {
 } from '@aws-sdk/client-rekognition';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import {
   REVIEW_FLAGGED_COUNT,
   REVIEW_FLAGGED_SHARE,
@@ -17,6 +18,7 @@ import {
   needsContentReview,
 } from './contentReview';
 import { buildAlertEmail } from './alert-email';
+import { alertEmail, alertPhone, photoAlertMessage, photoAlertStepCrossed } from './photoAlert';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
@@ -38,6 +40,7 @@ const dynamo = new DynamoDBClient({});
 const rekognition = new RekognitionClient({});
 const s3 = new S3Client({});
 const ses = new SESv2Client({});
+const sns = new SNSClient({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const ANALYTICS_TABLE = process.env.ANALYTICS_TABLE_NAME ?? '';
@@ -457,6 +460,100 @@ async function recordFlagged(eventId: string, eventName: string): Promise<void> 
     console.error('Could not record a flagged photo against its event', {
       at: new Date().toISOString(),
       eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Email + text the operator when an event crosses a 5,000-photo step. See
+ * photoAlert.ts. Best-effort: never fails or delays the upload.
+ */
+async function sendPhotoMilestoneAlert(facts: {
+  eventId: string;
+  eventName: string;
+  before: number;
+  after: number;
+  contributorCount: number;
+}): Promise<void> {
+  const step = photoAlertStepCrossed(facts.before, facts.after);
+  if (!step) return;
+  try {
+    // Claim this step. Concurrent uploads crossing the same line: one wins.
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: facts.eventId } },
+          UpdateExpression: 'SET photoAlertStep = :step',
+          ConditionExpression: 'attribute_not_exists(photoAlertStep) OR photoAlertStep < :step',
+          ExpressionAttributeValues: { ':step': { N: String(step) } },
+        }),
+      );
+    } catch (error) {
+      if ((error as { name?: string }).name === 'ConditionalCheckFailedException') return;
+      throw error;
+    }
+
+    const message = photoAlertMessage({
+      eventId: facts.eventId,
+      eventName: facts.eventName,
+      photoCount: facts.after,
+      contributorCount: facts.contributorCount,
+      appUrl: process.env.APP_URL ?? 'https://www.sharepix.net',
+    });
+    const from = process.env.ALERT_FROM_ADDRESS;
+    const to = alertEmail(process.env, await operatorAddress());
+    const phone = alertPhone(process.env);
+    const sends: Promise<unknown>[] = [];
+    if (from && to) {
+      sends.push(
+        ses.send(
+          new SendEmailCommand({
+            FromEmailAddress: from,
+            Destination: { ToAddresses: [to] },
+            Content: {
+              Simple: {
+                Subject: { Data: message.subject },
+                Body: { Text: { Data: message.text } },
+              },
+            },
+          }),
+        ),
+      );
+    }
+    if (phone) {
+      sends.push(
+        sns.send(
+          new PublishCommand({
+            PhoneNumber: phone,
+            Message: message.sms,
+            MessageAttributes: {
+              'AWS.SNS.SMS.SMSType': { DataType: 'String', StringValue: 'Transactional' },
+            },
+          }),
+        ),
+      );
+    }
+    if (sends.length === 0) {
+      console.warn('Event passed a photo milestone; no admin alert recipient configured', {
+        eventId: facts.eventId,
+        photoCount: facts.after,
+      });
+      return;
+    }
+    const results = await Promise.allSettled(sends);
+    for (const r of results) {
+      if (r.status === 'rejected') {
+        console.error('Could not send the photo milestone alert', {
+          eventId: facts.eventId,
+          error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Could not record the photo milestone alert', {
+      eventId: facts.eventId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -966,6 +1063,16 @@ export const handler: Handler = async (event) => {
       )
       .catch(() => undefined);
   }
+
+  // Operator heads-up at every 5,000 photos (photos are unlimited; this is the
+  // alert that replaced the cap). Best-effort, once per step.
+  void sendPhotoMilestoneAlert({
+    eventId,
+    eventName: ev.name?.S ?? '',
+    before: (toInt(reserved?.photoCount?.N) ?? 1) - 1,
+    after: toInt(reserved?.photoCount?.N) ?? 0,
+    contributorCount: toInt(reserved?.contributorCount?.N) ?? 0,
+  });
 
   // Funnel milestones. Best-effort and never awaited into the upload's own
   // outcome: a photo that is safely stored must not fail because a counter

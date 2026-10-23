@@ -1566,7 +1566,7 @@ function GlobalAdminPage() {
     <Layout title="Global admin">
       <section className="py-8">
         {loading && authorized === null ? (
-          <p className="text-center text-charcoal/60">Checking administrator access…</p>
+          <p className="text-center text-charcoal/70">Checking administrator access…</p>
         ) : authorized === false ? (
           <div className="mx-auto max-w-lg border border-charcoal/10 border-l-2 border-l-amber-600 bg-paper p-6 text-center">
             <h1 className="font-sans text-2xl font-bold tracking-[-0.02em]">Administrator access required</h1>
@@ -1578,7 +1578,7 @@ function GlobalAdminPage() {
               <div>
                 <p className="spx-eyebrow">Operations</p>
                 <h1 className="font-sans text-3xl font-bold tracking-[-0.02em]">Global admin</h1>
-                <p className="mt-1 text-charcoal/60">Monitor events and control complimentary pilot access.</p>
+                <p className="mt-1 text-charcoal/70">Monitor events and control complimentary pilot access.</p>
               </div>
               <button
                 type="button"
@@ -1614,7 +1614,7 @@ function GlobalAdminPage() {
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-sm text-charcoal/60">
+            <p className="mt-2 text-sm text-charcoal/70">
               {ADMIN_TABS.find((tab) => tab.id === adminTab)?.blurb}
             </p>
 
@@ -1644,48 +1644,48 @@ function GlobalAdminPage() {
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="spx-card p-5">
-                <p className="text-sm text-charcoal/60">Events</p>
+                <p className="text-sm text-charcoal/70">Events</p>
                 <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{events.length}</p>
               </div>
               <div className="spx-card p-5">
-                <p className="text-sm text-charcoal/60">Successful events</p>
+                <p className="text-sm text-charcoal/70">Successful events</p>
                 <p className="font-sans text-3xl font-bold tracking-[-0.02em]">
                   {successfulEvents}
                 </p>
                 {/* A rate of null means there are no events at all. Showing
                     "0.0%" there reads as a catastrophe rather than as nothing
                     having happened yet. */}
-                <p className="mt-1 text-xs text-charcoal/55">
+                <p className="mt-1 text-xs text-charcoal/70">
                   {eventSuccessRate === null
                     ? '3+ contributors and 10+ guest uploads'
                     : `${eventSuccessRate}% of all events`}
                 </p>
               </div>
               <div className="spx-card p-5">
-                <p className="text-sm text-charcoal/60">Stored photos</p>
+                <p className="text-sm text-charcoal/70">Stored photos</p>
                 <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{totalPhotos.toLocaleString()}</p>
               </div>
               <div className="spx-card p-5">
-                <p className="text-sm text-charcoal/60">Active discount codes</p>
+                <p className="text-sm text-charcoal/70">Active discount codes</p>
                 <p className="font-sans text-3xl font-bold tracking-[-0.02em]">{activeCodes}</p>
               </div>
             </div>
 
             <div className="spx-card mt-3 p-5">
-              <p className="text-sm text-charcoal/60">Where events came from</p>
+              <p className="text-sm text-charcoal/70">Where events came from</p>
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
                 {EVENT_SOURCES.map((source) => (
                   <p key={source} className="text-sm">
                     <span className="font-sans font-semibold text-charcoal">
                       {sourceCounts[source]}
                     </span>{' '}
-                    <span className="text-charcoal/60">{sourceLabel(source)}</span>
+                    <span className="text-charcoal/70">{sourceLabel(source)}</span>
                   </p>
                 ))}
               </div>
               {/* Said plainly, because a number that looks like analytics and
                   is not would be worse than no number. */}
-              <p className="mt-2 text-xs text-charcoal/55">
+              <p className="mt-2 text-xs text-charcoal/70">
                 Recorded on the event row when it is created. Events made before this existed
                 count as direct. Impressions and clicks are not tracked — there is no analytics
                 provider.
@@ -1812,7 +1812,7 @@ function GlobalAdminPage() {
                 const query = reviewQuery.trim().toLowerCase();
                 if (!query) {
                   return (
-                    <p className="mt-4 text-sm text-charcoal/55">
+                    <p className="mt-4 text-sm text-charcoal/70">
                       Nothing is shown until you look something up — this reads a
                       customer&rsquo;s event, so it should take a deliberate act.
                     </p>
@@ -1826,7 +1826,7 @@ function GlobalAdminPage() {
                 );
                 if (matches.length === 0) {
                   return (
-                    <p className="mt-4 text-sm text-charcoal/55">
+                    <p className="mt-4 text-sm text-charcoal/70">
                       No event matches that.
                     </p>
                   );
@@ -1880,12 +1880,12 @@ function GlobalAdminPage() {
                             </dd>
                           </div>
                           {finding.note ? (
-                            <p className="mt-1 text-xs text-charcoal/55">{finding.note}</p>
+                            <p className="mt-1 text-xs text-charcoal/70">{finding.note}</p>
                           ) : null}
                         </div>
                       ))}
                     </dl>
-                    <p className="mt-4 text-xs text-charcoal/55">
+                    <p className="mt-4 text-xs text-charcoal/70">
                       Counts are read off the event row. Nothing on this screen moves
                       money — record a refund in the section below, after issuing it in
                       Stripe.
@@ -1909,9 +1909,9 @@ function GlobalAdminPage() {
                 </Notice>
               ) : null}
               {refunds === null ? (
-                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : refunds.length === 0 ? (
-                <p className="mt-4 text-sm text-charcoal/55">Nothing has been claimed.</p>
+                <p className="mt-4 text-sm text-charcoal/70">Nothing has been claimed.</p>
               ) : (
                 <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
                   {refunds.map((row) => {
@@ -1924,7 +1924,7 @@ function GlobalAdminPage() {
                               {formatCents(row.amountCents)} ·{' '}
                               {event ? event.name : row.eventId}
                             </p>
-                            <p className="truncate text-xs text-charcoal/60">
+                            <p className="truncate text-xs text-charcoal/70">
                               {row.reason.toLowerCase().replace(/_/g, ' ')} ·{' '}
                               <span
                                 className={
@@ -1995,7 +1995,7 @@ function GlobalAdminPage() {
                   <>
                     <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
                       <div>
-                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                           Stored in total
                         </dt>
                         <dd className="font-sans text-2xl font-bold">
@@ -2003,19 +2003,19 @@ function GlobalAdminPage() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                           Events measured
                         </dt>
                         <dd className="font-sans text-2xl font-bold">
                           {measured.length}
-                          <span className="text-sm font-normal text-charcoal/55">
+                          <span className="text-sm font-normal text-charcoal/70">
                             {' '}
                             / {events.length}
                           </span>
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                        <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                           Flagged
                         </dt>
                         <dd className="font-sans text-2xl font-bold">{flagged.length}</dd>
@@ -2023,7 +2023,7 @@ function GlobalAdminPage() {
                     </dl>
 
                     {measured.length < events.length ? (
-                      <p className="mt-3 text-sm text-charcoal/60">
+                      <p className="mt-3 text-sm text-charcoal/70">
                         {/* Honest about the gap: byte counting starts at deploy, so
                             everything uploaded before it reads as zero rather than as
                             an empty event. */}
@@ -2034,7 +2034,7 @@ function GlobalAdminPage() {
                     ) : null}
 
                     {shown.length === 0 ? (
-                      <p className="mt-4 text-sm text-charcoal/55">Nothing stored yet.</p>
+                      <p className="mt-4 text-sm text-charcoal/70">Nothing stored yet.</p>
                     ) : (
                       <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
                         {shown.map(({ event, bytes, assessment }) => (
@@ -2044,7 +2044,7 @@ function GlobalAdminPage() {
                                 <p className="truncate text-sm font-medium text-charcoal">
                                   {formatBytes(bytes)} · {event.name}
                                 </p>
-                                <p className="truncate text-xs text-charcoal/60">
+                                <p className="truncate text-xs text-charcoal/70">
                                   {event.photoCount ?? 0} photos ·{' '}
                                   {formatBytes(event.videoBytes)} video
                                   {assessment.status !== 'NORMAL' ? (
@@ -2077,7 +2077,7 @@ function GlobalAdminPage() {
                                       className={`truncate text-xs ${
                                         due.urgent
                                           ? 'font-medium text-red-700'
-                                          : 'text-charcoal/55'
+                                          : 'text-charcoal/70'
                                       }`}
                                     >
                                       {due.text}
@@ -2145,7 +2145,7 @@ function GlobalAdminPage() {
                     <li key={message}>{message}</li>
                   ))}
                 </ul>
-                <p className="mt-3 text-xs text-charcoal/55">
+                <p className="mt-3 text-xs text-charcoal/70">
                   {NEXUS_DISCLAIMER} {HOME_JURISDICTION_NOTE}
                 </p>
               </div>
@@ -2186,7 +2186,7 @@ function GlobalAdminPage() {
                   {working === 'report-recipient' ? 'Saving…' : 'Save'}
                 </button>
               </div>
-              <p className="mt-3 text-sm text-charcoal/60">
+              <p className="mt-3 text-sm text-charcoal/70">
                 {/* Two things stand between a saved address and an email arriving, and
                     only one of them is on this screen. */}
                 A recipient is not enough on its own: the report also needs a verified
@@ -2238,7 +2238,7 @@ function GlobalAdminPage() {
                   {working === 'signup-alerts' ? 'Saving…' : 'Save'}
                 </button>
               </div>
-              <p className="mt-3 text-sm text-charcoal/60">
+              <p className="mt-3 text-sm text-charcoal/70">
                 {signupAlertSaved.on
                   ? `On — new signups are emailed to ${signupAlertSaved.to}.`
                   : 'Off — no signup emails are sent.'}{' '}
@@ -2261,7 +2261,7 @@ function GlobalAdminPage() {
                 </Notice>
               ) : null}
               {feedback === null ? (
-                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : (
                 (() => {
                   const stats = summarizeRatings(feedback);
@@ -2270,7 +2270,7 @@ function GlobalAdminPage() {
                     <>
                       <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                             Average
                           </dt>
                           <dd className="font-sans text-2xl font-bold">
@@ -2281,24 +2281,24 @@ function GlobalAdminPage() {
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                             Responses
                           </dt>
                           <dd className="font-sans text-2xl font-bold">{stats.responses}</dd>
                         </div>
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                             Low scores
                           </dt>
                           <dd className="font-sans text-2xl font-bold">{stats.lowRatings}</dd>
                         </div>
                         <div>
-                          <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                          <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                             Publishable
                           </dt>
                           <dd className="font-sans text-2xl font-bold">
                             {stats.publishable}
-                            <span className="text-sm font-normal text-charcoal/55">
+                            <span className="text-sm font-normal text-charcoal/70">
                               {' '}
                               / {stats.testimonials}
                             </span>
@@ -2315,7 +2315,7 @@ function GlobalAdminPage() {
                       ) : null}
 
                       {feedback.length === 0 ? (
-                        <p className="mt-4 text-sm text-charcoal/55">Nobody has rated yet.</p>
+                        <p className="mt-4 text-sm text-charcoal/70">Nobody has rated yet.</p>
                       ) : (
                         <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
                           {feedback
@@ -2327,7 +2327,7 @@ function GlobalAdminPage() {
                                     <p className="truncate text-sm font-medium text-charcoal">
                                       {row.rating}/5 · {row.eventName || row.eventId}
                                     </p>
-                                    <p className="truncate text-xs text-charcoal/60">
+                                    <p className="truncate text-xs text-charcoal/70">
                                       {row.marketingPermission
                                         ? `may publish · ${row.displayName || 'anonymous'}`
                                         : 'no permission to publish'}
@@ -2423,9 +2423,9 @@ function GlobalAdminPage() {
               ) : null}
 
               {featured === null ? (
-                <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : featured.length === 0 ? (
-                <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+                <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
                   No submissions yet.
                 </p>
               ) : (
@@ -2446,11 +2446,11 @@ function GlobalAdminPage() {
                         <div className="flex flex-wrap items-baseline justify-between gap-2">
                           <div>
                             <span className="font-medium">{row.eventName || row.eventId}</span>
-                            <span className="ml-2 text-xs text-charcoal/60">
+                            <span className="ml-2 text-xs text-charcoal/70">
                               {tier?.label ?? row.tierKey} · {row.status}
                             </span>
                           </div>
-                          <span className="text-xs text-charcoal/60">
+                          <span className="text-xs text-charcoal/70">
                             {usable} of {row.assets.length} photo
                             {row.assets.length === 1 ? '' : 's'} accepted
                             {row.compensationUsd ? ` · $${row.compensationUsd}` : ''}
@@ -2461,7 +2461,7 @@ function GlobalAdminPage() {
                         {/* The release the host actually accepted. Shown
                             verbatim rather than summarised, because which
                             wording they agreed to is the whole record. */}
-                        <p className="mt-1 text-xs text-charcoal/55">
+                        <p className="mt-1 text-xs text-charcoal/70">
                           {row.releaseVersion
                             ? `Release ${row.releaseVersion}, accepted ${
                                 row.releaseAcceptedAt
@@ -2545,7 +2545,7 @@ function GlobalAdminPage() {
               {/* Said here rather than nowhere: an operator who does not know
                   their own visits are excluded will eventually conclude the
                   page-view numbers are broken, and go looking. */}
-              <p className="mt-2 text-xs text-charcoal/55">
+              <p className="mt-2 text-xs text-charcoal/70">
                 Your own visits are not counted, signed in or not — this browser is
                 excluded once it has been recognised as an admin&rsquo;s. To undo that,
                 run <code>localStorage.removeItem(&apos;spx.analytics.exclude&apos;)</code> in
@@ -2591,7 +2591,7 @@ function GlobalAdminPage() {
               ) : null}
 
               {funnel === null ? (
-                <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : (
                 (() => {
                   const counts = new Map<string, number>();
@@ -2619,7 +2619,7 @@ function GlobalAdminPage() {
                             >
                               <div className="flex flex-wrap items-baseline justify-between gap-2">
                                 <div>
-                                  <span className="text-xs uppercase tracking-wide text-charcoal/55">
+                                  <span className="text-xs uppercase tracking-wide text-charcoal/70">
                                     {entry.stage.index}. {entry.stage.title}
                                   </span>
                                   <p className="mt-0.5 text-sm text-charcoal/70">
@@ -2631,7 +2631,7 @@ function GlobalAdminPage() {
                                     {entry.total === null ? 'Not measured' : entry.total}
                                   </span>
                                   {rate !== null ? (
-                                    <span className="block text-xs text-charcoal/60">
+                                    <span className="block text-xs text-charcoal/70">
                                       {rate}% of the stage before
                                     </span>
                                   ) : null}
@@ -2645,7 +2645,7 @@ function GlobalAdminPage() {
                                       {/* Said plainly rather than left to be
                                           assumed: a browser-reported figure can
                                           be blocked, doubled or made up. */}
-                                      <span className="text-charcoal/50">
+                                      <span className="text-charcoal/70">
                                         {row.serverTruth ? ' · measured' : ' · reported'}
                                       </span>
                                     </li>
@@ -2658,10 +2658,10 @@ function GlobalAdminPage() {
                       </ol>
 
                       <div className="mt-6 border-t border-charcoal/15 pt-4">
-                        <p className="text-xs uppercase tracking-wide text-charcoal/55">
+                        <p className="text-xs uppercase tracking-wide text-charcoal/70">
                           What this cannot tell you
                         </p>
-                        <ul className="mt-2 space-y-1 text-xs text-charcoal/60">
+                        <ul className="mt-2 space-y-1 text-xs text-charcoal/70">
                           {NOT_MEASURED_FUNNEL.map((line) => (
                             <li key={line}>{line}</li>
                           ))}
@@ -2697,9 +2697,9 @@ function GlobalAdminPage() {
               ) : null}
 
               {surveys === null ? (
-                <p className="mt-4 text-sm text-charcoal/60">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : surveys.length === 0 ? (
-                <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+                <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
                   No survey invitations have gone out yet.
                 </p>
               ) : (
@@ -2743,7 +2743,7 @@ function GlobalAdminPage() {
                           ['NPS', summary.nps === null ? 'Not yet measured' : String(summary.nps)],
                         ].map(([label, value]) => (
                           <div key={label} className="border border-charcoal/15 p-3">
-                            <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                            <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                               {label}
                             </dt>
                             <dd className="mt-1 font-sans text-lg font-bold">{value}</dd>
@@ -2877,7 +2877,7 @@ function GlobalAdminPage() {
                             aria-label="Completed from"
                             className="border border-charcoal/25 px-2 py-2 text-charcoal"
                           />
-                          <span className="text-charcoal/55">to</span>
+                          <span className="text-charcoal/70">to</span>
                           <input
                             type="date"
                             value={surveyFilters.to ?? ''}
@@ -2907,19 +2907,19 @@ function GlobalAdminPage() {
                         </button>
                       </div>
 
-                      <p className="mt-3 text-xs text-charcoal/60">
+                      <p className="mt-3 text-xs text-charcoal/70">
                         Showing {shown.length} of {surveys.length}.
                       </p>
 
                       {shown.length === 0 ? (
-                        <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+                        <p className="mt-4 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
                           No responses match these filters.
                         </p>
                       ) : (
                         <div className="mt-4 overflow-x-auto">
                           <table className="w-full min-w-[900px] border-collapse text-left text-sm">
                             <thead>
-                              <tr className="border-b border-charcoal/20 text-xs uppercase tracking-wide text-charcoal/55">
+                              <tr className="border-b border-charcoal/20 text-xs uppercase tracking-wide text-charcoal/70">
                                 <th scope="col" className="py-2 pr-3">Event</th>
                                 <th scope="col" className="py-2 pr-3">Stage</th>
                                 <th scope="col" className="py-2 pr-3">Satisfaction</th>
@@ -2955,13 +2955,13 @@ function GlobalAdminPage() {
                                           Worth reading
                                         </span>
                                       ) : null}
-                                      <span className="block text-xs text-charcoal/60">
+                                      <span className="block text-xs text-charcoal/70">
                                         {response.customer || 'Unknown host'}
                                         {response.metrics?.internalCohort
                                           ? ` · ${response.metrics.internalCohort}`
                                           : ''}
                                       </span>
-                                      <span className="block text-xs text-charcoal/60">
+                                      <span className="block text-xs text-charcoal/70">
                                         {answer('eventType')}
                                         {response.completedAt
                                           ? ` · ${new Date(response.completedAt).toLocaleDateString()}`
@@ -3020,7 +3020,7 @@ function GlobalAdminPage() {
                               <h3 className="font-sans text-lg font-bold tracking-[-0.02em]">
                                 {response.eventName || response.eventId}
                               </h3>
-                              <p className="mt-1 text-xs text-charcoal/60">
+                              <p className="mt-1 text-xs text-charcoal/70">
                                 {response.customer} · survey {response.surveyVersion || 'unversioned'}
                                 {response.completedAt
                                   ? ` · completed ${new Date(response.completedAt).toLocaleString()}`
@@ -3043,7 +3043,7 @@ function GlobalAdminPage() {
                                       String(value ?? ''));
                                   return (
                                     <div key={question.id}>
-                                      <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                                      <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                                         {question.prompt}
                                       </dt>
                                       <dd className="mt-0.5 whitespace-pre-wrap text-charcoal">
@@ -3055,7 +3055,7 @@ function GlobalAdminPage() {
                                 })}
                               </dl>
                               {response.metrics?.notMeasured?.length ? (
-                                <p className="mt-4 border-t border-charcoal/15 pt-3 text-xs text-charcoal/55">
+                                <p className="mt-4 border-t border-charcoal/15 pt-3 text-xs text-charcoal/70">
                                   Not captured for this event:{' '}
                                   {response.metrics.notMeasured.join('; ')}
                                 </p>
@@ -3095,13 +3095,13 @@ function GlobalAdminPage() {
                       key={key}
                       className="flex items-baseline justify-between gap-3 border border-charcoal/10 px-3 py-2"
                     >
-                      <dt className="text-xs uppercase tracking-wide text-charcoal/55">
+                      <dt className="text-xs uppercase tracking-wide text-charcoal/70">
                         {label}
                       </dt>
                       <dd
                         className={`text-sm font-medium ${
                           state === null
-                            ? 'text-charcoal/45'
+                            ? 'text-charcoal/70'
                             : state.enabled
                               ? 'text-red-700'
                               : 'text-charcoal/70'
@@ -3188,9 +3188,9 @@ function GlobalAdminPage() {
                 </Notice>
               ) : null}
               {incentives === null ? (
-                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : incentives.length === 0 ? (
-                <p className="mt-4 text-sm text-charcoal/55">
+                <p className="mt-4 text-sm text-charcoal/70">
                   Nothing owed. Invitations go out to successful events once their upload
                   window has closed.
                 </p>
@@ -3208,7 +3208,7 @@ function GlobalAdminPage() {
                           <p className="truncate text-sm font-medium text-charcoal">
                             ${row.amountUsd} · {row.participantEmail || 'no address'}
                           </p>
-                          <p className="truncate text-xs text-charcoal/60">
+                          <p className="truncate text-xs text-charcoal/70">
                             {event ? event.name : row.eventId} ·{' '}
                             <span className={owed ? 'font-medium text-pine' : ''}>
                               {row.status.toLowerCase().replace(/_/g, ' ')}
@@ -3249,7 +3249,7 @@ function GlobalAdminPage() {
                 </Notice>
               ) : null}
               {trials.length === 0 ? (
-                <p className="mt-4 text-sm text-charcoal/55">No free trial events yet.</p>
+                <p className="mt-4 text-sm text-charcoal/70">No free trial events yet.</p>
               ) : (
                 <ul className="mt-4 divide-y divide-charcoal/10 border-y border-charcoal/10">
                   {trials.map((event) => {
@@ -3269,14 +3269,14 @@ function GlobalAdminPage() {
                                 {accountEmail}
                               </a>
                             ) : trialEmails === null ? (
-                              <span className="text-charcoal/55">Looking up account email…</span>
+                              <span className="text-charcoal/70">Looking up account email…</span>
                             ) : (
-                              <span className="text-charcoal/55">
+                              <span className="text-charcoal/70">
                                 {sub ? 'No account email (account deleted?)' : 'No account recorded'}
                               </span>
                             )}
                           </p>
-                          <p className="text-sm text-charcoal/60">
+                          <p className="text-sm text-charcoal/70">
                             {event.createdBy ?? 'Unknown host'}
                             {event.alertEmail && event.alertEmail !== accountEmail
                               ? ` · alerts to ${event.alertEmail}`
@@ -3284,7 +3284,7 @@ function GlobalAdminPage() {
                             · Created{' '}
                             {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'}
                           </p>
-                          <p className="text-xs text-charcoal/60">
+                          <p className="text-xs text-charcoal/70">
                             {event.photoCount ?? 0} photo{event.photoCount === 1 ? '' : 's'} ·{' '}
                             {progress.contributors} contributor{progress.contributors === 1 ? '' : 's'} ·{' '}
                             {lifecyclePhase(event).label} · {sourceLabel(event.source)}
@@ -3388,9 +3388,9 @@ function GlobalAdminPage() {
                 </Notice>
               ) : null}
               {claims === null ? (
-                <p className="mt-4 text-sm text-charcoal/55">Loading…</p>
+                <p className="mt-4 text-sm text-charcoal/70">Loading…</p>
               ) : claims.length === 0 ? (
-                <p className="mt-4 text-sm text-charcoal/55">
+                <p className="mt-4 text-sm text-charcoal/70">
                   No account has taken a free event yet.
                 </p>
               ) : (
@@ -3411,7 +3411,7 @@ function GlobalAdminPage() {
                           <p className="truncate font-mono text-xs text-charcoal/70">
                             {claim.hostSub}
                           </p>
-                          <p className="text-sm text-charcoal/60">
+                          <p className="text-sm text-charcoal/70">
                             {claimed ? claimed.name : (claim.eventId ?? 'no event recorded')}
                             {claim.claimedAt
                               ? ` · claimed ${new Date(claim.claimedAt).toLocaleDateString()}`
@@ -3497,7 +3497,7 @@ function GlobalAdminPage() {
                       Needs review ({queue.length})
                     </h3>
                     {queue.length === 0 ? (
-                      <p className="mt-2 text-sm text-charcoal/55">No event is over the threshold.</p>
+                      <p className="mt-2 text-sm text-charcoal/70">No event is over the threshold.</p>
                     ) : (
                       <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
                         {queue.map((ev) => {
@@ -3539,7 +3539,7 @@ function GlobalAdminPage() {
                       Closed for content ({closed.length})
                     </h3>
                     {closed.length === 0 ? (
-                      <p className="mt-2 text-sm text-charcoal/55">No event has been closed.</p>
+                      <p className="mt-2 text-sm text-charcoal/70">No event has been closed.</p>
                     ) : (
                       <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
                         {closed.map((ev) => (
@@ -3588,7 +3588,7 @@ function GlobalAdminPage() {
               ) : null}
               {(() => {
                 if (quotas === null) {
-                  return <p className="mt-4 text-sm text-charcoal/55">Loading…</p>;
+                  return <p className="mt-4 text-sm text-charcoal/70">Loading…</p>;
                 }
                 const seats = quotas
                   .filter((row) => corporateMonthInUse(row))
@@ -3613,7 +3613,7 @@ function GlobalAdminPage() {
                       {seats.length === 1 ? 'subscriber' : 'subscribers'})
                     </h3>
                     {seats.length === 0 ? (
-                      <p className="mt-2 text-sm text-charcoal/55">
+                      <p className="mt-2 text-sm text-charcoal/70">
                         No Corporate subscriber has started an event this month.
                       </p>
                     ) : (
@@ -3634,7 +3634,7 @@ function GlobalAdminPage() {
                                   {included} included events used
                                   {used >= included ? ' — extras are $' + CORPORATE_PLAN.extraEventPrice + ' each' : ''}
                                 </p>
-                                <p className="truncate font-mono text-xs text-charcoal/60">{host}</p>
+                                <p className="truncate font-mono text-xs text-charcoal/70">{host}</p>
                               </div>
                               {clearButton(
                                 row.id,
@@ -3651,7 +3651,7 @@ function GlobalAdminPage() {
                       Guest book limits reached ({full.length})
                     </h3>
                     {full.length === 0 ? (
-                      <p className="mt-2 text-sm text-charcoal/55">Nobody is being turned away.</p>
+                      <p className="mt-2 text-sm text-charcoal/70">Nobody is being turned away.</p>
                     ) : (
                       <ul className="mt-2 divide-y divide-charcoal/10 border-y border-charcoal/10">
                         {full.map((row) => {
@@ -3670,7 +3670,7 @@ function GlobalAdminPage() {
                             <li key={row.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
                               <div className="min-w-0">
                                 <p className="truncate text-sm text-charcoal">{eventName(eventId)}</p>
-                                <p className="truncate font-mono text-xs text-charcoal/60">
+                                <p className="truncate font-mono text-xs text-charcoal/70">
                                   {who} · {row.count ?? 0} notes
                                 </p>
                               </div>
@@ -3730,7 +3730,7 @@ function GlobalAdminPage() {
                     {costs.cashHeadline}
                   </p>
                   <p className="text-sm text-charcoal/70">{costs.netHeadline}</p>
-                  <p className="mt-1 text-xs text-charcoal/50">
+                  <p className="mt-1 text-xs text-charcoal/70">
                     {costs.start} to {costs.end} ·{' '}
                     {costs.cached ? 'Cached figure from ' : 'Fetched '}
                     {new Date(costs.generatedAt).toLocaleString()}
@@ -3739,7 +3739,7 @@ function GlobalAdminPage() {
 
                   <table className="mt-5 w-full text-sm">
                     <thead>
-                      <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/50">
+                      <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/70">
                         <th className="py-2">Account</th>
                         <th className="py-2">How it is known</th>
                         <th className="py-2 text-right">This month</th>
@@ -3760,12 +3760,12 @@ function GlobalAdminPage() {
                                   buyer pays
                                 </span>
                               ) : null}
-                              <span className="block text-xs text-charcoal/60">{account.covers}</span>
+                              <span className="block text-xs text-charcoal/70">{account.covers}</span>
                               {costLine.detail ? (
-                                <span className="block text-xs text-charcoal/50">{costLine.detail}</span>
+                                <span className="block text-xs text-charcoal/70">{costLine.detail}</span>
                               ) : null}
                             </td>
-                            <td className="py-2 pr-3 text-xs text-charcoal/60">
+                            <td className="py-2 pr-3 text-xs text-charcoal/70">
                               <span className="font-medium capitalize">{account.provenance}</span>
                               {account.provenance === 'declared' && age !== null ? (
                                 <span className={stale ? 'ml-1 text-red-700' : 'ml-1'}>
@@ -3774,7 +3774,7 @@ function GlobalAdminPage() {
                               ) : null}
                               <span className="block">{account.basis}</span>
                               {account.id === 'cloudflare-r2' ? (
-                                <span className="block text-charcoal/40">
+                                <span className="block text-charcoal/70">
                                   Rates last checked {R2_RATES_VERIFIED_ON}
                                 </span>
                               ) : null}
@@ -3783,7 +3783,7 @@ function GlobalAdminPage() {
                               {costLine.amountUsd === null ? (
                                 <span className="text-red-700">
                                   unknown
-                                  <span className="block text-xs font-normal text-charcoal/60">
+                                  <span className="block text-xs font-normal text-charcoal/70">
                                     {costLine.unavailableReason}
                                   </span>
                                 </span>
@@ -3806,7 +3806,7 @@ function GlobalAdminPage() {
                           ${costs.summary.ownCostUsd.toFixed(2)}
                         </td>
                       </tr>
-                      <tr className="text-charcoal/60">
+                      <tr className="text-charcoal/70">
                         <td className="py-1" colSpan={2}>
                           Covered by buyers
                         </td>
@@ -3840,7 +3840,7 @@ function GlobalAdminPage() {
                           </dd>
                         </div>
                       </dl>
-                      <p className="mt-2 text-xs text-charcoal/50">
+                      <p className="mt-2 text-xs text-charcoal/70">
                         Prints are kept separate on purpose: a $12.66 print is about ten
                         cents earned, and adding it to event revenue would read as $12.66.
                       </p>
@@ -3849,7 +3849,7 @@ function GlobalAdminPage() {
                     <div className="border border-charcoal/10 p-4">
                       <h3 className="font-sans text-sm font-bold">AWS, by service</h3>
                       {costs.awsByService.length === 0 ? (
-                        <p className="mt-2 text-sm text-charcoal/60">
+                        <p className="mt-2 text-sm text-charcoal/70">
                           Cost Explorer did not answer, so there is no breakdown. The
                           total above is short by whatever AWS charged.
                         </p>
@@ -3864,7 +3864,7 @@ function GlobalAdminPage() {
                         </dl>
                       )}
                       {costs.awsForecastUsd !== null ? (
-                        <p className="mt-2 text-xs text-charcoal/50">
+                        <p className="mt-2 text-xs text-charcoal/70">
                           AWS forecasts ${costs.awsForecastUsd.toFixed(2)} more before the
                           month ends.
                         </p>
@@ -3905,7 +3905,7 @@ function GlobalAdminPage() {
                         >
                           {account.label} — monthly, in dollars
                         </label>
-                        <p className="text-xs text-charcoal/60">{account.basis}</p>
+                        <p className="text-xs text-charcoal/70">{account.basis}</p>
                         {account.mayDuplicate ? (
                           <p className="text-xs text-red-700">
                             If this is billed through{' '}
@@ -3975,7 +3975,7 @@ function GlobalAdminPage() {
                   {working === 'file-report-2' ? 'Filing…' : 'File the month before'}
                 </button>
               </div>
-              <p className="mt-2 text-xs text-charcoal/50">
+              <p className="mt-2 text-xs text-charcoal/70">
                 Filing the same period again replaces its report rather than adding a
                 second one, so pressing these twice is safe. Each costs a Cost Explorer
                 request.
@@ -3990,7 +3990,7 @@ function GlobalAdminPage() {
               {reports && reports.length > 0 ? (
                 <table className="mt-4 w-full text-sm">
                   <thead>
-                    <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/50">
+                    <tr className="border-b border-charcoal/15 text-left text-xs uppercase tracking-wide text-charcoal/70">
                       <th className="py-2">Period</th>
                       <th className="py-2 text-right">Cost</th>
                       <th className="py-2 text-right">In</th>
@@ -4040,7 +4040,7 @@ function GlobalAdminPage() {
                   </tbody>
                 </table>
               ) : (
-                <p className="mt-4 text-sm text-charcoal/60">
+                <p className="mt-4 text-sm text-charcoal/70">
                   {reports
                     ? 'Nothing filed yet. The first one lands on the 1st, or file last month now.'
                     : 'Loading…'}
@@ -4107,7 +4107,7 @@ function GlobalAdminPage() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 id="events" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Events</h2>
-                    <p className="text-sm text-charcoal/60">
+                    <p className="text-sm text-charcoal/70">
                       Open a host dashboard, archive an event, or restore one that was
                       archived.
                     </p>
@@ -4144,7 +4144,7 @@ function GlobalAdminPage() {
                     </button>
                   ))}
                   {archivedCount > 0 && phaseFilter === 'all' ? (
-                    <span className="self-center text-charcoal/60">
+                    <span className="self-center text-charcoal/70">
                       {archivedCount} event{archivedCount === 1 ? '' : 's'} no longer reachable
                       by their host
                     </span>
@@ -4152,7 +4152,7 @@ function GlobalAdminPage() {
                 </div>
                 <div className="mt-4 space-y-3">
                   {filteredEvents.length === 0 ? (
-                    <p className="border border-dashed border-charcoal/25 p-8 text-center text-charcoal/60">
+                    <p className="border border-dashed border-charcoal/25 p-8 text-center text-charcoal/70">
                       No events match this search.
                     </p>
                   ) : filteredEvents.map((event) => (
@@ -4170,7 +4170,7 @@ function GlobalAdminPage() {
                               </span>
                             ) : null}
                           </h3>
-                          <p className="mt-1 text-sm text-charcoal/60">
+                          <p className="mt-1 text-sm text-charcoal/70">
                             {event.createdBy ?? 'Unknown host'} · {event.tier} · {event.photoCount ?? 0}
                             {entitledPhotoLimit(event) == null
                               ? ' photos (unlimited)'
@@ -4182,14 +4182,8 @@ function GlobalAdminPage() {
                                 broken — but an operator reading a capacity list
                                 should be told which it is. */}
                             {limitsAreStale(event) ? ' · row limits stale' : ''}
-                            {/* A host asked for more room. Shown in the list
-                                rather than only in a queue, because the
-                                decision needs the event beside it. */}
-                            {event.capacityRequestedAt && !event.capacityGrantedAt
-                              ? ' · asked for more room'
-                              : ''}
                           </p>
-                          <p className="mt-1 text-xs text-charcoal/60">
+                          <p className="mt-1 text-xs text-charcoal/70">
                             Code {event.eventCode} · Created {event.createdAt ? new Date(event.createdAt).toLocaleDateString() : 'unknown'} ·{' '}
                             {sourceLabel(event.source)}
                           </p>
@@ -4204,12 +4198,12 @@ function GlobalAdminPage() {
                                   className={
                                     progress.successful
                                       ? 'font-medium text-pine'
-                                      : 'text-charcoal/60'
+                                      : 'text-charcoal/70'
                                   }
                                 >
                                   {progress.successful ? 'Successful event' : 'Not yet successful'}
                                 </span>
-                                <span className="text-charcoal/60">
+                                <span className="text-charcoal/70">
                                   {' · '}
                                   {progress.contributors} contributor
                                   {progress.contributors === 1 ? '' : 's'} ·{' '}
@@ -4242,7 +4236,7 @@ function GlobalAdminPage() {
                                 className={`mt-2 inline-block px-2.5 py-1 text-[11px] font-semibold ${
                                   phase.recover
                                     ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-charcoal/[0.07] text-charcoal/60'
+                                    : 'bg-charcoal/[0.07] text-charcoal/70'
                                 }`}
                               >
                                 {phase.label}
@@ -4352,7 +4346,7 @@ function GlobalAdminPage() {
 
               <section hidden={adminTab !== 'discounts'}>
                 <h2 id="discounts" className="scroll-mt-24 font-sans text-2xl font-bold tracking-[-0.02em]">Discount codes</h2>
-                <p className="text-sm text-charcoal/60">
+                <p className="text-sm text-charcoal/70">
                   Take a percentage off anything paid on the site. Default usage is one redemption.
                 </p>
 
@@ -4384,7 +4378,7 @@ function GlobalAdminPage() {
                   </div>
                   <div>
                     <label className="text-sm font-medium">Applies to</label>
-                    <p className="mt-0.5 text-xs text-charcoal/60">
+                    <p className="mt-0.5 text-xs text-charcoal/70">
                       Which paid items this code can be used on. Prints are excluded.
                     </p>
                     <div ref={scopeMenuRef} className="relative mt-1">
@@ -4395,10 +4389,10 @@ function GlobalAdminPage() {
                         aria-expanded={scopeOpen}
                         className="flex w-full items-center justify-between gap-2 border border-charcoal/20 bg-paper px-3 py-2.5 text-left text-sm text-charcoal focus:border-ink focus:outline-none"
                       >
-                        <span className={checkedScopes.size === 0 ? 'text-charcoal/60' : ''}>
+                        <span className={checkedScopes.size === 0 ? 'text-charcoal/70' : ''}>
                           {scopeButtonLabel}
                         </span>
-                        <span aria-hidden="true" className="shrink-0 text-charcoal/60">
+                        <span aria-hidden="true" className="shrink-0 text-charcoal/70">
                           {scopeOpen ? '▲' : '▼'}
                         </span>
                       </button>
@@ -4440,14 +4434,14 @@ function GlobalAdminPage() {
                         </div>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-xs text-charcoal/60">
+                    <p className="mt-2 text-xs text-charcoal/70">
                       Upload extensions and the live slideshow are redeemed on an event&apos;s{' '}
                       <span className="font-medium">Manage</span> page.
                     </p>
                   </div>
                   <div>
                     <label className="text-sm font-medium">Discount</label>
-                    <p className="mt-0.5 text-xs text-charcoal/60">How much to take off.</p>
+                    <p className="mt-0.5 text-xs text-charcoal/70">How much to take off.</p>
                     <div className="mt-1 flex flex-wrap gap-2">
                       {([
                         ['percent', 'Percentage off'],
@@ -4471,7 +4465,7 @@ function GlobalAdminPage() {
                     {discountType === 'amount' ? (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-charcoal/60">$</span>
+                          <span className="text-sm text-charcoal/70">$</span>
                           <input
                             type="number"
                             min={1}
@@ -4480,9 +4474,9 @@ function GlobalAdminPage() {
                             onChange={(e) => setAmountOffDollars(Number(e.target.value))}
                             className="spx-input w-28"
                           />
-                          <span className="text-sm text-charcoal/60">off</span>
+                          <span className="text-sm text-charcoal/70">off</span>
                         </div>
-                        <p className="mt-1 text-xs text-charcoal/60">
+                        <p className="mt-1 text-xs text-charcoal/70">
                           Taken off each qualifying purchase. If it&apos;s more than the item
                           costs, the item is simply free — never a negative total.
                         </p>
@@ -4524,13 +4518,13 @@ function GlobalAdminPage() {
                           onChange={(e) => setCustomPercent(Number(e.target.value))}
                           className="spx-input w-24"
                         />
-                        <span className="text-sm text-charcoal/60">% off</span>
+                        <span className="text-sm text-charcoal/70">% off</span>
                       </div>
                     ) : null}
                   </div>
                   <div>
                     <label className="text-sm font-medium">Corporate subscriptions</label>
-                    <p className="mt-0.5 text-xs text-charcoal/60">
+                    <p className="mt-0.5 text-xs text-charcoal/70">
                       How long the discount lasts on a recurring Corporate plan. One-time purchases
                       (events, extensions, add-on) are unaffected.
                     </p>
@@ -4576,7 +4570,7 @@ function GlobalAdminPage() {
                         disabled={unlimitedUses}
                         placeholder="∞"
                         onChange={(e) => setMaxUses(Number(e.target.value))}
-                        className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+                        className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/70"
                       />
                     </div>
                   </div>
@@ -4589,7 +4583,7 @@ function GlobalAdminPage() {
                     />
                     <span>
                       <span className="font-medium">Unlimited uses</span>
-                      <span className="block text-xs text-charcoal/60">
+                      <span className="block text-xs text-charcoal/70">
                         The code never runs out. Redemptions are still counted, so you can see
                         how many people used it.
                       </span>
@@ -4623,7 +4617,7 @@ function GlobalAdminPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-mono font-bold text-charcoal">{item.code}</p>
-                            <p className="mt-1 truncate text-xs text-charcoal/60">
+                            <p className="mt-1 truncate text-xs text-charcoal/70">
                               {item.discountType === 'amount'
                                 ? `$${((item.amountOffCents ?? 0) / 100).toFixed(2)} off`
                                 : (item.percentOff == null ? 100 : item.percentOff) >= 100
@@ -4640,7 +4634,7 @@ function GlobalAdminPage() {
                             {status}
                           </span>
                         </div>
-                        <p className="mt-3 text-xs text-charcoal/60">
+                        <p className="mt-3 text-xs text-charcoal/70">
                           {item.unlimitedUses
                             ? `${item.usedCount} ${item.usedCount === 1 ? 'use' : 'uses'} · unlimited`
                             : `${item.usedCount}/${item.maxUses} uses`}{' '}

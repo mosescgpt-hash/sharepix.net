@@ -132,7 +132,7 @@ export default function MomentsManager({
       <h2 id="moments-heading" className="font-sans text-xl font-bold tracking-[-0.02em]">
         Moments
       </h2>
-      <p className="mt-1 text-sm text-charcoal/60">
+      <p className="mt-1 text-sm text-charcoal/70">
         The parts of your event — &ldquo;Getting ready&rdquo;, &ldquo;Ceremony&rdquo;,
         &ldquo;Reception&rdquo;. Each one gets its own QR code, so a photo added from the card on
         the ceremony chairs files differently from one added at dinner. Optional: guests can
@@ -146,11 +146,11 @@ export default function MomentsManager({
       ) : null}
 
       {loading ? (
-        <p className="mt-4 text-sm text-charcoal/60">Loading&hellip;</p>
+        <p className="mt-4 text-sm text-charcoal/70">Loading&hellip;</p>
       ) : (
         <>
           {ordered.length === 0 ? (
-            <p className="mt-5 text-sm text-charcoal/60">
+            <p className="mt-5 text-sm text-charcoal/70">
               No moments yet. Add one below, or leave this empty and every photo simply lands in
               the one gallery.
             </p>
@@ -162,7 +162,7 @@ export default function MomentsManager({
                     <div className="min-w-0">
                       <p className="font-sans font-semibold text-charcoal">{moment.name}</p>
                       {moment.description ? (
-                        <p className="mt-0.5 text-sm text-charcoal/60">{moment.description}</p>
+                        <p className="mt-0.5 text-sm text-charcoal/70">{moment.description}</p>
                       ) : null}
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-2 text-sm">
@@ -205,11 +205,11 @@ export default function MomentsManager({
                         label={`QR code for ${moment.name}`}
                       />
                       <p className="font-serif text-lg italic">{moment.name}</p>
-                      <p className="break-all text-xs text-charcoal/60">
+                      <p className="break-all text-xs text-charcoal/70">
                         {origin}
                         {momentUploadPath(eventId, moment.id)}
                       </p>
-                      <p className="text-xs text-charcoal/55">
+                      <p className="text-xs text-charcoal/70">
                         Print this for the {moment.name.toLowerCase()} tables. Scanning it opens
                         the upload page with this moment already chosen.
                       </p>
@@ -234,14 +234,14 @@ export default function MomentsManager({
               maxLength={MAX_MOMENT_NAME_LENGTH}
               placeholder="Ceremony"
               disabled={busy || (full && !editingId)}
-              className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+              className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/70"
             />
 
             <label
               htmlFor="moment-description"
               className="mt-4 block font-sans text-sm font-medium text-charcoal"
             >
-              Description <span className="text-charcoal/50">(optional)</span>
+              Description <span className="text-charcoal/70">(optional)</span>
             </label>
             <input
               id="moment-description"
@@ -250,7 +250,7 @@ export default function MomentsManager({
               maxLength={MAX_MOMENT_DESCRIPTION_LENGTH}
               placeholder="Before the meal, in the garden"
               disabled={busy || (full && !editingId)}
-              className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+              className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/70"
             />
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -269,7 +269,7 @@ export default function MomentsManager({
             </div>
 
             {full && !editingId ? (
-              <p className="mt-3 text-xs text-charcoal/55">
+              <p className="mt-3 text-xs text-charcoal/70">
                 You have the maximum of {MAX_MOMENTS_PER_EVENT} moments. Remove one to add
                 another.
               </p>

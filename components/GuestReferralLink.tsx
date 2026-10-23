@@ -16,7 +16,7 @@ export type GuestReferralSource = 'guest_upload' | 'gallery';
  */
 export default function GuestReferralLink({ source }: { source: GuestReferralSource }) {
   return (
-    <p className="mt-6 border-t border-charcoal/10 pt-4 text-sm text-charcoal/60">
+    <p className="mt-6 border-t border-charcoal/10 pt-4 text-sm text-charcoal/70">
       Planning an event of your own?{' '}
       <Link href={`/create-event?source=${source}`} className="font-medium text-pine underline">
         Create your own SharePix

@@ -171,7 +171,7 @@ function AccountPage() {
             {/* Display name */}
             <form onSubmit={handleSaveName} className="spx-card p-6">
               <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Display name</h2>
-              <p className="mt-1 text-sm text-charcoal/60">
+              <p className="mt-1 text-sm text-charcoal/70">
                 Shown as the host on events you create. Leave it blank to use the name from your
                 email address.
               </p>
@@ -202,7 +202,7 @@ function AccountPage() {
             {/* Email */}
             <div className="spx-card p-6">
               <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Email address</h2>
-              <p className="mt-1 text-sm text-charcoal/60">
+              <p className="mt-1 text-sm text-charcoal/70">
                 You currently sign in with <strong className="text-ink">{currentEmail || 'an unknown address'}</strong>.
                 Changing it sends a code to the new address to confirm it&apos;s yours.
               </p>

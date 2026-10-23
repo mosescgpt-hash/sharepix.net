@@ -12,7 +12,6 @@ import {
   GUEST_BOOK_ADDON_PRICE,
   LIVE_SLIDESHOW_ADDON_PRICE,
 } from '../lib/pricing';
-import { FAIR_USE_PHOTO_CEILING } from '../lib/fairUse';
 import { bodyOf, codeOnly, readSource } from './sourceGuards';
 
 /**
@@ -51,11 +50,9 @@ describe('the site advertises what Stripe charges', () => {
     expect(GUEST_BOOK_ADDON_PRICE * 100).toBe(GUEST_BOOK_ADDON_CENTS);
   });
 
-  it('states the same photo ceiling on Corporate as on the Full Event', () => {
-    const ceiling = FAIR_USE_PHOTO_CEILING.toLocaleString('en-US');
-    expect(CORPORATE_PLAN.features.some((f) => f.includes(`fair-use ceiling ${ceiling}`))).toBe(
-      true,
-    );
+  it('states unlimited photos on Corporate with no ceiling', () => {
+    expect(CORPORATE_PLAN.features.some((f) => /^Unlimited photos/.test(f))).toBe(true);
+    expect(CORPORATE_PLAN.features.some((f) => /fair-use ceiling/i.test(f))).toBe(false);
   });
 
   it('prices an extra Corporate event below a single event', () => {
@@ -121,8 +118,10 @@ describe('help articles quote the numbers the code uses', () => {
   // code moves and the prose does not.
   const help = readSource('lib/help.ts');
 
-  it('states the fair-use ceiling', () => {
-    expect(help).toContain(FAIR_USE_PHOTO_CEILING.toLocaleString('en-US'));
+  it('says unlimited photos with the plain-language note, and no ceiling', () => {
+    expect(help).toMatch(/unlimited photos/i);
+    expect(help).toMatch(/bulk storage or automated uploads/);
+    expect(help).not.toMatch(/fair-use ceiling/i);
   });
 
   it('states Corporate as it is sold', () => {

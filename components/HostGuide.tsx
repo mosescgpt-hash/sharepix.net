@@ -41,12 +41,12 @@ export default function HostGuide({
       >
         <span>
           <span className="font-sans text-xl font-bold tracking-[-0.02em]">How to run your event</span>
-          <span className="mt-0.5 block text-sm text-charcoal/60">
+          <span className="mt-0.5 block text-sm text-charcoal/70">
             Sharing with guests, the printable brochure{sections.includes('live') ? ', the live slideshow' : ''}
             {sections.includes('downloads') ? ', guest downloads' : ''}.
           </span>
         </span>
-        <span className="shrink-0 text-charcoal/60">{open ? '▲' : '▼'}</span>
+        <span className="shrink-0 text-charcoal/70">{open ? '▲' : '▼'}</span>
       </button>
 
       {open ? (
@@ -74,7 +74,7 @@ export default function HostGuide({
                 <strong className="text-ink">{event.eventCode}</strong>.
               </li>
             </ol>
-            <p className="mt-2 text-charcoal/60">
+            <p className="mt-2 text-charcoal/70">
               Tell guests to keep the page open while photos upload — a phone can’t upload while
               it’s locked or on another app.
             </p>
@@ -132,7 +132,7 @@ export default function HostGuide({
                 </li>
                 <li>Put that tab full screen and leave it running. New photos appear on their own.</li>
               </ol>
-              <p className="mt-2 text-charcoal/60">
+              <p className="mt-2 text-charcoal/70">
                 Photos wait about 90 seconds before appearing — that’s the screening buffer, so
                 nothing hits the big screen the instant it lands. Set the computer not to sleep.
               </p>
@@ -153,7 +153,7 @@ export default function HostGuide({
             </section>
           ) : null}
 
-          <p className="border-t border-charcoal/10 pt-4 text-charcoal/60">
+          <p className="border-t border-charcoal/10 pt-4 text-charcoal/70">
             More detail is in the{' '}
             <Link href="/help" className="font-medium text-pine underline">
               help centre

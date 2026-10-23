@@ -254,7 +254,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
             {look.label}
           </span>
         </span>
-        <span className="block px-3 py-2 text-xs text-charcoal/60">
+        <span className="block px-3 py-2 text-xs text-charcoal/70">
           {working === `look-${look.key}` ? 'Applying…' : look.description}
         </span>
       </button>
@@ -289,7 +289,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
           </EventCover>
         </div>
       </div>
-      <p className="mt-2 text-xs text-charcoal/55">
+      <p className="mt-2 text-xs text-charcoal/70">
         Preview. Guests see this at the top of the upload page and the gallery.
       </p>
 
@@ -320,7 +320,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
             className={`-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
               tab === t.key
                 ? 'border-ink text-charcoal'
-                : 'border-transparent text-charcoal/55 hover:text-charcoal'
+                : 'border-transparent text-charcoal/70 hover:text-charcoal'
             }`}
           >
             {t.label}
@@ -337,10 +337,10 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
       {tab === 'looks' ? (
         <div role="tabpanel" id="look-panel-looks" aria-labelledby="look-tab-looks">
           <fieldset className="">
-            <legend className="text-xs uppercase tracking-wide text-charcoal/55">
+            <legend className="text-xs uppercase tracking-wide text-charcoal/70">
               Start with a look
             </legend>
-            <p className="mt-1 text-xs text-charcoal/60">
+            <p className="mt-1 text-xs text-charcoal/70">
               Fonts, colour and background that go together, in one click. Change any part of it
               afterwards.
             </p>
@@ -365,8 +365,8 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
       {tab === 'cover' ? (
         <div role="tabpanel" id="look-panel-cover" aria-labelledby="look-tab-cover">
           <fieldset className="">
-            <legend className="text-xs uppercase tracking-wide text-charcoal/55">Cover</legend>
-            <p className="mt-1 text-xs text-charcoal/60">
+            <legend className="text-xs uppercase tracking-wide text-charcoal/70">Cover</legend>
+            <p className="mt-1 text-xs text-charcoal/70">
               Your own photo — the two of you, the venue, last year&rsquo;s party — or a background.
               Wide photos work best.
             </p>
@@ -397,14 +397,14 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                     setLocalImage(null);
                     void saveCover({ image: undefined }, 'remove-photo');
                   }}
-                  className="text-sm text-charcoal/60 underline disabled:opacity-50"
+                  className="text-sm text-charcoal/70 underline disabled:opacity-50"
                 >
                   Remove photo
                 </button>
               ) : null}
             </div>
 
-            <p className="mt-4 text-xs text-charcoal/60">
+            <p className="mt-4 text-xs text-charcoal/70">
               {cover.image ? 'Background, if you remove the photo:' : 'Or a background:'}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -434,7 +434,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
           </fieldset>
 
           {cover.image ? (
-            <p className="mt-4 text-xs text-charcoal/60">
+            <p className="mt-4 text-xs text-charcoal/70">
               Faces cut off, or the words hard to read?{' '}
               <button
                 type="button"
@@ -452,7 +452,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
       {tab === 'fonts' ? (
         <div role="tabpanel" id="look-panel-fonts" aria-labelledby="look-tab-fonts">
           <fieldset className="">
-            <legend className="text-xs uppercase tracking-wide text-charcoal/55">Fonts</legend>
+            <legend className="text-xs uppercase tracking-wide text-charcoal/70">Fonts</legend>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {FONT_SETS.map((fontSet) => (
                 <button
@@ -477,7 +477,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                   >
                     {fontSet.label}
                   </span>
-                  <span className="mt-1 block text-xs text-charcoal/60">{fontSet.description}</span>
+                  <span className="mt-1 block text-xs text-charcoal/70">{fontSet.description}</span>
                 </button>
               ))}
             </div>
@@ -488,7 +488,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
       {tab === 'gallery' ? (
         <div role="tabpanel" id="look-panel-gallery" aria-labelledby="look-tab-gallery">
           <fieldset>
-            <legend className="text-xs uppercase tracking-wide text-charcoal/55">
+            <legend className="text-xs uppercase tracking-wide text-charcoal/70">
               Who can see the gallery
             </legend>
             <div className="mt-3 space-y-2">
@@ -517,7 +517,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                     />
                     <span>
                       <span className="block text-sm font-medium text-charcoal">{option.label}</span>
-                      <span className="mt-0.5 block text-xs text-charcoal/60">
+                      <span className="mt-0.5 block text-xs text-charcoal/70">
                         {option.description}
                       </span>
                     </span>
@@ -527,7 +527,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
             </div>
             {galleryAudienceFor(event) !== 'everyone' ? (
               // What this does and does not do, said before a host relies on it.
-              <p className="mt-3 text-xs text-charcoal/60">
+              <p className="mt-3 text-xs text-charcoal/70">
                 {galleryAudienceFor(event) === 'own'
                   ? 'A guest’s “own” photos are the ones uploaded from the same phone and browser, or while signed in. Photos from before October 2026 can’t be matched to a guest, so only you see those. '
                   : ''}
@@ -538,7 +538,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
           </fieldset>
 
           <fieldset className="mt-6">
-            <legend className="text-xs uppercase tracking-wide text-charcoal/55">Gallery layout</legend>
+            <legend className="text-xs uppercase tracking-wide text-charcoal/70">Gallery layout</legend>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {GALLERY_LAYOUTS.map((option) => (
                 <button
@@ -557,7 +557,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                 >
                   <LayoutSketch layout={option.key} />
                   <span className="mt-2 block text-sm font-medium text-charcoal">{option.label}</span>
-                  <span className="mt-0.5 block text-xs text-charcoal/60">{option.description}</span>
+                  <span className="mt-0.5 block text-xs text-charcoal/70">{option.description}</span>
                 </button>
               ))}
             </div>
@@ -565,10 +565,10 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
 
 
           <fieldset className="mt-6">
-            <legend className="text-xs uppercase tracking-wide text-charcoal/55">
+            <legend className="text-xs uppercase tracking-wide text-charcoal/70">
               Likes and comments
             </legend>
-            <p className="mt-1 text-xs text-charcoal/60">
+            <p className="mt-1 text-xs text-charcoal/70">
               {/* Naming the case rather than leaving a host to work it out. A like
                   button under a photograph at a celebration of life is the wrong
                   object in the room, and that is not ours to decide for them. */}
@@ -602,7 +602,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                 Guests can comment on photos
               </label>
             </div>
-            <p className="mt-2 text-xs text-charcoal/55">
+            <p className="mt-2 text-xs text-charcoal/70">
               {/* Said plainly rather than implied. */}
               Comments are not screened automatically. You can hide any of them from your dashboard,
               and turning comments off hides the ones already there.
@@ -625,7 +625,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                   onChange={(e) => set({ title: e.target.value || undefined })}
                   className="spx-input mt-1"
                 />
-                <span className="mt-1 block text-xs text-charcoal/55">
+                <span className="mt-1 block text-xs text-charcoal/70">
                   Blank uses your event&rsquo;s name.
                 </span>
               </label>
@@ -639,7 +639,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                   onChange={(e) => set({ subtitle: e.target.value || undefined })}
                   className="spx-input mt-1"
                 />
-                <span className="mt-1 block text-xs text-charcoal/55">
+                <span className="mt-1 block text-xs text-charcoal/70">
                   Blank shows the date and place.
                 </span>
               </label>
@@ -657,7 +657,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                   className="mt-2 block w-full"
                   aria-valuetext={`${cover.focus}% from the top`}
                 />
-                <span className="flex justify-between text-xs text-charcoal/55">
+                <span className="flex justify-between text-xs text-charcoal/70">
                   <span>Show the top</span>
                   <span>Show the bottom</span>
                 </span>
@@ -676,7 +676,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                   className="mt-2 block w-full"
                   aria-valuetext={`${cover.shade}%`}
                 />
-                <span className="flex justify-between text-xs text-charcoal/55">
+                <span className="flex justify-between text-xs text-charcoal/70">
                   <span>Lighter</span>
                   <span>Darker, easier to read</span>
                 </span>
@@ -714,7 +714,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
               />
               <span>
                 Show a countdown
-                <span className="block text-xs text-charcoal/55">
+                <span className="block text-xs text-charcoal/70">
                   &ldquo;3 days to go&rdquo; before the event, then how long guests have left to
                   share. Hidden once uploads close.
                 </span>
@@ -734,7 +734,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                 <button
                   type="button"
                   onClick={() => setDraft(storedStyle(event))}
-                  className="text-sm text-charcoal/60 underline"
+                  className="text-sm text-charcoal/70 underline"
                 >
                   Undo changes
                 </button>
@@ -748,7 +748,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                     setLocalImage(null);
                     void run('reset', () => setEventCover(event.id, null), 'Cover reset.');
                   }}
-                  className="ml-auto text-sm text-charcoal/60 underline disabled:opacity-50"
+                  className="ml-auto text-sm text-charcoal/70 underline disabled:opacity-50"
                 >
                   Reset cover
                 </button>
@@ -757,7 +757,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
 
             <fieldset className="border-t border-charcoal/10 pt-4">
               <legend className="text-sm text-charcoal">Accent colour</legend>
-              <p className="mt-1 text-xs text-charcoal/60">
+              <p className="mt-1 text-xs text-charcoal/70">
                 Your event&rsquo;s colour, used for rules and highlights. Leave it blank for the
                 SharePix palette.
               </p>
@@ -797,7 +797,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
                       setAccent('');
                       void run('accent', () => setEventGalleryTheme(event.id, { galleryAccent: '' }));
                     }}
-                    className="text-sm text-charcoal/60 underline disabled:opacity-50"
+                    className="text-sm text-charcoal/70 underline disabled:opacity-50"
                   >
                     Clear
                   </button>
@@ -819,7 +819,7 @@ export default function GalleryStyleSettings({ event, onSaved, requestedTab }: P
       ) : null}
       </div>
 
-      <p className="mt-6 text-xs text-charcoal/55">
+      <p className="mt-6 text-xs text-charcoal/70">
         Changes are live straight away —{' '}
         <a className="font-medium text-pine underline" href={`/event/${event.id}`}>
           open your gallery

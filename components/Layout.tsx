@@ -52,6 +52,8 @@ interface LayoutProps {
 
 const FOOTER_LINKS = [
   { href: '/help', label: 'Help' },
+  { href: '/contact', label: 'Contact' },
+  { href: '/about', label: 'About' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'See an example' },
   // Photographers, not hosts. In the footer rather than the header because a
@@ -164,19 +166,19 @@ export default function Layout({
             <div className="max-w-xs">
               <p className="font-sans text-lg font-bold tracking-[-0.02em]">
                 share<span className="text-mint">pix</span>
-                <span className="text-canvas/40">.net</span>
+                <span className="text-canvas/75">.net</span>
               </p>
               <p className="mt-4 font-serif text-xl italic leading-snug text-canvas/85">
                 Every moment. Everyone&rsquo;s perspective.
               </p>
-              <p className="mt-4 text-sm leading-relaxed text-canvas/60">
+              <p className="mt-4 text-sm leading-relaxed text-canvas/75">
                 One gallery for every photo your guests took. Pay per event, or take the
                 Corporate plan monthly.
               </p>
             </div>
             <div className="flex flex-wrap gap-10 sm:gap-16">
               <div>
-                <p className="spx-eyebrow">Use cases</p>
+                <p className="spx-eyebrow text-mint">Use cases</p>
                 <nav aria-label="Use cases" className="mt-3 flex flex-col gap-3 text-sm">
                   {USE_CASES.map((useCase) => (
                     <Link
@@ -205,7 +207,7 @@ export default function Layout({
               </nav>
             </div>
           </div>
-          <div className="mt-12 flex flex-col gap-2 border-t border-canvas/15 pt-6 text-sm text-canvas/45 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-12 flex flex-col gap-2 border-t border-canvas/15 pt-6 text-sm text-canvas/75 sm:flex-row sm:items-center sm:justify-between">
             <p>&copy; {new Date().getFullYear()} sharepix.net</p>
             <a href={`mailto:${SUPPORT_EMAIL}`} className="transition hover:text-mint">
               {SUPPORT_EMAIL}
@@ -217,7 +219,7 @@ export default function Layout({
               never opens /demo sees them anyway. Null when the folder holds
               photographs and there is nothing to disclose. */}
           {SITE_IMAGE_NOTICE ? (
-            <p className="mt-4 text-xs text-canvas/35">{SITE_IMAGE_NOTICE}</p>
+            <p className="mt-4 text-xs text-canvas/75">{SITE_IMAGE_NOTICE}</p>
           ) : null}
         </div>
       </footer>

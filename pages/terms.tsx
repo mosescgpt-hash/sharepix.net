@@ -14,7 +14,7 @@ export default function TermsPage() {
     <Layout title="Terms of Service">
       <section className="mx-auto max-w-3xl py-12 sm:py-16">
         <h1 className="spx-display">Terms of Service</h1>
-        <p className="mt-3 text-sm text-charcoal/60">Last updated: {LAST_UPDATED}</p>
+        <p className="mt-3 text-sm text-charcoal/70">Last updated: {LAST_UPDATED}</p>
 
         <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
@@ -170,7 +170,7 @@ export default function TermsPage() {
               </li>
               <li>
                 The paid event includes <strong>unlimited photo uploads</strong>, subject to the
-                fair-use ceiling in section 7, and unlimited guests. Video is not unlimited: each event includes a fixed amount of video, shown
+                fair use described in section 7, and unlimited guests. Video is not unlimited: each event includes a fixed amount of video, shown
                 on the <a href="/pricing">pricing page</a>, because a video is served at full size
                 every time it is played and so costs differently from a photo.
               </li>
@@ -195,9 +195,7 @@ export default function TermsPage() {
               general cloud storage, and it is not intended for automated or scripted uploading.
             </p>
             <p>
-              The ceiling stated above is where we check in, not where uploads stop: when an
-              event approaches it the host can ask for more room from their dashboard, and we
-              raise it free for any reasonable request. A wedding, a conference, a school
+              Photo uploads do not stop because an event is large. A wedding, a conference, a school
               fundraiser or a reunion producing thousands of photos is exactly what
               &ldquo;unlimited&rdquo; is for, and we will not restrict an event
               simply because it was popular. Where usage is far outside anything an event could
@@ -322,7 +320,7 @@ export default function TermsPage() {
             {/* The postal address comes from lib/businessInfo, the same place
                 the DMCA page reads it, so the two can never disagree. */}
             <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
-            <p className="text-sm text-charcoal/60">
+            <p className="text-sm text-charcoal/70">
               Copyright notices go to our designated agent instead — see our{' '}
               <a href="/dmca">Copyright and DMCA Policy</a>.
             </p>

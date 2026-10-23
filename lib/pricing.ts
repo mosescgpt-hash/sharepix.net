@@ -455,7 +455,7 @@ export const CORPORATE_PLAN = {
     // The same ceiling as the Full Event, stated the same way. Typed rather
     // than imported from lib/fairUse.ts to keep this module free of it; the
     // price-list test pins the number.
-    `Unlimited photos (fair-use ceiling 5,000 per event, raised free on request) and ${VIDEO_GB_INCLUDED} GB of video per event`,
+    `Unlimited photos and ${VIDEO_GB_INCLUDED} GB of video per event`,
     'Central event and storage dashboard',
     'Custom company branding',
     'Guest book — signed notes, photos, and video messages',

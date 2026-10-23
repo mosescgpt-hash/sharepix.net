@@ -139,7 +139,7 @@ function SignsPage() {
 
       <main className="mx-auto max-w-5xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-charcoal/60">Loading your signs…</p>
+          <p className="text-center text-charcoal/70">Loading your signs…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open these signs.
@@ -151,7 +151,7 @@ function SignsPage() {
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h1 className="text-2xl font-bold tracking-[-0.02em]">Signs</h1>
-                <p className="mt-1 max-w-xl text-sm text-charcoal/60">
+                <p className="mt-1 max-w-xl text-sm text-charcoal/70">
                   Print-ready PDFs for {event.name}. Each one has your event&apos;s QR code, so guests
                   scan and land straight on your upload page. Print at 100% (actual size), not
                   &ldquo;fit to page&rdquo;.
@@ -204,13 +204,13 @@ function SignsPage() {
                           <SignPreview layout={layout} title={`${piece.label} preview`} />
                         </div>
                       ) : (
-                        <span className="text-sm text-charcoal/50">Preparing preview…</span>
+                        <span className="text-sm text-charcoal/70">Preparing preview…</span>
                       )}
                     </div>
                     <h2 className="mt-3 font-semibold">
-                      {piece.label} <span className="font-normal text-charcoal/60">· {pieceSizeLabel(piece)}</span>
+                      {piece.label} <span className="font-normal text-charcoal/70">· {pieceSizeLabel(piece)}</span>
                     </h2>
-                    <p className="mt-1 flex-1 text-sm text-charcoal/60">{piece.use}</p>
+                    <p className="mt-1 flex-1 text-sm text-charcoal/70">{piece.use}</p>
                     {piece.kind === 'thanks' && !content?.closesLine ? (
                       <p className="mt-2 text-xs text-amber-800">
                         Uploads for this event are closed, so this card can&apos;t give a closing date.

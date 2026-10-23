@@ -181,14 +181,14 @@ export default function GuestBookPage() {
                 placeholder="What a day. So happy for you both."
                 className="spx-input mt-2"
               />
-              <p className="mt-1 text-right text-xs text-charcoal/55">
+              <p className="mt-1 text-right text-xs text-charcoal/70">
                 {message.length} / {MAX_MESSAGE_LENGTH}
               </p>
 
               {attachable.length > 0 ? (
                 <>
                   <label htmlFor="gb-photo" className="mt-4 block font-sans text-sm font-medium text-charcoal">
-                    Attach one of your photos or videos <span className="text-charcoal/55">(optional)</span>
+                    Attach one of your photos or videos <span className="text-charcoal/70">(optional)</span>
                   </label>
                   <select
                     id="gb-photo"
@@ -204,7 +204,7 @@ export default function GuestBookPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-2 text-xs text-charcoal/55">
+                  <p className="mt-2 text-xs text-charcoal/70">
                     Haven&apos;t uploaded yet?{' '}
                     <Link href={`/event/${event.id}/upload`} className="text-pine underline">
                       Add your photos first
@@ -213,7 +213,7 @@ export default function GuestBookPage() {
                   </p>
                 </>
               ) : (
-                <p className="mt-4 text-xs text-charcoal/55">
+                <p className="mt-4 text-xs text-charcoal/70">
                   <Link href={`/event/${event.id}/upload`} className="text-pine underline">
                     Add a photo or a video message
                   </Link>{' '}

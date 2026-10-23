@@ -9,7 +9,6 @@ import {
 } from '@/lib/pricing';
 import {
   FAIR_USE_NOTICE,
-  FAIR_USE_PHOTO_CEILING,
   NO_PER_GUEST_LIMIT_LINE,
   UNLIMITED_PHOTOS_LINE,
 } from '@/lib/fairUse';
@@ -92,7 +91,6 @@ function comparisonRows(): Row[] {
   const trial = getTier('trial');
   const full = getTier('plus');
   if (!trial || !full) return [];
-  const ceiling = FAIR_USE_PHOTO_CEILING.toLocaleString('en-US');
   const corporateMonths = Math.round(CORPORATE_PLAN.retentionDays / 30.4);
   return [
     {
@@ -110,8 +108,8 @@ function comparisonRows(): Row[] {
     {
       label: 'Photos per event',
       trial: `${trial.photoLimit}`,
-      full: `Unlimited (fair-use ceiling ${ceiling}, raised free on request)`,
-      corporate: `Unlimited (fair-use ceiling ${ceiling}, raised free on request)`,
+      full: 'Unlimited',
+      corporate: 'Unlimited',
     },
     {
       label: 'Video per event',
@@ -174,7 +172,7 @@ export default function PricingCards() {
           <span className="font-sans text-[3.5rem] font-bold leading-none tracking-[-0.03em]">
             ${paid.price}
           </span>
-          <span className="text-base text-canvas/60">one-time</span>
+          <span className="text-base text-canvas/75">one-time</span>
         </p>
         <p className="mt-3 text-sm text-canvas/70">
           No subscription. No surprise upgrades. Nothing charged per guest or per photo.
@@ -196,8 +194,8 @@ export default function PricingCards() {
           Create your event
         </Link>
 
-        <p className="mt-6 text-xs leading-relaxed text-canvas/55">
-          {/* No asterisk. The headline above already states the ceiling, so
+        <p className="mt-6 text-xs leading-relaxed text-canvas/75">
+          {/* No asterisk. The headline above already says unlimited, so
               this is the same promise in full rather than a caveat on it. */}
           {FAIR_USE_NOTICE}{' '}
           <Link href="/fair-use" className="underline">
@@ -235,7 +233,7 @@ export default function PricingCards() {
           <table className="w-full min-w-[560px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-charcoal/20">
-                <th scope="col" className="py-3 pr-4 font-medium text-charcoal/60">
+                <th scope="col" className="py-3 pr-4 font-medium text-charcoal/70">
                   <span className="sr-only">Feature</span>
                 </th>
                 <th scope="col" className="py-3 pr-4 font-semibold text-charcoal">
@@ -271,7 +269,7 @@ export default function PricingCards() {
           <span className="font-sans text-3xl font-bold tracking-[-0.02em] text-charcoal">
             ${CORPORATE_PLAN.price}
           </span>
-          <span className="text-sm text-charcoal/60">per month</span>
+          <span className="text-sm text-charcoal/70">per month</span>
         </p>
         <p className="spx-body mt-2 text-sm">
           For teams that run events back to back. {CORPORATE_PLAN.includedEvents} new events
@@ -289,7 +287,7 @@ export default function PricingCards() {
         <Link href="/corporate" className="spx-btn-ink mt-6 w-full sm:w-auto">
           Start {CORPORATE_PLAN.name} · {CORPORATE_PLAN.priceLabel}
         </Link>
-        <p className="mt-3 text-xs text-charcoal/60">
+        <p className="mt-3 text-xs text-charcoal/70">
           Sign in or create an account, then pay on Stripe. Cancel any time; you keep 30 days
           to download after your last paid month. Sales tax is added where it applies.
         </p>

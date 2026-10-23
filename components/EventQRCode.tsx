@@ -175,7 +175,7 @@ export default function EventQRCode({
         {invitesUploads(audience) ? 'Guests scan this code to upload photos and videos to ' : 'Guests scan this code to see the photos from '}
         <strong>{eventName}</strong>.
       </p>
-      <p className="max-w-full break-all text-xs text-charcoal/60">{uploadUrl}</p>
+      <p className="max-w-full break-all text-xs text-charcoal/70">{uploadUrl}</p>
       {/* Says both halves where the host decides who gets the code: hidden from
           search, open to anyone holding it. "Unlisted" alone is not a word a
           host can act on. */}
@@ -235,7 +235,7 @@ export default function EventQRCode({
             <button
               type="button"
               onClick={() => setFgColor(DEFAULT_QR_COLOR)}
-              className="mt-2 text-xs text-charcoal/60 underline transition hover:text-charcoal"
+              className="mt-2 text-xs text-charcoal/70 underline transition hover:text-charcoal"
             >
               Reset to the SharePix navy
             </button>
@@ -243,7 +243,7 @@ export default function EventQRCode({
 
           <div>
             <span className="block text-sm font-semibold">Center photo or logo</span>
-            <p className="mt-1 text-xs text-charcoal/60">
+            <p className="mt-1 text-xs text-charcoal/70">
               A simple square image scans best. SharePix keeps it small and uses high error correction.
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -285,7 +285,7 @@ export default function EventQRCode({
             >
               {saving ? 'Saving…' : dirty ? 'Save this design' : 'Saved'}
             </button>
-            <p className="mt-2 text-xs text-charcoal/60">
+            <p className="mt-2 text-xs text-charcoal/70">
               Saved once and used everywhere — the dashboard, the table tent, the brochure, and
               every reprint, until you change it again.
             </p>
@@ -293,7 +293,7 @@ export default function EventQRCode({
           </div>
         </div>
       ) : (
-        <p className="bg-sand px-3 py-2 text-xs text-charcoal/60">
+        <p className="bg-sand px-3 py-2 text-xs text-charcoal/70">
           This plan includes the standard square QR design.
         </p>
       )}

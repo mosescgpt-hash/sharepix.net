@@ -143,24 +143,24 @@ export default function DemoPage() {
                 {tent.eventName}
               </p>
               {tent.dateLine ? (
-                <p className="mt-1 text-sm text-charcoal/55">{tent.dateLine}</p>
+                <p className="mt-1 text-sm text-charcoal/70">{tent.dateLine}</p>
               ) : null}
               {tent.locationLine ? (
-                <p className="text-sm text-charcoal/55">{tent.locationLine}</p>
+                <p className="text-sm text-charcoal/70">{tent.locationLine}</p>
               ) : null}
               <p className="mt-5 font-serif text-xl italic">{tent.headline}</p>
               <div className="mt-4 flex justify-center">
                 <QRCodeSVG value={tent.uploadUrl} size={148} />
               </div>
-              <p className="mt-4 text-sm text-charcoal/60">{tent.message}</p>
+              <p className="mt-4 text-sm text-charcoal/70">{tent.message}</p>
               {tent.code ? (
-                <p className="mt-5 text-xs uppercase tracking-[0.18em] text-charcoal/50">
+                <p className="mt-5 text-xs uppercase tracking-[0.18em] text-charcoal/70">
                   Event code {tent.code}
                 </p>
               ) : null}
             </div>
           </div>
-          <p className="mt-5 text-center text-sm text-charcoal/55">
+          <p className="mt-5 text-center text-sm text-charcoal/70">
             That QR code works — it opens the sample gallery.
           </p>
         </div>

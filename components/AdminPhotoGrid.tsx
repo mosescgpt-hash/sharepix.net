@@ -148,7 +148,7 @@ export default function AdminPhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className="border border-dashed border-charcoal/25 px-4 py-12 text-center text-charcoal/60">
+      <p className="border border-dashed border-charcoal/25 px-4 py-12 text-center text-charcoal/70">
         No photos or videos have been uploaded to this event yet.
       </p>
     );
@@ -194,7 +194,7 @@ export default function AdminPhotoGrid({
             {bulkProgress ? (
               <span className="text-charcoal/65">{bulkProgress}</span>
             ) : (
-              <span className="hidden text-xs text-charcoal/55 sm:inline">
+              <span className="hidden text-xs text-charcoal/70 sm:inline">
                 Tip: hold Shift and click to select everything in between.
               </span>
             )}
@@ -290,7 +290,7 @@ export default function AdminPhotoGrid({
               <figcaption className="space-y-2 px-3 py-2 text-xs">
                 <p className="truncate font-medium">{photo.uploadedBy || 'Anonymous'}</p>
                 {photo.uploadedByUserId ? (
-                  <p className="truncate text-charcoal/60">User: {photo.uploadedByUserId}</p>
+                  <p className="truncate text-charcoal/70">User: {photo.uploadedByUserId}</p>
                 ) : null}
                 {hidden ? (
                   <p className="font-medium text-amber-600">Hidden from gallery</p>

@@ -187,7 +187,7 @@ export default function DemoTryPage() {
                       ? 'bg-ink text-canvas'
                       : done
                         ? 'bg-sage text-pine'
-                        : 'bg-charcoal/[0.07] text-charcoal/55'
+                        : 'bg-charcoal/[0.07] text-charcoal/70'
                   }`}
                 >
                   {done ? '✓' : i + 1}
@@ -224,7 +224,7 @@ export default function DemoTryPage() {
                   <span className="font-serif text-2xl italic text-charcoal">
                     Choose a photo
                   </span>
-                  <span className="mt-2 max-w-sm text-sm text-charcoal/60">
+                  <span className="mt-2 max-w-sm text-sm text-charcoal/70">
                     On a phone this opens your camera or camera roll — exactly what a
                     guest sees after scanning the code.
                   </span>
@@ -242,7 +242,7 @@ export default function DemoTryPage() {
                     {error}
                   </p>
                 ) : null}
-                <p className="mt-4 text-center text-sm text-charcoal/60">
+                <p className="mt-4 text-center text-sm text-charcoal/70">
                   Would rather not?{' '}
                   <button
                     type="button"
@@ -300,7 +300,7 @@ export default function DemoTryPage() {
             {step === 'live' ? (
               <>
                 <MiniSlideshow photos={galleryPhotos} />
-                <p className="mt-4 text-center text-sm text-charcoal/60">
+                <p className="mt-4 text-center text-sm text-charcoal/70">
                   On the night this runs full-screen on a TV or projector.{' '}
                   <Link href="/demo/live" className="font-medium text-pine underline">
                     Open the full-screen version
@@ -313,7 +313,7 @@ export default function DemoTryPage() {
           {/* Advance. Approving is the gate on step two — the whole point is
               that a held photo does not move until the host says so. */}
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-charcoal/12 pt-6">
-            <button type="button" onClick={restart} className="text-sm text-charcoal/60 underline">
+            <button type="button" onClick={restart} className="text-sm text-charcoal/70 underline">
               Start over
             </button>
             {forward ? (
@@ -335,7 +335,7 @@ export default function DemoTryPage() {
           </div>
         </div>
 
-        <p className="mt-8 text-center text-sm text-charcoal/60">
+        <p className="mt-8 text-center text-sm text-charcoal/70">
           {/* This was the copy that went wrong — it claimed illustrations
               above twelve photographs for a whole release. There is one
               sentence now, in lib/demoEvent.ts. */}

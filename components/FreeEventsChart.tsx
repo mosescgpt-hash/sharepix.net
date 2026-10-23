@@ -207,7 +207,7 @@ export default function FreeEventsChart({ series }: { series: FreeEventDay[] }) 
               <span aria-hidden className="inline-block h-2 w-2 rounded-sm" style={{ background: REFUSED }} />
               {hovered.refused} turned away
             </p>
-            <p className="text-charcoal/60">
+            <p className="text-charcoal/70">
               {limits[hover] === null ? 'No limit recorded yet' : `Limit ${limits[hover]}`}
             </p>
           </div>
@@ -220,7 +220,7 @@ export default function FreeEventsChart({ series }: { series: FreeEventDay[] }) 
         <div className="mt-2 max-h-64 overflow-auto">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-charcoal/15 text-charcoal/60">
+              <tr className="border-b border-charcoal/15 text-charcoal/70">
                 <th scope="col" className="py-1.5 pr-3 font-medium">Day (UTC)</th>
                 <th scope="col" className="py-1.5 pr-3 font-medium">Given out</th>
                 <th scope="col" className="py-1.5 pr-3 font-medium">Turned away</th>

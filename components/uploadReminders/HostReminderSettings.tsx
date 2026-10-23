@@ -59,7 +59,7 @@ export default function HostReminderSettings({
   return (
     <div className="spx-card mt-6 p-6">
       <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Guest reminders</h2>
-      <p className="mt-1 text-sm text-charcoal/60">
+      <p className="mt-1 text-sm text-charcoal/70">
         After a guest&apos;s first upload, offer to email them a reminder to add more. You never
         see their address, and we delete it 30 days after uploads close.
       </p>

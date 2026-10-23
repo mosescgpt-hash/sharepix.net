@@ -230,7 +230,7 @@ export default function ProReviewPage() {
             {event ? eventLabel(event.name) : 'Review'}
           </h1>
           {event?.code ? (
-            <p className="mt-1 text-sm text-charcoal/55">Event code {event.code}</p>
+            <p className="mt-1 text-sm text-charcoal/70">Event code {event.code}</p>
           ) : null}
 
           {booth?.booth && eventId ? (
@@ -305,7 +305,7 @@ export default function ProReviewPage() {
                 className="mt-2 block w-full text-sm"
               />
             </label>
-            <p className="mt-2 text-xs text-charcoal/55">
+            <p className="mt-2 text-xs text-charcoal/70">
               JPEG or PNG. We make a {DEFAULT_PREVIEW_LONG_EDGE}px preview
               {keepOriginals
                 ? ' and keep your original, because you asked us to.'
@@ -334,7 +334,7 @@ export default function ProReviewPage() {
           </nav>
 
           {shown.length === 0 ? (
-            <p className="mt-10 border border-dashed border-charcoal/25 p-10 text-center text-sm text-charcoal/60">
+            <p className="mt-10 border border-dashed border-charcoal/25 p-10 text-center text-sm text-charcoal/70">
               {QUEUES.find((entry) => entry.key === queue)?.empty ?? 'Nothing here.'}
             </p>
           ) : (
@@ -394,7 +394,7 @@ export default function ProReviewPage() {
                         </>
                       ) : null}
                       {status === 'approved' && booth?.booth ? (
-                        <p className="text-xs text-charcoal/60">
+                        <p className="text-xs text-charcoal/70">
                           Approved — it goes to this person, not to a gallery.
                         </p>
                       ) : null}
@@ -422,7 +422,7 @@ export default function ProReviewPage() {
                           action with its own trail, not a button beside the
                           one that rejected it. */}
                       {status === 'rejected' ? (
-                        <p className="text-xs text-charcoal/55">
+                        <p className="text-xs text-charcoal/70">
                           Rejected — never shown to guests.
                         </p>
                       ) : null}
