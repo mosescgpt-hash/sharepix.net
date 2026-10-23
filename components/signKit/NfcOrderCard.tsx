@@ -7,7 +7,7 @@ export default function NfcOrderCard({ className = '' }: { className?: string })
       <h2 id="nfc-order-heading" className="font-semibold">
         Order NFC stickers
       </h2>
-      <p className="mt-1 text-sm text-charcoal/60">
+      <p className="mt-1 text-sm text-charcoal/70">
         One for each table tent and welcome sign, plus a few spares in case one doesn&apos;t
         write. Packs are cheap and any NTAG213 or NTAG215 sticker works.
       </p>
@@ -21,11 +21,11 @@ export default function NfcOrderCard({ className = '' }: { className?: string })
             className="flex-1 border border-charcoal/25 px-4 py-2.5 text-sm transition hover:border-charcoal/60"
           >
             <span className="font-medium text-charcoal">{link.label} →</span>
-            <span className="mt-0.5 block text-xs text-charcoal/60">{link.detail}</span>
+            <span className="mt-0.5 block text-xs text-charcoal/70">{link.detail}</span>
           </a>
         ))}
       </div>
-      <p className="mt-2 text-xs text-charcoal/50">
+      <p className="mt-2 text-xs text-charcoal/70">
         Opens {NFC_STORE_NAME} in a new tab.{' '}
         {NFC_STORE_AFFILIATE
           ? 'SharePix may earn a small commission if you buy through this link.'

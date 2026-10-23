@@ -115,7 +115,7 @@ export default function BoothSignupPage() {
           <p className="spx-eyebrow">{event?.name ?? 'SharePix'}</p>
 
           {event === undefined ? (
-            <p className="mt-6 text-sm text-charcoal/55">Loading&hellip;</p>
+            <p className="mt-6 text-sm text-charcoal/70">Loading&hellip;</p>
           ) : unavailable ? (
             <>
               <h1 className="spx-display mt-3 text-3xl">Sign-up is not open</h1>
@@ -162,7 +162,7 @@ export default function BoothSignupPage() {
                       if (eventId) writeSaved(eventId, null);
                       reset();
                     }}
-                    className="mt-4 text-sm text-charcoal/60 underline"
+                    className="mt-4 text-sm text-charcoal/70 underline"
                   >
                     Not {saved.name}? Sign up someone else
                   </button>

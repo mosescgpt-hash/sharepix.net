@@ -384,7 +384,7 @@ function CreateEventPage() {
 
           <div>
             <label htmlFor="event-date" className="block text-sm font-medium">
-              Event date <span className="text-charcoal/50">(optional)</span>
+              Event date <span className="text-charcoal/70">(optional)</span>
             </label>
             <input
               id="event-date"
@@ -469,7 +469,7 @@ function CreateEventPage() {
                 );
               })}
             </div>
-            <p className="mt-1.5 text-xs text-charcoal/55">
+            <p className="mt-1.5 text-xs text-charcoal/70">
               Add your own cover photo and fine-tune it any time from your dashboard.
             </p>
           </fieldset>
@@ -481,7 +481,7 @@ function CreateEventPage() {
           {eventType.asksAudience ? (
           <fieldset>
             <legend className="text-sm font-medium text-charcoal">{AUDIENCE_QUESTION}</legend>
-            <p className="mt-1 text-xs text-charcoal/55">{AUDIENCE_HELP}</p>
+            <p className="mt-1 text-xs text-charcoal/70">{AUDIENCE_HELP}</p>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {AUDIENCE_OPTIONS.map((option) => (
                 <label
@@ -503,7 +503,7 @@ function CreateEventPage() {
                   <span className="block font-medium">{option.label}</span>
                   <span
                     className={`mt-1 block text-xs ${
-                      audience === option.value ? 'text-canvas/70' : 'text-charcoal/55'
+                      audience === option.value ? 'text-canvas/70' : 'text-charcoal/70'
                     }`}
                   >
                     {option.detail}
@@ -542,7 +542,7 @@ function CreateEventPage() {
                   <span className="block text-charcoal/70">
                     {tier.trial ? 'Free · one per account' : `$${tier.price} / event`}
                   </span>
-                  <span className="block text-xs text-charcoal/55">
+                  <span className="block text-xs text-charcoal/70">
                     {tier.photoLimit
                       ? `${tier.photoLimit.toLocaleString()} photos`
                       : 'Unlimited photos under fair use'}{' '}
@@ -579,7 +579,7 @@ function CreateEventPage() {
                   <span className="block text-pine">
                     {CORPORATE_PLAN.includedEvents} new events included each month
                   </span>
-                  <span className="block text-xs text-charcoal/55">
+                  <span className="block text-xs text-charcoal/70">
                     Beyond that, ${CORPORATE_PLAN.extraEventPrice} per extra event at checkout ·
                     Unlimited photos under fair use · 1-year host access
                   </span>
@@ -593,7 +593,7 @@ function CreateEventPage() {
             <label htmlFor="pilot-code" className="block font-sans font-semibold text-charcoal">
               Have a discount code?
             </label>
-            <p className="mt-1 text-sm text-charcoal/60">
+            <p className="mt-1 text-sm text-charcoal/70">
               Apply it to take a percentage off — or make your event free.
             </p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -639,7 +639,7 @@ function CreateEventPage() {
             {pilotCodeStatus === 'valid' ? (
               <p className="mt-3 text-sm font-medium text-ink">
                 {getTier(tierId)?.name}:{' '}
-                <span className="text-charcoal/50 line-through">${basePrice}</span>{' '}
+                <span className="text-charcoal/70 line-through">${basePrice}</span>{' '}
                 <span className="text-pine">
                   {isComped ? '$0' : `$${discountedPrice}`}
                 </span>
@@ -668,7 +668,7 @@ function CreateEventPage() {
                   : `Continue to payment · $${isDiscounted ? discountedPrice : basePrice}`}
           </button>
           {tierId !== 'corporate' && !isComped && !isTrial ? (
-            <p className="text-center text-xs text-charcoal/55">
+            <p className="text-center text-xs text-charcoal/70">
               You&apos;ll enter payment on Stripe&apos;s secure checkout. Your event activates
               as soon as payment is confirmed.
             </p>
@@ -684,4 +684,7 @@ function CreateEventPage() {
 export default withHostAuth(CreateEventPage, {
   purpose: 'Set up your event gallery.',
   arriving: 'new',
+  title: 'Create an event',
+  description:
+    'Create a SharePix event gallery: one QR code, and your guests add their photos with no app and no sign-up. Start with a free event.',
 });

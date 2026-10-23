@@ -429,7 +429,7 @@ function TableTentPage() {
 
       <main className="mx-auto max-w-5xl px-4 py-8">
         {loading ? (
-          <p className="text-center text-charcoal/60">Loading table tent…</p>
+          <p className="text-center text-charcoal/70">Loading table tent…</p>
         ) : denied ? (
           <p className="mx-auto max-w-lg rounded-xl bg-amber-50 px-4 py-6 text-center text-amber-800">
             Only the event host or a sharepix.net global administrator can open this table tent.
@@ -442,7 +442,7 @@ function TableTentPage() {
           <>
             <div className="print:hidden mx-auto mb-6 max-w-2xl rounded-2xl border border-ink/10 bg-white p-5">
               <h1 className="font-sans text-xl font-bold tracking-[-0.02em]">Table tent</h1>
-              <p className="mt-1 text-sm text-charcoal/60">
+              <p className="mt-1 text-sm text-charcoal/70">
                 Print one sheet, fold it in half across the dashed line, and stand it on the
                 table. Both sides read right way up. It&apos;s ready to print as-is — the
                 options below are only if you want to change something.
@@ -466,7 +466,7 @@ function TableTentPage() {
                   <button
                     type="button"
                     onClick={resetAll}
-                    className="text-sm font-medium text-charcoal/60 underline transition hover:text-charcoal"
+                    className="text-sm font-medium text-charcoal/70 underline transition hover:text-charcoal"
                   >
                     Reset to the default
                   </button>
@@ -544,7 +544,7 @@ function TableTentPage() {
                     />
                     City and state
                     {!event.location ? (
-                      <span className="text-charcoal/60">(add one in Event settings)</span>
+                      <span className="text-charcoal/70">(add one in Event settings)</span>
                     ) : null}
                   </label>
                   <label className="flex items-center gap-2">
@@ -576,16 +576,16 @@ function TableTentPage() {
                   <button
                     type="button"
                     onClick={() => setPhotoUrl(null)}
-                    className="mt-2 text-sm text-charcoal/60 underline transition hover:text-charcoal"
+                    className="mt-2 text-sm text-charcoal/70 underline transition hover:text-charcoal"
                   >
                     Remove the photo
                   </button>
                 ) : null}
                 {photosOpen ? (
                   photosLoading ? (
-                    <p className="mt-3 text-sm text-charcoal/60">Loading photos…</p>
+                    <p className="mt-3 text-sm text-charcoal/70">Loading photos…</p>
                   ) : photos.length === 0 ? (
-                    <p className="mt-3 text-sm text-charcoal/60">
+                    <p className="mt-3 text-sm text-charcoal/70">
                       No photos yet. Once guests start uploading, you can put one on the tent.
                     </p>
                   ) : (
@@ -615,7 +615,7 @@ function TableTentPage() {
               </div>
             </div>
 
-            <div className="print:hidden mx-auto mt-6 max-w-2xl border border-charcoal/10 bg-paper/70 p-5 text-sm text-charcoal/60">
+            <div className="print:hidden mx-auto mt-6 max-w-2xl border border-charcoal/10 bg-paper/70 p-5 text-sm text-charcoal/70">
               <p className="font-medium text-ink">Printing tips</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
                 <li>Use Letter paper, portrait, and set scale to 100% (not &ldquo;fit to page&rdquo;).</li>

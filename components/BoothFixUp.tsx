@@ -117,7 +117,7 @@ export default function BoothFixUp({
             >
               {selected.size === group.photoIds.length ? 'Select none' : 'Select all'}
             </button>
-            <span className="text-charcoal/60">{selected.size} selected</span>
+            <span className="text-charcoal/70">{selected.size} selected</span>
           </div>
 
           <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
@@ -208,7 +208,7 @@ export default function BoothFixUp({
                   type="button"
                   disabled={working}
                   onClick={() => void run('clear')}
-                  className="px-2 py-2 text-sm text-charcoal/60 underline disabled:opacity-40"
+                  className="px-2 py-2 text-sm text-charcoal/70 underline disabled:opacity-40"
                 >
                   Unassign
                 </button>

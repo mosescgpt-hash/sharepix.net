@@ -69,7 +69,7 @@ export default function TryDemoModal({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center text-charcoal/60 transition hover:bg-charcoal/5 hover:text-charcoal"
+          className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center text-charcoal/70 transition hover:bg-charcoal/5 hover:text-charcoal"
         >
           <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 3l10 10M13 3L3 13" strokeLinecap="round" />
@@ -83,7 +83,7 @@ export default function TryDemoModal({
         >
           Scan to try it on your phone
         </h2>
-        <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-charcoal/60">
+        <p className="mx-auto mt-3 max-w-xs text-sm leading-relaxed text-charcoal/70">
           Add a photo, approve it as the host, and watch it reach the gallery and the
           venue screen. Your photo never leaves your device.
         </p>
@@ -96,7 +96,7 @@ export default function TryDemoModal({
           )}
         </div>
 
-        <p className="mt-6 text-sm text-charcoal/60">
+        <p className="mt-6 text-sm text-charcoal/70">
           Or{' '}
           <Link href={DEMO_PATH} className="font-medium text-pine underline">
             open the demo here

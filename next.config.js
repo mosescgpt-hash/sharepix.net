@@ -36,6 +36,10 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.amazonaws.com' },
     ],
   },
+  // /faq is a common guess; the answers live in the help centre.
+  async redirects() {
+    return [{ source: '/faq', destination: '/help', permanent: true }];
+  },
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

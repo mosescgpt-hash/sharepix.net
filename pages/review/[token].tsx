@@ -77,7 +77,7 @@ export default function ModerationReviewPage() {
     <Layout title="Review a photo">
       <section className="mx-auto max-w-lg py-10">
         {loading ? (
-          <p className="text-center text-charcoal/60">Loading the photo…</p>
+          <p className="text-center text-charcoal/70">Loading the photo…</p>
         ) : !review ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900">
             <h1 className="font-sans text-2xl font-bold tracking-[-0.02em]">This link isn’t valid</h1>
@@ -167,7 +167,7 @@ export default function ModerationReviewPage() {
               </p>
             ) : null}
 
-            <p className="mt-6 text-xs text-charcoal/60">
+            <p className="mt-6 text-xs text-charcoal/70">
               Denying keeps the photo hidden from guests. To delete it permanently, open your
               event dashboard.
             </p>

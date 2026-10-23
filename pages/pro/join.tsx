@@ -72,7 +72,7 @@ export default function ProJoinPage() {
               />
             </label>
             {tidy && !ready ? (
-              <p className="mt-2 text-xs text-charcoal/55">
+              <p className="mt-2 text-xs text-charcoal/70">
                 {formatPairingCode(tidy)} — {PAIRING_CODE_LENGTH - tidy.length} more to go.
               </p>
             ) : null}

@@ -73,59 +73,59 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
     id: 'no-account',
     title: 'Guests never make an account',
     claim:
-      'No app, no sign-up, no phone number, no email. A guest scans the code and the upload page opens in the browser they already have.',
+      'Guests just scan the code with their phone camera and start sharing, with no app to download and no sign-up.',
     boundary:
-      'Hosts sign in, because somebody has to own the event. Guests never do.',
+      'You, the host, sign in to run the event. Your guests never have to.',
     backedBy: 'amplify/data/resource.ts',
-    badge: 'Zero onboarding',
+    badge: 'No sign-up',
   },
   {
     id: 'location-stripped',
-    title: 'Nothing arrives with its location attached',
+    title: 'Your guests\u2019 locations stay private',
     claim:
-      'A phone records the exact coordinates inside a photo or video whenever location tagging is switched on, which is how most arrive. SharePix removes that on upload, before the file is stored or shared — so a guest is not handing out the address of the house they are standing in.',
+      'We remove the hidden location from every photo and video when it is uploaded, so nobody can tell where it was taken.',
     boundary:
-      'A photo loses all of its metadata; a video loses its coordinates and keeps the rest, such as the camera model and the time, because removing those would mean re-encoding the file.',
+      'Photos lose all hidden details. A video keeps the rest, like the time and phone model, but its location is still removed.',
     backedBy: 'amplify/functions/sanitize-upload/video.ts',
-    badge: 'GPS removed',
+    badge: 'Location removed',
   },
   {
     id: 'full-resolution',
-    title: 'Full resolution, never shrunk',
+    title: 'Full quality, never shrunk',
     claim:
-      'Photos and videos are kept at the resolution the camera recorded them. Nothing is resized, re-encoded or compressed on the way in or on the way out — the only edit we make to a file is taking the metadata out of it.',
+      'You get every photo and video at the full resolution the phone took it, never shrunk or blurred.',
     boundary:
-      'SharePix Pro is the deliberate exception: a photographer’s originals are never served to guests, who see a reduced preview instead.',
+      'With SharePix Pro, guests see a smaller preview of the photographer\u2019s pictures instead of the originals.',
     backedBy: 'amplify/functions/sanitize-upload/handler.ts',
-    badge: 'Original quality',
+    badge: 'Full quality',
   },
   {
     id: 'screened-free',
-    title: 'Screening on every plan',
+    title: 'Inappropriate photos are held back',
     claim:
-      'Every still image is checked for explicit content before it can appear anywhere, on every plan including the free one. A flagged photo is held straight away rather than shown while you catch it.',
+      'Every photo is checked for explicit content before anyone can see it, even on the free plan.',
     boundary:
-      'Stills only; video is not screened. Screening is deliberately narrow — it looks for explicit content, not for unflattering photos.',
+      'This checks photos, not videos, and only looks for explicit content.',
     backedBy: 'amplify/functions/create-event-photo/moderation.ts',
     badge: 'Every plan',
   },
   {
     id: 'unlisted',
-    title: 'Not on the public web',
+    title: 'Private by default',
     claim:
-      'Galleries are unlisted and served through short-lived signed links. Search engines are told not to index them, and the robots file refuses the paths outright.',
+      'Only people with your link can find your gallery, and it\u2019s set to stay out of Google search.',
     boundary:
-      'Anyone with the link can look. That is what makes it shareable — treat the link like a key.',
+      'Anyone you give the link to can look, so share it like you would a house key.',
     backedBy: 'lib/seo.ts',
-    badge: 'Unlisted',
+    badge: 'Link only',
   },
   {
     id: 'one-payment',
-    title: 'One event, one payment',
+    title: 'Pay once per event',
     claim:
-      'Event plans are charged once, at the price on the pricing page. Nothing renews and no card is kept on file afterwards.',
+      'You pay once for an event, with no subscription and no card kept on file.',
     boundary:
-      'The Corporate plan is a monthly subscription, for organisations running events all year. It is the only recurring charge SharePix has.',
+      'The Corporate plan is the one exception: a monthly plan for companies that run events all year.',
     backedBy: 'lib/pricing.ts',
     badge: 'No renewals',
   },

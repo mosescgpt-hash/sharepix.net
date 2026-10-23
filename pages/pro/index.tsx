@@ -60,21 +60,21 @@ export default function ProHomePage() {
           {/* The events, first, because that is what a signed-in photographer
               came for. The explanation sits underneath and only expands itself
               when the list is empty. */}
-          <h2 className="mt-8 font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/55">
+          <h2 className="mt-8 font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/70">
             Your events
           </h2>
 
           {rows === null ? (
-            <p className="mt-3 text-sm text-charcoal/55">Loading&hellip;</p>
+            <p className="mt-3 text-sm text-charcoal/70">Loading&hellip;</p>
           ) : signedIn === false ? (
-            <p className="mt-3 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+            <p className="mt-3 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
               <Link href="/my-events" className="font-medium text-pine underline">
                 Sign in
               </Link>{' '}
               to see the events you are shooting.
             </p>
           ) : rows.length === 0 ? (
-            <p className="mt-3 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/60">
+            <p className="mt-3 border border-dashed border-charcoal/25 p-6 text-center text-sm text-charcoal/70">
               Nothing yet. A host adds you with a pairing code &mdash; there is one below.
             </p>
           ) : (
@@ -91,7 +91,7 @@ export default function ProHomePage() {
                         {/* Date and code: the two things a photographer can
                             match against something the host actually told
                             them. The UUID matched nothing a human has. */}
-                        <p className="mt-0.5 text-xs text-charcoal/55">
+                        <p className="mt-0.5 text-xs text-charcoal/70">
                           {[row.eventDate, row.eventCode].filter(Boolean).join(' · ') ||
                             'No date set'}
                         </p>
@@ -107,7 +107,7 @@ export default function ProHomePage() {
                           {state.badge}
                         </span>
                       ) : (
-                        <span className="shrink-0 text-xs text-charcoal/55">{waiting.label}</span>
+                        <span className="shrink-0 text-xs text-charcoal/70">{waiting.label}</span>
                       )}
                     </div>
 
@@ -153,13 +153,13 @@ export default function ProHomePage() {
           {/* Three lines, and only prominent when the list is empty — which is
               exactly when somebody does not yet know how this works. */}
           <div className={hasEvents ? 'mt-10 opacity-75' : 'mt-10'}>
-            <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/55">
+            <h2 className="font-sans text-sm font-semibold uppercase tracking-[0.14em] text-charcoal/70">
               How it works
             </h2>
             <ol className="mt-3 divide-y divide-charcoal/10 border-y border-charcoal/10">
               {PRO_STEPS.map((step, index) => (
                 <li key={step.title} className="flex gap-4 py-3">
-                  <span className="spx-numeral shrink-0 text-sm text-charcoal/40">
+                  <span className="spx-numeral shrink-0 text-sm text-charcoal/70">
                     {String(index + 1).padStart(2, '0')}
                   </span>
                   <span className="text-sm">
@@ -169,7 +169,7 @@ export default function ProHomePage() {
                 </li>
               ))}
             </ol>
-            <p className="mt-3 text-xs text-charcoal/55">
+            <p className="mt-3 text-xs text-charcoal/70">
               Your originals stay yours. We make the preview and delete the original unless
               you ask us to keep it &mdash; that switch is on the review page.
             </p>

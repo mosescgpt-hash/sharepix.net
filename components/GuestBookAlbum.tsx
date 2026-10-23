@@ -93,7 +93,7 @@ export default function GuestBookAlbum({
                     {isVideo ? 'Left a video message.' : 'Left a photo.'}
                   </p>
                 )}
-                <p className="mt-5 text-sm text-charcoal/60">
+                <p className="mt-5 text-sm text-charcoal/70">
                   <span className="font-sans font-semibold text-charcoal">
                     {entry.name}
                   </span>

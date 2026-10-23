@@ -293,7 +293,7 @@ export default function PhotoGrid({
               <button
                 type="button"
                 onClick={() => setSelected(new Set())}
-                className="px-2 py-2 text-charcoal/60 underline"
+                className="px-2 py-2 text-charcoal/70 underline"
               >
                 Deselect all ({selected.size})
               </button>
@@ -323,7 +323,7 @@ export default function PhotoGrid({
             ) : null}
           </div>
         ) : downloadMessage ? (
-          <p className="text-sm text-charcoal/60">{downloadMessage}</p>
+          <p className="text-sm text-charcoal/70">{downloadMessage}</p>
         ) : null}
       </div>
 

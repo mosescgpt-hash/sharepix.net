@@ -85,7 +85,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Order prints</h2>
-            <p className="mt-1 text-sm text-charcoal/60">
+            <p className="mt-1 text-sm text-charcoal/70">
               {printable.length} photo{printable.length === 1 ? '' : 's'} · shipped to you
             </p>
           </div>
@@ -117,7 +117,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
                 />
               ))}
               {printable.length > 8 ? (
-                <span className="flex h-16 shrink-0 items-center px-2 text-sm text-charcoal/60">
+                <span className="flex h-16 shrink-0 items-center px-2 text-sm text-charcoal/70">
                   +{printable.length - 8} more
                 </span>
               ) : null}
@@ -170,14 +170,14 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
 
             <dl className="mt-5 space-y-1 border-t border-ink/10 pt-4 text-sm">
               <div className="flex justify-between">
-                <dt className="text-charcoal/60">
+                <dt className="text-charcoal/70">
                   {product.size} × {copies} × {printable.length} photo
                   {printable.length === 1 ? '' : 's'}
                 </dt>
                 <dd>{money(itemsTotal)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-charcoal/60">Shipping &amp; handling</dt>
+                <dt className="text-charcoal/70">Shipping &amp; handling</dt>
                 <dd>{money(shipping)}</dd>
               </div>
               <div className="flex justify-between pt-1 font-semibold">
@@ -186,7 +186,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
               </div>
             </dl>
 
-            <p className="mt-2 text-xs text-charcoal/60">
+            <p className="mt-2 text-xs text-charcoal/70">
               {totalCopies} print{totalCopies === 1 ? '' : 's'} · {money(perPrint)} each, delivered
             </p>
 
@@ -212,7 +212,7 @@ export default function PrintOrderModal({ photos, eventId, onClose }: PrintOrder
             >
               {submitting ? 'Starting checkout…' : `Continue to payment · ${money(total)}`}
             </button>
-            <p className="mt-2 text-center text-xs text-charcoal/60">
+            <p className="mt-2 text-center text-xs text-charcoal/70">
               You’ll enter your shipping address and pay securely on Stripe.
             </p>
           </>

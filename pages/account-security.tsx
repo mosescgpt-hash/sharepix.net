@@ -127,13 +127,13 @@ function AccountSecurityPage() {
               <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                 Authenticator-app MFA
               </h2>
-              <p className="mt-1 text-sm leading-6 text-charcoal/60">
+              <p className="mt-1 text-sm leading-6 text-charcoal/70">
                 Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy, and similar apps.
               </p>
             </div>
             <span
               className={`shrink-0 px-3 py-1 font-sans text-[0.7rem] font-medium uppercase tracking-[0.14em] ${
-                enabled ? 'bg-sage text-pine' : 'bg-charcoal/[0.07] text-charcoal/55'
+                enabled ? 'bg-sage text-pine' : 'bg-charcoal/[0.07] text-charcoal/70'
               }`}
             >
               {loading ? 'Checking…' : enabled ? 'Enabled' : 'Off'}
@@ -193,7 +193,7 @@ function AccountSecurityPage() {
                         setCode('');
                       }}
                       disabled={busy}
-                      className="w-full py-2 text-sm text-charcoal/60 transition hover:text-charcoal"
+                      className="w-full py-2 text-sm text-charcoal/70 transition hover:text-charcoal"
                     >
                       Cancel
                     </button>

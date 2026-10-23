@@ -33,7 +33,7 @@ export default function AdminReminderRun() {
   return (
     <div className="mt-4 border border-charcoal/10 p-4">
       <p className="text-sm font-semibold">Guest upload reminders (hourly)</p>
-      <p className="mt-1 text-xs text-charcoal/60">
+      <p className="mt-1 text-xs text-charcoal/70">
         {status ?? 'Checking…'} Sends only reminders that are due now, and deletes opt-ins 30 days
         after their event&apos;s uploads closed.
       </p>

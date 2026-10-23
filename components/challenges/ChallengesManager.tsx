@@ -89,7 +89,7 @@ export default function ChallengesManager({
   return (
     <div className="spx-card mt-6 p-6">
       <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Photo challenges</h2>
-      <p className="mt-1 text-sm text-charcoal/60">
+      <p className="mt-1 text-sm text-charcoal/70">
         Guests see one random prompt on the upload page and can shuffle it or skip it. The gallery
         gets a filter for each challenge that has photos.
       </p>
@@ -117,12 +117,12 @@ export default function ChallengesManager({
 
       <p className="mt-5 text-sm font-semibold">
         Your challenges{' '}
-        <span className="font-normal text-charcoal/60">
+        <span className="font-normal text-charcoal/70">
           · {activeCount} of {MAX_ACTIVE_CHALLENGES} active
         </span>
       </p>
       {challenges.length === 0 ? (
-        <p className="mt-2 text-sm text-charcoal/60">None yet. Add some from the presets or write your own.</p>
+        <p className="mt-2 text-sm text-charcoal/70">None yet. Add some from the presets or write your own.</p>
       ) : (
         <ul className="mt-2 divide-y divide-charcoal/10 border border-charcoal/10">
           {challenges.map((c) => (
@@ -140,11 +140,11 @@ export default function ChallengesManager({
                   aria-label={`${c.text}: shown to guests`}
                   className="h-4 w-4 flex-none"
                 />
-                <span className={`min-w-0 break-words text-sm ${c.active ? '' : 'text-charcoal/50 line-through'}`}>
+                <span className={`min-w-0 break-words text-sm ${c.active ? '' : 'text-charcoal/70 line-through'}`}>
                   {c.text}
                 </span>
               </label>
-              <span className="text-xs text-charcoal/60">
+              <span className="text-xs text-charcoal/70">
                 {counts.get(c.id) ?? 0} photo{(counts.get(c.id) ?? 0) === 1 ? '' : 's'}
               </span>
               <button
@@ -191,7 +191,7 @@ export default function ChallengesManager({
             Add
           </button>
         </div>
-        <p className="mt-1 text-xs text-charcoal/50">
+        <p className="mt-1 text-xs text-charcoal/70">
           {[...draft].length}/{MAX_CHALLENGE_TEXT}
         </p>
       </form>
@@ -214,7 +214,7 @@ export default function ChallengesManager({
           ))}
         </div>
         {presets.length === 0 ? (
-          <p className="mt-2 text-sm text-charcoal/60">You&apos;ve added all of these.</p>
+          <p className="mt-2 text-sm text-charcoal/70">You&apos;ve added all of these.</p>
         ) : (
           <>
             <ul className="mt-2 flex flex-wrap gap-2">

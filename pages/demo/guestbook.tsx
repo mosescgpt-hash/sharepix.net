@@ -51,7 +51,7 @@ export default function DemoGuestBookPage() {
           </Link>
         </div>
 
-        <p className="mt-8 text-center text-sm text-charcoal/60">
+        <p className="mt-8 text-center text-sm text-charcoal/70">
           The guest book is included on the $79 full event and on Corporate.{' '}
           <Link href="/pricing" className="text-pine underline">See pricing</Link>.
         </p>

@@ -176,7 +176,7 @@ export default function HelpChat({
                 Ask
               </button>
             </div>
-            <p className="mt-2 text-[11px] text-charcoal/55">
+            <p className="mt-2 text-[11px] text-charcoal/70">
               Answers come from our{' '}
               <Link href="/help" className="underline">
                 help centre

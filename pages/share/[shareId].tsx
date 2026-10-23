@@ -50,7 +50,7 @@ export default function DownloadSharePage() {
     <Layout title={share ? `Download from ${share.eventName}` : 'Shared event downloads'}>
       <section className="py-8">
         {loading ? (
-          <p className="text-center text-charcoal/60">Loading shared photos and videos…</p>
+          <p className="text-center text-charcoal/70">Loading shared photos and videos…</p>
         ) : error ? (
           <p className="mx-auto max-w-lg rounded-xl bg-red-50 px-4 py-6 text-center text-red-700">{error}</p>
         ) : share ? (
@@ -58,7 +58,7 @@ export default function DownloadSharePage() {
             <div className="text-center">
               <p className="spx-eyebrow">Shared with you</p>
               <h1 className="spx-display mt-3">{share.eventName}</h1>
-              <p className="mt-2 text-charcoal/60">
+              <p className="mt-2 text-charcoal/70">
                 Download one item, select several, or download the entire shared collection.
               </p>
             </div>

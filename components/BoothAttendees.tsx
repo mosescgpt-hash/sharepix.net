@@ -76,7 +76,7 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
             <a href={kiosk} target="_blank" rel="noopener noreferrer" className="break-all text-pine underline">
               Open kiosk mode
             </a>
-            <span className="mt-1 block text-xs text-charcoal/60">
+            <span className="mt-1 block text-xs text-charcoal/70">
               Remembers nothing between people and clears itself after each sign-up.
             </span>
           </p>
@@ -92,17 +92,17 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
         </Notice>
       ) : null}
       {rows === null ? (
-        <p className="mt-2 text-sm text-charcoal/55">Loading&hellip;</p>
+        <p className="mt-2 text-sm text-charcoal/70">Loading&hellip;</p>
       ) : rows.length === 0 ? (
-        <p className="mt-2 text-sm text-charcoal/55">Nobody yet.</p>
+        <p className="mt-2 text-sm text-charcoal/70">Nobody yet.</p>
       ) : (
         <ul className="mt-2 max-h-80 divide-y divide-charcoal/10 overflow-y-auto border-y border-charcoal/10">
           {rows.map((row) => (
             <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm">
               <span className="min-w-0 truncate font-medium">{row.name}</span>
-              <span className="min-w-0 truncate text-charcoal/60">{row.email}</span>
+              <span className="min-w-0 truncate text-charcoal/70">{row.email}</span>
               <span className="flex shrink-0 items-baseline gap-3 text-xs">
-                <span className="text-charcoal/55">
+                <span className="text-charcoal/70">
                   {row.emailsStopped
                     ? 'Stopped emails'
                     : row.lastDeliveredAt

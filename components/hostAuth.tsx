@@ -1,7 +1,9 @@
 import type { ComponentType } from 'react';
+import Head from 'next/head';
 import Link from 'next/link';
 import { withAuthenticator } from '@aws-amplify/ui-react';
 import Logo from '@/components/Logo';
+import { OG_IMAGE_PATH, SITE_ORIGIN } from '@/lib/seo';
 
 /**
  * The sign-in screen a host actually meets.
@@ -47,6 +49,10 @@ export interface HostAuthOptions {
    * that only makes sense if they already have an account.
    */
   arriving: 'new' | 'returning';
+  /** Browser tab title for the sign-in screen. Defaults to `purpose`. */
+  title?: string;
+  /** Meta and link-preview description for the sign-in screen. */
+  description?: string;
 }
 
 function AuthHeader({ purpose, arriving }: HostAuthOptions) {
@@ -59,7 +65,7 @@ function AuthHeader({ purpose, arriving }: HostAuthOptions) {
         <Logo />
         <span className="lowercase">
           share<span className="text-pine">pix</span>
-          <span className="text-charcoal/40">.net</span>
+          <span className="text-charcoal/70">.net</span>
         </span>
       </Link>
       <p className="mt-5 font-sans text-base font-semibold text-charcoal">{purpose}</p>
@@ -92,11 +98,41 @@ export function withHostAuth<P extends object>(
   Component: ComponentType<P>,
   options: HostAuthOptions,
 ) {
-  return withAuthenticator(Component as ComponentType<object>, {
+  const Wrapped = withAuthenticator(Component as ComponentType<object>, {
     initialState: options.arriving === 'new' ? 'signUp' : 'signIn',
     components: {
       Header: () => <AuthHeader {...options} />,
       Footer: AuthFooter,
     },
   });
+  const { purpose, title, description } = options;
+  // The sign-in wall renders instead of the page, so the page's own <Layout>
+  // (and its <title>) never mounts. Without this the tab and any link preview
+  // showed no title at all.
+  const pageTitle = `${(title ?? purpose).replace(/\.$/, '')} — sharepix.net`;
+  const pageDescription =
+    description ??
+    'Hosts sign in to SharePix to set up and run an event gallery. Guests never need an account.';
+  // Outside the authenticator so it is in the server-rendered HTML too: the
+  // authenticator only draws once it knows the auth state, which a crawler or
+  // link preview never waits for. The page's own <Layout> overrides these once
+  // a signed-in host sees it.
+  function HostAuthPage(props: P) {
+    return (
+      <>
+        <Head>
+          <title>{pageTitle}</title>
+          <meta name="description" content={pageDescription} />
+          <meta name="robots" content="noindex, nofollow" />
+          <meta property="og:type" content="website" />
+          <meta property="og:site_name" content="sharepix.net" />
+          <meta property="og:title" content={pageTitle} />
+          <meta property="og:description" content={pageDescription} />
+          <meta property="og:image" content={`${SITE_ORIGIN}${OG_IMAGE_PATH}`} />
+        </Head>
+        <Wrapped {...(props as object)} />
+      </>
+    );
+  }
+  return HostAuthPage;
 }

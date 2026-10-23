@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import Layout from '@/components/Layout';
+import OfferBanner from '@/components/OfferBanner';
 import PricingCards from '@/components/PricingCards';
 import {
   CORPORATE_PLAN,
@@ -30,11 +31,11 @@ const faqs = [
   },
   {
     q: 'Is there a limit on how many photos each guest can share?',
-    a: 'No. Some event apps give each guest a roll of film — 24 or 36 shots and then they are done. SharePix has no per-guest limit: every guest can share every photo they took, and the fair-use ceiling below is for the whole event, never for one person.',
+    a: 'No. Some event apps give each guest a roll of film — 24 or 36 shots and then they are done. SharePix has no per-guest limit: every guest can share every photo they took, and the photo limit below is for the whole event, never for one person.',
   },
   {
-    q: 'Is "unlimited photos" really unlimited?',
-    a: `Unlimited, with one number we would rather tell you up front: a fair-use ceiling of ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event. A 300-guest wedding usually lands around 2,000. If your event gets near the ceiling, a button on your dashboard asks us for more room and we raise it free — your guests keep uploading the whole time, it never pauses mid-reception. What fair use rules out is automated uploads, bulk archival or backup use, and abusive activity.`,
+    q: 'How many photos can we upload?',
+    a: `Up to ${FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event. If your event gets close, tap the button on your dashboard and we raise it for free, and your guests keep uploading the whole time. What is not allowed is automated uploads, using it as a backup drive, or abuse.`,
   },
   {
     q: 'What about video?',
@@ -66,6 +67,7 @@ export default function PricingPage() {
       {/* One centred column, the width of the cards, rather than a wide
           container with the cards pinned to its left and the right third of
           the screen left empty. */}
+      <OfferBanner />
       <section className="spx-section-canvas">
         <div className="mx-auto w-full max-w-3xl">
           <p className="spx-eyebrow">Simple pricing</p>
@@ -82,8 +84,8 @@ export default function PricingPage() {
             <PricingCards />
           </div>
 
-          <p className="mt-8 text-sm text-charcoal/60">
-            Unlimited guests · Unlimited photos under fair use · No per-guest limit · Full-resolution memories · Private from search, shared by QR code
+          <p className="mt-8 text-sm text-charcoal/70">
+            Unlimited guests · Up to {FAIR_USE_PHOTO_CEILING.toLocaleString('en-US')} photos per event · No per-guest limit · Full-resolution memories · Private from search, shared by QR code
           </p>
         </div>
       </section>

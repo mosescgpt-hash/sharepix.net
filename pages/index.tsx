@@ -3,11 +3,12 @@ import Link from 'next/link';
 import Artwork from '@/components/Artwork';
 import HowItWorksSection from '@/components/HowItWorksSection';
 import Layout from '@/components/Layout';
+import OfferBanner from '@/components/OfferBanner';
 import SectionHeading from '@/components/SectionHeading';
 import { trackEvent } from '@/lib/trackEvent';
 import StyledQrCode from '@/components/StyledQrCode';
 import { DIFFERENTIATORS } from '@/lib/differentiators';
-import { PRICING_TIERS } from '@/lib/pricing';
+import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
 import { SITE_ORIGIN, organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
 
 /**
@@ -36,7 +37,9 @@ export default function HomePage() {
       structuredData={[organizationJsonLd(), webSiteJsonLd()]}
     >
       <div className="bg-canvas font-sans">
+        <OfferBanner />
         <Hero />
+        <PriceSummary />
         <TryItLive />
         <OurStandard />
         <HowItWorksSection />
@@ -93,7 +96,7 @@ function Hero() {
               View a live demo gallery
             </Link>
           </div>
-          {/* Was text-[0.7rem] text-charcoal/45 — about 11px at under half
+          {/* Was text-[0.7rem] text-charcoal/70 — about 11px at under half
               opacity, for the one line on the page that names a limit on what
               you get. Small grey type is where terms go when somebody would
               rather they were not read; these are ours, so they are body size
@@ -109,6 +112,46 @@ function Hero() {
         </div>
 
         <Artwork slot="home-hero" className="spx-arch aspect-[4/5] w-full" priority />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Prices up front, so nobody has to scroll to the bottom to find out what it
+ * costs. Read from lib/pricing.ts like every other price on the site.
+ */
+function PriceSummary() {
+  const trial = getTier('trial');
+  const full = getTier('plus');
+  const items = [
+    trial ? { name: trial.name, price: 'Free', note: 'Try it at something small' } : null,
+    full ? { name: full.name, price: `$${full.price} once`, note: 'Per event, no subscription' } : null,
+    {
+      name: CORPORATE_PLAN.name,
+      price: CORPORATE_PLAN.priceLabel,
+      note: `${CORPORATE_PLAN.includedEvents} new events every month`,
+    },
+  ].filter(Boolean) as { name: string; price: string; note: string }[];
+  return (
+    <section className="spx-section-canvas pt-0">
+      <div className="spx-inner">
+        <div className="grid gap-px bg-charcoal/10 sm:grid-cols-3">
+          {items.map((item) => (
+            <div key={item.name} className="bg-canvas p-5">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-charcoal/70">
+                {item.name}
+              </p>
+              <p className="mt-1 text-2xl font-bold tracking-[-0.02em]">{item.price}</p>
+              <p className="mt-1 text-sm text-charcoal/70">{item.note}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-sm">
+          <Link href="/pricing" className="text-pine underline">
+            Compare plans
+          </Link>
+        </p>
       </div>
     </section>
   );
@@ -158,7 +201,7 @@ function TryItLive() {
               <Link href="/demo/try-upload" className="spx-btn-ink">
                 Or just tap here
               </Link>
-              <span className="text-xs text-charcoal/55">
+              <span className="text-xs text-charcoal/70">
                 On a phone? Tapping does the same thing.
               </span>
             </div>
@@ -234,9 +277,8 @@ function OurStandard() {
         <p className="spx-eyebrow">Our standard</p>
         <SectionHeading first="What we promise" second="and exactly where it ends." />
         <p className="spx-body mt-5 max-w-lg">
-          Each of these is a specific commitment rather than a posture, so each one is
-          printed with the case where it does not apply. We would rather tell you the
-          edge than let you find it.
+          Each promise comes with a plain note about where it stops, so you know exactly
+          what you are getting.
         </p>
 
         <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
@@ -329,7 +371,7 @@ function Pricing() {
                     for it to be more popular than. */}
                 <p
                   className={`font-sans text-xs font-medium uppercase tracking-[0.16em] ${
-                    featured ? 'text-canvas/70' : 'text-charcoal/60'
+                    featured ? 'text-canvas/70' : 'text-charcoal/70'
                   }`}
                 >
                   {tier.name}
@@ -360,7 +402,7 @@ function Pricing() {
           })}
         </div>
 
-        <p className="mt-6 text-sm text-charcoal/60">
+        <p className="mt-6 text-sm text-charcoal/70">
           Running events all year?{' '}
           <Link href="/pricing" className="text-pine underline">
             The Corporate plan

@@ -143,7 +143,7 @@ export default function PhotoCard({
                   giving away. */}
               <p className="truncate font-medium text-pine">{PROFESSIONAL_BADGE}</p>
               {photo.photographerName ? (
-                <p className="truncate text-charcoal/60">Photo by {photo.photographerName}</p>
+                <p className="truncate text-charcoal/70">Photo by {photo.photographerName}</p>
               ) : null}
               {proLinks.length > 0 ? (
                 <p className="mt-0.5 flex flex-wrap gap-x-3">
@@ -165,7 +165,7 @@ export default function PhotoCard({
             <p className="truncate font-medium">Uploaded by: {photo.uploadedBy || 'Anonymous'}</p>
           )}
           {uploadedAt ? (
-            <p className="text-charcoal/60">
+            <p className="text-charcoal/70">
               {uploadedAt.toLocaleDateString()} ·{' '}
               {uploadedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
             </p>

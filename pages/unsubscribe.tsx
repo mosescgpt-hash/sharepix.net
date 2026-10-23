@@ -91,7 +91,7 @@ export default function UnsubscribePage() {
             </>
           )}
 
-          <p className="mt-8 text-sm text-charcoal/60">
+          <p className="mt-8 text-sm text-charcoal/70">
             <Link href="/" className="font-medium text-pine underline">
               Back to SharePix
             </Link>

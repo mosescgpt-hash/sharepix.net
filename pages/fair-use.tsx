@@ -157,7 +157,7 @@ export default function FairUsePage() {
           </div>
         </div>
 
-        <p className="mt-8 text-sm text-charcoal/60">
+        <p className="mt-8 text-sm text-charcoal/70">
           <Link href="/pricing" className="font-medium text-pine underline">
             Back to pricing
           </Link>

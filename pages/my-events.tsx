@@ -148,7 +148,7 @@ function MyEventsPage() {
                 <div className="spx-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-sans font-semibold text-charcoal">Download photos</p>
-                    <p className="mt-1 text-sm text-charcoal/60">
+                    <p className="mt-1 text-sm text-charcoal/70">
                       Check one or more events, then download them together as a ZIP (each event
                       in its own folder).
                     </p>
@@ -206,7 +206,7 @@ function MyEventsPage() {
                             <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
                               {event.name}
                             </h2>
-                            <p className="mt-1 text-sm text-charcoal/60">
+                            <p className="mt-1 text-sm text-charcoal/70">
                               {formatDate(event.date)} · {tier?.name ?? event.tier} plan
                             </p>
                           </div>
@@ -247,7 +247,7 @@ function MyEventsPage() {
                       ) : (
                         <>
                           {event.accessExpiresAt ? (
-                            <p className="mt-4 text-sm text-charcoal/60">
+                            <p className="mt-4 text-sm text-charcoal/70">
                               Gallery access through{' '}
                               {new Date(event.accessExpiresAt).toLocaleDateString()}
                             </p>

@@ -146,7 +146,7 @@ export default function RatingPage() {
                   </button>
                 ))}
               </div>
-              <p className="mt-4 text-sm text-charcoal/60">
+              <p className="mt-4 text-sm text-charcoal/70">
                 {RATING_MIN} is poor, {RATING_MAX} is excellent.
               </p>
             </>
@@ -179,7 +179,7 @@ export default function RatingPage() {
               </label>
               {permission ? (
                 <label className="mt-4 block">
-                  <span className="text-sm text-charcoal/60">
+                  <span className="text-sm text-charcoal/70">
                     First name to show with it, if you want one. Leave it blank to stay
                     anonymous.
                   </span>
@@ -192,7 +192,7 @@ export default function RatingPage() {
                   />
                 </label>
               ) : (
-                <p className="mt-3 text-sm text-charcoal/60">
+                <p className="mt-3 text-sm text-charcoal/70">
                   Leave that unticked and your words stay with us — we will read them and
                   publish nothing.
                 </p>

@@ -160,7 +160,7 @@ export default function GuestUploadPage() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-2 text-xs text-charcoal/55">
+                  <p className="mt-2 text-xs text-charcoal/70">
                     Only helps the host group the gallery afterwards. Skip it if you would rather.
                   </p>
                 </div>
@@ -233,7 +233,7 @@ export default function GuestUploadPage() {
                   </Link>
                 </p>
               ) : (
-                <p className="mt-8 text-center text-sm text-charcoal/60">
+                <p className="mt-8 text-center text-sm text-charcoal/70">
                   The host is keeping this gallery private — your photos go straight to them.
                 </p>
               )}

@@ -14,7 +14,7 @@ export default function TermsPage() {
     <Layout title="Terms of Service">
       <section className="mx-auto max-w-3xl py-12 sm:py-16">
         <h1 className="spx-display">Terms of Service</h1>
-        <p className="mt-3 text-sm text-charcoal/60">Last updated: {LAST_UPDATED}</p>
+        <p className="mt-3 text-sm text-charcoal/70">Last updated: {LAST_UPDATED}</p>
 
         <div className="spx-card mt-10 space-y-9 p-7 leading-relaxed text-charcoal/80 sm:p-10 [&_a]:text-pine [&_a]:underline [&_h2]:font-sans [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-[-0.02em] [&_h2]:text-charcoal [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-6">
           <div>
@@ -322,7 +322,7 @@ export default function TermsPage() {
             {/* The postal address comes from lib/businessInfo, the same place
                 the DMCA page reads it, so the two can never disagree. */}
             <p className="mt-3 whitespace-pre-line text-sm">{BUSINESS_ADDRESS}</p>
-            <p className="text-sm text-charcoal/60">
+            <p className="text-sm text-charcoal/70">
               Copyright notices go to our designated agent instead — see our{' '}
               <a href="/dmca">Copyright and DMCA Policy</a>.
             </p>

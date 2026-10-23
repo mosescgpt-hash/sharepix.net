@@ -156,7 +156,7 @@ function AdminPortal() {
           </button>
         </div>
 
-        {state === 'checking' ? <p className="mt-6 text-sm text-charcoal/60">Checking access…</p> : null}
+        {state === 'checking' ? <p className="mt-6 text-sm text-charcoal/70">Checking access…</p> : null}
 
         {state === 'no-mfa' ? (
           <Notice tone="warn" className="mt-6">
@@ -200,7 +200,7 @@ function AdminPortal() {
 
             <h2 className="mt-8 font-sans text-lg font-bold">Content review</h2>
             {queue.length === 0 ? (
-              <p className="mt-2 text-sm text-charcoal/60">Nothing over the threshold.</p>
+              <p className="mt-2 text-sm text-charcoal/70">Nothing over the threshold.</p>
             ) : (
               <ul className="mt-2 space-y-3">
                 {queue.map((ev) => (
@@ -231,7 +231,7 @@ function AdminPortal() {
               {recent.map((ev) => (
                 <li key={ev.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                   <span className="min-w-0 truncate">{ev.name}</span>
-                  <span className="shrink-0 text-xs text-charcoal/60">
+                  <span className="shrink-0 text-xs text-charcoal/70">
                     {ev.tier === 'corporate' ? 'Corporate' : getTier(ev.tier ?? '')?.name ?? ev.tier}
                     {ev.paid === false ? ' · unpaid' : ''}
                     {ev.takenDownAt ? ' · closed' : ''}
@@ -262,7 +262,7 @@ function AdminPortal() {
 function Tile({ label, value, warn = false }: { label: string; value: string; warn?: boolean }) {
   return (
     <div className={`spx-card p-4 ${warn ? 'border-amber-400' : ''}`}>
-      <p className="text-xs text-charcoal/60">{label}</p>
+      <p className="text-xs text-charcoal/70">{label}</p>
       <p className="mt-1 font-sans text-2xl font-bold tracking-[-0.02em]">{value}</p>
     </div>
   );

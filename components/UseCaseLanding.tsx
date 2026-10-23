@@ -3,6 +3,7 @@ import Link from 'next/link';
 import Artwork from '@/components/Artwork';
 import HowItWorksSection from '@/components/HowItWorksSection';
 import Layout from '@/components/Layout';
+import OfferBanner from '@/components/OfferBanner';
 import QuickFactsStrip from '@/components/QuickFactsStrip';
 import SamplePhoto from '@/components/SamplePhoto';
 import { trackEvent } from '@/lib/trackEvent';
@@ -53,6 +54,7 @@ export default function UseCaseLanding({ useCase }: { useCase: UseCase }) {
   return (
     <Layout title={useCase.metaTitle} width="bleed" structuredData={faqJsonLd(useCase.faqs)}>
       <div className="bg-canvas font-sans">
+        <OfferBanner />
         <section className="spx-section-canvas pt-12 sm:pt-20">
           <div className="spx-inner grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
             <div>

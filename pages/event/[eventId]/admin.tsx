@@ -764,7 +764,7 @@ function AdminDashboardPage() {
               <div>
                 <p className="spx-eyebrow">Admin dashboard</p>
                 <h1 className="spx-display mt-3">{event.name}</h1>
-                <p className="mt-3 text-sm text-charcoal/60">
+                <p className="mt-3 text-sm text-charcoal/70">
                   {event.tier === 'corporate' ? 'Corporate' : tier?.name ?? event.tier} plan ·
                   Event code {event.eventCode}
                   {lifecycle.uploadWindowEndsAt
@@ -883,7 +883,7 @@ function AdminDashboardPage() {
                   className={`-mb-px shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition ${
                     activeTab === t.id
                       ? 'border-ink text-charcoal'
-                      : 'border-transparent text-charcoal/55 hover:text-charcoal'
+                      : 'border-transparent text-charcoal/70 hover:text-charcoal'
                   }`}
                 >
                   {t.label}
@@ -898,7 +898,7 @@ function AdminDashboardPage() {
               hidden={activeTab !== 'share'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/60">{TABS[0].blurb}</p>
+              <p className="text-sm text-charcoal/70">{TABS[0].blurb}</p>
 
 
               {/* First thing in the band, and never hidden. It used to render
@@ -963,7 +963,7 @@ function AdminDashboardPage() {
               hidden={activeTab !== 'photos'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/60">{TABS[1].blurb}</p>
+              <p className="text-sm text-charcoal/70">{TABS[1].blurb}</p>
 
 
               <div className="mt-6 grid grid-cols-2 gap-4 sm:max-w-md">
@@ -1065,7 +1065,7 @@ function AdminDashboardPage() {
               hidden={activeTab !== 'design'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/60">{TABS[2].blurb}</p>
+              <p className="text-sm text-charcoal/70">{TABS[2].blurb}</p>
 
               <div id="look-and-feel" className="scroll-mt-24 mt-6">
                 <GalleryStyleSettings event={event} onSaved={load} requestedTab={lookTabRequest} />
@@ -1079,7 +1079,7 @@ function AdminDashboardPage() {
               hidden={activeTab !== 'guests'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/60">{TABS[3].blurb}</p>
+              <p className="text-sm text-charcoal/70">{TABS[3].blurb}</p>
 
               <div id="guest-settings" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
@@ -1090,7 +1090,7 @@ function AdminDashboardPage() {
                     event rather than after. */}
                 <div className="mt-4">
                   <p className="text-sm font-medium">{AUDIENCE_QUESTION}</p>
-                  <p className="text-xs text-charcoal/60">{AUDIENCE_HELP}</p>
+                  <p className="text-xs text-charcoal/70">{AUDIENCE_HELP}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {AUDIENCE_OPTIONS.map((option) => {
                       const active = parseAudience(event.uploadAudience) === option.value
@@ -1114,7 +1114,7 @@ function AdminDashboardPage() {
                       );
                     })}
                   </div>
-                  <p className="mt-2 text-xs text-charcoal/60">
+                  <p className="mt-2 text-xs text-charcoal/70">
                     Your signs will say &ldquo;{signHeadline(parseAudience(event.uploadAudience))}
                     &rdquo;. Reprint the table tent or brochure after changing this.
                   </p>
@@ -1122,7 +1122,7 @@ function AdminDashboardPage() {
 
                 <div id="photo-screening" className="scroll-mt-24 mt-4 border-t border-ink/10 pt-4">
                   <p className="text-sm font-medium">Photo screening</p>
-                  <p className="text-xs text-charcoal/60">
+                  <p className="text-xs text-charcoal/70">
                     Uploads are checked for explicit content. Alcohol, smoking, and kissing are
                     never flagged.
                   </p>
@@ -1149,7 +1149,7 @@ function AdminDashboardPage() {
                       );
                     })}
                   </div>
-                  <p className="mt-2 text-xs text-charcoal/60">
+                  <p className="mt-2 text-xs text-charcoal/70">
                     {(event.moderationMode ?? 'review') === 'allow_all'
                       ? 'Nothing is screened or held back. Any photo a guest uploads appears right away — including on the slideshow.'
                       : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
@@ -1158,13 +1158,13 @@ function AdminDashboardPage() {
                   <div id="guest-downloads" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Guest downloads</p>
-                      <p className="text-xs text-charcoal/60">
+                      <p className="text-xs text-charcoal/70">
                         {event.guestDownloadsBlocked === true
                           ? 'Off — guests can view the gallery but not download, and they see smaller viewing copies rather than full-size photos. You still have everything at full resolution.'
                           : 'On. Guests can save the photos at full resolution, no account needed. Turn this off for an event where you would rather the pictures stayed with you.'}
                       </p>
                       {event.guestDownloadsBlocked === true ? (
-                        <p className="mt-1 text-xs text-charcoal/60">
+                        <p className="mt-1 text-xs text-charcoal/70">
                           This lowers what a guest can take away — it cannot stop a screenshot.
                         </p>
                       ) : null}
@@ -1186,13 +1186,13 @@ function AdminDashboardPage() {
                   <div id="guest-videos" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
                     <div className="min-w-0">
                       <p className="text-sm font-medium">Guest videos</p>
-                      <p className="text-xs text-charcoal/60">
+                      <p className="text-xs text-charcoal/70">
                         {event.videoUploadsEnabled === false
                           ? 'Off — guests can add photos only.'
                           : 'On. Videos are yours alone: guests can upload them but only you can watch them, which is also what keeps them from costing a fortune to serve. Screening checks photos but not videos, so turn this off if you want screened media only.'}
                       </p>
                       {event.videoUploadsEnabled !== false && event.videoLimit != null ? (
-                        <p className="mt-1 text-sm text-charcoal/60">
+                        <p className="mt-1 text-sm text-charcoal/70">
                           {event.videoCount ?? 0} of{' '}
                           {event.videoLimit + (event.extraVideoCredits ?? 0)} videos used.
                           {videosRemaining(event) === 0
@@ -1219,9 +1219,9 @@ function AdminDashboardPage() {
                     <div className="mt-3">
                       <label htmlFor="alert-email" className="text-sm font-medium">
                         Email me when a photo is held{' '}
-                        <span className="text-charcoal/50">(optional)</span>
+                        <span className="text-charcoal/70">(optional)</span>
                       </label>
-                      <p className="text-xs text-charcoal/60">
+                      <p className="text-xs text-charcoal/70">
                         You&apos;ll get the photo and Approve / Deny buttons, so you don&apos;t have
                         to watch your phone.
                       </p>
@@ -1272,7 +1272,7 @@ function AdminDashboardPage() {
               hidden={activeTab !== 'extras'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/60">{TABS[4].blurb}</p>
+              <p className="text-sm text-charcoal/70">{TABS[4].blurb}</p>
 
               {/* Booth mode: included with every event, switched on here. */}
               <BoothModeCard
@@ -1329,7 +1329,7 @@ function AdminDashboardPage() {
                           <span className="block truncate font-medium">
                             {row.name ?? 'Photographer (no business name set yet)'}
                           </span>
-                          <span className="block truncate text-xs text-charcoal/60">
+                          <span className="block truncate text-xs text-charcoal/70">
                             {row.status === 'accepted'
                               ? row.livePublishing
                                 ? 'Connected · publishing'
@@ -1341,7 +1341,7 @@ function AdminDashboardPage() {
                           <button
                             type="button"
                             onClick={() => void handleRemovePhotographer(row.photographerId)}
-                            className="shrink-0 text-xs text-charcoal/60 underline hover:text-charcoal"
+                            className="shrink-0 text-xs text-charcoal/70 underline hover:text-charcoal"
                           >
                             Remove
                           </button>
@@ -1354,7 +1354,7 @@ function AdminDashboardPage() {
 
               <div id="addons" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">Add-ons</h2>
-                <p className="text-xs text-charcoal/60">
+                <p className="text-xs text-charcoal/70">
                   Tick what you want and pay once.{' '}
                   {lifecycle.uploadWindowEndsAt
                     ? lifecycle.uploadOpen
@@ -1421,7 +1421,7 @@ function AdminDashboardPage() {
                               <span className="text-sm font-medium">{addon.label}</span>
                               <span className="shrink-0 text-sm font-medium">${addon.price}</span>
                             </span>
-                            <span className="mt-0.5 block text-xs text-charcoal/60">
+                            <span className="mt-0.5 block text-xs text-charcoal/70">
                               {addon.description}
                             </span>
                           </span>
@@ -1431,7 +1431,7 @@ function AdminDashboardPage() {
 
                     <div className="mt-4">
                       <label htmlFor="addon-discount" className="text-sm font-medium">
-                        Discount code <span className="text-charcoal/50">(optional)</span>
+                        Discount code <span className="text-charcoal/70">(optional)</span>
                       </label>
                       <input
                         id="addon-discount"
@@ -1442,7 +1442,7 @@ function AdminDashboardPage() {
                         autoComplete="off"
                         className="spx-input mt-2 max-w-xs uppercase"
                       />
-                      <p className="mt-1 text-xs text-charcoal/60">
+                      <p className="mt-1 text-xs text-charcoal/70">
                         Applied to whichever ticked items the code covers. Anything it
                         doesn&apos;t cover stays full price.
                       </p>
@@ -1462,7 +1462,7 @@ function AdminDashboardPage() {
                     </button>
                   </>
                 ) : (
-                  <p className="mt-3 text-xs text-charcoal/60">
+                  <p className="mt-3 text-xs text-charcoal/70">
                     Everything available for this event is already active.
                   </p>
                 )}
@@ -1507,7 +1507,7 @@ function AdminDashboardPage() {
               hidden={activeTab !== 'event'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/60">{TABS[5].blurb}</p>
+              <p className="text-sm text-charcoal/70">{TABS[5].blurb}</p>
 
               {/* Name, date and place, in a card of their own. These used to
                   open a single settings card that ran to three screens and
@@ -1522,7 +1522,7 @@ function AdminDashboardPage() {
                       value={editName}
                       disabled={detailsLocked || savingDetails}
                       onChange={(e) => setEditName(e.target.value)}
-                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/70"
                     />
                   </label>
                   <label className="block">
@@ -1537,7 +1537,7 @@ function AdminDashboardPage() {
                       // date nobody could reach is a save that fails for a
                       // reason the form never mentioned.
                       max={latestEventDate()}
-                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/50"
+                      className="spx-input mt-2 disabled:bg-sand disabled:text-charcoal/70"
                     />
                     {!detailsLocked ? (
                       <span className="mt-1.5 block text-sm text-charcoal/70">
@@ -1550,7 +1550,7 @@ function AdminDashboardPage() {
 
                 <div className="mt-4">
                   <span className="text-sm font-medium">
-                    Where it happened <span className="text-charcoal/50">(optional)</span>
+                    Where it happened <span className="text-charcoal/70">(optional)</span>
                   </span>
                   <div className="mt-1 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <input
@@ -1574,14 +1574,14 @@ function AdminDashboardPage() {
                       className="spx-input disabled:bg-sand"
                     />
                   </div>
-                  <p className="mt-1 text-xs text-charcoal/60">
+                  <p className="mt-1 text-xs text-charcoal/70">
                     City and state only — never a street address. Photos&apos; own location data
                     is always removed when they&apos;re uploaded.
                   </p>
                 </div>
 
                 {detailsLocked ? (
-                  <p className="mt-2 text-xs text-charcoal/60">
+                  <p className="mt-2 text-xs text-charcoal/70">
                     The name and date lock once the first photo is uploaded, so guests&apos;
                     memories keep the details they saw. You can still change the location.
                   </p>
@@ -1628,7 +1628,7 @@ function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={() => setPromiseOpen(true)}
-                    className="text-xs text-charcoal/60 underline transition hover:text-charcoal"
+                    className="text-xs text-charcoal/70 underline transition hover:text-charcoal"
                   >
                     Something not right with this event?
                   </button>
@@ -1700,7 +1700,7 @@ function AdminDashboardPage() {
                         >
                           {claiming ? 'Sending…' : 'Send'}
                         </button>
-                        <p className="mt-2 text-xs text-charcoal/55">
+                        <p className="mt-2 text-xs text-charcoal/70">
                           We read these by hand.
                         </p>
                       </>
@@ -1721,7 +1721,7 @@ function AdminDashboardPage() {
                     <p className="text-sm font-medium">
                       Uploads are {event.uploadsClosed ? 'closed' : 'open'}
                     </p>
-                    <p className="text-xs text-charcoal/60">
+                    <p className="text-xs text-charcoal/70">
                       {event.uploadsClosed
                         ? 'Guests cannot add new photos. The gallery stays viewable.'
                         : 'Close the event when you have all the photos you want.'}
@@ -1747,7 +1747,7 @@ function AdminDashboardPage() {
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-5">
                   <div>
                     <p className="text-sm font-medium text-red-700">Delete event</p>
-                    <p className="text-xs text-charcoal/60">
+                    <p className="text-xs text-charcoal/70">
                       Permanently removes this event and all of its photos.
                     </p>
                   </div>

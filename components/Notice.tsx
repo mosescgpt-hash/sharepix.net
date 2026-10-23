@@ -16,7 +16,7 @@ export type NoticeTone = 'info' | 'warn' | 'error' | 'success';
  * note interrupts the person for no reason.
  */
 const TONES: Record<NoticeTone, { rule: string; label: string; labelText: string }> = {
-  info: { rule: 'border-l-charcoal/25', label: 'text-charcoal/50', labelText: '' },
+  info: { rule: 'border-l-charcoal/25', label: 'text-charcoal/70', labelText: '' },
   // Amber and red come from Tailwind's default palette rather than the brand
   // tokens: the palette has no warning colour, and inventing one out of `pine`
   // or `mint` would make a warning look like a success.
