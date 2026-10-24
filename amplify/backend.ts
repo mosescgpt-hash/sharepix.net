@@ -859,6 +859,13 @@ boothDeliveriesFn.addEnvironment('EMAIL_SENDING_ENABLED', process.env.EMAIL_SEND
 boothDeliveriesFn.addToRolePolicy(
   new PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
 );
+// Booth texts (docs/booth-mode.md, SMS_SETUP.md). Off unless BOOTH_SMS_ENABLED
+// is 'true'; SNS publishes to phone numbers have no resource ARN, hence '*'.
+boothDeliveriesFn.addEnvironment('BOOTH_SMS_ENABLED', process.env.BOOTH_SMS_ENABLED ?? '');
+boothDeliveriesFn.addEnvironment('BOOTH_SMS_ORIGINATION_NUMBER', process.env.BOOTH_SMS_ORIGINATION_NUMBER ?? '');
+boothDeliveriesFn.addToRolePolicy(
+  new PolicyStatement({ actions: ['sns:Publish', 'sns:CheckIfPhoneNumberIsOptedOut'], resources: ['*'] }),
+);
 
 // The public gallery credits the photographer live from their profile.
 backend.data.resources.tables.PhotographerProfile.grantReadData(listFn);
@@ -866,10 +873,18 @@ listFn.addEnvironment('PROFILE_TABLE_NAME', backend.data.resources.tables.Photog
 
 // The photo processor matches booth photos to the latest scan: it reads the
 // event (is it a booth?) and the scans, nothing more.
-eventTable.grantReadData(processProFn);
-boothScanTable.grantReadData(processProFn);
+// Read/write since offline booth codes (docs/booth-mode.md): a QR divider
+// found in a photo creates the attendee (and takes the event's sign-up
+// ceiling) and records a scan in the camera's own clock.
+eventTable.grantReadWriteData(processProFn);
+boothScanTable.grantReadWriteData(processProFn);
+boothAttendeeTable.grantReadWriteData(processProFn);
 processProFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 processProFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
+processProFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
+// PKCS#8 P-256 private key (base64) that opens offline booth codes. Set in the
+// Amplify console env; never NEXT_PUBLIC. Blank = dividers are not decoded.
+processProFn.addEnvironment('BOOTH_PRIVATE_KEY', process.env.BOOTH_PRIVATE_KEY ?? '');
 
 // Stripe webhook: a public Function URL Stripe calls when a checkout completes.
 // It verifies the signature, then writes a Payment row (table write only — no

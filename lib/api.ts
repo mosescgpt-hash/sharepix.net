@@ -2767,7 +2767,9 @@ export async function boothSignUp(input: {
   eventId: string;
   name: string;
   email: string;
+  phone?: string;
   consent: boolean;
+  smsConsent?: boolean;
 }): Promise<{ ok: boolean; message: string; token: string | null; name: string | null }> {
   const { data, errors } = await getClient().mutations.boothSignUp(input, {
     authMode: await authModeFor(),
@@ -2834,7 +2836,7 @@ export interface BoothAssignmentView {
 export async function assignBoothPhotos(input: {
   eventId: string;
   uploadIds: string[];
-  action: 'set' | 'add' | 'remove' | 'clear';
+  action: 'set' | 'add' | 'remove' | 'clear' | 'divider';
   attendeeId?: string;
   token?: string;
 }): Promise<{ ok: boolean; message: string }> {
@@ -2944,7 +2946,23 @@ export async function listBoothAttendees(eventId: string): Promise<BoothAttendee
     (nextToken) =>
       getClient().models.BoothAttendee.listBoothAttendeeByEventId(
         { eventId },
-        { limit: LIST_PAGE_LIMIT, nextToken, authMode: 'userPool' },
+        {
+          limit: LIST_PAGE_LIMIT,
+          nextToken,
+          authMode: 'userPool',
+          // Never email/phone: admin-only fields the host may not read.
+          selectionSet: [
+            'id',
+            'name',
+            'contactLabel',
+            'consentedAt',
+            'galleryKey',
+            'lastDeliveredAt',
+            'emailsStopped',
+            'smsConsentAt',
+            'smsStopped',
+          ],
+        },
       ),
     'Attendees could not be loaded.',
   );
@@ -2952,7 +2970,8 @@ export async function listBoothAttendees(eventId: string): Promise<BoothAttendee
     .map((row) => ({
       id: String(row.id),
       name: String(row.name ?? ''),
-      email: String(row.email ?? ''),
+      contactLabel: String(row.contactLabel ?? '') || 'Contact hidden',
+      texting: Boolean(row.smsConsentAt) && row.smsStopped !== true,
       consentedAt: (row.consentedAt as string | null) ?? null,
       galleryKey: (row.galleryKey as string | null) ?? null,
       lastDeliveredAt: (row.lastDeliveredAt as string | null) ?? null,

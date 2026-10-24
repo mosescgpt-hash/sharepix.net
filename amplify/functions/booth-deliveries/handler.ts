@@ -8,13 +8,16 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import { CheckIfPhoneNumberIsOptedOutCommand, PublishCommand, SNSClient } from '@aws-sdk/client-sns';
+import { buildBoothSms } from './sms';
 import { buildBoothMessage, formatRemovalDate, type BoothMessageKind } from './message';
-import { deliveryDue, reminderDue, removalDue, type AttendeeState } from './plan';
+import { channelsFor, deliveryDue, reminderDue, removalDue, type AttendeeState } from './plan';
 import { originalsRemovedAt, reminderAt } from './retention';
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
 const ses = new SESv2Client({});
+const sns = new SNSClient({});
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const ATTENDEE_TABLE = process.env.BOOTH_ATTENDEE_TABLE_NAME as string;
@@ -25,6 +28,14 @@ const FROM_ADDRESS = process.env.REMINDER_FROM_ADDRESS || 'SharePix <noreply@sha
 const REPLY_TO = process.env.REMINDER_REPLY_TO || 'support@sharepix.net';
 /** The same master switch as all customer mail. Unset: decide and log, send nothing. */
 const SENDING_ENABLED = (process.env.EMAIL_SENDING_ENABLED ?? '').toLowerCase() === 'true';
+/**
+ * Texting has its own switch, off by default, because it needs an approved
+ * toll-free number first (SMS_SETUP.md). Off: no texts, and phone-only
+ * attendees are simply not due. Email is unaffected.
+ */
+const SMS_ENABLED = (process.env.BOOTH_SMS_ENABLED ?? '').toLowerCase() === 'true';
+/** Optional origination number (the approved toll-free number), E.164. */
+const SMS_ORIGINATION = process.env.BOOTH_SMS_ORIGINATION_NUMBER ?? '';
 /** Bound one run, so a bad hour cannot become a bad day. */
 const MAX_SENDS_PER_RUN = 1000;
 /** A host's Resend can't be used to flood someone's inbox. */
@@ -71,6 +82,9 @@ function readAttendee(item: Record<string, AttributeValue>): Attendee {
     id: item.id?.S ?? '',
     name: item.name?.S ?? '',
     email: item.email?.S ?? null,
+    phone: item.phone?.S ?? null,
+    smsConsent: Boolean(item.smsConsentAt?.S),
+    smsStopped: item.smsStopped?.BOOL === true,
     galleryKey: item.galleryKey?.S ?? null,
     emailsStopped: item.emailsStopped?.BOOL === true,
     deliveredCount: Number(item.deliveredCount?.N ?? 0) || 0,
@@ -122,7 +136,8 @@ async function loadPhotos(eventId: string): Promise<BoothPhoto[]> {
     for (const item of page.Items ?? []) {
       out.push({
         id: item.id?.S ?? '',
-        recipients: recipientsOf(item),
+        // A QR divider shot is never anyone's photo.
+        recipients: item.boothMatch?.S === 'divider' ? [] : recipientsOf(item),
         approved: item.publishStatus?.S === 'approved',
         originalObjectKey: item.originalObjectKey?.S ?? null,
       });
@@ -158,8 +173,10 @@ async function claimDelivery(attendee: Attendee, total: number, nowISO: string):
         TableName: ATTENDEE_TABLE,
         Key: { id: { S: attendee.id } },
         UpdateExpression: 'SET deliveredCount = :total, lastDeliveredAt = :now, updatedAt = :now',
+        // Email-only attendees: re-check "stop" at claim time. Anyone who can
+        // be texted is re-checked against the carrier opt-out list at send.
         ConditionExpression:
-          'attribute_exists(id) AND (attribute_not_exists(emailsStopped) OR emailsStopped = :false) AND ' +
+          'attribute_exists(id) AND (attribute_not_exists(emailsStopped) OR emailsStopped = :false OR :sms = :true) AND ' +
           (attendee.deliveredCount === 0
             ? '(attribute_not_exists(deliveredCount) OR deliveredCount = :zero)'
             : 'deliveredCount = :old'),
@@ -167,6 +184,8 @@ async function claimDelivery(attendee: Attendee, total: number, nowISO: string):
           ':total': { N: String(total) },
           ':now': { S: nowISO },
           ':false': { BOOL: false },
+          ':true': { BOOL: true },
+          ':sms': { BOOL: channelsFor(attendee, 'ready', SMS_ENABLED).sms },
           ...(attendee.deliveredCount === 0
             ? { ':zero': { N: '0' } }
             : { ':old': { N: String(attendee.deliveredCount) } }),
@@ -208,8 +227,13 @@ async function claimReminder(attendee: Attendee, nowISO: string): Promise<boolea
         Key: { id: { S: attendee.id } },
         UpdateExpression: 'SET reminderSentAt = :now, updatedAt = :now',
         ConditionExpression:
-          'attribute_exists(id) AND attribute_not_exists(reminderSentAt) AND (attribute_not_exists(emailsStopped) OR emailsStopped = :false)',
-        ExpressionAttributeValues: { ':now': { S: nowISO }, ':false': { BOOL: false } },
+          'attribute_exists(id) AND attribute_not_exists(reminderSentAt) AND (attribute_not_exists(emailsStopped) OR emailsStopped = :false OR :sms = :true)',
+        ExpressionAttributeValues: {
+          ':now': { S: nowISO },
+          ':false': { BOOL: false },
+          ':true': { BOOL: true },
+          ':sms': { BOOL: channelsFor(attendee, 'reminder', SMS_ENABLED).sms },
+        },
       }),
     );
     return true;
@@ -231,7 +255,65 @@ async function releaseReminder(attendee: Attendee): Promise<void> {
     .catch((error) => console.error('Could not release a reminder claim', { id: attendee.id, error: String(error) }));
 }
 
+/**
+ * One text. Checks the carrier opt-out list first (someone who replied STOP
+ * to any SharePix text is on it) and records it on the row so we stop trying.
+ */
+async function sendSms(attendee: Attendee, event: BoothEvent, kind: 'ready' | 'reminder'): Promise<boolean> {
+  if (!attendee.phone || !attendee.galleryKey) return false;
+  try {
+    const opted = await sns.send(new CheckIfPhoneNumberIsOptedOutCommand({ phoneNumber: attendee.phone }));
+    if (opted.isOptedOut) {
+      await dynamo
+        .send(
+          new UpdateItemCommand({
+            TableName: ATTENDEE_TABLE,
+            Key: { id: { S: attendee.id } },
+            UpdateExpression: 'SET smsStopped = :true',
+            ExpressionAttributeValues: { ':true': { BOOL: true } },
+          }),
+        )
+        .catch(() => undefined);
+      return false;
+    }
+    await sns.send(
+      new PublishCommand({
+        PhoneNumber: attendee.phone,
+        Message: buildBoothSms({ kind, eventName: event.name, galleryUrl: `${APP_URL}/booth/photos/${attendee.galleryKey}` }),
+        MessageAttributes: {
+          'AWS.SNS.SMS.SMSType': { DataType: 'String', StringValue: 'Transactional' },
+          ...(SMS_ORIGINATION
+            ? { 'AWS.MM.SMS.OriginationNumber': { DataType: 'String', StringValue: SMS_ORIGINATION } }
+            : {}),
+        },
+      }),
+    );
+    return true;
+  } catch (error) {
+    // The number is deliberately not logged.
+    console.error('Could not send a booth text', {
+      eventId: event.id,
+      kind,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/** Email and/or text, per channelsFor. True when at least one went. */
 async function send(
+  attendee: Attendee,
+  event: BoothEvent,
+  kind: BoothMessageKind,
+  photoCount: number,
+): Promise<boolean> {
+  const ch = channelsFor(attendee, kind, SMS_ENABLED);
+  const emailed = ch.email ? await sendEmail(attendee, event, kind, photoCount) : false;
+  const texted = ch.sms ? await sendSms(attendee, event, kind === 'reminder' ? 'reminder' : 'ready') : false;
+  return emailed || texted;
+}
+
+async function sendEmail(
   attendee: Attendee,
   event: BoothEvent,
   kind: BoothMessageKind,
@@ -366,8 +448,8 @@ async function run(): Promise<JobResult> {
         const remindFrom = event.removedAt ? reminderAt(event.removedAt) : null;
         for (const attendee of await loadAttendees(event.id)) {
           const total = approved.get(attendee.id) ?? 0;
-          const delivery = deliveryDue(attendee, total);
-          const remind = !delivery && reminderDue(attendee, nowISO, remindFrom, event.removedAt);
+          const delivery = deliveryDue(attendee, total, SMS_ENABLED);
+          const remind = !delivery && reminderDue(attendee, nowISO, remindFrom, event.removedAt, SMS_ENABLED);
           if (!delivery && !remind) continue;
           if (!attendee.galleryKey) continue;
           if (capped()) {
@@ -486,10 +568,12 @@ async function resend(
     if (isConditionFailure(error)) return { ok: false, message: 'They were just emailed.' };
     throw error;
   }
-  if (!(await send(attendee, event, 'ready', total))) {
+  // Resend is email only; a host cannot trigger texts.
+  if (!(await sendEmail(attendee, event, 'ready', total))) {
     return { ok: false, message: 'The email could not be sent. Try again in a moment.' };
   }
-  return { ok: true, message: `Sent to ${attendee.email}.` };
+  // Never the address itself: hosts do not see guests' contact details.
+  return { ok: true, message: 'Sent their photo link again.' };
 }
 
 interface InvocationEvent {

@@ -10,7 +10,7 @@ export interface BoothAssignmentLike {
 }
 
 export interface BoothGroup {
-  /** 'check', 'none', or an attendee id. */
+  /** 'check', 'none', 'dividers', or an attendee id. */
   key: string;
   label: string;
   photoIds: string[];
@@ -18,8 +18,8 @@ export interface BoothGroup {
 
 /**
  * Check first (matched by upload time, so worth a look), then photos going to
- * nobody, then one group per person in the order they were scanned (newest
- * first). A group shot appears under every person it goes to.
+ * nobody (including photos with no camera time that no divider could place), then one group per person in the order they were scanned (newest
+ * first), then QR divider shots last. A group shot appears under every person it goes to.
  */
 export function boothGroups(
   photoIds: readonly string[],
@@ -28,10 +28,15 @@ export function boothGroups(
 ): BoothGroup[] {
   const check: string[] = [];
   const none: string[] = [];
+  const dividers: string[] = [];
   const byPerson = new Map<string, { label: string; photoIds: string[] }>();
 
   for (const id of photoIds) {
     const a = assignments.get(id);
+    if (a?.match === 'divider') {
+      dividers.push(id);
+      continue;
+    }
     if (!a || a.attendeeIds.length === 0) {
       none.push(id);
       continue;
@@ -53,5 +58,7 @@ export function boothGroups(
     ...(check.length ? [{ key: 'check', label: 'Check — matched by upload time', photoIds: check }] : []),
     ...(none.length ? [{ key: 'none', label: 'Not matched to anyone', photoIds: none }] : []),
     ...people,
+    // QR code shots (offline booth): kept for checking, never sent to anyone.
+    ...(dividers.length ? [{ key: 'dividers', label: 'QR code shots — never sent', photoIds: dividers }] : []),
   ];
 }

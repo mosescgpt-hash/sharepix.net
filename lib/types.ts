@@ -322,7 +322,13 @@ export interface DiscountRedemption {
 export interface BoothAttendeeRow {
   id: string;
   name: string;
-  email: string;
+  /**
+   * Masked contact ("j***@gmail.com", "***-***-4567"). The host never sees a
+   * guest's email or phone (docs/booth-mode.md); those fields are admin-only.
+   */
+  contactLabel: string;
+  /** They agreed to texts and have not replied STOP. */
+  texting: boolean;
   consentedAt: string | null;
   /** Their private gallery key; null for sign-ups from before galleries. */
   galleryKey: string | null;

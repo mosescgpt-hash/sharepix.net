@@ -19,6 +19,17 @@ import { connectionId, mayUploadToEvent } from './photographerAccess';
 import { exifCaptureTime } from './captureTime';
 import { isHeic, isJpeg, stripHeicGps, stripJpegMetadata } from './exif';
 import { boothScanKey, photoInstant } from './boothMatch';
+import { contactLabel, openContact, type BoothContact } from './boothSeal';
+import { DECODE_LONG_EDGE, findDividerCode } from './boothDivider';
+import {
+  NOBODY,
+  belongsToDivider,
+  cameraAtISO,
+  cameraScanKey,
+  dividerScanId,
+  offlineAttendeeId,
+} from './boothOffline';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   defaultsFor,
   previewLongEdge,
@@ -43,20 +54,248 @@ const BUCKET = process.env.PHOTO_BUCKET_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 const SCAN_TABLE = process.env.BOOTH_SCAN_TABLE_NAME ?? '';
 const SCANS_BY_KEY = 'boothScansByScanKey';
+const ATTENDEE_TABLE = process.env.BOOTH_ATTENDEE_TABLE_NAME ?? '';
+const BOOTH_PRIVATE_KEY = process.env.BOOTH_PRIVATE_KEY ?? '';
+const PHOTOS_BY_EVENT = 'photosByEventId';
+/** Same ceiling as online sign-up (booth-signup/signup.ts). */
+const MAX_ATTENDEES_PER_EVENT = 10000;
 
-/** Whether this event is in booth mode (docs/booth-mode.md). */
-async function isBoothEvent(eventId: string): Promise<boolean> {
-  if (!EVENT_TABLE) return false;
+/** Whether this event is in booth mode (docs/booth-mode.md), and its owner. */
+async function boothEvent(eventId: string): Promise<{ booth: boolean; owner: string }> {
+  if (!EVENT_TABLE) return { booth: false, owner: '' };
   const found = await dynamo
     .send(
       new GetItemCommand({
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'id, boothMode',
+        ProjectionExpression: 'id, boothMode, #owner',
+        ExpressionAttributeNames: { '#owner': 'owner' },
       }),
     )
     .catch(() => null);
-  return found?.Item?.boothMode?.BOOL === true;
+  return { booth: found?.Item?.boothMode?.BOOL === true, owner: found?.Item?.owner?.S ?? '' };
+}
+
+/** The latest QR divider at or before this camera time, if any. */
+async function latestCameraScan(
+  eventId: string,
+  sub: string,
+  cameraAt: string,
+): Promise<{ attendeeId: string; name: string } | null> {
+  if (!SCAN_TABLE) return null;
+  const res = await dynamo
+    .send(
+      new QueryCommand({
+        TableName: SCAN_TABLE,
+        IndexName: SCANS_BY_KEY,
+        KeyConditionExpression: 'scanKey = :key AND scannedAt <= :at',
+        ExpressionAttributeValues: {
+          ':key': { S: cameraScanKey(eventId, sub) },
+          ':at': { S: cameraAt },
+        },
+        ScanIndexForward: false,
+        Limit: 1,
+      }),
+    )
+    .catch(() => null);
+  const item = res?.Items?.[0];
+  if (!item?.attendeeId?.S) return null;
+  return { attendeeId: item.attendeeId.S, name: item.attendeeName?.S ?? 'Guest' };
+}
+
+/** The next QR divider strictly after this camera time, if any. */
+async function nextCameraScanAt(eventId: string, sub: string, cameraAt: string): Promise<string | null> {
+  if (!SCAN_TABLE) return null;
+  const res = await dynamo
+    .send(
+      new QueryCommand({
+        TableName: SCAN_TABLE,
+        IndexName: SCANS_BY_KEY,
+        KeyConditionExpression: 'scanKey = :key AND scannedAt > :at',
+        ExpressionAttributeValues: {
+          ':key': { S: cameraScanKey(eventId, sub) },
+          ':at': { S: cameraAt },
+        },
+        ScanIndexForward: true,
+        Limit: 1,
+      }),
+    )
+    .catch(() => null);
+  return res?.Items?.[0]?.scannedAt?.S ?? null;
+}
+
+/**
+ * Create (or find) the attendee a decrypted offline code describes. The id is
+ * derived from the email (or phone), the same as online sign-up, so one
+ * person is one row however many codes they made. The host never sees the
+ * contact: the row's name is a masked label, and email/phone are admin-only
+ * fields in the schema.
+ */
+async function upsertOfflineAttendee(
+  eventId: string,
+  owner: string,
+  personId: string,
+  contact: BoothContact,
+): Promise<{ id: string; name: string } | null> {
+  if (!ATTENDEE_TABLE) return null;
+  const id = offlineAttendeeId(eventId, contact);
+  const label = contactLabel(contact);
+  const now = new Date().toISOString();
+  const existing = await dynamo
+    .send(new GetItemCommand({ TableName: ATTENDEE_TABLE, Key: { id: { S: id } }, ConsistentRead: true }))
+    .catch(() => null);
+  if (existing?.Item) {
+    // Fill in what this code adds (a phone, texting consent); never replace.
+    const sets = ['galleryKey = if_not_exists(galleryKey, :key)', 'contactLabel = if_not_exists(contactLabel, :label)'];
+    const values: Record<string, AttributeValue> = {
+      ':key': { S: randomBytes(24).toString('base64url') },
+      ':label': { S: label },
+    };
+    if (contact.phone) {
+      sets.push('phone = if_not_exists(phone, :phone)');
+      values[':phone'] = { S: contact.phone };
+      if (contact.smsConsent) {
+        sets.push('smsConsentAt = if_not_exists(smsConsentAt, :now)');
+        values[':now'] = { S: now };
+      }
+    }
+    if (contact.email) {
+      sets.push('email = if_not_exists(email, :email)');
+      values[':email'] = { S: contact.email };
+    }
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: ATTENDEE_TABLE,
+          Key: { id: { S: id } },
+          UpdateExpression: `SET ${sets.join(', ')}`,
+          ExpressionAttributeValues: values,
+        }),
+      )
+      .catch(() => undefined);
+    return { id, name: existing.Item.name?.S ?? label };
+  }
+
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: 'ADD boothAttendeeCount :one',
+        ConditionExpression: 'attribute_not_exists(boothAttendeeCount) OR boothAttendeeCount < :max',
+        ExpressionAttributeValues: { ':one': { N: '1' }, ':max': { N: String(MAX_ATTENDEES_PER_EVENT) } },
+      }),
+    );
+  } catch {
+    return null;
+  }
+  try {
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: ATTENDEE_TABLE,
+        Item: {
+          id: { S: id },
+          __typename: { S: 'BoothAttendee' },
+          eventId: { S: eventId },
+          ...(owner ? { eventOwner: { S: owner } } : {}),
+          name: { S: label },
+          contactLabel: { S: label },
+          ...(contact.email ? { email: { S: contact.email } } : {}),
+          ...(contact.phone ? { phone: { S: contact.phone } } : {}),
+          ...(contact.phone && contact.smsConsent ? { smsConsentAt: { S: now } } : {}),
+          token: { S: randomBytes(15).toString('base64url') },
+          galleryKey: { S: randomBytes(24).toString('base64url') },
+          offlinePersonId: { S: personId },
+          signupSource: { S: 'offline-qr' },
+          consentedAt: { S: now },
+          createdAt: { S: now },
+          updatedAt: { S: now },
+        },
+        ConditionExpression: 'attribute_not_exists(id)',
+      }),
+    );
+  } catch (err) {
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'ADD boothAttendeeCount :neg',
+          ExpressionAttributeValues: { ':neg': { N: '-1' } },
+        }),
+      )
+      .catch(() => undefined);
+    if ((err as { name?: string })?.name !== 'ConditionalCheckFailedException') return null;
+  }
+  return { id, name: label };
+}
+
+/**
+ * A divider landed: re-point this photographer's photos between it and the
+ * next divider (camera time) at its person. Photos uploaded before their
+ * divider was processed are fixed here, so upload order never matters.
+ * Hand-fixed photos and other dividers are left alone.
+ */
+async function rematchAfterDivider(
+  eventId: string,
+  sub: string,
+  dividerAt: string,
+  attendee: { id: string; name: string } | null,
+): Promise<void> {
+  const nextAt = await nextCameraScanAt(eventId, sub, dividerAt);
+  let start: Record<string, AttributeValue> | undefined;
+  for (let page = 0; page < 50; page += 1) {
+    const res = await dynamo
+      .send(
+        new QueryCommand({
+          TableName: PHOTO_TABLE,
+          IndexName: PHOTOS_BY_EVENT,
+          KeyConditionExpression: 'eventId = :event',
+          FilterExpression: 'photographerId = :sub AND cameraAt >= :at',
+          ExpressionAttributeValues: { ':event': { S: eventId }, ':sub': { S: sub }, ':at': { S: dividerAt } },
+          ProjectionExpression: 'id, cameraAt, boothMatch',
+          ExclusiveStartKey: start,
+        }),
+      )
+      .catch(() => null);
+    if (!res) return;
+    for (const item of res.Items ?? []) {
+      const at = item.cameraAt?.S ?? '';
+      const match = item.boothMatch?.S ?? '';
+      if (!at || match === 'manual' || match === 'divider') continue;
+      if (!belongsToDivider(at, dividerAt, nextAt)) continue;
+      const now = new Date().toISOString();
+      await dynamo
+        .send(
+          new UpdateItemCommand({
+            TableName: PHOTO_TABLE,
+            Key: { id: { S: item.id!.S! } },
+            UpdateExpression: attendee
+              ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothAttendeeId = :id, boothAttendeeName = :name, boothMatch = :match, updatedAt = :now'
+              : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName',
+            // Never over a hand fix that landed meanwhile.
+            ConditionExpression: 'boothMatch <> :manual AND boothMatch <> :divider',
+            ExpressionAttributeValues: {
+              ':ids': { L: attendee ? [{ S: attendee.id }] : [] },
+              ':names': { L: attendee ? [{ S: attendee.name }] : [] },
+              ':match': { S: attendee ? 'qr' : 'unassigned' },
+              ':now': { S: now },
+              ':manual': { S: 'manual' },
+              ':divider': { S: 'divider' },
+              ...(attendee ? { ':id': { S: attendee.id }, ':name': { S: attendee.name } } : {}),
+            },
+          }),
+        )
+        .catch(() => undefined);
+    }
+    start = res.LastEvaluatedKey;
+    if (!start) break;
+  }
+}
+
+/** Fingerprint for logs: never the payload, which carries sealed contact details. */
+function payloadTag(payload: string): string {
+  return createHash('sha256').update(payload).digest('hex').slice(0, 8);
 }
 
 /**
@@ -110,6 +349,15 @@ async function boothAssignment(input: {
 }
 
 type Handler = Schema['processProPhoto']['functionHandler'];
+
+/** The offline booth code in this photo, if it fills enough of the frame. */
+async function dividerPayload(source: Buffer): Promise<string | null> {
+  const image = await Jimp.read(source);
+  const scale = scaleToLongEdge(image.width, image.height, DECODE_LONG_EDGE);
+  if (scale.resized) image.resize({ w: scale.width, h: scale.height });
+  const { data, width, height } = image.bitmap;
+  return findDividerCode(new Uint8ClampedArray(data.buffer, data.byteOffset, data.length), width, height);
+}
 
 async function bodyOf(key: string): Promise<Buffer | null> {
   const result = await s3
@@ -206,7 +454,8 @@ export const handler: Handler = async (event) => {
     .catch(() => null);
   const p = profile?.Item;
   // A booth event delivers the original itself, so it is always kept there.
-  const booth = await isBoothEvent(eventId);
+  const boothRow = await boothEvent(eventId);
+  const booth = boothRow.booth;
   const keepOriginal = booth || p?.keepOriginals?.BOOL === true;
   const longEdge = previewLongEdge(
     p?.defaultPreviewResolution?.N ? Number(p.defaultPreviewResolution.N) : null,
@@ -216,7 +465,7 @@ export const handler: Handler = async (event) => {
   if (!source) throw new Error('That upload could not be read.');
 
   const offsetN = connectionRow?.Item?.boothClockOffsetMs?.N;
-  const boothFields = booth
+  let boothFields: Record<string, AttributeValue> = booth
     ? await boothAssignment({
         eventId,
         sub,
@@ -224,6 +473,69 @@ export const handler: Handler = async (event) => {
         offsetMs: offsetN !== undefined ? Number(offsetN) : null,
       })
     : {};
+
+  // Offline booth (docs/booth-mode.md): the camera's own clock orders photos
+  // against QR dividers shot on the same camera.
+  const cameraAt = booth ? cameraAtISO(exifCaptureTime(source)) : null;
+  let divider: { attendee: { id: string; name: string } | null } | null = null;
+  if (booth && BOOTH_PRIVATE_KEY) {
+    const payload = await dividerPayload(source).catch(() => null);
+    if (payload) {
+      const opened = await openContact({ payload, eventId, privateKeyPkcs8: BOOTH_PRIVATE_KEY });
+      const attendee = opened
+        ? await upsertOfflineAttendee(eventId, boothRow.owner, opened.personId, opened.contact)
+        : null;
+      if (!opened) console.warn('Booth divider did not open for this event', { uploadId, tag: payloadTag(payload) });
+      divider = { attendee };
+      boothFields = {
+        boothMatch: { S: 'divider' },
+        boothDivider: { BOOL: true },
+        boothAttendeeIds: { L: [] },
+        boothAttendeeNames: { L: [] },
+        ...(attendee ? { boothDividerFor: { S: attendee.name } } : {}),
+        ...(cameraAt ? { cameraAt: { S: cameraAt } } : { boothDividerNoTime: { BOOL: true } }),
+      };
+    }
+  }
+  if (booth && cameraAt && !divider) {
+    boothFields.cameraAt = { S: cameraAt };
+    const fromDivider = await latestCameraScan(eventId, sub, cameraAt);
+    if (fromDivider) {
+      const who = fromDivider.attendeeId === NOBODY ? null : fromDivider;
+      boothFields = {
+        ...boothFields,
+        boothMatch: { S: who ? 'qr' : 'unassigned' },
+        boothAttendeeIds: { L: who ? [{ S: who.attendeeId }] : [] },
+        boothAttendeeNames: { L: who ? [{ S: who.name }] : [] },
+        ...(who ? { boothAttendeeId: { S: who.attendeeId }, boothAttendeeName: { S: who.name } } : {}),
+      };
+      if (!who) {
+        delete boothFields.boothAttendeeId;
+        delete boothFields.boothAttendeeName;
+      }
+    }
+  }
+  if (divider && cameraAt && SCAN_TABLE) {
+    await dynamo
+      .send(
+        new PutItemCommand({
+          TableName: SCAN_TABLE,
+          Item: {
+            id: { S: dividerScanId(eventId, sub, uploadId) },
+            __typename: { S: 'BoothScan' },
+            scanKey: { S: cameraScanKey(eventId, sub) },
+            eventId: { S: eventId },
+            photographerId: { S: sub },
+            attendeeId: { S: divider.attendee?.id ?? NOBODY },
+            attendeeName: { S: divider.attendee?.name ?? 'Unreadable code' },
+            scannedAt: { S: cameraAt },
+            createdAt: { S: new Date().toISOString() },
+            updatedAt: { S: new Date().toISOString() },
+          },
+        }),
+      )
+      .catch((error) => console.error('Could not record a booth divider', { uploadId, error: (error as Error).message }));
+  }
 
   let previewWritten = false;
   let thumbnailWritten = false;
@@ -338,6 +650,10 @@ export const handler: Handler = async (event) => {
           console.error('Booth original could not be cleaned', { uploadId, error: (error as Error).message });
         });
     }
+  }
+
+  if (divider && cameraAt) {
+    await rematchAfterDivider(eventId, sub, cameraAt, divider.attendee).catch(() => undefined);
   }
 
   const discard = discardDecision({ previewWritten, thumbnailWritten, keepOriginal });

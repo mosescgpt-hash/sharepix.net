@@ -445,9 +445,19 @@ const schema = a.schema({
       // the single fields above mirror the first. Edited by assignBoothPhotos.
       boothAttendeeIds: a.string().array(),
       boothAttendeeNames: a.string().array(),
-      // 'capture' | 'upload' | 'manual' (the photographer fixed it) | 'unassigned'.
+      // 'capture' | 'upload' | 'manual' (the photographer fixed it) | 'unassigned'
+      // | 'qr' (follows an offline QR divider) | 'divider' (the code photo
+      // itself, never delivered). docs/booth-mode.md.
       boothMatch: a.string(),
       capturedAt: a.datetime(),
+      // The camera's own clock reading (no offset), ordering photos against
+      // offline QR dividers shot on the same camera.
+      cameraAt: a.string(),
+      boothDivider: a.boolean(),
+      // Masked label of the divider's person ("j***@gmail.com"), for fix-up.
+      boothDividerFor: a.string(),
+      // A divider whose photo had no camera time: it cannot split the stream.
+      boothDividerNoTime: a.boolean(),
       // One of PUBLISH_STATUSES. Guests see 'published' and nothing else.
       publishStatus: a.string(),
       publishedAt: a.datetime(),
@@ -578,7 +588,19 @@ const schema = a.schema({
       eventId: a.id().required(),
       eventOwner: a.string(),
       name: a.string().required(),
-      email: a.string().required(),
+      // Contact details are never shown to the host (docs/booth-mode.md):
+      // admin-only fields, read by the delivery function with IAM. The host
+      // sees contactLabel, a masked form ("j***@gmail.com", "***-***-4567").
+      // At least one of email/phone is set.
+      email: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      phone: a.string().authorization((allow) => [allow.group('ADMINS')]),
+      contactLabel: a.string(),
+      // When the attendee agreed to be texted. No texts without it.
+      smsConsentAt: a.datetime(),
+      smsStopped: a.boolean(),
+      // 'online' (signup page) or 'offline-qr' (decrypted from a divider).
+      signupSource: a.string(),
+      offlinePersonId: a.string(),
       token: a.string().required(),
       // The key to this person's private gallery (step 4). Separate from the
       // QR token, which is shown and printed; this one is only emailed.
@@ -1638,8 +1660,11 @@ const schema = a.schema({
     .arguments({
       eventId: a.id().required(),
       name: a.string().required(),
-      email: a.string().required(),
+      // Email and/or a cell number; at least one (booth-signup/signup.ts).
+      email: a.string(),
+      phone: a.string(),
       consent: a.boolean().required(),
+      smsConsent: a.boolean(),
     })
     .returns(a.ref('BoothSignupResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])

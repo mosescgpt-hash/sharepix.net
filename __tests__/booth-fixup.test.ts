@@ -3,6 +3,7 @@ import {
   MAX_RECIPIENTS,
   applyAssignment,
   isAssignAction,
+  matchAfter,
   recipientsOf,
 } from '../amplify/functions/booth-scan/recipients';
 import { boothGroups } from '../lib/boothGroups';
@@ -79,6 +80,8 @@ describe('the server keeps the fix-ups honest', () => {
   });
 
   it('marks a fixed photo as manual, so it leaves the check group', () => {
-    expect(handler).toContain("':match': { S: first ? 'manual' : 'unassigned' }");
+    expect(handler).toContain("':match': { S: matchAfter(action, next.length) }");
+    expect(matchAfter('add', 1)).toBe('manual');
+    expect(matchAfter('remove', 0)).toBe('unassigned');
   });
 });

@@ -8,6 +8,7 @@ import {
   BOOTH_CONSENT_TEXT,
   KIOSK_RESET_SECONDS,
   boothQrPayload,
+  boothSmsConsentText,
   boothStorageKey,
 } from '@/lib/booth';
 import type { QREvent } from '@/lib/types';
@@ -50,6 +51,8 @@ export default function BoothSignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [smsConsent, setSmsConsent] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Saved | null>(null);
@@ -69,6 +72,8 @@ export default function BoothSignupPage() {
     setName('');
     setEmail('');
     setConsent(false);
+    setPhone('');
+    setSmsConsent(false);
     setError(null);
     setSecondsLeft(KIOSK_RESET_SECONDS);
     nameInput.current?.focus();
@@ -90,7 +95,14 @@ export default function BoothSignupPage() {
     setWorking(true);
     setError(null);
     try {
-      const result = await boothSignUp({ eventId, name, email, consent });
+      const result = await boothSignUp({
+        eventId,
+        name,
+        email: email.trim(),
+        phone: phone.trim(),
+        consent: email.trim() ? consent : false,
+        smsConsent: phone.trim() ? smsConsent : false,
+      });
       if (!result.ok || !result.token) {
         setError(result.message || 'Sign-up did not go through. Please try again.');
         return;
@@ -130,7 +142,7 @@ export default function BoothSignupPage() {
               </h1>
               <p className="spx-body mt-3">
                 Show this code to the photographer before your photo. Your photos will be
-                emailed to you.
+                sent to you.
               </p>
               <div className="mx-auto mt-6 inline-block bg-white p-4">
                 <QRCodeSVG
@@ -206,22 +218,46 @@ export default function BoothSignupPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete={kiosk ? 'off' : 'email'}
-                    required
                     className="spx-input mt-1 w-full"
                   />
                 </label>
-                <label className="flex items-start gap-3 text-sm">
+                {email.trim() ? (
+                  <label className="flex items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={consent}
+                      onChange={(e) => setConsent(e.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>{BOOTH_CONSENT_TEXT}</span>
+                  </label>
+                ) : null}
+                <label className="block">
+                  <span className="text-sm font-medium">Cell number (optional if you gave an email)</span>
                   <input
-                    type="checkbox"
-                    checked={consent}
-                    onChange={(e) => setConsent(e.target.checked)}
-                    className="mt-1"
+                    type="tel"
+                    inputMode="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    autoComplete={kiosk ? 'off' : 'tel'}
+                    maxLength={20}
+                    className="spx-input mt-1 w-full"
                   />
-                  <span>{BOOTH_CONSENT_TEXT}</span>
                 </label>
+                {phone.trim() ? (
+                  <label className="flex items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={smsConsent}
+                      onChange={(e) => setSmsConsent(e.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>{boothSmsConsentText(event?.name)}</span>
+                  </label>
+                ) : null}
                 <p className="pl-7 text-xs leading-relaxed text-charcoal/65">
                   The host can see your sign-up and photos. The photographer uses your name and
-                  code to match your photos. Approved photos are emailed through a private link;
+                  code to match your photos. Approved photos are sent (by email, or by text if you ask) through a private link;
                   anyone you share the link with can open it. Full-resolution files are removed
                   30 days after the event. If you are under 13, ask a parent or guardian to enter
                   your name and their email and sign up for you. Read our <a href="/privacy" className="underline">Privacy Policy</a>.
@@ -229,7 +265,12 @@ export default function BoothSignupPage() {
                 {error ? <Notice tone="error">{error}</Notice> : null}
                 <button
                   type="submit"
-                  disabled={working || !consent}
+                  disabled={
+                    working ||
+                    (!email.trim() && !phone.trim()) ||
+                    (email.trim() !== '' && !consent) ||
+                    (phone.trim() !== '' && !smsConsent)
+                  }
                   className="spx-btn-ink w-full disabled:opacity-40"
                 >
                   {working ? 'Signing up…' : 'Get my code'}
