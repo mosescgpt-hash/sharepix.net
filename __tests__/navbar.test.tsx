@@ -7,6 +7,7 @@ import Navbar from '@/components/Navbar';
 const routeHandlers: Record<string, Array<() => void>> = {};
 jest.mock('next/router', () => ({
   useRouter: () => ({
+    replace: jest.fn(),
     events: {
       on: (event: string, handler: () => void) => {
         routeHandlers[event] = [...(routeHandlers[event] ?? []), handler];
@@ -18,7 +19,16 @@ jest.mock('next/router', () => ({
   }),
 }));
 
+let mockUser: import('@/lib/authUser').AuthUser = { status: 'out' };
+const mockSignOut = jest.fn(async () => {});
+jest.mock('@/lib/authUser', () => ({
+  useAuthUser: () => mockUser,
+  signOutAndGoHome: () => mockSignOut(),
+}));
+
 beforeEach(() => {
+  mockUser = { status: 'out' };
+  mockSignOut.mockClear();
   for (const key of Object.keys(routeHandlers)) delete routeHandlers[key];
 });
 
@@ -56,5 +66,42 @@ describe('Navbar mobile menu', () => {
     });
 
     expect(document.getElementById('primary-navigation')).not.toBeInTheDocument();
+  });
+});
+
+describe('Navbar account state', () => {
+  it('shows a neutral placeholder while auth is unknown, never "Sign in"', () => {
+    mockUser = { status: 'loading' };
+    render(<Navbar />);
+    expect(screen.queryByText('Sign in')).not.toBeInTheDocument();
+    expect(screen.getByTestId('auth-placeholder')).toBeInTheDocument();
+  });
+
+  it('signed out shows Sign in', () => {
+    render(<Navbar />);
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
+  });
+
+  it('signed in shows the account menu with events, create and sign out', async () => {
+    mockUser = { status: 'in', label: 'Seth', email: 'seth@example.com' };
+    const user = userEvent.setup();
+    render(<Navbar />);
+    expect(screen.queryByText('Sign in')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Hi, Seth/ }));
+    expect(screen.getByRole('menuitem', { name: 'My events' })).toHaveAttribute('href', '/my-events');
+    expect(screen.getByRole('menuitem', { name: 'Create event' })).toHaveAttribute('href', '/create-event');
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }));
+    expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it('mobile menu reflects the signed-in state too', async () => {
+    mockUser = { status: 'in', label: 'My account', email: null };
+    const user = userEvent.setup();
+    render(<Navbar />);
+    await user.click(screen.getByRole('button', { name: 'Open menu' }));
+    const panel = document.getElementById('primary-navigation')!;
+    expect(panel).toHaveTextContent('Signed in');
+    expect(panel).toHaveTextContent('Sign out');
+    expect(panel).not.toHaveTextContent('Sign in');
   });
 });
