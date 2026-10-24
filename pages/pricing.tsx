@@ -27,7 +27,7 @@ const faqs = [
   },
   {
     q: 'Can I moderate photos?',
-    a: 'You can delete any photo on either plan. The paid plan adds approve-before-showing moderation, so nothing appears in the gallery until you have seen it.',
+    a: 'Yes. Automatic screening holds back photos that look explicit until you review them, and you can hide or delete any photo at any time. Videos are not automatically screened, so you can switch guest videos off if you want screened media only.',
   },
   {
     q: 'Is there a limit on how many photos each guest can share?',

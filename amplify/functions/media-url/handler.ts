@@ -1,8 +1,24 @@
-import { DynamoDBClient, GetItemCommand, BatchGetItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  BatchGetItemCommand,
+  QueryCommand,
+  type AttributeValue,
+} from '@aws-sdk/client-dynamodb';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Schema } from '../../data/resource';
-import { MAX_KEYS_PER_REQUEST, canSign, dedupeKeys, isProKey, proUploadIdOf } from './access';
+import {
+  MAX_KEYS_PER_REQUEST,
+  canSign,
+  dedupeKeys,
+  photoStemOf,
+  withheldPhotoStems,
+  isEventPhotoKey,
+  isHostOrAdmin,
+  isProKey,
+  proUploadIdOf,
+} from './access';
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
@@ -95,6 +111,13 @@ export const handler: Handler = async (event) => {
   // rejected or still-in-review photo is dropped whatever its key says.
   const publishedPro = await publishedProIds(keys);
 
+  // Guest photos held by screening or hidden by the host are not signed for
+  // guests — the same rule listEventPhotos applies to the gallery and the
+  // slideshow. Read only when a non-host asks for event photo keys.
+  const host = isHostOrAdmin(caller, eventState.owner);
+  const withheld =
+    !host && keys.some(isEventPhotoKey) ? await withheldGuestPhotos(eventId) : null;
+
   return Promise.all(
     keys.map(async (key) => {
       const decision = canSign({ eventId, key, event: eventState, caller });
@@ -104,6 +127,9 @@ export const handler: Handler = async (event) => {
       // their gallery should see what their guests see; the photographer's own
       // queue is served by the Pro dashboard, not by this function.
       if (isProKey(key) && !publishedPro.has(proUploadIdOf(key))) {
+        return { key, url: null };
+      }
+      if (withheld && isEventPhotoKey(key) && (withheld === 'all' || withheld.has(photoStemOf(key)))) {
         return { key, url: null };
       }
       try {
@@ -164,4 +190,49 @@ async function publishedProIds(keys: string[]): Promise<Set<string>> {
     }
   }
   return published;
+}
+
+const PHOTOS_BY_EVENT_INDEX = 'photosByEventId';
+
+/**
+ * Stems of this event's photos that guests may not see. Fails closed: if the
+ * read fails, 'all' — no guest photo is signed — matching the Pro check above.
+ */
+async function withheldGuestPhotos(eventId: string): Promise<Set<string> | 'all'> {
+  if (!PHOTO_TABLE) return 'all';
+  const rows: Parameters<typeof withheldPhotoStems>[0] = [];
+  let startKey: Record<string, AttributeValue> | undefined;
+  try {
+    do {
+      const result = await dynamo.send(
+        new QueryCommand({
+          TableName: PHOTO_TABLE,
+          IndexName: PHOTOS_BY_EVENT_INDEX,
+          KeyConditionExpression: '#eventId = :eventId',
+          ProjectionExpression: 's3Key, previewS3Key, thumbS3Key, approved, moderationStatus',
+          ExpressionAttributeNames: { '#eventId': 'eventId' },
+          ExpressionAttributeValues: { ':eventId': { S: eventId } },
+          ExclusiveStartKey: startKey,
+        }),
+      );
+      for (const item of result.Items ?? []) {
+        rows.push({
+          s3Key: item.s3Key?.S,
+          previewS3Key: item.previewS3Key?.S,
+          thumbS3Key: item.thumbS3Key?.S,
+          approved: item.approved?.BOOL,
+          moderationStatus: item.moderationStatus?.S,
+        });
+      }
+      startKey = result.LastEvaluatedKey;
+    } while (startKey);
+  } catch (error) {
+    console.error('Could not read photo visibility; guest photo keys will not resolve', {
+      at: new Date().toISOString(),
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return 'all';
+  }
+  return withheldPhotoStems(rows);
 }

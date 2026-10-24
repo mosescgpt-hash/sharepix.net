@@ -63,7 +63,7 @@ const INCLUDED: string[] = [
   'Live slideshow for a venue screen, updating as photos arrive',
   'ZIP download of everything, in one click',
   'Guest names and captions on every upload',
-  'Approve-before-showing moderation, and delete anything at any time',
+  'Automatic screening holds back explicit-looking photos; hide or delete anything at any time',
   'Your own cover photo or background, fonts, colours and layout',
 ];
 

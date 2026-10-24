@@ -40,7 +40,7 @@ export const DEMO_STEP_COPY: Record<DemoStep, DemoStepCopy> = {
     role: 'host',
     label: 'Approve it',
     blurb:
-      'This event has moderation on, so your photo is waiting for the host. That is you now.',
+      'In this demo your photo is waiting for the host to review it, the way a photo flagged by screening would. That is you now.',
   },
   gallery: {
     role: 'guest',
