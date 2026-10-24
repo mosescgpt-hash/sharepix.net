@@ -6,7 +6,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { createHash, randomBytes } from 'node:crypto';
 import type { Schema } from '../../data/resource';
-import { MAX_ATTENDEES_PER_EVENT, boothOpen, validateSignup } from './signup';
+import { MAX_ATTENDEES_PER_EVENT, boothOpen, maskedContact, validateSignup } from './signup';
 
 const dynamo = new DynamoDBClient({});
 
@@ -77,8 +77,10 @@ export const handler: Handler = async (event) => {
 
   const checked = validateSignup(event.arguments);
   if (!checked.ok) return fail(checked.reason);
-  const { name, email } = checked;
-  const id = attendeeId(eventId, email);
+  const { name, email, phone, smsConsent } = checked;
+  // Email when given, else the phone: the same derivation the offline QR path
+  // uses (process-pro-photo/boothOffline.ts), so one person is one row.
+  const id = attendeeId(eventId, (email ?? phone) as string);
   const now = new Date().toISOString();
 
   // Already signed up: hand back the same token. The stored row is left as it
@@ -92,8 +94,9 @@ export const handler: Handler = async (event) => {
         new UpdateItemCommand({
           TableName: ATTENDEE_TABLE,
           Key: { id: { S: id } },
-          UpdateExpression: 'SET galleryKey = if_not_exists(galleryKey, :key)',
-          ExpressionAttributeValues: { ':key': { S: newGalleryKey() } },
+          UpdateExpression:
+            'SET galleryKey = if_not_exists(galleryKey, :key), contactLabel = if_not_exists(contactLabel, :label)',
+          ExpressionAttributeValues: { ':key': { S: newGalleryKey() }, ':label': { S: maskedContact(email, phone) } },
         }),
       )
       .catch(() => undefined);
@@ -133,7 +136,11 @@ export const handler: Handler = async (event) => {
           // The host's owner string, so they can read their own attendees.
           ...(ev.owner?.S ? { eventOwner: { S: ev.owner.S } } : {}),
           name: { S: name },
-          email: { S: email },
+          ...(email ? { email: { S: email } } : {}),
+          ...(phone ? { phone: { S: phone } } : {}),
+          ...(phone && smsConsent ? { smsConsentAt: { S: now } } : {}),
+          contactLabel: { S: maskedContact(email, phone) },
+          signupSource: { S: 'online' },
           token: { S: token },
           galleryKey: { S: newGalleryKey() },
           consentedAt: { S: now },

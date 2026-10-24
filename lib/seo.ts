@@ -147,6 +147,7 @@ export const PRIVATE_ROUTES = [
   '/global-admin',
   '/my-events',
   '/booth/[eventId]',
+  '/booth/kiosk/[eventId]',
   '/booth/photos/[key]',
   '/pro/join',
   '/pro/profile',

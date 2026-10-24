@@ -40,7 +40,7 @@ describe('the field the pipeline reads actually exists', () => {
     // (docs/booth-mode.md), whose whole product is the full-resolution file —
     // and that is read from the event row, never from the request.
     expect(pipeline).toContain('const keepOriginal = booth || p?.keepOriginals?.BOOL === true;');
-    expect(pipeline).toContain('const booth = await isBoothEvent(eventId);');
+    expect(pipeline).toContain('const booth = boothRow.booth;');
   });
 });
 

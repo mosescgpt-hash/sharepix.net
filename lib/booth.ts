@@ -43,3 +43,48 @@ export function boothGalleryPath(galleryKey: string): string {
 export function boothSignupPath(eventId: string, kiosk = false): string {
   return `/booth/${eventId}${kiosk ? '?kiosk=1' : ''}`;
 }
+
+/**
+ * The texting consent beside the cell-number box. Exact wording, approved for
+ * toll-free registration (SMS_SETUP.md) — change it there too if it changes.
+ */
+export function boothSmsConsentText(eventName: string | null | undefined): string {
+  const event = (eventName ?? '').trim() || 'this event';
+  return `Text me a link to my photos from ${event}. Msg & data rates may apply. Reply STOP to opt out.`;
+}
+
+/** The offline kiosk (docs/booth-mode.md, "Offline kiosk"). */
+export function boothKioskPath(eventId: string): string {
+  return `/booth/kiosk/${eventId}`;
+}
+
+/**
+ * What the offline kiosk keeps between people: the event name (to work after
+ * a reload with no signal), how many codes it made, and their random person
+ * ids. NEVER a name, email or phone — those exist only in the sealed code.
+ */
+export interface KioskState {
+  eventName: string;
+  count: number;
+  personIds: string[];
+}
+
+export function kioskStorageKey(eventId: string): string {
+  return `sharepix-kiosk:${eventId}`;
+}
+
+/** Parse stored kiosk state, dropping anything that is not exactly the allowed shape. */
+export function parseKioskState(raw: string | null): KioskState | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Partial<KioskState>;
+    if (typeof v.eventName !== 'string' || typeof v.count !== 'number' || !Array.isArray(v.personIds)) return null;
+    return {
+      eventName: v.eventName.slice(0, 120),
+      count: Math.max(0, Math.floor(v.count)),
+      personIds: v.personIds.filter((id): id is string => typeof id === 'string' && /^[A-Za-z0-9_-]{12}$/.test(id)).slice(-5000),
+    };
+  } catch {
+    return null;
+  }
+}

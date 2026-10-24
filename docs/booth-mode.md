@@ -161,6 +161,96 @@ Each step is one PR and works on its own.
    minutes). All of it sends nothing unless `EMAIL_SENDING_ENABLED` is
    `true`; removal runs regardless, because it is cleanup, not mail.
 
+## Offline kiosk (no signal at the venue)
+
+Open `/booth/kiosk/<eventId>` once **with a connection** (the host panel links
+it). The service worker (`public/sw.js`, cache `sharepix-kiosk-v1`) keeps the
+page and its build files, so it reloads and works with no signal. The badge at
+the top shows Online/Offline and "Saved for offline".
+
+Per person: enter an email and/or a cell number (at least one), tick the
+matching consent, tap **Get my code**. The page encrypts the details on the
+device and shows a QR. The photographer takes **one photo of the QR, filling
+most of the frame**, then that person's photos. Tap **Next person** (or wait
+90 seconds) and the screen is wiped.
+
+Texting consent wording, shown exactly:
+"Text me a link to my photos from [event]. Msg & data rates may apply. Reply STOP to opt out."
+
+### Privacy model
+
+- The host never sees a guest's email or phone. Host screens show a masked
+  label only (`j***@gmail.com`, `***-***-4567`); those fields are admin-only in
+  the data model and the host's queries never ask for them.
+- The kiosk keeps no contact details: no IndexedDB, no cache of typed values.
+  localStorage holds only the event name, a count and random person ids.
+- Contact details travel only inside the QR, encrypted to the SharePix public
+  key. Only the server (the photo processor) holds the private key.
+
+### Code format
+
+`SPB1.<personId>.<base64url(ephemeralKey | iv | ciphertext)>` — about 200
+characters for a typical email, ~510 for a 254-character one (fits QR level M).
+ECIES: P-256 ECDH → HKDF-SHA256 (salt = ephemeral public key, info
+`sharepix-booth-v1`) → AES-128-GCM, with `SPB1.<eventId>.<personId>` as
+authenticated data so a code only opens for its own event and person id.
+`lib/boothSeal.ts` is copied byte-for-byte to
+`amplify/functions/process-pro-photo/boothSeal.ts` (a test enforces it).
+
+### Keys
+
+```
+node scripts/booth-keygen.mjs /some/private/dir
+```
+
+It prints `NEXT_PUBLIC_BOOTH_PUBLIC_KEY=...` and writes the private key to
+`booth-private-key.txt` (mode 600; it refuses to overwrite). In Amplify Console →
+Hosting → Environment variables set:
+
+| Variable | Value | Secret? |
+| --- | --- | --- |
+| `NEXT_PUBLIC_BOOTH_PUBLIC_KEY` | printed public key | no (it ships to browsers) |
+| `BOOTH_PRIVATE_KEY` | contents of the file | **yes** — never commit, never in client code |
+
+Then delete the file and redeploy. Without the public key the kiosk shows a
+setup notice; without the private key, offline codes are not read. Rotating
+keys makes codes made with the old key unreadable, so do it between events.
+
+### How photos are split
+
+The processor reads each pro photo. A booth code that is **large in frame**
+(bounding box ≥ 2% of the image and its short side ≥ 12% of the image's short
+side, decoded at 1000 px) is a **divider**: it is decrypted, the attendee is
+created or matched (same email → same attendee as an online sign-up), and the
+photo itself is never sent. Photos are then ordered by the camera's raw EXIF
+clock, per photographer: each photo goes to the latest divider at or before it.
+
+Tie-breaks and limits:
+
+- A photo in the same second as a divider goes to the **new** person.
+- Two dividers in the same second can't be ordered (EXIF has 1-second
+  resolution), so photos in that second may go to either. Leave a second or more between people.
+- Photos with no EXIF time, and photos before the first divider, are flagged
+  "Needs a person" for the host. A divider with no EXIF time is flagged too.
+- A code that is unreadable or from another event still counts as a divider
+  for nobody, so the previous person's run ends there.
+- Uploads can arrive in any order: a late divider re-matches photos after it.
+- In fix-up the host can **Mark as divider** (e.g. a QR shot the scanner
+  missed); dividers are listed under "QR code shots — never sent".
+
+**If the QR photo is lost or unreadable, that sign-up is lost** — there is no
+other copy of the contact details. The photographer should check the shot.
+
+### Texting
+
+Off unless `BOOTH_SMS_ENABLED=true` and `BOOTH_SMS_ORIGINATION_NUMBER` (a
+registered toll-free number) are set on the booth-deliveries function; see
+SMS_SETUP notes. A text goes only to someone who ticked the texting consent,
+only after the host approves photos, for the first "ready" message and the
+reminder (not every extra batch). Before each send, SNS opt-out is checked; a
+STOP marks the attendee `smsStopped` and no more texts go. Message:
+"SharePix: your photos from <event> are ready. <link> Reply STOP to opt out."
+
 ## Decisions
 
 1. **Price:** included with every event, as an option the host turns on.

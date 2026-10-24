@@ -10,7 +10,7 @@ describe('booth sign-up rules', () => {
   it('stores a tidy name and a lower-cased email, with consent', () => {
     expect(
       validateSignup({ name: '  Alex \n Rivera ', email: ' Alex@Example.COM ', consent: true }),
-    ).toEqual({ ok: true, name: 'Alex Rivera', email: 'alex@example.com' });
+    ).toEqual({ ok: true, name: 'Alex Rivera', email: 'alex@example.com', phone: null, smsConsent: false });
   });
 
   it('refuses a sign-up without consent, a name or a real email', () => {
@@ -41,7 +41,7 @@ describe('booth sign-up rules', () => {
     // it can never rename anyone or replace a key.
     const updates = [...handler.matchAll(/new UpdateItemCommand\(\{\s*TableName: ATTENDEE_TABLE[\s\S]*?\}\)/g)].map((m) => m[0]);
     expect(updates).toHaveLength(1);
-    expect(updates[0]).toContain("UpdateExpression: 'SET galleryKey = if_not_exists(galleryKey, :key)'");
+    expect(updates[0]).toContain("'SET galleryKey = if_not_exists(galleryKey, :key), contactLabel = if_not_exists(contactLabel, :label)'");
     expect(handler).toContain("return { ok: true, message: 'Welcome back.', token: known, name };");
     expect(handler).toContain("ConditionExpression: 'attribute_not_exists(id)'");
   });

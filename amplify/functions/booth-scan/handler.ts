@@ -15,6 +15,8 @@ import {
   isAssignAction,
   recipientsOf,
   type Recipient,
+  actionNeedsTarget,
+  matchAfter,
 } from './recipients';
 
 const dynamo = new DynamoDBClient({});
@@ -97,7 +99,7 @@ async function assign(eventId: string, sub: string, args: Args) {
   }
 
   let target: Recipient | null = null;
-  if (action !== 'clear') {
+  if (actionNeedsTarget(action)) {
     target = await findAttendee(eventId, String(args.attendeeId ?? '').trim(), String(args.token ?? '').trim());
     if (!target) return { ok: false, message: 'That person is not signed up for this event.', updated: 0 };
   }
@@ -124,16 +126,19 @@ async function assign(eventId: string, sub: string, args: Args) {
         TableName: PHOTO_TABLE,
         Key: { id: { S: uploadId } },
         UpdateExpression: first
-          ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothAttendeeId = :id, boothAttendeeName = :name, boothMatch = :match, updatedAt = :now'
-          : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName',
+          ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothAttendeeId = :id, boothAttendeeName = :name, boothMatch = :match, updatedAt = :now REMOVE boothDivider'
+          : action === 'divider'
+            ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothDivider = :true, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName'
+            : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothDivider',
         // Only the photographer's own photo, re-checked at write time.
         ConditionExpression: 'photographerId = :sub',
         ExpressionAttributeValues: {
           ':ids': { L: next.map((r) => ({ S: r.id })) },
           ':names': { L: next.map((r) => ({ S: r.name })) },
-          ':match': { S: first ? 'manual' : 'unassigned' },
+          ':match': { S: matchAfter(action, next.length) },
           ':now': { S: now },
           ':sub': { S: sub },
+          ...(action === 'divider' ? { ':true': { BOOL: true } } : {}),
           ...(first ? { ':id': { S: first.id }, ':name': { S: first.name } } : {}),
         },
       }),
@@ -141,7 +146,9 @@ async function assign(eventId: string, sub: string, args: Args) {
     updated += 1;
   }
   const what =
-    action === 'clear'
+    action === 'divider'
+      ? 'marked as dividers (never sent)'
+      : action === 'clear'
       ? 'unassigned'
       : action === 'remove'
         ? `no longer going to ${target?.name}`

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Notice from '@/components/Notice';
 import { listBoothAttendees, resendBoothEmail } from '@/lib/api';
-import { boothGalleryPath, boothSignupPath } from '@/lib/booth';
+import { boothGalleryPath, boothKioskPath, boothSignupPath } from '@/lib/booth';
 import type { BoothAttendeeRow } from '@/lib/types';
 
 /**
@@ -49,6 +49,7 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
 
   const signup = `${origin}${boothSignupPath(eventId)}`;
   const kiosk = `${origin}${boothSignupPath(eventId, true)}`;
+  const offlineKiosk = `${origin}${boothKioskPath(eventId)}`;
 
   return (
     <div id="booth" className="spx-card scroll-mt-24 mt-6 p-6">
@@ -80,6 +81,18 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
               Remembers nothing between people and clears itself after each sign-up.
             </span>
           </p>
+          <p>
+            <span className="font-medium">No signal at the venue?</span>{' '}
+            <a href={offlineKiosk} target="_blank" rel="noopener noreferrer" className="break-all text-pine underline">
+              Open the offline kiosk
+            </a>
+            <span className="mt-1 block text-xs text-charcoal/70">
+              Open it once with a connection; it then works offline. The photographer takes one
+              photo of each person&apos;s code, then their photos. Contact details are locked
+              inside the code — you see a masked label. If the code photo is lost, so is that
+              sign-up.
+            </span>
+          </p>
         </div>
       </div>
 
@@ -100,7 +113,9 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
           {rows.map((row) => (
             <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-3 py-2 text-sm">
               <span className="min-w-0 truncate font-medium">{row.name}</span>
-              <span className="min-w-0 truncate text-charcoal/70">{row.email}</span>
+              <span className="min-w-0 truncate text-charcoal/70">{row.contactLabel}
+                {row.texting ? ' · text' : ''}
+              </span>
               <span className="flex shrink-0 items-baseline gap-3 text-xs">
                 <span className="text-charcoal/70">
                   {row.emailsStopped

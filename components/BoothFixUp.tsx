@@ -37,7 +37,8 @@ export default function BoothFixUp({
   const [note, setNote] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const group = groups.find((g) => g.key === open) ?? null;
-  const isPersonGroup = group !== null && group.key !== 'check' && group.key !== 'none';
+  const isPersonGroup =
+    group !== null && group.key !== 'check' && group.key !== 'none' && group.key !== 'dividers';
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -49,7 +50,7 @@ export default function BoothFixUp({
   }
 
   async function run(
-    action: 'set' | 'add' | 'remove' | 'clear',
+    action: 'set' | 'add' | 'remove' | 'clear' | 'divider',
     target: { attendeeId?: string; token?: string } = {},
   ) {
     if (selected.size === 0) return;
@@ -212,6 +213,16 @@ export default function BoothFixUp({
                 >
                   Unassign
                 </button>
+                {group.key !== 'dividers' ? (
+                  <button
+                    type="button"
+                    disabled={working}
+                    onClick={() => void run('divider')}
+                    className="px-2 py-2 text-sm text-charcoal/70 underline disabled:opacity-40"
+                  >
+                    Mark as divider
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : null}

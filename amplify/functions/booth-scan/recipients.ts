@@ -13,8 +13,22 @@ export interface Recipient {
  * add    — this person as well (a group shot)
  * remove — not this person
  * clear  — nobody yet
+ * divider — this photo is a QR code / divider shot: nobody, never delivered.
+ *           (It does not read the code: only process-pro-photo can open an
+ *           offline code. Any other action on it makes it a photo again.)
  */
-export const ASSIGN_ACTIONS = ['set', 'add', 'remove', 'clear'] as const;
+export const ASSIGN_ACTIONS = ['set', 'add', 'remove', 'clear', 'divider'] as const;
+
+/** Actions that need no person. */
+export function actionNeedsTarget(action: AssignAction): boolean {
+  return action !== 'clear' && action !== 'divider';
+}
+
+/** boothMatch after an action. */
+export function matchAfter(action: AssignAction, recipients: number): string {
+  if (action === 'divider') return 'divider';
+  return recipients > 0 ? 'manual' : 'unassigned';
+}
 export type AssignAction = (typeof ASSIGN_ACTIONS)[number];
 
 export function isAssignAction(value: unknown): value is AssignAction {
@@ -33,7 +47,7 @@ export function applyAssignment(
   action: AssignAction,
   target: Recipient | null,
 ): Recipient[] {
-  if (action === 'clear') return [];
+  if (action === 'clear' || action === 'divider') return [];
   if (!target) return [...current];
   if (action === 'set') return [target];
   if (action === 'remove') return current.filter((r) => r.id !== target.id);
