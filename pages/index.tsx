@@ -321,8 +321,8 @@ const FEATURES = [
     body: 'Notes, photos and short video messages, signed by the people who were there.',
   },
   {
-    title: 'Hold everything for approval',
-    body: 'Switch on approvals and nothing appears until you release it. Included on every plan.',
+    title: 'Automatic photo screening',
+    body: 'Photos that look explicit are held back until you review them, and you can hide or delete anything at any time. Included on every plan.',
   },
   {
     title: 'One ZIP, every original',

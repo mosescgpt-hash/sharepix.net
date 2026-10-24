@@ -212,3 +212,59 @@ export function canSign({
 
   return { allowed: true, host: false };
 }
+
+/** True for an uploaded guest/host photo key (original, preview or thumb). */
+export function isEventPhotoKey(key: string): boolean {
+  const v = variantOf(key);
+  return v === 'original' || v === 'preview' || v === 'thumb';
+}
+
+/** The parts of a Photo row the guest-visibility check reads. */
+export interface PhotoVisibilityRow {
+  s3Key?: string | null;
+  previewS3Key?: string | null;
+  thumbS3Key?: string | null;
+  approved?: boolean | null;
+  moderationStatus?: string | null;
+}
+
+/**
+ * Whether a guest may see this photo: the same rule listEventPhotos applies to
+ * the public gallery and slideshow. Hidden by the host (`approved === false`)
+ * or held by screening (`moderationStatus === 'flagged'`) means no.
+ */
+export function guestMayView(row: PhotoVisibilityRow): boolean {
+  return row.approved !== false && row.moderationStatus !== 'flagged';
+}
+
+/**
+ * The photo a key belongs to, independent of variant: the event plus the file
+ * name with its extension and any -preview/-thumb suffix removed. Previews and
+ * thumbnails are derived from the original's name (lib/validation.ts,
+ * sanitize-upload), so all three variants of one photo share a stem even when
+ * the row does not record the derived keys.
+ */
+export function photoStemOf(key: string): string {
+  const match = key.match(/^events\/([^/]+)\/(?:photos|previews|thumbs)\/(.+)$/);
+  if (!match) return '';
+  const name = match[2].replace(/\.[^/.]+$/, '').replace(/-(?:preview|thumb)$/, '');
+  return `${match[1]}/${name}`;
+}
+
+/**
+ * Stems of photos guests must NOT see (hidden or flagged). A guest key whose
+ * stem is in this set gets no link, even if the guest knows the key (the
+ * uploader does). Unknown keys are left to the other rules so a photo whose
+ * row is still being written is not blanked.
+ */
+export function withheldPhotoStems(rows: PhotoVisibilityRow[]): Set<string> {
+  const withheld = new Set<string>();
+  for (const row of rows) {
+    if (guestMayView(row)) continue;
+    for (const key of [row.s3Key, row.previewS3Key, row.thumbS3Key]) {
+      const stem = key ? photoStemOf(key) : '';
+      if (stem) withheld.add(stem);
+    }
+  }
+  return withheld;
+}

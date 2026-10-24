@@ -190,7 +190,7 @@ export const USE_CASES: UseCase[] = [
       },
     ],
     benefits: [
-      'Moderation and deletion before anything goes public',
+      'Automatic screening of explicit photos, plus hide or delete anytime',
       'Location data removed automatically',
       'Live slideshow for the big screen',
       `Corporate plan for multiple events a year ($${CORPORATE_PLAN.price}/mo)`,
@@ -198,7 +198,7 @@ export const USE_CASES: UseCase[] = [
     faqs: [
       {
         question: 'Can we review photos before anyone sees them?',
-        answer: 'Yes. Turn on moderation and nothing appears in the gallery until you approve it.',
+        answer: 'Yes. Automatic screening holds back photos that look explicit until you review them, and you can hide or delete any photo at any time. Videos are not screened, so you can switch guest videos off.',
       },
       {
         question: 'Do photos include location data?',
@@ -244,7 +244,7 @@ export const USE_CASES: UseCase[] = [
       'Cosplay photo walls on a live slideshow',
       'Moments QR codes for each panel, contest or meetup',
       'No app for thousands of attendees',
-      'Moderation for all-ages events',
+      'Explicit-photo screening for all-ages events',
     ],
     faqs: [
       {
@@ -254,7 +254,7 @@ export const USE_CASES: UseCase[] = [
       },
       {
         question: 'Will this work for an all-ages crowd?',
-        answer: 'Yes. Turn on moderation so nothing appears in the gallery until it’s approved.',
+        answer: 'Yes. Automatic screening holds back photos that look explicit until you review them, and you can hide or delete any photo at any time. Videos are not screened, so you can switch guest videos off.',
       },
       {
         question: 'How many people can use one code?',
