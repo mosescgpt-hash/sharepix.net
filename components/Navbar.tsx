@@ -2,23 +2,44 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Logo from '@/components/Logo';
+import { signOutAndGoHome, useAuthUser } from '@/lib/authUser';
 
 const LINKS = [
   { href: '/weddings', label: 'Weddings' },
   { href: '/company-events', label: 'Company events' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/demo', label: 'Example' },
-  { href: '/my-events', label: 'Sign in' },
+];
+
+const ACCOUNT_LINKS = [
+  { href: '/my-events', label: 'My events' },
+  { href: '/create-event', label: 'Create event' },
 ];
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
+  const user = useAuthUser();
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOutAndGoHome(router.replace);
+    } finally {
+      setSigningOut(false);
+      setAccountOpen(false);
+    }
+  }
 
   // Without this the panel stays open across a client-side navigation and
   // covers the page the visitor just asked for.
   useEffect(() => {
-    const close = () => setMenuOpen(false);
+    const close = () => {
+      setMenuOpen(false);
+      setAccountOpen(false);
+    };
     router.events.on('routeChangeComplete', close);
     return () => router.events.off('routeChangeComplete', close);
   }, [router.events]);
@@ -63,9 +84,53 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link href="/create-event" className="spx-btn-ink px-6 py-3 text-sm">
-            Create an event
-          </Link>
+          {user.status === 'loading' ? (
+            <span aria-hidden="true" data-testid="auth-placeholder" className="inline-block h-4 w-16 rounded bg-charcoal/10" />
+          ) : user.status === 'out' ? (
+            <Link href="/sign-in" className="font-sans text-sm text-charcoal/75 transition hover:text-charcoal">
+              Sign in
+            </Link>
+          ) : (
+            <div className="relative">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={accountOpen}
+                aria-controls="account-menu"
+                onClick={() => setAccountOpen((o) => !o)}
+                className="font-sans text-sm text-charcoal/75 transition hover:text-charcoal"
+              >
+                {user.label === 'My account' ? 'My account' : `Hi, ${user.label}`} ▾
+              </button>
+              {accountOpen ? (
+                <div
+                  id="account-menu"
+                  role="menu"
+                  className="absolute right-0 mt-3 w-44 border border-charcoal/10 bg-canvas py-1 shadow-lg"
+                >
+                  {ACCOUNT_LINKS.map((link) => (
+                    <Link key={link.href} href={link.href} role="menuitem" className="block px-4 py-2 text-sm text-charcoal hover:bg-charcoal/5">
+                      {link.label}
+                    </Link>
+                  ))}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={signingOut}
+                    onClick={handleSignOut}
+                    className="block w-full px-4 py-2 text-left text-sm text-charcoal hover:bg-charcoal/5 disabled:opacity-50"
+                  >
+                    {signingOut ? 'Signing out…' : 'Sign out'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+          {user.status === 'in' ? null : (
+            <Link href="/create-event" className="spx-btn-ink px-6 py-3 text-sm">
+              Create an event
+            </Link>
+          )}
         </div>
       </nav>
 
@@ -83,6 +148,32 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          {user.status === 'loading' ? (
+            <span aria-hidden="true" className="block border-b border-charcoal/10 py-4">
+              <span className="inline-block h-4 w-20 rounded bg-charcoal/10" />
+            </span>
+          ) : user.status === 'out' ? (
+            <Link href="/sign-in" className="border-b border-charcoal/10 py-4 font-sans text-base text-charcoal">
+              Sign in
+            </Link>
+          ) : (
+            <>
+              <p className="pt-4 text-xs uppercase tracking-wide text-charcoal/60">
+                Signed in{user.label === 'My account' ? '' : ` as ${user.label}`}
+              </p>
+              <Link href="/my-events" className="border-b border-charcoal/10 py-4 font-sans text-base text-charcoal">
+                My events
+              </Link>
+              <button
+                type="button"
+                disabled={signingOut}
+                onClick={handleSignOut}
+                className="border-b border-charcoal/10 py-4 text-left font-sans text-base text-charcoal disabled:opacity-50"
+              >
+                {signingOut ? 'Signing out…' : 'Sign out'}
+              </button>
+            </>
+          )}
           <Link href="/create-event" className="spx-btn-ink mt-5 w-full">
             Create an event
           </Link>
