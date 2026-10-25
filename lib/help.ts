@@ -1183,7 +1183,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     audience: 'host',
     category: 'Photographers and booth mode',
     summary: 'Each person signs up, the photographer scans their code, and each person is emailed only their own photos.',
-    keywords: ['booth', 'booth mode', 'headshot', 'headshots', 'trade show', 'convention', 'expo', 'conference', 'kiosk', 'attendee', 'scan', 'badge', 'corporate', 'resend', 'sign up'],
+    keywords: ['booth', 'booth mode', 'headshot', 'headshots', 'trade show', 'convention', 'expo', 'conference', 'kiosk', 'attendee', 'scan', 'badge', 'corporate', 'resend', 'sign up', 'booth tab', 'approve', 'send everything'],
     blocks: [
       {
         kind: 'text',
@@ -1192,13 +1192,14 @@ export const HELP_ARTICLES: HelpArticle[] = [
       {
         kind: 'steps',
         steps: [
-          'On your dashboard, go to Extras and tap Turn on booth mode.',
-          'Share the sign-up link on a sign or badge, or tap Open kiosk mode on a tablet or computer at the booth. People enter their name and email, agree to be emailed, and get a QR code.',
-          'Before each person\'s photos, take one photo of their QR code. That photo marks where their photos start.',
-          'Back on Extras, under Booth photos, tap Upload booth photos and choose them all. We sort them by person using the QR code photos.',
-          'Check each person\'s photos. If one landed with the wrong person, select it and move it, add someone (for a group shot), or unassign it. QR code photos are shown in their own group and are never sent.',
-          'Tap Approve all for a person, or select photos and tap Approve selected. Within the hour, each person is emailed a private link to theirs.',
-          'Working with a photographer instead? Invite them with Add your photographer. They can scan and sort from their own review page, and you can still check and approve here.',
+          'On your dashboard, go to Extras and tap Turn on booth mode. A new Booth tab appears, with everything for booth mode in five numbered steps. You can also open it from Open the Booth tab on Extras.',
+          'Step 1, Sign people up: share the sign-up link or QR code on a sign or badge, or tap Open kiosk mode on a tablet or computer at the booth. No signal? Use Open the offline kiosk. People enter their name and email, agree to be emailed, and get a QR code.',
+          'When you take photos, take two photos of each person\'s QR code first, then their photos. Wait a second before you start the next person.',
+          'Step 2, Who signed up: see everyone, with their contact details hidden, whether they have been emailed, and a link to their photos.',
+          'Step 3, Upload your photos: tap Upload booth photos and choose them all, QR code photos included. We sort them by person.',
+          'Step 4, Check who\'s in each photo: tap a person, tap any photo that is not them, choose who it is of, and tap Move to this person. For a group photo, tap Also send to this person. You can also unassign a photo or mark it as a QR shot. QR code photos are never sent.',
+          'Step 5, Approve and send: each person shows Waiting for photos, Ready to approve or Sent. Tap Approve all for a person, or Approve and send everything (it asks first, because it emails real people). Within the hour, each person is emailed a private link to theirs.',
+          'Working with a photographer instead? Invite them with Add your photographer. They can scan and sort from their own review page, and you can still check and approve on the Booth tab.',
         ],
       },
       {

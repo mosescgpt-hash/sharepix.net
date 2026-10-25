@@ -6,7 +6,7 @@ import { codeOnly, readSource } from './sourceGuards';
  * dashboard source for each target, and check it sits in the tab it opens.
  */
 const ADMIN = codeOnly(readSource('pages/event/[eventId]/admin.tsx'));
-const TAB_ORDER = ['share', 'photos', 'design', 'guests', 'extras', 'event'];
+const TAB_ORDER = ['share', 'photos', 'design', 'guests', 'extras', 'booth', 'event'];
 const ALL = DASHBOARD_JUMPS.flatMap((g) => g.jumps);
 
 describe('the I want to… list', () => {

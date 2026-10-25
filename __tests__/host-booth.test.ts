@@ -50,11 +50,11 @@ describe('server paths for the host', () => {
 });
 
 describe('the booth admin screen', () => {
-  const card = readSource('components/BoothModeCard.tsx');
-  const host = readSource('components/HostBoothPhotos.tsx');
+  const host = readSource('components/BoothTab.tsx');
+  const sort = readSource('components/BoothSort.tsx');
   it('shows booth photos to the host', () => {
-    expect(card).toContain('<HostBoothPhotos eventId={eventId} />');
-    expect(host).toContain('onApprove={approve}');
+    expect(host).toContain('<BoothSort');
+    expect(sort).toContain('assignBoothPhotos');
     expect(host).toContain('requestProUploadSlot');
     expect(host).toContain("decideProPhoto(id, 'approve')");
   });

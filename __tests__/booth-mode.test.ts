@@ -91,8 +91,9 @@ describe('the pages', () => {
   it('offers booth mode on every event, with the attendee list once it is on', () => {
     const admin = readSource('pages/event/[eventId]/admin.tsx');
     expect(admin).toContain('on={event.boothMode === true}');
+    expect(admin).toContain('<BoothTab');
     const card = readSource('components/BoothModeCard.tsx');
-    expect(card).toContain('<BoothAttendees');
+    expect(card).toContain('Open the Booth tab');
     expect(card).toContain('Turn on booth mode');
   });
 });
