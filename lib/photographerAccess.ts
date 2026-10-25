@@ -204,3 +204,21 @@ export function formatPairingCode(code: string): string {
 export function normalizePairingCode(input: string | null | undefined): string {
   return (input ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, PAIRING_CODE_LENGTH);
 }
+
+/**
+ * Whether this caller may run Booth mode on this event themselves, with no
+ * photographer: upload booth photos, sort them by person, and approve them so
+ * they are emailed. Only on a booth-mode event, and only its host (the owner,
+ * stored as "<sub>::<loginId>") or an admin. A host shooting their own booth is
+ * the common case (a cruise kiosk), and it must not need a photographer invite.
+ */
+export function mayRunOwnBooth(
+  event: { owner?: string | null; boothMode?: boolean | null } | null | undefined,
+  sub: string,
+  groups?: readonly string[] | null,
+): boolean {
+  if (!event || event.boothMode !== true || !sub) return false;
+  if ((groups ?? []).includes('ADMINS')) return true;
+  const owner = event.owner ?? '';
+  return owner !== '' && owner.split('::')[0] === sub;
+}

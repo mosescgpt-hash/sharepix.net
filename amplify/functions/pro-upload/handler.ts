@@ -3,13 +3,14 @@ import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Schema } from '../../data/resource';
-import { connectionId, mayUploadToEvent } from './photographerAccess';
+import { connectionId, mayRunOwnBooth, mayUploadToEvent } from './photographerAccess';
 import { professionalKeys } from './professionalMedia';
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
 
 const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 const BUCKET = process.env.PHOTO_BUCKET_NAME as string;
 
 /** Long enough to push a 60 MB file from a venue's wifi, short enough to matter. */
@@ -64,7 +65,9 @@ export const handler: Handler = async (event) => {
   // One answer whether the event does not exist, the photographer was never
   // invited, or the invitation is still unaccepted. Anything more specific
   // would let somebody map which events exist and who shoots them.
-  if (!mayUploadToEvent(connection, eventId, sub)) {
+  // Or the host (or an admin) shooting their own booth-mode event.
+  const groups = (event.identity as { groups?: string[] | null } | null)?.groups ?? null;
+  if (!mayUploadToEvent(connection, eventId, sub) && !(await hostRunsBooth(eventId, sub, groups))) {
     throw new Error('That event could not be found.');
   }
 
@@ -86,3 +89,24 @@ export const handler: Handler = async (event) => {
 
   return { uploadId, uploadUrl: url, expiresInSeconds: UPLOAD_URL_TTL_SECONDS };
 };
+
+/** The host of a booth-mode event (docs/booth-mode.md) may upload booth photos. */
+async function hostRunsBooth(eventId: string, sub: string, groups: string[] | null): Promise<boolean> {
+  if (!EVENT_TABLE) return false;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        ProjectionExpression: 'id, boothMode, #owner',
+        ExpressionAttributeNames: { '#owner': 'owner' },
+      }),
+    )
+    .catch(() => null);
+  const item = found?.Item;
+  return mayRunOwnBooth(
+    item ? { owner: item.owner?.S ?? '', boothMode: item.boothMode?.BOOL === true } : null,
+    sub,
+    groups,
+  );
+}

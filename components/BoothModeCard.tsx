@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Notice from '@/components/Notice';
 import BoothAttendees from '@/components/BoothAttendees';
+import HostBoothPhotos from '@/components/HostBoothPhotos';
 import { setEventBoothModeAsHost } from '@/lib/api';
 
 /**
@@ -48,6 +49,7 @@ export default function BoothModeCard({
       {on ? (
         <>
           {origin ? <BoothAttendees eventId={eventId} origin={origin} /> : null}
+          <HostBoothPhotos eventId={eventId} />
           <p className="mt-2 text-right text-xs">
             <button
               type="button"
@@ -66,8 +68,8 @@ export default function BoothModeCard({
             Booth mode: headshots and trade shows
           </h2>
           <p className="spx-body mt-2 text-sm">
-            Each person signs up and gets a QR code. Your photographer scans it before their
-            shot, and each person is emailed only their own photos, full resolution, instead of
+            Each person signs up and gets a QR code. You (or your photographer) photograph the code before
+            each person's shot, and each person is emailed only their own photos, full resolution, instead of
             a shared gallery.
           </p>
           <button

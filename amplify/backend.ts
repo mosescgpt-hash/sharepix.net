@@ -2,6 +2,7 @@ import { defineBackend } from '@aws-amplify/backend';
 import { Duration, Stack } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { indexReadStatement } from './lib/indexGrants';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
@@ -256,6 +257,9 @@ bucket.grantPut(proUploadFn);
 connectionTable.grantReadData(proUploadFn);
 proUploadFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
 proUploadFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+// A booth-mode host may upload to their own event (mayRunOwnBooth).
+eventTable.grantReadData(proUploadFn);
+proUploadFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // Reads the original, writes the derivatives, deletes the original. The one
 // component that holds all three, which is why it is also the only one that
@@ -278,6 +282,9 @@ connectionTable.grantReadWriteData(decideProFn);
 photoTable.grantReadWriteData(decideProFn);
 decideProFn.addEnvironment('CONNECTION_TABLE_NAME', connectionTable.tableName);
 decideProFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// A booth-mode host approves booth photos on their own event (mayRunOwnBooth).
+eventTable.grantReadData(decideProFn);
+decideProFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // Host invites, photographer pairs, either side removes. The only writer of
 // EventPhotographer and PhotographerPairingCode.
@@ -814,7 +821,8 @@ eventTable.grantReadData(boothScanFn);
 backend.data.resources.tables.EventPhotographer.grantReadWriteData(boothScanFn);
 boothAttendeeTable.grantReadData(boothScanFn);
 boothScanTable.grantReadWriteData(boothScanFn);
-photoTable.grantReadData(boothScanFn);
+// Read and write: assignBoothPhotos edits who each booth photo goes to.
+photoTable.grantReadWriteData(boothScanFn);
 boothScanFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothScanFn.addEnvironment(
   'CONNECTION_TABLE_NAME',
@@ -823,6 +831,9 @@ boothScanFn.addEnvironment(
 boothScanFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothScanFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
 boothScanFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// Thumbnails for the sorting screen (host and photographer): read-only, pro/ only.
+bucket.grantRead(boothScanFn, 'pro/*');
+boothScanFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
 
 // An attendee's private gallery: reads their row by gallery key, the event,
 // and the photos, and signs links under pro/ — read-only, and nothing outside
@@ -850,6 +861,13 @@ boothDeliveriesFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothDeliveriesFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothDeliveriesFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 boothDeliveriesFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Explicit index access for the booth functions: grantReadData did not cover
+// the booth tables' indexes in production (see amplify/lib/indexGrants.ts).
+const boothIndexTables = [boothAttendeeTable.tableArn, boothScanTable.tableArn, photoTable.tableArn];
+for (const fn of [boothSignupFn, boothScanFn, boothGalleryFn, boothDeliveriesFn]) {
+  fn.addToRolePolicy(indexReadStatement(boothIndexTables));
+}
 boothDeliveriesFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 boothDeliveriesFn.addEnvironment(
   'REMINDER_FROM_ADDRESS',
@@ -881,6 +899,7 @@ boothScanTable.grantReadWriteData(processProFn);
 boothAttendeeTable.grantReadWriteData(processProFn);
 processProFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 processProFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
+processProFn.addToRolePolicy(indexReadStatement([boothScanTable.tableArn, photoTable.tableArn]));
 processProFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 // PKCS#8 P-256 private key (base64) that opens offline booth codes. Set in the
 // Amplify console env; never NEXT_PUBLIC. Blank = dividers are not decoded.

@@ -56,9 +56,10 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
       <p className="spx-eyebrow">Booth mode</p>
       <h2 className="mt-2 font-sans text-xl font-bold tracking-[-0.02em]">Attendee sign-up</h2>
       <p className="spx-body mt-2 text-sm">
-        Each person signs up once and gets a code. The photographer scans it before their
-        photo, and their photos are sent to them — not to a shared gallery. Each person is
-        emailed within the hour once the photographer approves their photos.
+        Each person signs up once and gets a code. Whoever is taking photos (you or a
+        photographer) photographs it before their photo, and their photos are sent to them —
+        not to a shared gallery. Each person is emailed within the hour once you approve their
+        photos below.
       </p>
 
       <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -87,7 +88,7 @@ export default function BoothAttendees({ eventId, origin }: { eventId: string; o
               Open the offline kiosk
             </a>
             <span className="mt-1 block text-xs text-charcoal/70">
-              Open it once with a connection; it then works offline. The photographer takes one
+              Open it once with a connection; it then works offline. Whoever is shooting takes one
               photo of each person&apos;s code, then their photos. Contact details are locked
               inside the code — you see a masked label. If the code photo is lost, so is that
               sign-up.

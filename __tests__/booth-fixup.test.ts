@@ -64,10 +64,10 @@ describe('the server keeps the fix-ups honest', () => {
   const handler = codeOnly(readSource('amplify/functions/booth-scan/handler.ts'));
 
   it('only changes the photographer\'s own booth photos at this event', () => {
-    expect(handler).toContain('item.photographerId?.S !== sub');
+    expect(handler).toContain('(!host && item.photographerId?.S !== sub)');
     expect(handler).toContain('item.eventId?.S !== eventId');
     expect(handler).toContain('item.boothMatch?.S === undefined');
-    expect(handler).toContain("ConditionExpression: 'photographerId = :sub'");
+    expect(handler).toContain("ConditionExpression: host ? 'eventId = :event' : 'photographerId = :sub'");
   });
 
   it('only assigns people who signed up for this event', () => {

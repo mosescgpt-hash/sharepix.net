@@ -15,7 +15,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { Jimp } from 'jimp';
 import type { Schema } from '../../data/resource';
-import { connectionId, mayUploadToEvent } from './photographerAccess';
+import { connectionId, mayRunOwnBooth, mayUploadToEvent } from './photographerAccess';
 import { exifCaptureTime } from './captureTime';
 import { isHeic, isJpeg, stripHeicGps, stripJpegMetadata } from './exif';
 import { boothScanKey, photoInstant } from './boothMatch';
@@ -412,8 +412,14 @@ export const handler: Handler = async (event) => {
         status: connectionRow.Item.status?.S ?? null,
       }
     : null;
+  // Or the host (or an admin) running their own booth-mode event: their
+  // uploads go through the same QR-divider matching as a photographer's.
   if (!mayUploadToEvent(connection, eventId, sub)) {
-    throw new Error('That upload could not be found.');
+    const groups = (event.identity as { groups?: string[] | null } | null)?.groups ?? null;
+    const ev = await boothEvent(eventId);
+    if (!mayRunOwnBooth({ owner: ev.owner, boothMode: ev.booth }, sub, groups)) {
+      throw new Error('That upload could not be found.');
+    }
   }
 
   // Already done? Return it rather than doing it again.

@@ -56,15 +56,25 @@ Alice's late uploads still go to Alice.
 - **No capture time** (some phones strip it, screenshots never had it): fall
   back to upload time and mark the photo "check" in the fix-up screen.
 
-**5. The photographer reviews and fixes.** Approval stays: nothing is sent
-until the photographer approves it. The review screen groups photos by person
-and lets them:
+**5. Review and fix — by the host or the photographer.** Approval stays:
+nothing is sent until someone approves it. The host does this on their own
+booth admin screen (Extras → Booth mode → Booth photos); no photographer is
+needed. The host can also upload the booth photos there, and they go through
+the same QR-code matching as a photographer's. A photographer, if invited,
+can still do the same on their review page. The screen groups photos by
+person (plus "Check", "Not matched" and "QR code shots") and lets them:
 
 - move selected photos to another person (missed scan, wrong person);
 - send one photo to several people (group shots);
-- remove a photo from everyone.
+- remove a photo from everyone;
+- mark a photo as a QR code shot (divider);
+- approve one photo, selected photos, or "approve all" for one person.
 
-**6. Delivery.** When the photographer approves a person's photos, that person
+Who may do this on the server: the event's host or an admin, only on a
+booth-mode event (`mayRunOwnBooth`), or a connected photographer on their own
+photos. A host upload is stored as the host's own booth photo.
+
+**6. Delivery.** When the host or photographer approves a person's photos, that person
 gets one email with a private link. The link opens a page with only their
 photos, each downloadable at full resolution, plus "download all". Approving
 more of their photos later sends one follow-up email, batched, not one per

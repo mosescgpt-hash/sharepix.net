@@ -6,8 +6,10 @@ import {
   UpdateItemCommand,
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
-import { connectionId, mayUploadToEvent } from './photographerAccess';
+import { connectionId, mayRunOwnBooth, mayUploadToEvent } from './photographerAccess';
 import { boothScanKey, isBoothToken, validClockOffset } from './rules';
 import {
   MAX_PHOTOS_PER_CALL,
@@ -20,6 +22,20 @@ import {
 } from './recipients';
 
 const dynamo = new DynamoDBClient({});
+const s3 = new S3Client({});
+const BUCKET = process.env.PHOTO_BUCKET_NAME ?? '';
+/** Thumbnails on the sorting screen; long enough for one sorting session. */
+const THUMB_URL_TTL_SECONDS = 60 * 60;
+
+/** A short-lived link to a booth photo's thumbnail, for the sorting screen only. */
+async function thumbUrlOf(item: Record<string, AttributeValue>): Promise<string | null> {
+  const key = item.thumbnailObjectKey?.S ?? item.previewObjectKey?.S ?? '';
+  // Only the private pro/ prefix this function is granted; never an original.
+  if (!BUCKET || !key.startsWith('pro/') || key.includes('/originals/')) return null;
+  return getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET, Key: key }), {
+    expiresIn: THUMB_URL_TTL_SECONDS,
+  }).catch(() => null);
+}
 
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
@@ -29,6 +45,7 @@ const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 
 /** Explicit in the schema (amplify/data/resource.ts) so these cannot drift. */
 const ATTENDEES_BY_TOKEN = 'boothAttendeesByToken';
+const ATTENDEES_BY_EVENT = 'boothAttendeesByEventId';
 const SCANS_BY_KEY = 'boothScansByScanKey';
 const PHOTOS_BY_EVENT = 'photosByEventId';
 
@@ -89,7 +106,7 @@ async function findAttendee(
  * re-checked: theirs, this event's, and a booth photo. Anything else is
  * skipped rather than failing the whole batch.
  */
-async function assign(eventId: string, sub: string, args: Args) {
+async function assign(eventId: string, sub: string, args: Args, host = false) {
   const action = args.action ?? '';
   if (!isAssignAction(action)) return { ok: false, message: 'Unknown change.', updated: 0 };
   const ids = [...new Set((args.uploadIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))];
@@ -110,9 +127,11 @@ async function assign(eventId: string, sub: string, args: Args) {
       new GetItemCommand({ TableName: PHOTO_TABLE, Key: { id: { S: uploadId } } }),
     );
     const item = found.Item;
+    // A photographer changes only their own photos; the event's host (or an
+    // admin) may change any booth photo on their own booth event.
     if (
       !item ||
-      item.photographerId?.S !== sub ||
+      (!host && item.photographerId?.S !== sub) ||
       item.eventId?.S !== eventId ||
       item.boothMatch?.S === undefined
     ) {
@@ -130,14 +149,15 @@ async function assign(eventId: string, sub: string, args: Args) {
           : action === 'divider'
             ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothDivider = :true, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName'
             : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothDivider',
-        // Only the photographer's own photo, re-checked at write time.
-        ConditionExpression: 'photographerId = :sub',
+        // Only the photographer's own photo (or, for the host, this event's
+        // photo), re-checked at write time.
+        ConditionExpression: host ? 'eventId = :event' : 'photographerId = :sub',
         ExpressionAttributeValues: {
           ':ids': { L: next.map((r) => ({ S: r.id })) },
           ':names': { L: next.map((r) => ({ S: r.name })) },
           ':match': { S: matchAfter(action, next.length) },
           ':now': { S: now },
-          ':sub': { S: sub },
+          ...(host ? { ':event': { S: eventId } } : { ':sub': { S: sub } }),
           ...(action === 'divider' ? { ':true': { BOOL: true } } : {}),
           ...(first ? { ':id': { S: first.id }, ':name': { S: first.name } } : {}),
         },
@@ -169,16 +189,20 @@ type Event = {
   fieldName?: string;
 };
 
+interface Access {
+  /** The photographer's connection row, when they are on this event. */
+  connection: Record<string, AttributeValue> | null;
+  /** The event's host (or an admin) running their own booth: all its photos. */
+  host: boolean;
+}
+
 /**
- * The photographer's connection row, when they may work on this booth event.
- *
- * Same rule as uploading (mayUploadToEvent), plus the event must be a booth.
- * Every way of not being allowed gives the same answer.
+ * Who may work on this booth event: an accepted photographer (the same rule as
+ * uploading, mayUploadToEvent), or the event's host or an admin
+ * (mayRunOwnBooth). The event must be in booth mode either way. Every way of
+ * not being allowed gives the same answer: null.
  */
-async function authorize(
-  eventId: string,
-  sub: string,
-): Promise<Record<string, AttributeValue> | null> {
+async function authorize(eventId: string, sub: string, groups: string[] | null): Promise<Access | null> {
   if (!eventId || !sub) return null;
   const [connection, event] = await Promise.all([
     dynamo.send(
@@ -191,12 +215,14 @@ async function authorize(
       new GetItemCommand({
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'id, boothMode',
+        ProjectionExpression: 'id, boothMode, #owner',
+        ExpressionAttributeNames: { '#owner': 'owner' },
       }),
     ),
   ]);
+  if (event.Item?.boothMode?.BOOL !== true) return null;
   const row = connection.Item;
-  const allowed = mayUploadToEvent(
+  const photographer = mayUploadToEvent(
     row
       ? {
           eventId: row.eventId?.S ?? null,
@@ -207,8 +233,9 @@ async function authorize(
     eventId,
     sub,
   );
-  if (!allowed || event.Item?.boothMode?.BOOL !== true) return null;
-  return row ?? null;
+  const host = mayRunOwnBooth({ owner: event.Item.owner?.S ?? '', boothMode: true }, sub, groups);
+  if (!photographer && !host) return null;
+  return { connection: photographer ? (row ?? null) : null, host };
 }
 
 async function scan(eventId: string, sub: string, token: string) {
@@ -285,7 +312,8 @@ async function setClock(eventId: string, sub: string, offsetMs: number, synced: 
   };
 }
 
-async function status(eventId: string, sub: string, connection: Record<string, AttributeValue>) {
+async function status(eventId: string, sub: string, access: Access) {
+  const connection = access.connection ?? {};
   const latest = await dynamo.send(
     new QueryCommand({
       TableName: SCAN_TABLE,
@@ -317,6 +345,32 @@ async function status(eventId: string, sub: string, connection: Record<string, A
     seen.add(id);
     people.push({ attendeeId: id, name: item.attendeeName?.S ?? 'Guest' });
   }
+  // The host sorts every booth photo, so they can pick anyone who signed up,
+  // not only people they scanned themselves. Names only, never contact details.
+  if (access.host) {
+    let next: Record<string, AttributeValue> | undefined;
+    for (let page = 0; page < 20; page += 1) {
+      const res = await dynamo.send(
+        new QueryCommand({
+          TableName: ATTENDEE_TABLE,
+          IndexName: ATTENDEES_BY_EVENT,
+          KeyConditionExpression: 'eventId = :event',
+          ExpressionAttributeValues: { ':event': { S: eventId } },
+          ProjectionExpression: 'id, #name',
+          ExpressionAttributeNames: { '#name': 'name' },
+          ExclusiveStartKey: next,
+        }),
+      );
+      for (const item of res.Items ?? []) {
+        const id = item.id?.S;
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        people.push({ attendeeId: id, name: item.name?.S ?? 'Guest' });
+      }
+      next = res.LastEvaluatedKey;
+      if (!next) break;
+    }
+  }
 
   // This photographer's matched photos, for the labels on the review grid.
   const assignments: {
@@ -325,6 +379,9 @@ async function status(eventId: string, sub: string, connection: Record<string, A
     attendeeIds: string[];
     attendeeNames: string[];
     match: string;
+    thumbUrl: string | null;
+    publishStatus: string | null;
+    createdAt: string | null;
   }[] = [];
   let start: Record<string, AttributeValue> | undefined;
   for (let page = 0; page < 20; page += 1) {
@@ -333,10 +390,15 @@ async function status(eventId: string, sub: string, connection: Record<string, A
         TableName: PHOTO_TABLE,
         IndexName: PHOTOS_BY_EVENT,
         KeyConditionExpression: 'eventId = :event',
-        FilterExpression: 'photographerId = :sub AND attribute_exists(boothMatch)',
-        ExpressionAttributeValues: { ':event': { S: eventId }, ':sub': { S: sub } },
+        // The host sees every booth photo at the event; a photographer, theirs.
+        FilterExpression: access.host
+          ? 'attribute_exists(boothMatch)'
+          : 'photographerId = :sub AND attribute_exists(boothMatch)',
+        ExpressionAttributeValues: access.host
+          ? { ':event': { S: eventId } }
+          : { ':event': { S: eventId }, ':sub': { S: sub } },
         ProjectionExpression:
-          'id, boothAttendeeId, boothAttendeeName, boothAttendeeIds, boothAttendeeNames, boothMatch',
+          'id, boothAttendeeId, boothAttendeeName, boothAttendeeIds, boothAttendeeNames, boothMatch, thumbnailObjectKey, previewObjectKey, publishStatus, createdAt',
         ExclusiveStartKey: start,
       }),
     );
@@ -348,6 +410,9 @@ async function status(eventId: string, sub: string, connection: Record<string, A
         attendeeIds: recipients.map((r) => r.id),
         attendeeNames: recipients.map((r) => r.name),
         match: item.boothMatch?.S ?? 'unassigned',
+        thumbUrl: await thumbUrlOf(item),
+        publishStatus: item.publishStatus?.S ?? null,
+        createdAt: item.createdAt?.S ?? null,
       });
     }
     start = res.LastEvaluatedKey;
@@ -362,37 +427,42 @@ async function status(eventId: string, sub: string, connection: Record<string, A
     clockOffsetMs: connection.boothClockOffsetMs?.N ? Number(connection.boothClockOffsetMs.N) : null,
     assignments,
     people,
+    asHost: access.host,
   };
 }
 
 export const handler = async (event: Event) => {
-  const identity = event.identity as { sub?: string } | null | undefined;
+  const identity = event.identity as { sub?: string; groups?: string[] | null } | null | undefined;
   const sub = identity?.sub ? String(identity.sub) : '';
+  const groups = identity?.groups ?? null;
   const eventId = String(event.arguments.eventId ?? '').trim();
   const field = event.info?.fieldName ?? event.fieldName ?? '';
 
-  const connection = await authorize(eventId, sub);
+  const access = await authorize(eventId, sub, groups);
 
   if (field === 'boothStatus') {
-    if (!connection) {
-      return { booth: false, currentName: null, currentScannedAt: null, clockSynced: false, clockOffsetMs: null, assignments: [], people: [] };
+    if (!access) {
+      return { booth: false, currentName: null, currentScannedAt: null, clockSynced: false, clockOffsetMs: null, assignments: [], people: [], asHost: false };
     }
-    return status(eventId, sub, connection);
+    return status(eventId, sub, access);
   }
 
   const denied = { ok: false, message: 'That event could not be found.', attendeeName: null };
 
   if (field === 'assignBoothPhotos') {
-    if (!connection) return { ok: false, message: denied.message, updated: 0 };
-    return assign(eventId, sub, event.arguments);
+    if (!access) return { ok: false, message: denied.message, updated: 0 };
+    return assign(eventId, sub, event.arguments, access.host);
   }
 
-  if (!connection) return denied;
+  if (!access) return denied;
 
   if (field === 'boothScan') {
     return scan(eventId, sub, String(event.arguments.token ?? '').trim());
   }
   if (field === 'setBoothClock') {
+    // The clock is stored on a photographer's connection row; a host shooting
+    // offline uses the camera's own clock and QR dividers instead.
+    if (!access.connection) return denied;
     const offsetMs = event.arguments.offsetMs;
     if (!validClockOffset(offsetMs)) {
       return { ok: false, message: 'That camera clock is too far out to use. Check the camera’s date and time.', attendeeName: null };
