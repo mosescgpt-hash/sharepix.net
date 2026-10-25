@@ -2,6 +2,7 @@ import { defineBackend } from '@aws-amplify/backend';
 import { Duration, Stack } from 'aws-cdk-lib';
 import { Function as LambdaFunction, FunctionUrlAuthType } from 'aws-cdk-lib/aws-lambda';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { indexReadStatement } from './lib/indexGrants';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
@@ -850,6 +851,13 @@ boothDeliveriesFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothDeliveriesFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothDeliveriesFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 boothDeliveriesFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+
+// Explicit index access for the booth functions: grantReadData did not cover
+// the booth tables' indexes in production (see amplify/lib/indexGrants.ts).
+const boothIndexTables = [boothAttendeeTable.tableArn, boothScanTable.tableArn, photoTable.tableArn];
+for (const fn of [boothSignupFn, boothScanFn, boothGalleryFn, boothDeliveriesFn]) {
+  fn.addToRolePolicy(indexReadStatement(boothIndexTables));
+}
 boothDeliveriesFn.addEnvironment('APP_URL', process.env.APP_URL ?? 'https://www.sharepix.net');
 boothDeliveriesFn.addEnvironment(
   'REMINDER_FROM_ADDRESS',
@@ -881,6 +889,7 @@ boothScanTable.grantReadWriteData(processProFn);
 boothAttendeeTable.grantReadWriteData(processProFn);
 processProFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 processProFn.addEnvironment('BOOTH_SCAN_TABLE_NAME', boothScanTable.tableName);
+processProFn.addToRolePolicy(indexReadStatement([boothScanTable.tableArn, photoTable.tableArn]));
 processProFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 // PKCS#8 P-256 private key (base64) that opens offline booth codes. Set in the
 // Amplify console env; never NEXT_PUBLIC. Blank = dividers are not decoded.
