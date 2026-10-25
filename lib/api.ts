@@ -2818,8 +2818,10 @@ export interface BoothStatusView {
   clockOffsetMs: number | null;
   /** uploadId → who it goes to (first is the main one), and how it was matched. */
   assignments: Map<string, BoothAssignmentView>;
-  /** People this photographer has scanned, newest first. */
+  /** People this photographer has scanned, newest first (for a host, everyone signed up). */
   people: { attendeeId: string; name: string }[];
+  /** The caller is the event's host (or an admin): every booth photo is theirs to sort. */
+  asHost: boolean;
 }
 
 export interface BoothAssignmentView {
@@ -2827,6 +2829,11 @@ export interface BoothAssignmentView {
   attendeeIds: string[];
   attendeeNames: string[];
   match: string;
+  /** Short-lived thumbnail link, for the sorting screen. */
+  thumbUrl: string | null;
+  /** awaiting_review, approved or rejected. Approved means it is sent. */
+  publishStatus: string | null;
+  createdAt: string | null;
 }
 
 /**
@@ -2862,6 +2869,9 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
         attendeeIds: (row.attendeeIds ?? []).filter((v): v is string => Boolean(v)),
         attendeeNames: (row.attendeeNames ?? []).map((v) => v ?? 'Guest'),
         match: row.match ?? 'unassigned',
+        thumbUrl: row.thumbUrl ?? null,
+        publishStatus: row.publishStatus ?? null,
+        createdAt: row.createdAt ?? null,
       });
     }
   }
@@ -2876,6 +2886,7 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
     clockOffsetMs: data?.clockOffsetMs ?? null,
     assignments,
     people,
+    asHost: data?.asHost === true,
   };
 }
 

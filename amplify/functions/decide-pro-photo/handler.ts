@@ -4,7 +4,7 @@ import {
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
-import { connectionId, mayReviewEvent } from './photographerAccess';
+import { connectionId, mayReviewEvent, mayRunOwnBooth } from './photographerAccess';
 import {
   DEFAULT_PUBLISHING_MODE,
   canTransition,
@@ -17,6 +17,7 @@ import {
 const dynamo = new DynamoDBClient({});
 const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
+const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 
 /** What a caller may ask for, and where each one lands. */
 const DECISIONS: Record<string, PublishStatus> = {
@@ -71,13 +72,18 @@ export const handler: DecideHandler = async (event) => {
   const photo = photoRow?.Item;
   // Their own photo, and a professional one. A guest photo has no publish
   // status and must never be reachable through this path.
-  if (!photo || photo.photographerId?.S !== sub || photo.sourceType?.S !== 'professional') {
-    throw new Error(DENIED);
-  }
+  if (!photo || photo.sourceType?.S !== 'professional') throw new Error(DENIED);
 
   const photoEventId = photo.eventId?.S ?? '';
-  const connection = await loadConnection(photoEventId, sub);
-  if (!mayReviewEvent(connection, photoEventId, sub)) throw new Error(DENIED);
+  const ownPhoto = photo.photographerId?.S === sub;
+  const connection = ownPhoto ? await loadConnection(photoEventId, sub) : null;
+  if (!ownPhoto || !mayReviewEvent(connection, photoEventId, sub)) {
+    // The host (or an admin) of a booth-mode event decides on any booth photo
+    // in it, whoever shot it: approving sends it to the person it shows.
+    const groups = (event.identity as { groups?: string[] | null } | null)?.groups ?? null;
+    const isBooth = photo.boothMatch?.S !== undefined;
+    if (!isBooth || !(await hostRunsBooth(photoEventId, sub, groups))) throw new Error(DENIED);
+  }
 
   // A booth photo (docs/booth-mode.md) is delivered to the one person it was
   // taken of. It is never published to the event's shared gallery: approving
@@ -204,4 +210,25 @@ async function setPublishing(
         ? 'Paused. Nothing new reaches the gallery until you go live again.'
         : 'Live. Photos publish as you approve them.',
   };
+}
+
+/** Whether the caller hosts (or, as an admin, may manage) this booth-mode event. */
+async function hostRunsBooth(eventId: string, sub: string, groups: string[] | null): Promise<boolean> {
+  if (!eventId || !EVENT_TABLE) return false;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        ProjectionExpression: 'id, boothMode, #owner',
+        ExpressionAttributeNames: { '#owner': 'owner' },
+      }),
+    )
+    .catch(() => null);
+  const item = found?.Item;
+  return mayRunOwnBooth(
+    item ? { owner: item.owner?.S ?? '', boothMode: item.boothMode?.BOOL === true } : null,
+    sub,
+    groups,
+  );
 }

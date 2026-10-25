@@ -17,11 +17,20 @@ export default function BoothFixUp({
   photos,
   status,
   onChange,
+  approvedIds,
+  onApprove,
 }: {
   eventId: string;
   photos: DisplayPhoto[];
   status: BoothStatusView;
   onChange: () => void;
+  /** Photos already approved (sent). Shown with a "Sent" badge when given. */
+  approvedIds?: ReadonlySet<string>;
+  /**
+   * The host's booth admin screen approves from here (the photographer's
+   * review page has its own approve buttons). Approving queues the email.
+   */
+  onApprove?: (uploadIds: string[]) => Promise<{ ok: boolean; message: string }>;
 }) {
   const groups = useMemo(
     () => boothGroups(photos.map((p) => p.id), status.assignments, status.people),
@@ -65,6 +74,26 @@ export default function BoothFixUp({
       }
     } catch (err) {
       setNote({ tone: 'error', text: err instanceof Error ? err.message : 'That change did not go through.' });
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function approve(ids: string[]) {
+    if (!onApprove) return;
+    const todo = ids.filter((id) => !approvedIds?.has(id));
+    if (todo.length === 0) {
+      setNote({ tone: 'success', text: 'Those photos are already approved.' });
+      return;
+    }
+    setWorking(true);
+    setNote(null);
+    try {
+      const result = await onApprove(todo);
+      setNote({ tone: result.ok ? 'success' : 'error', text: result.message });
+      if (result.ok) setSelected(new Set());
+    } catch (err) {
+      setNote({ tone: 'error', text: err instanceof Error ? err.message : 'Those photos could not be approved.' });
     } finally {
       setWorking(false);
     }
@@ -119,6 +148,16 @@ export default function BoothFixUp({
               {selected.size === group.photoIds.length ? 'Select none' : 'Select all'}
             </button>
             <span className="text-charcoal/70">{selected.size} selected</span>
+            {onApprove && isPersonGroup ? (
+              <button
+                type="button"
+                disabled={working}
+                onClick={() => void approve(group.photoIds)}
+                className="spx-btn-ink ml-auto disabled:opacity-40"
+              >
+                Approve all for {group.label}
+              </button>
+            ) : null}
           </div>
 
           <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
@@ -142,6 +181,11 @@ export default function BoothFixUp({
                     {isOn ? (
                       <span className="absolute right-1 top-1 bg-pine px-1.5 text-xs font-bold text-white">✓</span>
                     ) : null}
+                    {approvedIds?.has(id) ? (
+                      <span className="absolute left-1 top-1 bg-pine/90 px-1.5 text-[10px] font-semibold text-white">
+                        Approved
+                      </span>
+                    ) : null}
                     {assignment && assignment.attendeeNames.length > 1 ? (
                       <span className="absolute bottom-1 left-1 bg-ink/80 px-1.5 text-[10px] text-white">
                         {assignment.attendeeNames.length} people
@@ -162,7 +206,7 @@ export default function BoothFixUp({
                   onChange={(e) => setPersonId(e.target.value)}
                   className="spx-input mt-1 w-full sm:w-72"
                 >
-                  <option value="">Choose someone you scanned…</option>
+                  <option value="">{status.asHost ? 'Choose someone who signed up…' : 'Choose someone you scanned…'}</option>
                   {status.people.map((p) => (
                     <option key={p.attendeeId} value={p.attendeeId}>
                       {p.name}
@@ -171,6 +215,16 @@ export default function BoothFixUp({
                 </select>
               </label>
               <div className="flex flex-wrap gap-2">
+                {onApprove && isPersonGroup ? (
+                  <button
+                    type="button"
+                    disabled={working}
+                    onClick={() => void approve([...selected])}
+                    className="spx-btn-ink disabled:opacity-40"
+                  >
+                    Approve selected
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={working || !personId}

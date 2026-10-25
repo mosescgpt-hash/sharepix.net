@@ -1187,16 +1187,18 @@ export const HELP_ARTICLES: HelpArticle[] = [
     blocks: [
       {
         kind: 'text',
-        text: 'Booth mode is for a photographer shooting a stream of different people. Instead of a shared gallery, each person gets their own photos, full resolution, by email. It is included with every event.',
+        text: 'Booth mode is for photographing a stream of different people, by you or by a photographer. Instead of a shared gallery, each person gets their own photos, full resolution, by email. It is included with every event.',
       },
       {
         kind: 'steps',
         steps: [
           'On your dashboard, go to Extras and tap Turn on booth mode.',
           'Share the sign-up link on a sign or badge, or tap Open kiosk mode on a tablet or computer at the booth. People enter their name and email, agree to be emailed, and get a QR code.',
-          'Invite your photographer with Add your photographer, below.',
-          'Before each person\'s photo, the photographer taps Scan next person and scans their code. Photos are matched to people by when they were taken.',
-          'The photographer checks and approves the photos. Within the hour, each person is emailed a private link to theirs.',
+          'Before each person\'s photos, take one photo of their QR code. That photo marks where their photos start.',
+          'Back on Extras, under Booth photos, tap Upload booth photos and choose them all. We sort them by person using the QR code photos.',
+          'Check each person\'s photos. If one landed with the wrong person, select it and move it, add someone (for a group shot), or unassign it. QR code photos are shown in their own group and are never sent.',
+          'Tap Approve all for a person, or select photos and tap Approve selected. Within the hour, each person is emailed a private link to theirs.',
+          'Working with a photographer instead? Invite them with Add your photographer. They can scan and sort from their own review page, and you can still check and approve here.',
         ],
       },
       {

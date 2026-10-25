@@ -151,7 +151,10 @@ describe('the decision handler', () => {
   it('only ever touches the photographer’s own photo', () => {
     // Not the host's, not another photographer on the same event. A
     // photographer decides what happens to their own work and nobody else's.
-    expect(handler).toContain('photo.photographerId?.S !== sub');
+    expect(handler).toContain('const ownPhoto = photo.photographerId?.S === sub;');
+    // Anyone else is refused unless it is a booth photo on the host's own
+    // booth event (host-booth.test.ts).
+    expect(handler).toContain('if (!isBooth || !(await hostRunsBooth(photoEventId, sub, groups))) throw new Error(DENIED);');
   });
 
   it('refuses to reach a guest photo through this path', () => {

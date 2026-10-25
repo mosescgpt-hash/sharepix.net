@@ -1682,6 +1682,11 @@ const schema = a.schema({
     attendeeIds: a.string().array(),
     attendeeNames: a.string().array(),
     match: a.string(),
+    // For the sorting screen: a short-lived thumbnail link, and whether the
+    // photo is approved (sent) yet.
+    thumbUrl: a.string(),
+    publishStatus: a.string(),
+    createdAt: a.string(),
   }),
 
   BoothPerson: a.customType({
@@ -1703,6 +1708,9 @@ const schema = a.schema({
     clockOffsetMs: a.integer(),
     assignments: a.ref('BoothAssignment').array(),
     people: a.ref('BoothPerson').array(),
+    // True when the caller is the event's host (or an admin): every booth
+    // photo at the event is theirs to sort and approve.
+    asHost: a.boolean(),
   }),
 
   // Booth mode for photographers. Each re-checks that the caller is an
