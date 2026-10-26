@@ -1,6 +1,6 @@
 # Booth mode: headshots and trade-show photos, delivered to each person
 
-Status: **all five steps built** (sign-up, QR codes, scanning, matching, fix-ups, private galleries, delivery emails and the 30-day cleanup). **Included with every event** at no extra cost: the host switches it on under **Extras → Booth mode**.
+Status: **all five steps built** (sign-up, QR codes, scanning, matching, fix-ups, private galleries, delivery emails and the 30-day cleanup). **Included with every event** at no extra cost: the host switches it on under **Extras → Booth mode**, and everything else is on the dashboard's **Booth** tab.
 Decided: email only (no texting for now), **full resolution**, **included
 with every event** (an option, not a separate plan), originals kept **30 days**, the **host can see** attendees'
 photos (disclosed at sign-up), and a **kiosk sign-up** for a tablet or
@@ -25,7 +25,7 @@ file itself, and there is no shared gallery at all.
 event: the host taps **Turn on booth mode** under **Extras** (a global admin
 can also use **Booth off/on** in the Events list). Booth events use
 everything below instead of the shared gallery. The host invites the photographer with the existing pairing
-code, and finds the sign-up links under **Extras → Booth mode**.
+code, and finds the sign-up links on the **Booth** tab (step 1).
 
 **2. Attendees sign up once,** at `/booth/<eventId>`: on their own phone from
 a sign or badge, or at the booth on a tablet or computer running kiosk mode
@@ -58,7 +58,7 @@ Alice's late uploads still go to Alice.
 
 **5. Review and fix — by the host or the photographer.** Approval stays:
 nothing is sent until someone approves it. The host does this on their own
-booth admin screen (Extras → Booth mode → Booth photos); no photographer is
+Booth tab (steps 3 to 5); no photographer is
 needed. The host can also upload the booth photos there, and they go through
 the same QR-code matching as a photographer's. A photographer, if invited,
 can still do the same on their review page. The screen groups photos by
@@ -103,7 +103,7 @@ for this plan, deliberately and only for booth events:
 
 | Piece | What it is |
 | --- | --- |
-| Booth switch | Included with every event; the host turns it on under Extras (built). |
+| Booth switch | Included with every event; the host turns it on under Extras; the Booth tab then appears (built). |
 | `BoothAttendee` table | Event, name, email, consent time, random QR token. Readable only by the host, the event's photographers and admins. |
 | Sign-up page | Public page per event: name, email, consent, then the QR code. |
 | Scan mode | In the Pro review page: read a QR code, show who is next, record the scan time. |
@@ -277,3 +277,26 @@ STOP marks the attendee `smsStopped` and no more texts go. Message:
 - **The camera uploader.** Booth mode works with today's browser upload and
   camera-to-phone wifi transfer. A dedicated uploader (`docs/pro-uploader.md`)
   would make a busy booth faster, but this plan does not depend on it.
+
+## The host's Booth tab
+
+Once booth mode is on, the dashboard shows a **Booth** tab (link straight to it
+with `admin?tab=booth` or `admin#booth`). Extras keeps only the switch and an
+**Open the Booth tab** button. The tab is five numbered steps, in plain words,
+built for a phone:
+
+1. **Sign people up**: the sign-up link and QR code, Open kiosk mode, and Open
+   the offline kiosk, with the reminder to take two photos of each person's
+   code and wait a second between people.
+2. **Who signed up**: everyone, contact details masked, emailed or not, Their
+   photos and Resend email.
+3. **Upload your photos**: the host's own upload, sorted by the QR code photos.
+4. **Check who's in each photo**: tap a group, tap photos, then Move to this
+   person, Also send to this person (group photos), Not (name), Unassign
+   (nobody) or Mark as QR shot.
+5. **Approve and send**: each person shows Waiting for photos, Ready to approve
+   or Sent. Approve all for (name), or Approve and send everything, which asks
+   first because it emails real people.
+
+Turn booth mode off sits at the bottom of the tab. The photographer's review
+page (scanning, camera clock and its own sorter) is unchanged.

@@ -53,9 +53,9 @@ describe('the six tabs', () => {
   });
 
   it('gives every panel a tab and hides the ones not chosen', () => {
-    for (const id of ORDER) {
+    for (const id of [...ORDER, 'booth']) {
       expect(SOURCE).toContain(`id: '${id}'`);
-      expect(SOURCE).toContain(`hidden={activeTab !== '${id}'}`);
+      expect(SOURCE).toContain(`hidden={shownTab !== '${id}'}`);
     }
     // The tab bar is generated from TABS, so the ids cannot drift apart.
     expect(SOURCE).toContain('aria-controls={t.id}');

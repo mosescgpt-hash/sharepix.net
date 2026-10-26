@@ -11,6 +11,7 @@ import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
 import BoothModeCard from '@/components/BoothModeCard';
+import BoothTab from '@/components/BoothTab';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
 import CommentModeration from '@/components/CommentModeration';
 import { commentsEnabled } from '@/lib/photoEngagement';
@@ -105,6 +106,8 @@ import {
 const TABS = [
   { id: 'share', label: 'Share', blurb: 'Your QR code, printable signs and moments.' },
   { id: 'photos', label: 'Photos', blurb: 'What your guests have added so far.' },
+  // Only shown while booth mode is on (see visibleTabs).
+  { id: 'booth', label: 'Booth', blurb: 'Booth mode, one step at a time: sign people up, add your photos, send them.' },
   { id: 'design', label: 'Design', blurb: 'How your event pages and gallery look.' },
   { id: 'guests', label: 'Guests', blurb: 'Permissions, reminders and photo challenges.' },
   { id: 'extras', label: 'Extras', blurb: 'Your photographer, add-ons and featured events.' },
@@ -126,6 +129,21 @@ function tabFromHash(hash: string): TabId | null {
     setup: 'design',
   };
   return legacy[id] ?? null;
+}
+
+/** A tab's one-line blurb, by id rather than position. */
+function blurbFor(id: TabId): string {
+  return TABS.find((t) => t.id === id)?.blurb ?? '';
+}
+
+/** The tabs this event shows: Booth only while booth mode is on. */
+function visibleTabs(boothMode: boolean) {
+  return TABS.filter((t) => t.id !== 'booth' || boothMode);
+}
+
+/** ?tab=booth (or any tab id), for links that cannot carry a #fragment. */
+function tabFromQuery(value: unknown): TabId | null {
+  return typeof value === 'string' ? (TABS.find((t) => t.id === value)?.id ?? null) : null;
 }
 
 /**
@@ -293,9 +311,9 @@ function AdminDashboardPage() {
   }, []);
 
   useEffect(() => {
-    const fromLink = tabFromHash(window.location.hash);
+    const fromLink = tabFromHash(window.location.hash) ?? tabFromQuery(router.query.tab);
     if (fromLink) setActiveTab(fromLink);
-  }, [router.asPath]);
+  }, [router.asPath, router.query.tab]);
 
   // "I want to…": open the tab, open the Look and feel tab inside it where
   // there is one, then bring the card into view and briefly outline it so the
@@ -726,6 +744,10 @@ function AdminDashboardPage() {
     }
   }
 
+  // A link to the Booth tab on an event without booth mode lands on Extras,
+  // where booth mode is switched on.
+  const shownTab: TabId = activeTab === 'booth' && event?.boothMode !== true ? 'extras' : activeTab;
+
   return (
     <Layout title={event ? `Admin — ${event.name}` : 'Admin dashboard'} width="bleed">
       <section className="spx-section-canvas py-10 sm:py-14">
@@ -848,24 +870,25 @@ function AdminDashboardPage() {
               className="-mx-4 mt-6 flex overflow-x-auto border-b border-charcoal/15 px-4 sm:mx-0 sm:px-0"
               onKeyDown={(e) => {
                 if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-                const i = TABS.findIndex((t) => t.id === activeTab);
-                const next = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+                const tabs = visibleTabs(event.boothMode === true);
+                const i = tabs.findIndex((t) => t.id === shownTab);
+                const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
                 selectTab(next.id);
                 document.getElementById(`tab-${next.id}`)?.focus();
               }}
             >
-              {TABS.map((t) => (
+              {visibleTabs(event.boothMode === true).map((t) => (
                 <button
                   key={t.id}
                   id={`tab-${t.id}`}
                   type="button"
                   role="tab"
-                  aria-selected={activeTab === t.id}
+                  aria-selected={shownTab === t.id}
                   aria-controls={t.id}
-                  tabIndex={activeTab === t.id ? 0 : -1}
+                  tabIndex={shownTab === t.id ? 0 : -1}
                   onClick={() => selectTab(t.id)}
                   className={`-mb-px shrink-0 border-b-2 px-4 py-3 text-sm font-medium transition ${
-                    activeTab === t.id
+                    shownTab === t.id
                       ? 'border-ink text-charcoal'
                       : 'border-transparent text-charcoal/70 hover:text-charcoal'
                   }`}
@@ -879,10 +902,10 @@ function AdminDashboardPage() {
               id="share"
               role="tabpanel"
               aria-labelledby="tab-share"
-              hidden={activeTab !== 'share'}
+              hidden={shownTab !== 'share'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/70">{TABS[0].blurb}</p>
+              <p className="text-sm text-charcoal/70">{blurbFor('share')}</p>
 
 
               {/* First thing in the band, and never hidden. It used to render
@@ -944,10 +967,10 @@ function AdminDashboardPage() {
               id="photos"
               role="tabpanel"
               aria-labelledby="tab-photos"
-              hidden={activeTab !== 'photos'}
+              hidden={shownTab !== 'photos'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/70">{TABS[1].blurb}</p>
+              <p className="text-sm text-charcoal/70">{blurbFor('photos')}</p>
 
 
               <div className="mt-6 grid grid-cols-2 gap-4 sm:max-w-md">
@@ -997,10 +1020,10 @@ function AdminDashboardPage() {
               id="design"
               role="tabpanel"
               aria-labelledby="tab-design"
-              hidden={activeTab !== 'design'}
+              hidden={shownTab !== 'design'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/70">{TABS[2].blurb}</p>
+              <p className="text-sm text-charcoal/70">{blurbFor('design')}</p>
 
               <div id="look-and-feel" className="scroll-mt-24 mt-6">
                 <GalleryStyleSettings event={event} onSaved={load} requestedTab={lookTabRequest} />
@@ -1011,10 +1034,10 @@ function AdminDashboardPage() {
               id="guests"
               role="tabpanel"
               aria-labelledby="tab-guests"
-              hidden={activeTab !== 'guests'}
+              hidden={shownTab !== 'guests'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/70">{TABS[3].blurb}</p>
+              <p className="text-sm text-charcoal/70">{blurbFor('guests')}</p>
 
               <div id="guest-settings" className="spx-card scroll-mt-24 mt-6 p-6">
                 <h2 className="font-sans text-xl font-bold tracking-[-0.02em]">
@@ -1204,17 +1227,17 @@ function AdminDashboardPage() {
               id="extras"
               role="tabpanel"
               aria-labelledby="tab-extras"
-              hidden={activeTab !== 'extras'}
+              hidden={shownTab !== 'extras'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/70">{TABS[4].blurb}</p>
+              <p className="text-sm text-charcoal/70">{blurbFor('extras')}</p>
 
-              {/* Booth mode: included with every event, switched on here. */}
+                            {/* Booth mode's switch. Once on, everything for it is on the Booth tab. */}
               <BoothModeCard
                 eventId={event.id}
                 on={event.boothMode === true}
-                origin={origin}
                 onChanged={(on) => setEvent({ ...event, boothMode: on })}
+                onOpenBooth={() => selectTab('booth')}
               />
               {/* SharePix Pro. Always here, because a host books a photographer
                   before the event rather than after it — unlike Featured Events
@@ -1436,13 +1459,35 @@ function AdminDashboardPage() {
             </section>
 
             <section
+              id="booth"
+              role="tabpanel"
+              aria-labelledby="tab-booth"
+              hidden={shownTab !== 'booth'}
+              className="pt-6"
+            >
+              <p className="mb-6 text-sm text-charcoal/70">{blurbFor('booth')}</p>
+              {/* Mounted only while booth mode is on, so an ordinary event
+                  never asks for booth data. */}
+              {event.boothMode === true ? (
+                <BoothTab
+                  eventId={event.id}
+                  origin={origin}
+                  onTurnedOff={() => {
+                    setEvent({ ...event, boothMode: false });
+                    selectTab('extras');
+                  }}
+                />
+              ) : null}
+            </section>
+
+            <section
               id="event"
               role="tabpanel"
               aria-labelledby="tab-event"
-              hidden={activeTab !== 'event'}
+              hidden={shownTab !== 'event'}
               className="pt-6"
             >
-              <p className="text-sm text-charcoal/70">{TABS[5].blurb}</p>
+              <p className="text-sm text-charcoal/70">{blurbFor('event')}</p>
 
               {/* Name, date and place, in a card of their own. These used to
                   open a single settings card that ran to three screens and
