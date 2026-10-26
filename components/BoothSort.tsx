@@ -17,13 +17,22 @@ const GROUP_LABEL: Record<string, string> = {
   check: 'Please check',
   none: 'Not matched to anyone',
   dividers: 'QR code photos (never sent)',
+  event: 'Event photos',
+  stopped: 'Stopped — held, not sent',
 };
 
 const GROUP_HINT: Record<string, string> = {
   check: 'We guessed who these go to from when they were uploaded. Make sure they are right.',
   none: 'We could not tell who these go to. Pick a person for each one.',
   dividers: 'These are the QR code photos. They are only used for sorting and never sent.',
+  event: 'Taken after the event start code. They go to no one person. Move any that belong to someone.',
+  stopped: 'Taken after the stop code. They are kept, not sent. Move any you want to keep to a person or the event.',
 };
+
+/** Groups that are not a person. */
+function isPersonGroup(key: string): boolean {
+  return !(key in GROUP_LABEL) && !key.startsWith('cat:');
+}
 
 const BTN = 'min-h-[48px] px-4 py-2 text-base font-medium disabled:opacity-40';
 
@@ -31,10 +40,13 @@ export default function BoothSort({
   eventId,
   status,
   onChange,
+  categories = [],
 }: {
   eventId: string;
   status: BoothStatusView;
   onChange: () => void | Promise<void>;
+  /** The event's categories (start & stop codes), for "Move to a category". */
+  categories?: { id: string; name: string }[];
 }) {
   const photos = useMemo(() => boothTiles(status, eventId), [status, eventId]);
   const groups = useMemo(
@@ -46,11 +58,12 @@ export default function BoothSort({
   const [open, setOpen] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [personId, setPersonId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   const group = groups.find((g) => g.key === open) ?? null;
-  const isPerson = group !== null && !(group.key in GROUP_LABEL);
+  const isPerson = group !== null && isPersonGroup(group.key);
 
   if (photos.length === 0) {
     return <p className="mt-3 text-sm text-charcoal/70">No photos yet. Upload them in step 3.</p>;
@@ -65,12 +78,16 @@ export default function BoothSort({
     });
   }
 
-  async function run(action: 'set' | 'add' | 'remove' | 'clear' | 'divider', attendeeId?: string) {
+  async function run(
+    action: 'set' | 'add' | 'remove' | 'clear' | 'divider' | 'event' | 'category',
+    attendeeId?: string,
+    catId?: string,
+  ) {
     if (selected.size === 0) return;
     setWorking(true);
     setNote(null);
     try {
-      const result = await assignBoothPhotos({ eventId, uploadIds: [...selected], action, attendeeId });
+      const result = await assignBoothPhotos({ eventId, uploadIds: [...selected], action, attendeeId, categoryId: catId });
       setNote({ ok: result.ok, text: result.message });
       if (result.ok) {
         setSelected(new Set());
@@ -87,7 +104,7 @@ export default function BoothSort({
     <div className="mt-3">
       <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {groups.map((g) => {
-          const warn = g.key === 'check' || g.key === 'none';
+          const warn = g.key === 'check' || g.key === 'none' || g.key === 'stopped';
           const on = open === g.key;
           return (
             <li key={g.key}>
@@ -119,6 +136,9 @@ export default function BoothSort({
         <div className="mt-4">
           <p className="text-sm text-charcoal/80">
             {GROUP_HINT[group.key] ??
+              (group.key.startsWith('cat:')
+                ? `Taken after the ${group.label.replace(/ — category photos$/, '')} start code. They go to no one person.`
+                : null) ??
               `These go to ${group.label}. Tap any that are not ${group.label}, then choose what to do below.`}
           </p>
           <div className="mt-2 flex items-center gap-3 text-sm">
@@ -156,10 +176,13 @@ export default function BoothSort({
                     {isOn ? (
                       <span className="absolute right-1 top-1 bg-pine px-2 text-sm font-bold text-white">✓</span>
                     ) : null}
-                    {a?.publishStatus === 'approved' ? (
+                    {a?.publishStatus === 'approved' || a?.publishStatus === 'published' ? (
                       <span className="absolute left-1 top-1 bg-pine/90 px-1.5 text-[11px] font-semibold text-white">
-                        Sent
+                        {a.publishStatus === 'published' ? 'In gallery' : 'Sent'}
                       </span>
+                    ) : null}
+                    {a?.guestUpload ? (
+                      <span className="absolute bottom-1 right-1 bg-ink/80 px-1.5 text-[11px] text-white">From guest</span>
                     ) : null}
                     {a && a.attendeeNames.length > 1 ? (
                       <span className="absolute bottom-1 left-1 bg-ink/80 px-1.5 text-[11px] text-white">
@@ -221,6 +244,41 @@ export default function BoothSort({
                   >
                     Not {group.label}
                   </button>
+                ) : null}
+                {group.key !== 'event' ? (
+                  <button
+                    type="button"
+                    disabled={working}
+                    onClick={() => void run('event')}
+                    className={`border border-charcoal/30 ${BTN}`}
+                  >
+                    Move to event photos
+                  </button>
+                ) : null}
+                {categories.length > 0 ? (
+                  <span className="flex gap-2">
+                    <select
+                      aria-label="Category"
+                      value={categoryId}
+                      onChange={(e) => setCategoryId(e.target.value)}
+                      className="spx-input min-h-[48px] text-base"
+                    >
+                      <option value="">Choose a category…</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={working || !categoryId}
+                      onClick={() => void run('category', undefined, categoryId)}
+                      className={`border border-charcoal/30 ${BTN}`}
+                    >
+                      Move to category
+                    </button>
+                  </span>
                 ) : null}
                 <button
                   type="button"

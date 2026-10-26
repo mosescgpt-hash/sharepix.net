@@ -34,9 +34,10 @@ describe('server paths for the host', () => {
     expect(scan).toContain("key.includes('/originals/')");
     expect(scan).toContain("key.startsWith('pro/')");
   });
-  it('the host only approves booth photos, and never publishes them', () => {
+  it('the host approves booth photos; only event and category ones publish', () => {
     expect(decide).toContain('mayRunOwnBooth');
-    expect(decide).toContain("if (boothPhoto && target === 'published')");
+    // Only event and category booth photos may publish (boothPublish.ts).
+    expect(decide).toContain("if (boothPhoto && !boothToGallery && target === 'published')");
   });
   it('host uploads go through the same pipeline', () => {
     expect(upload).toContain('mayRunOwnBooth');

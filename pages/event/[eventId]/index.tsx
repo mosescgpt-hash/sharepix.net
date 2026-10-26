@@ -15,6 +15,7 @@ import { canDownloadEventMedia, galleryVariantFor, isEventHost } from '@/lib/gal
 import { DisplayPhoto, EventMoment, QREvent } from '@/lib/types';
 import { guestBookAvailable } from '@/lib/guestBook';
 import { groupPhotosByMoment } from '@/lib/moments';
+import { withBoothCategories } from '@/lib/boothGalleryGroups';
 import ChallengeChips from '@/components/challenges/ChallengeChips';
 import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
 import { galleryAudienceFor } from '@/lib/galleryAudience';
@@ -116,6 +117,8 @@ export default function EventGalleryPage() {
   // (its challenge was deleted, or switched off) shows everything.
   const filtered = challengeFilter ? photos.filter((p) => p.challengeId === challengeFilter) : photos;
   const shown = filtered.length > 0 ? filtered : photos;
+  // Booth categories group like moments (lib/boothGalleryGroups.ts).
+  const grouped = withBoothCategories(shown, moments);
 
   return (
     <Layout title={event ? event.name : 'Event gallery'} width="bleed">
@@ -238,7 +241,7 @@ export default function EventGalleryPage() {
                       </Link>
                     ) : null}
                   </div>
-                ) : moments.length === 0 || shown !== photos ? (
+                ) : grouped.moments.length === 0 || shown !== photos ? (
                   // One grid while a challenge filter is on, too: grouping a
                   // filtered set by moment would be mostly empty headings.
                   <PhotoGrid
@@ -256,7 +259,7 @@ export default function EventGalleryPage() {
                   // none, this page renders exactly as it did before moments
                   // existed — one grid, no headings, nothing to explain.
                   <div className="space-y-14">
-                    {groupPhotosByMoment(shown, moments).map((group) => (
+                    {groupPhotosByMoment(grouped.photos, grouped.moments).map((group) => (
                       <section key={group.moment?.id ?? 'unfiled'}>
                         <h2 className="spx-display-serif text-3xl">
                           {group.moment ? group.moment.name : 'Everything else'}

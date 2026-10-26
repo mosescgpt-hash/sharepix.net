@@ -150,14 +150,14 @@ describe('scanning', () => {
   });
 });
 
-describe('booth photos never reach a shared gallery', () => {
+describe('booth photos reach the shared gallery only as event or category photos', () => {
   const decide = codeOnly(readSource('amplify/functions/decide-pro-photo/handler.ts'));
 
-  it('refuses to publish one', () => {
-    expect(decide).toContain("if (boothPhoto && target === 'published')");
+  it('refuses to publish a person, stopped or unmatched photo', () => {
+    expect(decide).toContain("if (boothPhoto && !boothToGallery && target === 'published')");
   });
 
-  it('never publishes one on approval', () => {
-    expect(decide).toMatch(/!boothPhoto &&\s*target === 'approved'/);
+  it('publishes event and category photos on approval', () => {
+    expect(decide).toMatch(/boothToGallery && decision === 'approve' && target === 'approved'/);
   });
 });

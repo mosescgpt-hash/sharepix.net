@@ -15,6 +15,9 @@ jest.mock('@/lib/api', () => ({
   requestProUploadSlot: jest.fn(),
   resendBoothEmail: jest.fn(),
   setEventBoothModeAsHost: jest.fn(() => Promise.resolve()),
+  boothCodes: jest.fn(() =>
+    Promise.resolve({ ok: true, message: '', eventCode: 'SPK1.e.-.x', stopCode: 'SPK1.s.-.y', categories: [], uploadsClosed: false, uploadsClosedBy: null }),
+  ),
 }));
 jest.mock('qrcode.react', () => ({ QRCodeSVG: () => <svg aria-label="Sign-up QR code" /> }));
 
@@ -33,6 +36,7 @@ describe('the Booth tab', () => {
     const titles = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(titles).toEqual([
       'Step 1: Sign people up',
+      'Start & stop codes',
       'Step 2: Who signed up (3)',
       'Step 3: Upload your photos',
       "Step 4: Check who's in each photo",

@@ -3,6 +3,7 @@ import {
   GetItemCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
+import { publishesToGallery } from './boothPublish';
 import type { Schema } from '../../data/resource';
 import { connectionId, mayReviewEvent, mayRunOwnBooth } from './photographerAccess';
 import {
@@ -85,11 +86,18 @@ export const handler: DecideHandler = async (event) => {
     if (!isBooth || !(await hostRunsBooth(photoEventId, sub, groups))) throw new Error(DENIED);
   }
 
-  // A booth photo (docs/booth-mode.md) is delivered to the one person it was
-  // taken of. It is never published to the event's shared gallery: approving
-  // it is the photographer's whole decision.
+  // A booth photo (docs/booth-mode.md) of a person is delivered to them and
+  // never published. An event or category photo (no one person) is
+  // published to the shared gallery when approved (boothPublish.ts).
   const boothPhoto = photo.boothMatch?.S !== undefined;
-  if (boothPhoto && target === 'published') {
+  const boothToGallery =
+    boothPhoto &&
+    publishesToGallery({
+      segment: photo.boothSegment?.S ?? null,
+      match: photo.boothMatch?.S ?? null,
+      divider: photo.boothDivider?.BOOL === true,
+    });
+  if (boothPhoto && !boothToGallery && target === 'published') {
     throw new Error('Booth photos are sent to each person, not published to a gallery.');
   }
 
@@ -103,8 +111,9 @@ export const handler: DecideHandler = async (event) => {
   const mode = isPublishingMode(connection?.publishingMode)
     ? connection.publishingMode
     : DEFAULT_PUBLISHING_MODE;
-  const landing: PublishStatus =
-    !boothPhoto &&
+  const landing: PublishStatus = boothToGallery && decision === 'approve' && target === 'approved'
+    ? 'published'
+    : !boothPhoto &&
     target === 'approved' &&
     decision === 'approve' &&
     shouldPublishOnApproval({ livePublishing: live, mode })

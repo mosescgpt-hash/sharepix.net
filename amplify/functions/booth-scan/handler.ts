@@ -8,7 +8,30 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import {
+  MAX_CATEGORIES,
+  START_STATE,
+  cleanCategoryName,
+  destinationOfScan,
+  isCategoryId,
+  isControlPayload,
+  makeControlCode,
+  markerLabel,
+  markerToScanId,
+  parseCategories,
+  readControlCode,
+  stateAfterScan,
+  step,
+  uploadsAfterScan,
+  startsEvent,
+  type Destination,
+  type Marker,
+} from './boothControl';
+import { boothPayloadOf } from './boothLink';
+import { statusAfterMove } from './boothPublish';
+
+const ONLINE_QR_PREFIX = 'sharepix-booth:';
 import { connectionId, mayRunOwnBooth, mayUploadToEvent } from './photographerAccess';
 import { boothScanKey, isBoothToken, validClockOffset } from './rules';
 import {
@@ -42,6 +65,8 @@ const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
 const ATTENDEE_TABLE = process.env.BOOTH_ATTENDEE_TABLE_NAME as string;
 const SCAN_TABLE = process.env.BOOTH_SCAN_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
+/** Server-only; also signs and checks start/stop codes (boothControl.ts). */
+const BOOTH_PRIVATE_KEY = process.env.BOOTH_PRIVATE_KEY ?? '';
 
 /** Explicit in the schema (amplify/data/resource.ts) so these cannot drift. */
 const ATTENDEES_BY_TOKEN = 'boothAttendeesByToken';
@@ -57,6 +82,8 @@ type Args = {
   uploadIds?: (string | null)[] | null;
   action?: string | null;
   attendeeId?: string | null;
+  categoryId?: string | null;
+  name?: string | null;
 };
 
 /** The recipients stored on a photo row, old single fields or step 3's lists. */
@@ -108,6 +135,7 @@ async function findAttendee(
  */
 async function assign(eventId: string, sub: string, args: Args, host = false) {
   const action = args.action ?? '';
+  if (action === 'event' || action === 'category') return assignToPart(eventId, sub, args, host);
   if (!isAssignAction(action)) return { ok: false, message: 'Unknown change.', updated: 0 };
   const ids = [...new Set((args.uploadIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))];
   if (ids.length === 0) return { ok: false, message: 'Choose some photos first.', updated: 0 };
@@ -140,15 +168,17 @@ async function assign(eventId: string, sub: string, args: Args, host = false) {
     const next = applyAssignment(rowRecipients(item), action, target);
     const first = next[0];
     const now = new Date().toISOString();
+    // Out of the event photos: out of the shared gallery too.
+    await moveGalleryStatus(uploadId, item.publishStatus?.S, false);
     await dynamo.send(
       new UpdateItemCommand({
         TableName: PHOTO_TABLE,
         Key: { id: { S: uploadId } },
         UpdateExpression: first
-          ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothAttendeeId = :id, boothAttendeeName = :name, boothMatch = :match, updatedAt = :now REMOVE boothDivider'
+          ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothAttendeeId = :id, boothAttendeeName = :name, boothMatch = :match, boothSegment = :person, updatedAt = :now REMOVE boothDivider'
           : action === 'divider'
-            ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothDivider = :true, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName'
-            : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothDivider',
+            ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothDivider = :true, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothSegment, boothCategoryId, boothCategoryName'
+            : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothSegment = :unsorted, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothDivider, boothCategoryId, boothCategoryName',
         // Only the photographer's own photo (or, for the host, this event's
         // photo), re-checked at write time.
         ConditionExpression: host ? 'eventId = :event' : 'photographerId = :sub',
@@ -159,7 +189,8 @@ async function assign(eventId: string, sub: string, args: Args, host = false) {
           ':now': { S: now },
           ...(host ? { ':event': { S: eventId } } : { ':sub': { S: sub } }),
           ...(action === 'divider' ? { ':true': { BOOL: true } } : {}),
-          ...(first ? { ':id': { S: first.id }, ':name': { S: first.name } } : {}),
+          ...(first ? { ':id': { S: first.id }, ':name': { S: first.name }, ':person': { S: 'person' } } : {}),
+          ...(!first && action !== 'divider' ? { ':unsorted': { S: 'unsorted' } } : {}),
         },
       }),
     );
@@ -179,6 +210,211 @@ async function assign(eventId: string, sub: string, args: Args, host = false) {
     ok: updated > 0,
     message: updated > 0 ? `${updated} photo${updated === 1 ? '' : 's'} ${what}.` : 'None of those photos could be changed.',
     updated,
+  };
+}
+
+/** Publish or unpublish a moved photo (boothPublish.ts), only from the status read. */
+async function moveGalleryStatus(uploadId: string, from: string | undefined, toGallery: boolean) {
+  const change = statusAfterMove(from, toGallery);
+  if (!change || !from) return;
+  const now = new Date().toISOString();
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: PHOTO_TABLE,
+        Key: { id: { S: uploadId } },
+        UpdateExpression:
+          'SET publishStatus = :next, approved = :approved, updatedAt = :now' +
+          (change.publishStatus === 'published' ? ', publishedAt = :now' : ''),
+        ConditionExpression: 'publishStatus = :from',
+        ExpressionAttributeValues: {
+          ':next': { S: change.publishStatus },
+          ':approved': { BOOL: change.approved },
+          ':from': { S: from },
+          ':now': { S: now },
+        },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/** The event row's booth settings: categories and whether guest uploads are closed. */
+async function boothSettings(eventId: string) {
+  const ev = await dynamo.send(
+    new GetItemCommand({
+      TableName: EVENT_TABLE,
+      Key: { id: { S: eventId } },
+      ProjectionExpression: 'id, boothCategories, boothUploadsClosed, boothUploadsClosedBy',
+    }),
+  );
+  const by = ev.Item?.boothUploadsClosedBy?.S;
+  return {
+    categories: parseCategories(ev.Item?.boothCategories?.S ?? null),
+    closedBy: (ev.Item?.boothUploadsClosed?.BOOL === true ? (by === 'stop' ? 'stop' : 'host') : null) as
+      | 'host'
+      | 'stop'
+      | null,
+  };
+}
+
+/**
+ * The host's hand fix: put photos in the event's general photos, or a
+ * category's. They then go to no person.
+ */
+async function assignToPart(eventId: string, sub: string, args: Args, host: boolean) {
+  const ids = [...new Set((args.uploadIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean))];
+  if (ids.length === 0) return { ok: false, message: 'Choose some photos first.', updated: 0 };
+  if (ids.length > MAX_PHOTOS_PER_CALL) {
+    return { ok: false, message: `Choose at most ${MAX_PHOTOS_PER_CALL} photos at a time.`, updated: 0 };
+  }
+  let cat: { id: string; name: string } | null = null;
+  if (args.action === 'category') {
+    const { categories } = await boothSettings(eventId);
+    cat = categories.find((c) => c.id === String(args.categoryId ?? '')) ?? null;
+    if (!cat) return { ok: false, message: 'That category is not on this event.', updated: 0 };
+  }
+  let updated = 0;
+  for (const uploadId of ids) {
+    const found = await dynamo.send(new GetItemCommand({ TableName: PHOTO_TABLE, Key: { id: { S: uploadId } } }));
+    const item = found.Item;
+    if (!item || (!host && item.photographerId?.S !== sub) || item.eventId?.S !== eventId || item.boothMatch?.S === undefined) {
+      continue;
+    }
+    // Into the event photos: an approved photo joins the shared gallery.
+    await moveGalleryStatus(uploadId, item.publishStatus?.S, true);
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: PHOTO_TABLE,
+        Key: { id: { S: uploadId } },
+        UpdateExpression: cat
+          ? 'SET boothAttendeeIds = :empty, boothAttendeeNames = :empty, boothMatch = :match, boothSegment = :seg, boothCategoryId = :cid, boothCategoryName = :cname, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothDivider'
+          : 'SET boothAttendeeIds = :empty, boothAttendeeNames = :empty, boothMatch = :match, boothSegment = :seg, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName, boothDivider, boothCategoryId, boothCategoryName',
+        ConditionExpression: host ? 'eventId = :event' : 'photographerId = :sub',
+        ExpressionAttributeValues: {
+          ':empty': { L: [] },
+          ':match': { S: 'event' },
+          ':seg': { S: cat ? 'category' : 'event' },
+          ':now': { S: new Date().toISOString() },
+          ...(cat ? { ':cid': { S: cat.id }, ':cname': { S: cat.name } } : {}),
+          ...(host ? { ':event': { S: eventId } } : { ':sub': { S: sub } }),
+        },
+      }),
+    );
+    updated += 1;
+  }
+  const where = cat ? `in ${cat.name}` : 'in the event photos';
+  return {
+    ok: updated > 0,
+    message: updated > 0 ? `${updated} photo${updated === 1 ? '' : 's'} now ${where}.` : 'None of those photos could be changed.',
+    updated,
+  };
+}
+
+/** A start or stop code was used: guest uploads close on stop, reopen on start (unless the host closed them). */
+async function applyUploadsAfterScan(eventId: string, closedBy: 'host' | 'stop' | null, dest: Destination) {
+  if (startsEvent(dest)) {
+    // The first start code: from then on guests with a code may upload.
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'SET boothStartedAt = if_not_exists(boothStartedAt, :now)',
+          ExpressionAttributeValues: { ':now': { S: new Date().toISOString() } },
+        }),
+      )
+      .catch(() => undefined);
+  }
+  const before = { closed: closedBy !== null, by: closedBy };
+  const after = uploadsAfterScan(before, dest);
+  if (after.closed === before.closed && after.by === before.by) return;
+  await setUploadsClosed(eventId, after.closed, 'stop').catch(() => undefined);
+}
+
+async function setUploadsClosed(eventId: string, closed: boolean, by: 'host' | 'stop') {
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: EVENT_TABLE,
+      Key: { id: { S: eventId } },
+      UpdateExpression: closed
+        ? 'SET boothUploadsClosed = :t, boothUploadsClosedBy = :by'
+        : 'SET boothUploadsClosed = :f REMOVE boothUploadsClosedBy',
+      // A scanned code never undoes the host's own choice.
+      ...(by === 'stop'
+        ? { ConditionExpression: 'attribute_not_exists(boothUploadsClosedBy) OR boothUploadsClosedBy <> :host' }
+        : {}),
+      ExpressionAttributeValues: {
+        ...(closed ? { ':t': { BOOL: true }, ':by': { S: by } } : { ':f': { BOOL: false } }),
+        ...(by === 'stop' ? { ':host': { S: 'host' } } : {}),
+      },
+    }),
+  );
+}
+
+/**
+ * The host's "Start & stop codes" section: list the codes, add or rename a
+ * category, or close / reopen guest uploads. Host (or admin) only. Codes are
+ * signed here and never stored.
+ */
+async function boothCodes(eventId: string, args: Args) {
+  const action = String(args.action ?? 'list');
+  let { categories, closedBy } = await boothSettings(eventId);
+  let message = '';
+  if (action === 'add' || action === 'rename') {
+    const name = cleanCategoryName(args.name);
+    if (!name) return codesResult(eventId, categories, closedBy, false, 'Give the category a name (up to 40 characters).');
+    if (action === 'add') {
+      if (categories.length >= MAX_CATEGORIES) {
+        return codesResult(eventId, categories, closedBy, false, `An event can have up to ${MAX_CATEGORIES} categories.`);
+      }
+      categories = [...categories, { id: randomBytes(6).toString('base64url'), name }];
+      message = `Added ${name}.`;
+    } else {
+      const id = String(args.categoryId ?? '');
+      if (!isCategoryId(id) || !categories.some((c) => c.id === id)) {
+        return codesResult(eventId, categories, closedBy, false, 'That category is not on this event.');
+      }
+      categories = categories.map((c) => (c.id === id ? { id, name } : c));
+      message = `Renamed to ${name}.`;
+    }
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: 'SET boothCategories = :cats',
+        ExpressionAttributeValues: { ':cats': { S: JSON.stringify(categories) } },
+      }),
+    );
+  } else if (action === 'close' || action === 'open') {
+    await setUploadsClosed(eventId, action === 'close', 'host');
+    closedBy = action === 'close' ? 'host' : null;
+    message = action === 'close' ? 'Guest uploads are closed.' : 'Guest uploads are open again.';
+  } else if (action !== 'list') {
+    return codesResult(eventId, categories, closedBy, false, 'Unknown change.');
+  }
+  return codesResult(eventId, categories, closedBy, true, message);
+}
+
+function codesResult(
+  eventId: string,
+  categories: { id: string; name: string }[],
+  closedBy: 'host' | 'stop' | null,
+  ok: boolean,
+  message: string,
+) {
+  const ready = Boolean(BOOTH_PRIVATE_KEY);
+  return {
+    ok,
+    message: ready ? message : 'Start and stop codes are not set up yet (the booth key is missing).',
+    eventCode: ready ? makeControlCode(BOOTH_PRIVATE_KEY, eventId, { kind: 'e', id: '-' }) : null,
+    stopCode: ready ? makeControlCode(BOOTH_PRIVATE_KEY, eventId, { kind: 's', id: '-' }) : null,
+    categories: categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: ready ? makeControlCode(BOOTH_PRIVATE_KEY, eventId, { kind: 'c', id: c.id }) : null,
+    })),
+    uploadsClosed: closedBy !== null,
+    uploadsClosedBy: closedBy,
   };
 }
 
@@ -238,7 +474,105 @@ async function authorize(eventId: string, sub: string, groups: string[] | null):
   return { connection: photographer ? (row ?? null) : null, host };
 }
 
-async function scan(eventId: string, sub: string, token: string) {
+/** The latest live scan by this photographer, as a destination. */
+async function latestLiveScan(eventId: string, sub: string): Promise<Destination | null> {
+  const res = await dynamo.send(
+    new QueryCommand({
+      TableName: SCAN_TABLE,
+      IndexName: SCANS_BY_KEY,
+      KeyConditionExpression: 'scanKey = :key',
+      ExpressionAttributeValues: { ':key': { S: boothScanKey(eventId, sub) } },
+      ScanIndexForward: false,
+      Limit: 1,
+    }),
+  );
+  const item = res.Items?.[0];
+  if (!item?.attendeeId?.S) return null;
+  return destinationOfScan({
+    attendeeId: item.attendeeId.S,
+    name: item.attendeeName?.S ?? 'Guest',
+    categoryId: item.categoryId?.S ?? null,
+    categoryName: item.categoryName?.S ?? null,
+  });
+}
+
+/** Record one live scan (a person, or a start/stop code) from now on. */
+async function recordLiveScan(eventId: string, sub: string, marker: Marker, dest: Destination) {
+  const now = new Date().toISOString();
+  const cat: Record<string, AttributeValue> =
+    dest.to === 'category' || (dest.to === 'person' && dest.categoryId)
+      ? { categoryId: { S: dest.categoryId ?? '' }, categoryName: { S: dest.categoryName ?? '' } }
+      : {};
+  await dynamo.send(
+    new PutItemCommand({
+      TableName: SCAN_TABLE,
+      Item: {
+        id: { S: randomUUID() },
+        __typename: { S: 'BoothScan' },
+        scanKey: { S: boothScanKey(eventId, sub) },
+        eventId: { S: eventId },
+        photographerId: { S: sub },
+        attendeeId: { S: markerToScanId(marker) ?? 'none' },
+        attendeeName: { S: markerLabel(marker) },
+        ...cat,
+        scannedAt: { S: now },
+        createdAt: { S: now },
+        updatedAt: { S: now },
+      },
+    }),
+  );
+  if (dest.to === 'person') {
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: ATTENDEE_TABLE,
+          Key: { id: { S: dest.attendeeId } },
+          UpdateExpression: dest.categoryId
+            ? 'SET boothSessionAt = :now, boothSessionCategoryId = :cid, boothSessionCategoryName = :cname'
+            : 'SET boothSessionAt = :now REMOVE boothSessionCategoryId, boothSessionCategoryName',
+          ConditionExpression: 'attribute_exists(id)',
+          ExpressionAttributeValues: {
+            ':now': { S: now },
+            ...(dest.categoryId ? { ':cid': { S: dest.categoryId }, ':cname': { S: dest.categoryName ?? '' } } : {}),
+          },
+        }),
+      )
+      .catch(() => undefined);
+  }
+}
+
+const DEST_MESSAGE: Record<Destination['to'], string> = {
+  event: 'Event started. Photos now go to the event photos.',
+  category: '',
+  person: '',
+  stopped: 'Stopped. Photos from now on are held and not sent.',
+  nobody: '',
+};
+
+async function scan(eventId: string, sub: string, scanned: string) {
+  // A sharepix.net booth link carries the old-format code; old codes pass through.
+  const inner = boothPayloadOf(scanned, eventId);
+  if (inner === null) return { ok: false, message: 'That code is not for this event.', attendeeName: null };
+  const token = inner.startsWith(ONLINE_QR_PREFIX) ? inner.slice(ONLINE_QR_PREFIX.length) : inner;
+  const prev = await latestLiveScan(eventId, sub).catch(() => null);
+  const before = prev ? stateAfterScan(prev, START_STATE) : START_STATE;
+  if (isControlPayload(token)) {
+    const code = readControlCode(BOOTH_PRIVATE_KEY, eventId, token);
+    const settings = await boothSettings(eventId);
+    let marker: Marker | null = null;
+    if (code?.kind === 'e') marker = { kind: 'event' };
+    else if (code?.kind === 's') marker = { kind: 'stop' };
+    else if (code?.kind === 'c') {
+      const cat = settings.categories.find((c) => c.id === code.id);
+      if (cat) marker = { kind: 'category', categoryId: cat.id, categoryName: cat.name };
+    }
+    if (!marker) return { ok: false, message: 'That code is not for this event.', attendeeName: null };
+    const { dest } = step(before, marker);
+    await recordLiveScan(eventId, sub, marker, dest);
+    await applyUploadsAfterScan(eventId, settings.closedBy, dest);
+    const message = dest.to === 'category' ? `Started ${dest.categoryName}. Photos now go there.` : DEST_MESSAGE[dest.to];
+    return { ok: true, message, attendeeName: markerLabel(marker) };
+  }
   if (!isBoothToken(token)) return { ok: false, message: 'That is not a SharePix booth code.', attendeeName: null };
   const found = await dynamo.send(
     new QueryCommand({
@@ -255,25 +589,10 @@ async function scan(eventId: string, sub: string, token: string) {
   if (!attendee || attendee.eventId?.S !== eventId) {
     return { ok: false, message: 'That code is not for this event.', attendeeName: null };
   }
-  const now = new Date().toISOString();
   const name = attendee.name?.S ?? 'Guest';
-  await dynamo.send(
-    new PutItemCommand({
-      TableName: SCAN_TABLE,
-      Item: {
-        id: { S: randomUUID() },
-        __typename: { S: 'BoothScan' },
-        scanKey: { S: boothScanKey(eventId, sub) },
-        eventId: { S: eventId },
-        photographerId: { S: sub },
-        attendeeId: { S: attendee.id?.S ?? '' },
-        attendeeName: { S: name },
-        scannedAt: { S: now },
-        createdAt: { S: now },
-        updatedAt: { S: now },
-      },
-    }),
-  );
+  const marker: Marker = { kind: 'person', attendeeId: attendee.id?.S ?? '', name };
+  const { dest } = step(before, marker);
+  await recordLiveScan(eventId, sub, marker, dest);
   return { ok: true, message: `Now shooting ${name}.`, attendeeName: name };
 }
 
@@ -382,6 +701,10 @@ async function status(eventId: string, sub: string, access: Access) {
     thumbUrl: string | null;
     publishStatus: string | null;
     createdAt: string | null;
+    segment: string | null;
+    categoryId: string | null;
+    categoryName: string | null;
+    guestUpload: boolean;
   }[] = [];
   let start: Record<string, AttributeValue> | undefined;
   for (let page = 0; page < 20; page += 1) {
@@ -398,7 +721,7 @@ async function status(eventId: string, sub: string, access: Access) {
           ? { ':event': { S: eventId } }
           : { ':event': { S: eventId }, ':sub': { S: sub } },
         ProjectionExpression:
-          'id, boothAttendeeId, boothAttendeeName, boothAttendeeIds, boothAttendeeNames, boothMatch, thumbnailObjectKey, previewObjectKey, publishStatus, createdAt',
+          'id, boothAttendeeId, boothAttendeeName, boothAttendeeIds, boothAttendeeNames, boothMatch, boothSegment, boothCategoryId, boothCategoryName, boothGuestUpload, thumbnailObjectKey, previewObjectKey, publishStatus, createdAt',
         ExclusiveStartKey: start,
       }),
     );
@@ -413,6 +736,10 @@ async function status(eventId: string, sub: string, access: Access) {
         thumbUrl: await thumbUrlOf(item),
         publishStatus: item.publishStatus?.S ?? null,
         createdAt: item.createdAt?.S ?? null,
+        segment: item.boothSegment?.S ?? null,
+        categoryId: item.boothCategoryId?.S ?? null,
+        categoryName: item.boothCategoryName?.S ?? null,
+        guestUpload: item.boothGuestUpload?.BOOL === true,
       });
     }
     start = res.LastEvaluatedKey;
@@ -452,6 +779,12 @@ export const handler = async (event: Event) => {
   if (field === 'assignBoothPhotos') {
     if (!access) return { ok: false, message: denied.message, updated: 0 };
     return assign(eventId, sub, event.arguments, access.host);
+  }
+
+  if (field === 'boothCodes') {
+    // The host's codes and categories; never a photographer's.
+    if (!access?.host) return { ok: false, message: denied.message, eventCode: null, stopCode: null, categories: [], uploadsClosed: false, uploadsClosedBy: null };
+    return boothCodes(eventId, event.arguments);
   }
 
   if (!access) return denied;

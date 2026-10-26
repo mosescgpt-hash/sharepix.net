@@ -817,9 +817,11 @@ boothSignupFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tab
 // reads attendees by token, writes scans, and reads photos for the labels.
 const boothScanTable = backend.data.resources.tables.BoothScan;
 const boothScanFn = backend.boothScan.resources.lambda as LambdaFunction;
-eventTable.grantReadData(boothScanFn);
+// Event write: the host's categories and "Close uploads" (boothCodes).
+eventTable.grantReadWriteData(boothScanFn);
 backend.data.resources.tables.EventPhotographer.grantReadWriteData(boothScanFn);
-boothAttendeeTable.grantReadData(boothScanFn);
+// Attendee write: a live scan opens that person's guest uploads.
+boothAttendeeTable.grantReadWriteData(boothScanFn);
 boothScanTable.grantReadWriteData(boothScanFn);
 // Read and write: assignBoothPhotos edits who each booth photo goes to.
 photoTable.grantReadWriteData(boothScanFn);
@@ -834,6 +836,8 @@ boothScanFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 // Thumbnails for the sorting screen (host and photographer): read-only, pro/ only.
 bucket.grantRead(boothScanFn, 'pro/*');
 boothScanFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+// Signs and checks start/stop codes (same server-only key as the processor).
+boothScanFn.addEnvironment('BOOTH_PRIVATE_KEY', process.env.BOOTH_PRIVATE_KEY ?? '');
 
 // An attendee's private gallery: reads their row by gallery key, the event,
 // and the photos, and signs links under pro/ — read-only, and nothing outside
@@ -841,12 +845,16 @@ boothScanFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
 const boothGalleryFn = backend.boothGallery.resources.lambda as LambdaFunction;
 eventTable.grantReadData(boothGalleryFn);
 boothAttendeeTable.grantReadWriteData(boothGalleryFn);
-photoTable.grantReadData(boothGalleryFn);
+// Photo write and pro/*/guest/ put: a scanned guest's own uploads (to approval).
+photoTable.grantReadWriteData(boothGalleryFn);
 bucket.grantRead(boothGalleryFn, 'pro/*');
+bucket.grantPut(boothGalleryFn, 'pro/*/guest/*');
 boothGalleryFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothGalleryFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+// Opens offline kiosk codes when a guest's own phone opens their booth link.
+boothGalleryFn.addEnvironment('BOOTH_PRIVATE_KEY', process.env.BOOTH_PRIVATE_KEY ?? '');
 
 // Booth delivery emails and the 30-day cleanup (step 5). Writes attendee rows
 // to claim each email, photo rows and the event to record removed originals,

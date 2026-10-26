@@ -1,11 +1,17 @@
 import {
   DynamoDBClient,
   GetItemCommand,
+  PutItemCommand,
   QueryCommand,
   UpdateItemCommand,
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
-import { GetObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { createHash, randomUUID } from 'node:crypto';
+import { GUEST_UPLOAD_MESSAGES, MAX_GUEST_UPLOADS, guestUploadRefusal } from './boothControl';
+import { readBoothLink } from './boothLink';
+import { openContact } from './boothSeal';
+import { sharedGalleryFor } from './sharedGallery';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   LINK_TTL_SECONDS,
@@ -23,6 +29,8 @@ const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const ATTENDEE_TABLE = process.env.BOOTH_ATTENDEE_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const BUCKET = process.env.PHOTO_BUCKET_NAME as string;
+const BOOTH_PRIVATE_KEY = process.env.BOOTH_PRIVATE_KEY ?? '';
+const ATTENDEES_BY_TOKEN = 'boothAttendeesByToken';
 
 /** Explicit in the schema so it cannot drift. */
 const ATTENDEES_BY_GALLERY_KEY = 'boothAttendeesByGalleryKey';
@@ -37,7 +45,182 @@ const NOT_FOUND = {
   removeOriginalsAt: null,
   originalsRemoved: false,
   emailsStopped: false,
+  uploadsOpen: false,
+  uploadsMessage: null,
+  uploadsLeft: 0,
+  eventId: null,
+  sharedGalleryPath: null,
+  sharedGalleryMessage: null,
 };
+
+/** Whether uploads are closed on the event row. */
+function closedOn(ev: Record<string, AttributeValue> | undefined): boolean {
+  return ev?.boothUploadsClosed?.BOOL === true;
+}
+
+/**
+ * A scanned guest adding their own photo from the gallery page. The key is
+ * the whole authorization, as for the gallery. The page has already shrunk
+ * the photo (which also drops its location data). It goes to the host's
+ * approval queue as one of this person's photos, never straight out.
+ */
+async function guestUpload(key: string, image: string): Promise<{ ok: boolean; message: string }> {
+  const notFound = { ok: false, message: 'This link is not valid. Check the email it came in.' };
+  if (!isGalleryKey(key)) return notFound;
+  const attendee = await attendeeByKey(key);
+  const attendeeId = attendee?.id?.S;
+  const eventId = attendee?.eventId?.S;
+  if (!attendee || !attendeeId || !eventId) return notFound;
+  const ev = await dynamo.send(
+    new GetItemCommand({
+      TableName: EVENT_TABLE,
+      Key: { id: { S: eventId } },
+      ProjectionExpression: 'id, #owner, boothMode, takenDownAt, boothUploadsClosed, boothStartedAt',
+      ExpressionAttributeNames: { '#owner': 'owner' },
+    }),
+  );
+  if (!ev.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S || !ev.Item.owner?.S) return notFound;
+  const count = Number(attendee.guestUploadCount?.N ?? 0);
+  const b64 = String(image ?? '').replace(/^data:image\/jpeg;base64,/, '');
+  const bytes = /^[A-Za-z0-9+/=]+$/.test(b64) && b64.length < 1_000_000 ? Buffer.from(b64, 'base64') : null;
+  const refusal = guestUploadRefusal({
+    sessionAt: attendee.boothSessionAt?.S ?? null,
+    eventStarted: Boolean(ev.Item.boothStartedAt?.S),
+    uploadsClosed: closedOn(ev.Item),
+    count,
+    bytes,
+  });
+  if (refusal || !bytes) return { ok: false, message: GUEST_UPLOAD_MESSAGES[refusal ?? 'bad-file'] };
+
+  // Count first, conditionally, so two quick uploads cannot pass the limit.
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: ATTENDEE_TABLE,
+        Key: { id: { S: attendeeId } },
+        UpdateExpression: 'SET guestUploadCount = if_not_exists(guestUploadCount, :zero) + :one',
+        ConditionExpression: 'attribute_not_exists(guestUploadCount) OR guestUploadCount < :max',
+        ExpressionAttributeValues: { ':zero': { N: '0' }, ':one': { N: '1' }, ':max': { N: String(MAX_GUEST_UPLOADS) } },
+      }),
+    );
+  } catch {
+    return { ok: false, message: GUEST_UPLOAD_MESSAGES.limit };
+  }
+
+  const uploadId = randomUUID();
+  const objectKey = `pro/${eventId}/guest/${uploadId}.jpg`;
+  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: objectKey, Body: bytes, ContentType: 'image/jpeg' }));
+  const now = new Date().toISOString();
+  const name = attendee.name?.S ?? 'Guest';
+  const catId = attendee.boothSessionCategoryId?.S;
+  const catName = attendee.boothSessionCategoryName?.S;
+  await dynamo.send(
+    new PutItemCommand({
+      TableName: PHOTO_TABLE,
+      Item: {
+        id: { S: uploadId },
+        __typename: { S: 'Photo' },
+        eventId: { S: eventId },
+        s3Key: { S: objectKey },
+        previewObjectKey: { S: objectKey },
+        thumbnailObjectKey: { S: objectKey },
+        originalObjectKey: { S: objectKey },
+        storageProvider: { S: 's3' },
+        sourceType: { S: 'guest' },
+        publishStatus: { S: 'awaiting_review' },
+        downloadAllowed: { BOOL: true },
+        previewOnly: { BOOL: false },
+        watermarkEnabled: { BOOL: false },
+        // The host's photo to approve, like their own booth shots.
+        photographerId: { S: ev.Item.owner.S },
+        boothMatch: { S: 'guest' },
+        boothSegment: { S: 'person' },
+        boothGuestUpload: { BOOL: true },
+        boothAttendeeId: { S: attendeeId },
+        boothAttendeeName: { S: name },
+        boothAttendeeIds: { L: [{ S: attendeeId }] },
+        boothAttendeeNames: { L: [{ S: name }] },
+        ...(catId ? { boothCategoryId: { S: catId }, boothCategoryName: { S: catName ?? '' } } : {}),
+        capturedAt: { S: now },
+        previewFileSize: { N: String(bytes.length) },
+        approved: { BOOL: false },
+        createdAt: { S: now },
+        updatedAt: { S: now },
+      },
+      ConditionExpression: 'attribute_not_exists(id)',
+    }),
+  );
+  return { ok: true, message: 'Thanks! Your photo was sent to the host. It shows here once they approve it.' };
+}
+
+/**
+ * The guest's own phone camera opened their booth link
+ * (https://www.sharepix.net/b/<eventId>/<code>): the private page key for it.
+ *
+ * - An online sign-up's token finds their row directly.
+ * - An offline kiosk code is opened with the private key, and only gives a
+ *   page once the photographer has photographed THAT code (its person id is
+ *   recorded on the row). Anyone can seal a made-up email with the public key,
+ *   so the contact alone must never unlock someone's photos.
+ * The same answer for every failure, so codes cannot be probed.
+ */
+async function guestLink(code: string): Promise<{ ok: boolean; message: string; key: string | null }> {
+  const fail = {
+    ok: false,
+    message: 'This code is not ready yet. Your page opens once the photographer has taken a photo of your code. Try again later.',
+    key: null,
+  };
+  const link = readBoothLink(code);
+  if (!link || !ATTENDEE_TABLE) return fail;
+  const ev = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: link.eventId } },
+        ProjectionExpression: 'id, boothMode, takenDownAt',
+      }),
+    )
+    .catch(() => null);
+  if (!ev?.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S) return fail;
+
+  let attendee: Record<string, AttributeValue> | null = null;
+  if (link.payload.startsWith('sharepix-booth:')) {
+    const token = link.payload.slice('sharepix-booth:'.length);
+    const found = await dynamo
+      .send(
+        new QueryCommand({
+          TableName: ATTENDEE_TABLE,
+          IndexName: ATTENDEES_BY_TOKEN,
+          KeyConditionExpression: '#token = :token',
+          ExpressionAttributeNames: { '#token': 'token' },
+          ExpressionAttributeValues: { ':token': { S: token } },
+          Limit: 2,
+        }),
+      )
+      .catch(() => null);
+    attendee = found?.Items?.[0] ?? null;
+  } else if (BOOTH_PRIVATE_KEY) {
+    const opened = await openContact({ payload: link.payload, eventId: link.eventId, privateKeyPkcs8: BOOTH_PRIVATE_KEY });
+    if (opened) {
+      const id = offlineId(link.eventId, opened.contact.email ?? opened.contact.phone ?? '');
+      const row = await dynamo
+        .send(new GetItemCommand({ TableName: ATTENDEE_TABLE, Key: { id: { S: id } }, ConsistentRead: true }))
+        .catch(() => null);
+      const item = row?.Item;
+      const ids = new Set([item?.offlinePersonId?.S, ...(item?.offlinePersonIds?.SS ?? [])]);
+      if (item && ids.has(opened.personId)) attendee = item;
+    }
+  }
+  if (!attendee || attendee.eventId?.S !== link.eventId) return fail;
+  const key = attendee.galleryKey?.S;
+  if (!key) return fail;
+  return { ok: true, message: '', key };
+}
+
+/** Same derivation as process-pro-photo/boothOffline.ts offlineAttendeeId. */
+function offlineId(eventId: string, contactKey: string): string {
+  return `${eventId}#${createHash('sha256').update(contactKey).digest('hex').slice(0, 32)}`;
+}
 
 async function attendeeByKey(key: string): Promise<Record<string, AttributeValue> | null> {
   const found = await dynamo.send(
@@ -102,11 +285,13 @@ function sign(key: string, filename?: string): Promise<string> {
  * rule, so these links are the only way in.
  */
 export const handler = async (event: {
-  arguments: { key?: string | null };
+  arguments: { key?: string | null; image?: string | null; code?: string | null };
   info?: { fieldName?: string };
 }) => {
   const key = String(event.arguments.key ?? '').trim();
   if (event.info?.fieldName === 'boothStopEmails') return stopEmails(key);
+  if (event.info?.fieldName === 'boothGuestLink') return guestLink(String(event.arguments.code ?? ''));
+  if (event.info?.fieldName === 'boothGuestUpload') return guestUpload(key, String(event.arguments.image ?? ''));
   if (!isGalleryKey(key)) return NOT_FOUND;
 
   const attendee = await attendeeByKey(key);
@@ -118,7 +303,7 @@ export const handler = async (event: {
     new GetItemCommand({
       TableName: EVENT_TABLE,
       Key: { id: { S: eventId } },
-      ProjectionExpression: 'id, #name, #date, createdAt, boothMode, takenDownAt, boothOriginalsRemovedAt',
+      ProjectionExpression: 'id, #name, #date, createdAt, boothMode, takenDownAt, boothOriginalsRemovedAt, boothUploadsClosed, boothStartedAt, galleryAudience',
       ExpressionAttributeNames: { '#name': 'name', '#date': 'date' },
     }),
   );
@@ -181,5 +366,24 @@ export const handler = async (event: {
     removeOriginalsAt,
     originalsRemoved: Boolean(removedAt),
     emailsStopped: attendee.emailsStopped?.BOOL === true,
+    ...uploadState(attendee, ev.Item),
+    eventId,
+    ...sharedGalleryFor({ eventId, audience: ev.Item.galleryAudience?.S ?? null, takenDown: false }),
   };
 };
+
+function uploadState(attendee: Record<string, AttributeValue>, ev: Record<string, AttributeValue>) {
+  const count = Number(attendee.guestUploadCount?.N ?? 0);
+  const refusal = guestUploadRefusal({
+    sessionAt: attendee.boothSessionAt?.S ?? null,
+    eventStarted: Boolean(ev.boothStartedAt?.S),
+    uploadsClosed: closedOn(ev),
+    count,
+    bytes: Buffer.from([0xff, 0xd8, 0xff, ...new Array(200).fill(0)]),
+  });
+  return {
+    uploadsOpen: refusal === null,
+    uploadsMessage: refusal ? GUEST_UPLOAD_MESSAGES[refusal] : null,
+    uploadsLeft: Math.max(0, MAX_GUEST_UPLOADS - count),
+  };
+}
