@@ -176,9 +176,9 @@ export default function BoothSort({
                     {isOn ? (
                       <span className="absolute right-1 top-1 bg-pine px-2 text-sm font-bold text-white">✓</span>
                     ) : null}
-                    {a?.publishStatus === 'approved' ? (
+                    {a?.publishStatus === 'approved' || a?.publishStatus === 'published' ? (
                       <span className="absolute left-1 top-1 bg-pine/90 px-1.5 text-[11px] font-semibold text-white">
-                        Sent
+                        {a.publishStatus === 'published' ? 'In gallery' : 'Sent'}
                       </span>
                     ) : null}
                     {a?.guestUpload ? (

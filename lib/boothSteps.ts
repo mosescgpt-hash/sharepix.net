@@ -47,7 +47,7 @@ export function boothPersonStatuses(
     for (const [id, a] of assignments) {
       if (!counts(a) || !a.attendeeIds.includes(attendeeId)) continue;
       photoIds.push(id);
-      if (a.publishStatus !== 'approved') toApprove.push(id);
+      if (a.publishStatus !== 'approved' && a.publishStatus !== 'published') toApprove.push(id);
     }
     const state: BoothPersonState =
       photoIds.length === 0 ? 'waiting' : toApprove.length > 0 ? 'ready' : 'sent';

@@ -146,7 +146,7 @@ export default function BoothSignupPage() {
               </p>
               <div className="mx-auto mt-6 inline-block bg-white p-4">
                 <QRCodeSVG
-                  value={boothQrPayload(saved.token)}
+                  value={boothQrPayload(saved.token, eventId ?? undefined)}
                   size={kiosk ? 320 : 240}
                   level="M"
                   aria-label="Your photo code"

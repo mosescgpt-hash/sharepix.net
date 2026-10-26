@@ -24,9 +24,14 @@ import {
   stateAfterScan,
   step,
   uploadsAfterScan,
+  startsEvent,
   type Destination,
   type Marker,
 } from './boothControl';
+import { boothPayloadOf } from './boothLink';
+import { statusAfterMove } from './boothPublish';
+
+const ONLINE_QR_PREFIX = 'sharepix-booth:';
 import { connectionId, mayRunOwnBooth, mayUploadToEvent } from './photographerAccess';
 import { boothScanKey, isBoothToken, validClockOffset } from './rules';
 import {
@@ -163,6 +168,8 @@ async function assign(eventId: string, sub: string, args: Args, host = false) {
     const next = applyAssignment(rowRecipients(item), action, target);
     const first = next[0];
     const now = new Date().toISOString();
+    // Out of the event photos: out of the shared gallery too.
+    await moveGalleryStatus(uploadId, item.publishStatus?.S, false);
     await dynamo.send(
       new UpdateItemCommand({
         TableName: PHOTO_TABLE,
@@ -204,6 +211,31 @@ async function assign(eventId: string, sub: string, args: Args, host = false) {
     message: updated > 0 ? `${updated} photo${updated === 1 ? '' : 's'} ${what}.` : 'None of those photos could be changed.',
     updated,
   };
+}
+
+/** Publish or unpublish a moved photo (boothPublish.ts), only from the status read. */
+async function moveGalleryStatus(uploadId: string, from: string | undefined, toGallery: boolean) {
+  const change = statusAfterMove(from, toGallery);
+  if (!change || !from) return;
+  const now = new Date().toISOString();
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: PHOTO_TABLE,
+        Key: { id: { S: uploadId } },
+        UpdateExpression:
+          'SET publishStatus = :next, approved = :approved, updatedAt = :now' +
+          (change.publishStatus === 'published' ? ', publishedAt = :now' : ''),
+        ConditionExpression: 'publishStatus = :from',
+        ExpressionAttributeValues: {
+          ':next': { S: change.publishStatus },
+          ':approved': { BOOL: change.approved },
+          ':from': { S: from },
+          ':now': { S: now },
+        },
+      }),
+    )
+    .catch(() => undefined);
 }
 
 /** The event row's booth settings: categories and whether guest uploads are closed. */
@@ -248,6 +280,8 @@ async function assignToPart(eventId: string, sub: string, args: Args, host: bool
     if (!item || (!host && item.photographerId?.S !== sub) || item.eventId?.S !== eventId || item.boothMatch?.S === undefined) {
       continue;
     }
+    // Into the event photos: an approved photo joins the shared gallery.
+    await moveGalleryStatus(uploadId, item.publishStatus?.S, true);
     await dynamo.send(
       new UpdateItemCommand({
         TableName: PHOTO_TABLE,
@@ -278,6 +312,19 @@ async function assignToPart(eventId: string, sub: string, args: Args, host: bool
 
 /** A start or stop code was used: guest uploads close on stop, reopen on start (unless the host closed them). */
 async function applyUploadsAfterScan(eventId: string, closedBy: 'host' | 'stop' | null, dest: Destination) {
+  if (startsEvent(dest)) {
+    // The first start code: from then on guests with a code may upload.
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: EVENT_TABLE,
+          Key: { id: { S: eventId } },
+          UpdateExpression: 'SET boothStartedAt = if_not_exists(boothStartedAt, :now)',
+          ExpressionAttributeValues: { ':now': { S: new Date().toISOString() } },
+        }),
+      )
+      .catch(() => undefined);
+  }
   const before = { closed: closedBy !== null, by: closedBy };
   const after = uploadsAfterScan(before, dest);
   if (after.closed === before.closed && after.by === before.by) return;
@@ -502,7 +549,11 @@ const DEST_MESSAGE: Record<Destination['to'], string> = {
   nobody: '',
 };
 
-async function scan(eventId: string, sub: string, token: string) {
+async function scan(eventId: string, sub: string, scanned: string) {
+  // A sharepix.net booth link carries the old-format code; old codes pass through.
+  const inner = boothPayloadOf(scanned, eventId);
+  if (inner === null) return { ok: false, message: 'That code is not for this event.', attendeeName: null };
+  const token = inner.startsWith(ONLINE_QR_PREFIX) ? inner.slice(ONLINE_QR_PREFIX.length) : inner;
   const prev = await latestLiveScan(eventId, sub).catch(() => null);
   const before = prev ? stateAfterScan(prev, START_STATE) : START_STATE;
   if (isControlPayload(token)) {

@@ -133,6 +133,8 @@ export interface HostGuestBookEntry extends GuestBookEntry {
 }
 
 export interface QRPhoto {
+  /** A booth event/category photo's category name (docs/booth-mode.md, "Shared gallery"). */
+  boothCategoryName?: string | null;
   id: string;
   eventId: string;
   s3Key: string;

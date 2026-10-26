@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
+import Link from 'next/link';
 import Notice from '@/components/Notice';
 import BoothGuestUpload from '@/components/BoothGuestUpload';
 import { fetchBoothGallery, stopBoothEmails, type BoothGalleryView } from '@/lib/api';
@@ -109,7 +110,19 @@ export default function BoothGalleryPage() {
               <h1 className="spx-display mt-2 text-3xl sm:text-4xl">
                 {gallery.attendeeName ? `${gallery.attendeeName}, your photos` : 'Your photos'}
               </h1>
-              {key && (gallery.uploadsOpen || gallery.uploadsMessage?.includes('closed')) ? (
+              {gallery.sharedGalleryPath ? (
+                <div className="mt-4">
+                  <Link href={gallery.sharedGalleryPath} className="spx-btn-outline inline-flex">
+                    See the event&rsquo;s shared gallery
+                  </Link>
+                  {gallery.sharedGalleryMessage ? (
+                    <p className="mt-2 text-sm text-charcoal/65">{gallery.sharedGalleryMessage}</p>
+                  ) : null}
+                </div>
+              ) : gallery.sharedGalleryMessage ? (
+                <p className="mt-4 text-sm text-charcoal/65">{gallery.sharedGalleryMessage}</p>
+              ) : null}
+              {key && (gallery.uploadsOpen || gallery.uploadsMessage) ? (
                 <BoothGuestUpload
                   galleryKey={key}
                   open={gallery.uploadsOpen}

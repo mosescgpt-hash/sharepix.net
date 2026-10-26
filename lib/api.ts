@@ -2915,6 +2915,11 @@ export interface BoothGalleryView {
   uploadsOpen: boolean;
   uploadsMessage: string | null;
   uploadsLeft: number;
+  eventId: string | null;
+  /** The event's shared gallery, when guests may see it; else null. */
+  sharedGalleryPath: string | null;
+  /** Plain words about the shared gallery's privacy, or null. */
+  sharedGalleryMessage: string | null;
 }
 
 /** An attendee's private gallery, by the key in their email. Public. */
@@ -2943,7 +2948,20 @@ export async function fetchBoothGallery(key: string): Promise<BoothGalleryView> 
     uploadsOpen: data?.uploadsOpen === true,
     uploadsMessage: data?.uploadsMessage ?? null,
     uploadsLeft: data?.uploadsLeft ?? 0,
+    eventId: data?.eventId ?? null,
+    sharedGalleryPath: data?.sharedGalleryPath ?? null,
+    sharedGalleryMessage: data?.sharedGalleryMessage ?? null,
   };
+}
+
+/** Opens a guest's own booth code (the QR link) into their private page key. Public. */
+export async function openBoothGuestLink(code: string): Promise<{ ok: boolean; message: string; key: string | null }> {
+  const { data, errors } = await getClient().queries.boothGuestLink(
+    { code },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error('Your page could not be opened. Try again in a moment.');
+  return { ok: data?.ok === true, message: data?.message ?? '', key: data?.key ?? null };
 }
 
 /** A scanned guest adds one photo (a shrunk JPEG, base64). Goes to the host for approval. */

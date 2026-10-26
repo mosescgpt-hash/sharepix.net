@@ -853,6 +853,8 @@ boothGalleryFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 boothGalleryFn.addEnvironment('BOOTH_ATTENDEE_TABLE_NAME', boothAttendeeTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 boothGalleryFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
+// Opens offline kiosk codes when a guest's own phone opens their booth link.
+boothGalleryFn.addEnvironment('BOOTH_PRIVATE_KEY', process.env.BOOTH_PRIVATE_KEY ?? '');
 
 // Booth delivery emails and the 30-day cleanup (step 5). Writes attendee rows
 // to claim each email, photo rows and the event to record removed originals,

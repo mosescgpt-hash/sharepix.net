@@ -249,6 +249,15 @@ export const handler: Handler = async (event) => {
   // reviewable and how the host keeps every video.
   const visible = items
     .filter((item) => item.approved?.BOOL !== false)
+    // Booth photos: only published event or category photos, never a person's
+    // (docs/booth-mode.md, "Shared gallery"). Belt and braces over `approved`.
+    .filter(
+      (item) =>
+        item.boothMatch?.S === undefined ||
+        (item.publishStatus?.S === 'published' &&
+          item.boothDivider?.BOOL !== true &&
+          (item.boothSegment?.S === 'event' || item.boothSegment?.S === 'category')),
+    )
     .filter((item) => item.moderationStatus?.S !== 'flagged')
     .filter((item) =>
       isVisibleTo({ s3Key: item.s3Key?.S, eventOwner: item.eventOwner?.S }, identity),
@@ -283,6 +292,8 @@ export const handler: Handler = async (event) => {
       challengeId: item.challengeId?.S ?? null,
       createdAt: item.createdAt?.S ?? null,
       sourceType: item.sourceType?.S ?? null,
+      // A booth category's name, so the gallery can group by it.
+      boothCategoryName: item.boothMatch?.S !== undefined ? item.boothCategoryName?.S ?? null : null,
       // Live from the profile when it could be read; otherwise what the photo
       // was made with. A link the photographer removed is removed here too.
       photographerName: professional ? (live ? live.name : item.photographerName?.S ?? null) : null,

@@ -12,6 +12,7 @@ Disallow: /global-admin
 Disallow: /my-events
 Disallow: /sign-in
 Disallow: /booth/
+Disallow: /b/
 Disallow: /pro/join
 Disallow: /pro/profile
 Disallow: /pro/events/

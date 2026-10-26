@@ -40,6 +40,7 @@ import {
   stateAfterScan,
   step,
   uploadsAfterScan,
+  startsEvent,
   START_STATE,
   type Destination,
   type Marker,
@@ -172,8 +173,23 @@ async function openGuestSession(attendeeId: string, dest: Destination): Promise<
 }
 
 /** A stop code closes guest uploads; a start code reopens them if a stop closed them. */
+/** The first start code at this event: from then on guests with a code may upload. */
+async function markStarted(eventId: string): Promise<void> {
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: 'SET boothStartedAt = if_not_exists(boothStartedAt, :now)',
+        ExpressionAttributeValues: { ':now': { S: new Date().toISOString() } },
+      }),
+    )
+    .catch(() => undefined);
+}
+
 async function applyUploadsAfterScan(eventId: string, closedBy: 'host' | 'stop' | null, dest: Destination): Promise<void> {
   if (!EVENT_TABLE) return;
+  if (startsEvent(dest)) await markStarted(eventId);
   const before = { closed: closedBy !== null, by: closedBy };
   const after = uploadsAfterScan(before, dest);
   if (after.closed === before.closed && after.by === before.by) return;
@@ -243,6 +259,7 @@ async function upsertOfflineAttendee(
     const values: Record<string, AttributeValue> = {
       ':key': { S: randomBytes(24).toString('base64url') },
       ':label': { S: label },
+      ':pids': { SS: [personId] },
     };
     if (contact.phone) {
       sets.push('phone = if_not_exists(phone, :phone)');
@@ -261,7 +278,8 @@ async function upsertOfflineAttendee(
         new UpdateItemCommand({
           TableName: ATTENDEE_TABLE,
           Key: { id: { S: id } },
-          UpdateExpression: `SET ${sets.join(', ')}`,
+          // Every code photographed for them: their own phone may open their page with any of these.
+          UpdateExpression: `SET ${sets.join(', ')} ADD offlinePersonIds :pids`,
           ExpressionAttributeValues: values,
         }),
       )
@@ -299,6 +317,7 @@ async function upsertOfflineAttendee(
           token: { S: randomBytes(15).toString('base64url') },
           galleryKey: { S: randomBytes(24).toString('base64url') },
           offlinePersonId: { S: personId },
+          offlinePersonIds: { SS: [personId] },
           signupSource: { S: 'offline-qr' },
           consentedAt: { S: now },
           createdAt: { S: now },
@@ -352,7 +371,7 @@ async function rematchAfterDivider(
           KeyConditionExpression: 'eventId = :event',
           FilterExpression: 'photographerId = :sub AND cameraAt >= :at',
           ExpressionAttributeValues: { ':event': { S: eventId }, ':sub': { S: sub }, ':at': { S: dividerAt } },
-          ProjectionExpression: 'id, cameraAt, boothMatch',
+          ProjectionExpression: 'id, cameraAt, boothMatch, publishStatus',
           ExclusiveStartKey: start,
         }),
       )
@@ -364,6 +383,10 @@ async function rematchAfterDivider(
       if (!at || match === 'manual' || match === 'divider') continue;
       if (!belongsToDivider(at, dividerAt, nextAt)) continue;
       const now = new Date().toISOString();
+      // A photo published as an event photo that now belongs elsewhere leaves
+      // the shared gallery (it stays approved for its person).
+      const unpublish =
+        item.publishStatus?.S === 'published' && dest.to !== 'event' && dest.to !== 'category';
       await dynamo
         .send(
           new UpdateItemCommand({
@@ -371,6 +394,7 @@ async function rematchAfterDivider(
             Key: { id: { S: item.id!.S! } },
             UpdateExpression:
               'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothSegment = :segment, updatedAt = :now' +
+              (unpublish ? ", publishStatus = :approvedStatus, approved = :false" : '') +
               (hasPerson ? ', boothAttendeeId = :id, boothAttendeeName = :name' : '') +
               (fields.boothCategoryId ? ', boothCategoryId = :cid, boothCategoryName = :cname' : '') +
               (removes.length ? ` REMOVE ${removes.join(', ')}` : ''),
@@ -378,6 +402,7 @@ async function rematchAfterDivider(
             ConditionExpression: 'boothMatch <> :manual AND boothMatch <> :divider',
             ExpressionAttributeValues: {
               ':ids': fields.boothAttendeeIds,
+              ...(unpublish ? { ':approvedStatus': { S: 'approved' }, ':false': { BOOL: false } } : {}),
               ':names': fields.boothAttendeeNames,
               ':match': fields.boothMatch,
               ':segment': fields.boothSegment,

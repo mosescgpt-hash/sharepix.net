@@ -205,7 +205,9 @@ ECIES: P-256 ECDH → HKDF-SHA256 (salt = ephemeral public key, info
 `sharepix-booth-v1`) → AES-128-GCM, with `SPB1.<eventId>.<personId>` as
 authenticated data so a code only opens for its own event and person id.
 `lib/boothSeal.ts` is copied byte-for-byte to
-`amplify/functions/process-pro-photo/boothSeal.ts` (a test enforces it).
+`amplify/functions/process-pro-photo/boothSeal.ts` and
+`amplify/functions/booth-gallery/boothSeal.ts` (a test enforces it). The QR
+code wraps it in a link (see "One code").
 
 ### Keys
 
@@ -331,14 +333,72 @@ Renaming a category keeps its code, so printed copies still work.
 
 ### Guest uploads
 
-Once a person's code is scanned (live or in a photographed divider), they can
-add their own photos from their private photo page (the link they are
-emailed), until uploads close:
+A guest can add their own photos from their private photo page (the link they
+are emailed, or their own QR code, below) once the event has started, until
+uploads close. "Started" means either their code was scanned (live or in a
+photographed divider) or the photographer scanned an event or category start
+code for this event (`Event.boothStartedAt`, set once by the first one).
+Uploads close when:
 
 - the host presses **Close uploads / Stop event** (stays closed until they press Reopen), or
 - the stop code is scanned (the next start code reopens them).
 
-After that the page says "Uploads for this event are closed. Thanks for
-sharing!". The phone shrinks each photo to 2000 px (which also drops its
+Before the start the page says "You can add photos once the event has
+started."; after a close it says "Uploads for this event are closed. Thanks
+for sharing!". The phone shrinks each photo to 2000 px (which also drops its
 location data) before sending. Each upload is one of that person's booth
-photos, waiting for the host's approval like any other. Limit: 50 per person.
+photos, waiting for the host's approval like any other. Limit: 50 per person
+(confirmed).
+
+**Why "started" and not only "scanned":** a guest who signed up but was never
+photographed could otherwise never add anything. Opening on the start code
+lets everyone at a running event take part, and the host's close/stop still
+ends it for everyone.
+
+### One code
+
+A guest's QR code (from online sign-up or the offline kiosk) is one link:
+
+    https://www.sharepix.net/b/<eventId>/t.<token>      online sign-up
+    https://www.sharepix.net/b/<eventId>/SPB1.<id>.<…>  offline kiosk (contact still encrypted)
+
+- **The photographer's camera** reads the code inside the link exactly as
+  before, so sorting is unchanged (`lib/boothLink.ts`, copied byte-for-byte
+  into process-pro-photo, booth-scan and booth-gallery). A link for a
+  different event is ignored ("That code is not for this event.").
+- **The guest's own camera** opens `/b/…`, which swaps the code for their
+  private page (`boothGuestLink` query): their photos, their uploads and a
+  button to the event's shared gallery.
+- **The kiosk still works offline**: it only builds the link text; nothing is
+  fetched until someone opens it.
+- **Old codes** (`sharepix-booth:<token>` and bare `SPB1.…`) still sort as
+  before.
+
+Opening rules, so a code cannot be forged into someone else's page:
+
+- online: the token is a random secret, so it opens the page straight away;
+- offline: anyone can seal an email with the public key, so the page opens
+  only once the photographer has photographed *that exact* code (its person id
+  is stored on the attendee as `offlinePersonIds`). Until then: "This code is
+  not ready yet…".
+
+Whoever holds a guest's code (including the photographer) can open that
+guest's page, the same as whoever has their email link.
+
+### Shared gallery
+
+- Approved **event and category** photos (no one person) are published to the
+  event's shared gallery, grouped under their category name after any moments
+  the host set up (`lib/boothGalleryGroups.ts`).
+- A **person's** photos stay private to that person.
+- **Stopped, unsorted and divider** photos never go to the gallery, unless the
+  host moves them into the event or a category. Moving a published photo to a
+  person (or a later divider re-sorting it) takes it out of the gallery again.
+- The gallery list also filters booth photos itself, so only published event
+  and category ones ever show.
+- The rules live in `boothPublish.ts` (booth-scan and decide-pro-photo copies).
+
+The guest's private page shows **See the event's shared gallery**, respecting
+the host's gallery setting: everyone → the button; "guests see only their
+own" → the button plus a note saying so; host only → no button, a note that
+the host keeps it private; taken down → nothing.

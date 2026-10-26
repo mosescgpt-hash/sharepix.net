@@ -11,6 +11,7 @@
 import jsQR from 'jsqr';
 import { BOOTH_OFFLINE_PREFIX } from './boothSeal';
 import { CONTROL_PREFIX } from './boothControl';
+import { boothPayloadOf } from './boothLink';
 
 /** Long edge the photo is scaled to before decoding: fast, and plenty for a frame-filling code. */
 export const DECODE_LONG_EDGE = 1000;
@@ -44,7 +45,7 @@ export function isLargeInFrame(corners: Point[], width: number, height: number):
 
 /** Whether this decoded text is a booth code at all: a person's code or a start/stop code. */
 export function isOfflineBoothPayload(data: string): boolean {
-  const text = data.trim();
+  const text = boothPayloadOf(data) ?? '';
   return text.startsWith(BOOTH_OFFLINE_PREFIX) || text.startsWith(CONTROL_PREFIX);
 }
 
@@ -63,5 +64,6 @@ export function findDividerCode(
   const loc = hit.location;
   const corners = [loc.topLeftCorner, loc.topRightCorner, loc.bottomRightCorner, loc.bottomLeftCorner];
   if (requireLarge && !isLargeInFrame(corners, width, height)) return null;
-  return hit.data.trim();
+  // A sharepix.net booth link: the code inside it.
+  return boothPayloadOf(hit.data) ?? null;
 }

@@ -2,6 +2,7 @@
  * Booth mode on the client: what an attendee's QR code carries, and the words
  * the sign-up page shows. See docs/booth-mode.md.
  */
+import { boothLink, boothPayloadOf } from './boothLink';
 
 /**
  * The QR payload: a prefix and the attendee's random token, never an email.
@@ -10,13 +11,18 @@
  */
 export const BOOTH_QR_PREFIX = 'sharepix-booth:';
 
-export function boothQrPayload(token: string): string {
-  return `${BOOTH_QR_PREFIX}${token}`;
+export function boothQrPayload(token: string, eventId?: string): string {
+  const code = `${BOOTH_QR_PREFIX}${token}`;
+  // A sharepix.net link: the photographer's scan reads the token inside it,
+  // and the guest's own camera opens their private page (lib/boothLink.ts).
+  return eventId ? boothLink(eventId, code) : code;
 }
 
 /** The token from a scanned payload, or null when it is not a booth code. */
 export function tokenFromBoothQr(payload: string): string | null {
-  const value = payload.trim();
+  const value = boothPayloadOf(payload) ?? '';
+  // A start or stop code: the server checks its signature.
+  if (/^SPK1\.[ecs]\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) return value;
   if (!value.startsWith(BOOTH_QR_PREFIX)) return null;
   const token = value.slice(BOOTH_QR_PREFIX.length);
   return /^[A-Za-z0-9_-]{16,64}$/.test(token) ? token : null;

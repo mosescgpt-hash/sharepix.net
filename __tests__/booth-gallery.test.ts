@@ -37,7 +37,11 @@ describe('the gallery function', () => {
 
   it('finds the attendee by the gallery key, never by the QR token', () => {
     expect(handler).toContain("IndexName: ATTENDEES_BY_GALLERY_KEY");
-    expect(handler).not.toContain('boothAttendeesByToken');
+    // The token index is used only by boothGuestLink (a guest's own code).
+    const gallery = handler
+      .slice(0, handler.indexOf('async function guestLink'))
+      .replace("const ATTENDEES_BY_TOKEN = 'boothAttendeesByToken';", '');
+    expect(gallery).not.toContain('ATTENDEES_BY_TOKEN');
     const schema = readSource('amplify/data/resource.ts');
     expect(schema).toContain("index('galleryKey').name('boothAttendeesByGalleryKey')");
   });

@@ -13,6 +13,7 @@ import {
   type KioskState,
 } from '@/lib/booth';
 import { checkContact, newPersonId, sealContact } from '@/lib/boothSeal';
+import { boothLink } from '@/lib/boothLink';
 
 /** SharePix's booth public key. Public by design; the private half is server-only. */
 const PUBLIC_KEY = process.env.NEXT_PUBLIC_BOOTH_PUBLIC_KEY ?? '';
@@ -182,7 +183,8 @@ export default function BoothKioskPage() {
       // The typed values are no longer needed: only the sealed code remains.
       setEmail('');
       setPhone('');
-      setCode(sealed);
+      // A sharepix.net link holding the sealed code: built here, no connection needed.
+      setCode(boothLink(eventId, sealed));
       setSecondsLeft(KIOSK_RESET_SECONDS);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The code could not be made. Try again.');

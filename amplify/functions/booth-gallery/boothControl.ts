@@ -281,7 +281,7 @@ export const MAX_GUEST_UPLOAD_BYTES = 700 * 1024;
 export type GuestUploadRefusal = 'not-scanned' | 'closed' | 'limit' | 'bad-file';
 
 export const GUEST_UPLOAD_MESSAGES: Record<GuestUploadRefusal, string> = {
-  'not-scanned': 'You can add photos once the booth has scanned your code.',
+  'not-scanned': 'You can add photos once the event has started.',
   closed: 'Uploads for this event are closed. Thanks for sharing!',
   limit: 'You have added the most photos allowed for this event. Thanks!',
   'bad-file': 'That file could not be used. Try a JPEG photo.',
@@ -290,17 +290,24 @@ export const GUEST_UPLOAD_MESSAGES: Record<GuestUploadRefusal, string> = {
 /** Whether a guest may add a photo now, or why not. */
 export function guestUploadRefusal(input: {
   sessionAt: string | null;
+  /** A start code (event or category) has been scanned at this event. */
+  eventStarted?: boolean;
   uploadsClosed: boolean;
   count: number;
   bytes: Buffer | null;
 }): GuestUploadRefusal | null {
   if (input.uploadsClosed) return 'closed';
-  if (!input.sessionAt) return 'not-scanned';
+  if (!input.sessionAt && !input.eventStarted) return 'not-scanned';
   if (input.count >= MAX_GUEST_UPLOADS) return 'limit';
   const b = input.bytes;
   if (!b || b.length < 100 || b.length > MAX_GUEST_UPLOAD_BYTES) return 'bad-file';
   if (b[0] !== 0xff || b[1] !== 0xd8 || b[2] !== 0xff) return 'bad-file';
   return null;
+}
+
+/** Whether a scan starts the event (opens guest uploads for every guest with a code). */
+export function startsEvent(dest: Destination): boolean {
+  return dest.to === 'event' || dest.to === 'category';
 }
 
 /**

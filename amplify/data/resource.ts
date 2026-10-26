@@ -340,6 +340,8 @@ const schema = a.schema({
       boothCategories: a.string(),
       boothUploadsClosed: a.boolean(),
       boothUploadsClosedBy: a.string(),
+      // First start code scanned (event or category): guests with a code may upload from then on.
+      boothStartedAt: a.datetime(),
       // Set by booth-deliveries once the event's full-resolution originals
       // are removed (30 days after the event).
       boothOriginalsRemovedAt: a.datetime(),
@@ -1626,6 +1628,7 @@ const schema = a.schema({
     photographerName: a.string(),
     photographerWebsite: a.string(),
     purchaseUrl: a.string(),
+    boothCategoryName: a.string(),
     contactUrl: a.string(),
   }),
 
@@ -1826,6 +1829,10 @@ const schema = a.schema({
     uploadsOpen: a.boolean(),
     uploadsMessage: a.string(),
     uploadsLeft: a.integer(),
+    // The event's shared gallery, per the host's gallery setting (null when private).
+    eventId: a.string(),
+    sharedGalleryPath: a.string(),
+    sharedGalleryMessage: a.string(),
   }),
 
   BoothActionResult: a.customType({
@@ -1850,6 +1857,21 @@ const schema = a.schema({
     .returns(a.ref('BoothActionResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(boothGalleryFn)),
+
+  // A guest's own phone opened their booth QR link (/b/<eventId>/<code>):
+  // the key to their private page. Public; the code is the authorization.
+  boothGuestLink: a
+    .query()
+    .arguments({ code: a.string().required() })
+    .returns(a.ref('BoothGuestLinkResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothGalleryFn)),
+
+  BoothGuestLinkResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string().required(),
+    key: a.string(),
+  }),
 
   // The "Stop these emails" link (step 5). Public, by the same secret key.
   boothStopEmails: a
