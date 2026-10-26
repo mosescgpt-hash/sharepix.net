@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { QRCodeSVG } from 'qrcode.react';
 import Notice from '@/components/Notice';
 import BoothSort from '@/components/BoothSort';
+import BoothCodes from '@/components/BoothCodes';
 import {
   decideProPhoto,
   fetchBoothStatus,
@@ -40,6 +41,7 @@ export default function BoothTab({
   const [rows, setRows] = useState<BoothAttendeeRow[] | null>(null);
   const [status, setStatus] = useState<BoothStatusView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(async () => {
     const [attendees, booth] = await Promise.allSettled([listBoothAttendees(eventId), fetchBoothStatus(eventId)]);
@@ -61,14 +63,15 @@ export default function BoothTab({
     <div className="space-y-6">
       {error ? <Notice tone="warn">{error}</Notice> : null}
       <SignUpStep eventId={eventId} origin={origin} />
+      <BoothCodes eventId={eventId} onCategories={setCategories} />
       <WhoStep eventId={eventId} origin={origin} rows={rows} status={status} />
       <UploadStep eventId={eventId} onUploaded={load} />
       <Step n={4} title="Check who's in each photo" id="booth-sort">
         <p className="spx-body text-sm">
-          We sort your photos by person using the QR code photos. Tap a person, check their photos, and fix any
+          We sort your photos using the QR code photos: event, category, person, or stopped. Tap a person, check their photos, and fix any
           that landed in the wrong place.
         </p>
-        {status ? <BoothSort eventId={eventId} status={status} onChange={load} /> : <Loading />}
+        {status ? <BoothSort eventId={eventId} status={status} onChange={load} categories={categories} /> : <Loading />}
       </Step>
       <ApproveStep status={status} onDone={load} />
       <TurnOff eventId={eventId} onTurnedOff={onTurnedOff} />

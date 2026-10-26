@@ -334,6 +334,12 @@ const schema = a.schema({
       // boothSignUp.
       boothMode: a.boolean(),
       boothAttendeeCount: a.integer(),
+      // Start & stop codes (boothControl.ts): the host's categories as JSON
+      // [{id,name}], and whether guest uploads are closed ('host' or 'stop').
+      // Written only by booth-scan and process-pro-photo.
+      boothCategories: a.string(),
+      boothUploadsClosed: a.boolean(),
+      boothUploadsClosedBy: a.string(),
       // Set by booth-deliveries once the event's full-resolution originals
       // are removed (30 days after the event).
       boothOriginalsRemovedAt: a.datetime(),
@@ -454,6 +460,13 @@ const schema = a.schema({
       // offline QR dividers shot on the same camera.
       cameraAt: a.string(),
       boothDivider: a.boolean(),
+      // Which part of the event a booth photo belongs to after start/stop
+      // codes: 'event', 'category', 'person', 'stopped' or 'unsorted'.
+      boothSegment: a.string(),
+      boothCategoryId: a.string(),
+      boothCategoryName: a.string(),
+      // Added by the guest from their own gallery page, not the booth camera.
+      boothGuestUpload: a.boolean(),
       // Masked label of the divider's person ("j***@gmail.com"), for fix-up.
       boothDividerFor: a.string(),
       // A divider whose photo had no camera time: it cannot split the stream.
@@ -612,6 +625,12 @@ const schema = a.schema({
       lastDeliveredAt: a.datetime(),
       reminderSentAt: a.datetime(),
       emailsStopped: a.boolean(),
+      // Set when the booth scans this person's code: from then they may add
+      // their own photos until uploads close. With the category running then.
+      boothSessionAt: a.datetime(),
+      boothSessionCategoryId: a.string(),
+      boothSessionCategoryName: a.string(),
+      guestUploadCount: a.integer(),
     })
     .secondaryIndexes((index) => [
       index('eventId'),
@@ -636,6 +655,9 @@ const schema = a.schema({
       photographerId: a.string().required(),
       attendeeId: a.string().required(),
       attendeeName: a.string(),
+      // The category running when this scan was made (start/stop codes).
+      categoryId: a.string(),
+      categoryName: a.string(),
       scannedAt: a.datetime().required(),
     })
     .secondaryIndexes((index) => [
@@ -1687,7 +1709,41 @@ const schema = a.schema({
     thumbUrl: a.string(),
     publishStatus: a.string(),
     createdAt: a.string(),
+    segment: a.string(),
+    categoryId: a.string(),
+    categoryName: a.string(),
+    guestUpload: a.boolean(),
   }),
+
+  BoothCategoryCode: a.customType({
+    id: a.string().required(),
+    name: a.string(),
+    code: a.string(),
+  }),
+
+  BoothCodesResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    eventCode: a.string(),
+    stopCode: a.string(),
+    categories: a.ref('BoothCategoryCode').array(),
+    uploadsClosed: a.boolean(),
+    uploadsClosedBy: a.string(),
+  }),
+
+  // The host's "Start & stop codes": list, add or rename a category, or
+  // close / reopen guest uploads. booth-scan checks the caller is the host.
+  boothCodes: a
+    .mutation()
+    .arguments({
+      eventId: a.id().required(),
+      action: a.string().required(),
+      categoryId: a.string(),
+      name: a.string(),
+    })
+    .returns(a.ref('BoothCodesResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(boothScanFn)),
 
   BoothPerson: a.customType({
     attendeeId: a.string().required(),
@@ -1743,6 +1799,7 @@ const schema = a.schema({
       action: a.string().required(),
       attendeeId: a.string(),
       token: a.string(),
+      categoryId: a.string(),
     })
     .returns(a.ref('BoothAssignResult'))
     .authorization((allow) => [allow.authenticated()])
@@ -1765,6 +1822,10 @@ const schema = a.schema({
     removeOriginalsAt: a.string(),
     originalsRemoved: a.boolean(),
     emailsStopped: a.boolean(),
+    // Guest uploads: whether this person may add photos now, and why not.
+    uploadsOpen: a.boolean(),
+    uploadsMessage: a.string(),
+    uploadsLeft: a.integer(),
   }),
 
   BoothActionResult: a.customType({
@@ -1778,6 +1839,15 @@ const schema = a.schema({
     .query()
     .arguments({ key: a.string().required() })
     .returns(a.ref('BoothGalleryResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothGalleryFn)),
+
+  // A scanned guest adding their own photo, by the same secret key. It goes
+  // to the host for approval like any booth photo. Refused once uploads close.
+  boothGuestUpload: a
+    .mutation()
+    .arguments({ key: a.string().required(), image: a.string().required() })
+    .returns(a.ref('BoothActionResult'))
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(boothGalleryFn)),
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
+import BoothGuestUpload from '@/components/BoothGuestUpload';
 import { fetchBoothGallery, stopBoothEmails, type BoothGalleryView } from '@/lib/api';
 
 /**
@@ -108,6 +109,14 @@ export default function BoothGalleryPage() {
               <h1 className="spx-display mt-2 text-3xl sm:text-4xl">
                 {gallery.attendeeName ? `${gallery.attendeeName}, your photos` : 'Your photos'}
               </h1>
+              {key && (gallery.uploadsOpen || gallery.uploadsMessage?.includes('closed')) ? (
+                <BoothGuestUpload
+                  galleryKey={key}
+                  open={gallery.uploadsOpen}
+                  message={gallery.uploadsMessage}
+                  left={gallery.uploadsLeft}
+                />
+              ) : null}
               {gallery.photos.length === 0 ? (
                 <p className="spx-body mt-4">{gallery.message}</p>
               ) : (

@@ -2834,6 +2834,12 @@ export interface BoothAssignmentView {
   /** awaiting_review, approved or rejected. Approved means it is sent. */
   publishStatus: string | null;
   createdAt: string | null;
+  /** Event part from start/stop codes: event, category, person, stopped, unsorted. */
+  segment: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  /** Added by the guest from their own phone. */
+  guestUpload: boolean;
 }
 
 /**
@@ -2843,9 +2849,10 @@ export interface BoothAssignmentView {
 export async function assignBoothPhotos(input: {
   eventId: string;
   uploadIds: string[];
-  action: 'set' | 'add' | 'remove' | 'clear' | 'divider';
+  action: 'set' | 'add' | 'remove' | 'clear' | 'divider' | 'event' | 'category';
   attendeeId?: string;
   token?: string;
+  categoryId?: string;
 }): Promise<{ ok: boolean; message: string }> {
   const { data, errors } = await getClient().mutations.assignBoothPhotos(input, {
     authMode: 'userPool',
@@ -2872,6 +2879,10 @@ export async function fetchBoothStatus(eventId: string): Promise<BoothStatusView
         thumbUrl: row.thumbUrl ?? null,
         publishStatus: row.publishStatus ?? null,
         createdAt: row.createdAt ?? null,
+        segment: row.segment ?? null,
+        categoryId: row.categoryId ?? null,
+        categoryName: row.categoryName ?? null,
+        guestUpload: row.guestUpload === true,
       });
     }
   }
@@ -2900,6 +2911,10 @@ export interface BoothGalleryView {
   removeOriginalsAt: string | null;
   originalsRemoved: boolean;
   emailsStopped: boolean;
+  /** Whether this guest may add their own photos now; if not, why. */
+  uploadsOpen: boolean;
+  uploadsMessage: string | null;
+  uploadsLeft: number;
 }
 
 /** An attendee's private gallery, by the key in their email. Public. */
@@ -2925,6 +2940,51 @@ export async function fetchBoothGallery(key: string): Promise<BoothGalleryView> 
     removeOriginalsAt: data?.removeOriginalsAt ?? null,
     originalsRemoved: data?.originalsRemoved === true,
     emailsStopped: data?.emailsStopped === true,
+    uploadsOpen: data?.uploadsOpen === true,
+    uploadsMessage: data?.uploadsMessage ?? null,
+    uploadsLeft: data?.uploadsLeft ?? 0,
+  };
+}
+
+/** A scanned guest adds one photo (a shrunk JPEG, base64). Goes to the host for approval. */
+export async function uploadBoothGuestPhoto(key: string, image: string): Promise<{ ok: boolean; message: string }> {
+  const { data, errors } = await getClient().mutations.boothGuestUpload(
+    { key, image },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error('That photo did not upload. Try again in a moment.');
+  return { ok: data?.ok === true, message: data?.message ?? '' };
+}
+
+export interface BoothCodesView {
+  ok: boolean;
+  message: string;
+  eventCode: string | null;
+  stopCode: string | null;
+  categories: { id: string; name: string; code: string | null }[];
+  uploadsClosed: boolean;
+  uploadsClosedBy: string | null;
+}
+
+/** Host: the event's start & stop codes; add or rename a category; close or reopen guest uploads. */
+export async function boothCodes(input: {
+  eventId: string;
+  action: 'list' | 'add' | 'rename' | 'close' | 'open';
+  categoryId?: string;
+  name?: string;
+}): Promise<BoothCodesView> {
+  const { data, errors } = await getClient().mutations.boothCodes(input, { authMode: 'userPool' });
+  if (errors?.length) throw new Error('Start and stop codes could not be loaded. Try again.');
+  return {
+    ok: data?.ok === true,
+    message: data?.message ?? '',
+    eventCode: data?.eventCode ?? null,
+    stopCode: data?.stopCode ?? null,
+    categories: (data?.categories ?? [])
+      .filter((c): c is NonNullable<typeof c> => Boolean(c?.id))
+      .map((c) => ({ id: c.id, name: c.name ?? 'Category', code: c.code ?? null })),
+    uploadsClosed: data?.uploadsClosed === true,
+    uploadsClosedBy: data?.uploadsClosedBy ?? null,
   };
 }
 

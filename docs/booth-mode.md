@@ -300,3 +300,45 @@ built for a phone:
 
 Turn booth mode off sits at the bottom of the tab. The photographer's review
 page (scanning, camera clock and its own sorter) is unchanged.
+
+## Start & stop codes
+
+The host's Booth tab has a **Start & stop codes** section. Each code is a QR
+code signed by the server for this event only (`SPK1.<kind>.<id>.<mac>`, an
+HMAC from a key derived from `BOOTH_PRIVATE_KEY`; see
+`amplify/functions/*/boothControl.ts`, byte-identical in process-pro-photo,
+booth-scan and booth-gallery). A code from another event, or a changed or
+made-up one, is treated as unreadable. Code photos are dividers: never in a
+gallery, never emailed.
+
+Rules, in the order the photographer photographs (or scans) codes:
+
+- **Event start**: following photos are the event's general photos (no one person).
+- **A person's code**: following photos go to that person, and are emailed once approved. If a category is running they are labelled with it.
+- **Another person's code**: switches to them.
+- **Event start again**: back to the event's general photos.
+- **Category start** (a day or session the host created): following photos go to that category.
+- **Stop**: following photos are kept but held as "Stopped", never sent, until a start code. A person's code scanned while stopped carries on with that person (no category).
+- An unreadable code, or the code of a category that no longer exists: following photos are unsorted until the next good code.
+- Photos before any code behave as before (not matched).
+
+Step 4 (sorting) shows Event photos, each category, each person, Stopped and
+Not matched groups; the host can move photos between them before approving.
+Event and category photos are approved like any other but go to no one;
+they are not published to the shared gallery (booth photos never are).
+
+Renaming a category keeps its code, so printed copies still work.
+
+### Guest uploads
+
+Once a person's code is scanned (live or in a photographed divider), they can
+add their own photos from their private photo page (the link they are
+emailed), until uploads close:
+
+- the host presses **Close uploads / Stop event** (stays closed until they press Reopen), or
+- the stop code is scanned (the next start code reopens them).
+
+After that the page says "Uploads for this event are closed. Thanks for
+sharing!". The phone shrinks each photo to 2000 px (which also drops its
+location data) before sending. Each upload is one of that person's booth
+photos, waiting for the host's approval like any other. Limit: 50 per person.

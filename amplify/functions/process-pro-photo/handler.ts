@@ -29,6 +29,21 @@ import {
   dividerScanId,
   offlineAttendeeId,
 } from './boothOffline';
+import {
+  destinationOfScan,
+  isControlPayload,
+  markerLabel,
+  markerToScanId,
+  parseCategories,
+  photoFieldsFor,
+  readControlCode,
+  stateAfterScan,
+  step,
+  uploadsAfterScan,
+  START_STATE,
+  type Destination,
+  type Marker,
+} from './boothControl';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   defaultsFor,
@@ -61,19 +76,28 @@ const PHOTOS_BY_EVENT = 'photosByEventId';
 const MAX_ATTENDEES_PER_EVENT = 10000;
 
 /** Whether this event is in booth mode (docs/booth-mode.md), and its owner. */
-async function boothEvent(eventId: string): Promise<{ booth: boolean; owner: string }> {
-  if (!EVENT_TABLE) return { booth: false, owner: '' };
+async function boothEvent(
+  eventId: string,
+): Promise<{ booth: boolean; owner: string; categories: { id: string; name: string }[]; closedBy: 'host' | 'stop' | null }> {
+  if (!EVENT_TABLE) return { booth: false, owner: '', categories: [], closedBy: null };
   const found = await dynamo
     .send(
       new GetItemCommand({
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'id, boothMode, #owner',
+        ProjectionExpression: 'id, boothMode, #owner, boothCategories, boothUploadsClosed, boothUploadsClosedBy',
         ExpressionAttributeNames: { '#owner': 'owner' },
       }),
     )
     .catch(() => null);
-  return { booth: found?.Item?.boothMode?.BOOL === true, owner: found?.Item?.owner?.S ?? '' };
+  const item = found?.Item;
+  const by = item?.boothUploadsClosedBy?.S;
+  return {
+    booth: item?.boothMode?.BOOL === true,
+    owner: item?.owner?.S ?? '',
+    categories: parseCategories(item?.boothCategories?.S ?? null),
+    closedBy: item?.boothUploadsClosed?.BOOL === true ? (by === 'stop' ? 'stop' : 'host') : null,
+  };
 }
 
 /** The latest QR divider at or before this camera time, if any. */
@@ -81,7 +105,7 @@ async function latestCameraScan(
   eventId: string,
   sub: string,
   cameraAt: string,
-): Promise<{ attendeeId: string; name: string } | null> {
+): Promise<{ attendeeId: string; name: string; categoryId: string | null; categoryName: string | null } | null> {
   if (!SCAN_TABLE) return null;
   const res = await dynamo
     .send(
@@ -100,7 +124,76 @@ async function latestCameraScan(
     .catch(() => null);
   const item = res?.Items?.[0];
   if (!item?.attendeeId?.S) return null;
-  return { attendeeId: item.attendeeId.S, name: item.attendeeName?.S ?? 'Guest' };
+  return {
+    attendeeId: item.attendeeId.S,
+    name: item.attendeeName?.S ?? 'Guest',
+    categoryId: item.categoryId?.S ?? null,
+    categoryName: item.categoryName?.S ?? null,
+  };
+}
+
+/** DynamoDB fields for a photo going to a destination (boothControl.photoFieldsFor). */
+function destinationAttributes(dest: Destination): Record<string, AttributeValue> {
+  const f = photoFieldsFor(dest);
+  return {
+    boothMatch: { S: f.boothMatch },
+    boothSegment: { S: f.boothSegment },
+    boothAttendeeIds: { L: f.attendeeIds.map((S) => ({ S })) },
+    boothAttendeeNames: { L: f.attendeeNames.map((S) => ({ S })) },
+    ...(f.attendeeIds[0] ? { boothAttendeeId: { S: f.attendeeIds[0] }, boothAttendeeName: { S: f.attendeeNames[0] } } : {}),
+    ...(f.categoryId ? { boothCategoryId: { S: f.categoryId } } : {}),
+    ...(f.categoryName ? { boothCategoryName: { S: f.categoryName } } : {}),
+  };
+}
+
+/**
+ * A person was scanned: from now on they may add their own photos from their
+ * gallery page (into the category that is running), until uploads close.
+ */
+async function openGuestSession(attendeeId: string, dest: Destination): Promise<void> {
+  if (!ATTENDEE_TABLE || dest.to !== 'person') return;
+  const now = new Date().toISOString();
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: ATTENDEE_TABLE,
+        Key: { id: { S: attendeeId } },
+        UpdateExpression: dest.categoryId
+          ? 'SET boothSessionAt = :now, boothSessionCategoryId = :cid, boothSessionCategoryName = :cname'
+          : 'SET boothSessionAt = :now REMOVE boothSessionCategoryId, boothSessionCategoryName',
+        ConditionExpression: 'attribute_exists(id)',
+        ExpressionAttributeValues: {
+          ':now': { S: now },
+          ...(dest.categoryId ? { ':cid': { S: dest.categoryId }, ':cname': { S: dest.categoryName ?? '' } } : {}),
+        },
+      }),
+    )
+    .catch(() => undefined);
+}
+
+/** A stop code closes guest uploads; a start code reopens them if a stop closed them. */
+async function applyUploadsAfterScan(eventId: string, closedBy: 'host' | 'stop' | null, dest: Destination): Promise<void> {
+  if (!EVENT_TABLE) return;
+  const before = { closed: closedBy !== null, by: closedBy };
+  const after = uploadsAfterScan(before, dest);
+  if (after.closed === before.closed && after.by === before.by) return;
+  await dynamo
+    .send(
+      new UpdateItemCommand({
+        TableName: EVENT_TABLE,
+        Key: { id: { S: eventId } },
+        UpdateExpression: after.closed
+          ? 'SET boothUploadsClosed = :t, boothUploadsClosedBy = :by'
+          : 'SET boothUploadsClosed = :f REMOVE boothUploadsClosedBy',
+        // Never undo a host's close.
+        ConditionExpression: 'attribute_not_exists(boothUploadsClosedBy) OR boothUploadsClosedBy <> :host',
+        ExpressionAttributeValues: {
+          ':host': { S: 'host' },
+          ...(after.closed ? { ':t': { BOOL: true }, ':by': { S: 'stop' } } : { ':f': { BOOL: false } }),
+        },
+      }),
+    )
+    .catch(() => undefined);
 }
 
 /** The next QR divider strictly after this camera time, if any. */
@@ -240,8 +333,14 @@ async function rematchAfterDivider(
   eventId: string,
   sub: string,
   dividerAt: string,
-  attendee: { id: string; name: string } | null,
+  dest: Destination,
 ): Promise<void> {
+  const fields = destinationAttributes(dest);
+  const hasPerson = Boolean(fields.boothAttendeeId);
+  const removes = [
+    ...(hasPerson ? [] : ['boothAttendeeId', 'boothAttendeeName']),
+    ...(fields.boothCategoryId ? [] : ['boothCategoryId', 'boothCategoryName']),
+  ];
   const nextAt = await nextCameraScanAt(eventId, sub, dividerAt);
   let start: Record<string, AttributeValue> | undefined;
   for (let page = 0; page < 50; page += 1) {
@@ -270,19 +369,23 @@ async function rematchAfterDivider(
           new UpdateItemCommand({
             TableName: PHOTO_TABLE,
             Key: { id: { S: item.id!.S! } },
-            UpdateExpression: attendee
-              ? 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothAttendeeId = :id, boothAttendeeName = :name, boothMatch = :match, updatedAt = :now'
-              : 'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, updatedAt = :now REMOVE boothAttendeeId, boothAttendeeName',
+            UpdateExpression:
+              'SET boothAttendeeIds = :ids, boothAttendeeNames = :names, boothMatch = :match, boothSegment = :segment, updatedAt = :now' +
+              (hasPerson ? ', boothAttendeeId = :id, boothAttendeeName = :name' : '') +
+              (fields.boothCategoryId ? ', boothCategoryId = :cid, boothCategoryName = :cname' : '') +
+              (removes.length ? ` REMOVE ${removes.join(', ')}` : ''),
             // Never over a hand fix that landed meanwhile.
             ConditionExpression: 'boothMatch <> :manual AND boothMatch <> :divider',
             ExpressionAttributeValues: {
-              ':ids': { L: attendee ? [{ S: attendee.id }] : [] },
-              ':names': { L: attendee ? [{ S: attendee.name }] : [] },
-              ':match': { S: attendee ? 'qr' : 'unassigned' },
+              ':ids': fields.boothAttendeeIds,
+              ':names': fields.boothAttendeeNames,
+              ':match': fields.boothMatch,
+              ':segment': fields.boothSegment,
               ':now': { S: now },
               ':manual': { S: 'manual' },
               ':divider': { S: 'divider' },
-              ...(attendee ? { ':id': { S: attendee.id }, ':name': { S: attendee.name } } : {}),
+              ...(hasPerson ? { ':id': fields.boothAttendeeId, ':name': fields.boothAttendeeName } : {}),
+              ...(fields.boothCategoryId ? { ':cid': fields.boothCategoryId, ':cname': fields.boothCategoryName ?? { S: '' } } : {}),
             },
           }),
         )
@@ -337,15 +440,17 @@ async function boothAssignment(input: {
   if (!scan?.attendeeId?.S) {
     return { boothMatch: { S: 'unassigned' }, capturedAt: { S: capturedAt } };
   }
-  return {
-    boothAttendeeId: { S: scan.attendeeId.S },
-    ...(scan.attendeeName?.S ? { boothAttendeeName: { S: scan.attendeeName.S } } : {}),
-    // The recipient list the fix-up screen edits; one person to start.
-    boothAttendeeIds: { L: [{ S: scan.attendeeId.S }] },
-    boothAttendeeNames: { L: [{ S: scan.attendeeName?.S ?? 'Guest' }] },
-    boothMatch: { S: match },
-    capturedAt: { S: capturedAt },
-  };
+  // A live scan may be a start or stop code (boothControl.ts) or a person.
+  const dest = destinationOfScan({
+    attendeeId: scan.attendeeId.S,
+    name: scan.attendeeName?.S ?? 'Guest',
+    categoryId: scan.categoryId?.S ?? null,
+    categoryName: scan.categoryName?.S ?? null,
+  });
+  const fields = destinationAttributes(dest);
+  // A person matched by upload time stays marked "check".
+  if (dest.to === 'person') fields.boothMatch = { S: match };
+  return { ...fields, capturedAt: { S: capturedAt } };
 }
 
 type Handler = Schema['processProPhoto']['functionHandler'];
@@ -483,22 +588,42 @@ export const handler: Handler = async (event) => {
   // Offline booth (docs/booth-mode.md): the camera's own clock orders photos
   // against QR dividers shot on the same camera.
   const cameraAt = booth ? cameraAtISO(exifCaptureTime(source)) : null;
-  let divider: { attendee: { id: string; name: string } | null } | null = null;
+  let divider: { marker: Marker; dest: Destination } | null = null;
   if (booth && BOOTH_PRIVATE_KEY) {
     const payload = await dividerPayload(source).catch(() => null);
     if (payload) {
-      const opened = await openContact({ payload, eventId, privateKeyPkcs8: BOOTH_PRIVATE_KEY });
-      const attendee = opened
-        ? await upsertOfflineAttendee(eventId, boothRow.owner, opened.personId, opened.contact)
-        : null;
-      if (!opened) console.warn('Booth divider did not open for this event', { uploadId, tag: payloadTag(payload) });
-      divider = { attendee };
+      let marker: Marker = { kind: 'unreadable' };
+      if (isControlPayload(payload)) {
+        // A start or stop code from the Booth tab (boothControl.ts).
+        const code = readControlCode(BOOTH_PRIVATE_KEY, eventId, payload);
+        if (code?.kind === 'e') marker = { kind: 'event' };
+        else if (code?.kind === 's') marker = { kind: 'stop' };
+        else if (code?.kind === 'c') {
+          const cat = boothRow.categories.find((c) => c.id === code.id);
+          // A deleted category's code goes nowhere rather than guessing.
+          if (cat) marker = { kind: 'category', categoryId: cat.id, categoryName: cat.name };
+        }
+      } else {
+        const opened = await openContact({ payload, eventId, privateKeyPkcs8: BOOTH_PRIVATE_KEY });
+        const attendee = opened
+          ? await upsertOfflineAttendee(eventId, boothRow.owner, opened.personId, opened.contact)
+          : null;
+        if (attendee) marker = { kind: 'person', attendeeId: attendee.id, name: attendee.name };
+      }
+      if (marker.kind === 'unreadable') {
+        console.warn('Booth code did not open for this event', { uploadId, tag: payloadTag(payload) });
+      }
+      // A person scanned while a category runs is labelled with it.
+      const prev = cameraAt ? await latestCameraScan(eventId, sub, cameraAt) : null;
+      const before = prev ? stateAfterScan(destinationOfScan(prev), START_STATE) : START_STATE;
+      const { dest } = step(before, marker);
+      divider = { marker, dest };
       boothFields = {
         boothMatch: { S: 'divider' },
         boothDivider: { BOOL: true },
         boothAttendeeIds: { L: [] },
         boothAttendeeNames: { L: [] },
-        ...(attendee ? { boothDividerFor: { S: attendee.name } } : {}),
+        ...(marker.kind !== 'unreadable' ? { boothDividerFor: { S: markerLabel(marker) } } : {}),
         ...(cameraAt ? { cameraAt: { S: cameraAt } } : { boothDividerNoTime: { BOOL: true } }),
       };
     }
@@ -507,18 +632,9 @@ export const handler: Handler = async (event) => {
     boothFields.cameraAt = { S: cameraAt };
     const fromDivider = await latestCameraScan(eventId, sub, cameraAt);
     if (fromDivider) {
-      const who = fromDivider.attendeeId === NOBODY ? null : fromDivider;
-      boothFields = {
-        ...boothFields,
-        boothMatch: { S: who ? 'qr' : 'unassigned' },
-        boothAttendeeIds: { L: who ? [{ S: who.attendeeId }] : [] },
-        boothAttendeeNames: { L: who ? [{ S: who.name }] : [] },
-        ...(who ? { boothAttendeeId: { S: who.attendeeId }, boothAttendeeName: { S: who.name } } : {}),
-      };
-      if (!who) {
-        delete boothFields.boothAttendeeId;
-        delete boothFields.boothAttendeeName;
-      }
+      const keepCapture = boothFields.capturedAt;
+      boothFields = { ...destinationAttributes(destinationOfScan(fromDivider)), cameraAt: { S: cameraAt } };
+      if (keepCapture) boothFields.capturedAt = keepCapture;
     }
   }
   if (divider && cameraAt && SCAN_TABLE) {
@@ -532,8 +648,13 @@ export const handler: Handler = async (event) => {
             scanKey: { S: cameraScanKey(eventId, sub) },
             eventId: { S: eventId },
             photographerId: { S: sub },
-            attendeeId: { S: divider.attendee?.id ?? NOBODY },
-            attendeeName: { S: divider.attendee?.name ?? 'Unreadable code' },
+            attendeeId: { S: markerToScanId(divider.marker) ?? NOBODY },
+            attendeeName: { S: markerLabel(divider.marker) },
+            ...(divider.dest.to === 'person' && divider.dest.categoryId
+              ? { categoryId: { S: divider.dest.categoryId }, categoryName: { S: divider.dest.categoryName ?? '' } }
+              : divider.dest.to === 'category'
+                ? { categoryId: { S: divider.dest.categoryId }, categoryName: { S: divider.dest.categoryName } }
+                : {}),
             scannedAt: { S: cameraAt },
             createdAt: { S: new Date().toISOString() },
             updatedAt: { S: new Date().toISOString() },
@@ -659,7 +780,11 @@ export const handler: Handler = async (event) => {
   }
 
   if (divider && cameraAt) {
-    await rematchAfterDivider(eventId, sub, cameraAt, divider.attendee).catch(() => undefined);
+    await rematchAfterDivider(eventId, sub, cameraAt, divider.dest).catch(() => undefined);
+  }
+  if (divider) {
+    if (divider.dest.to === 'person') await openGuestSession(divider.dest.attendeeId, divider.dest);
+    await applyUploadsAfterScan(eventId, boothRow.closedBy, divider.dest);
   }
 
   const discard = discardDecision({ previewWritten, thumbnailWritten, keepOriginal });

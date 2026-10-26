@@ -10,6 +10,7 @@
  */
 import jsQR from 'jsqr';
 import { BOOTH_OFFLINE_PREFIX } from './boothSeal';
+import { CONTROL_PREFIX } from './boothControl';
 
 /** Long edge the photo is scaled to before decoding: fast, and plenty for a frame-filling code. */
 export const DECODE_LONG_EDGE = 1000;
@@ -41,9 +42,10 @@ export function isLargeInFrame(corners: Point[], width: number, height: number):
   return area >= MIN_AREA_FRACTION && side >= MIN_SIDE_FRACTION;
 }
 
-/** Whether this decoded text is an offline booth code at all. */
+/** Whether this decoded text is a booth code at all: a person's code or a start/stop code. */
 export function isOfflineBoothPayload(data: string): boolean {
-  return data.trim().startsWith(BOOTH_OFFLINE_PREFIX);
+  const text = data.trim();
+  return text.startsWith(BOOTH_OFFLINE_PREFIX) || text.startsWith(CONTROL_PREFIX);
 }
 
 /**
