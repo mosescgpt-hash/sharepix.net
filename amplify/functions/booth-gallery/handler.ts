@@ -165,13 +165,15 @@ async function guestUpload(key: string, image: string): Promise<{ ok: boolean; m
  * The same answer for every failure, so codes cannot be probed.
  */
 async function guestLink(code: string): Promise<{ ok: boolean; message: string; key: string | null }> {
+  const invalid = { ok: false, message: 'This code isn’t valid for any event. Ask the host for a new one.', key: null };
   const fail = {
     ok: false,
     message: 'This code is not ready yet. Your page opens once the photographer has taken a photo of your code. Try again later.',
     key: null,
   };
   const link = readBoothLink(code);
-  if (!link || !ATTENDEE_TABLE) return fail;
+  if (!link) return invalid;
+  if (!ATTENDEE_TABLE) return fail;
   const ev = await dynamo
     .send(
       new GetItemCommand({
@@ -181,7 +183,8 @@ async function guestLink(code: string): Promise<{ ok: boolean; message: string; 
       }),
     )
     .catch(() => null);
-  if (!ev?.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S) return fail;
+  if (!ev) return fail;
+  if (!ev.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S) return invalid;
 
   let attendee: Record<string, AttributeValue> | null = null;
   if (link.payload.startsWith('sharepix-booth:')) {
@@ -287,11 +290,14 @@ function sign(key: string, filename?: string): Promise<string> {
 export const handler = async (event: {
   arguments: { key?: string | null; image?: string | null; code?: string | null };
   info?: { fieldName?: string };
+  fieldName?: string;
 }) => {
   const key = String(event.arguments.key ?? '').trim();
-  if (event.info?.fieldName === 'boothStopEmails') return stopEmails(key);
-  if (event.info?.fieldName === 'boothGuestLink') return guestLink(String(event.arguments.code ?? ''));
-  if (event.info?.fieldName === 'boothGuestUpload') return guestUpload(key, String(event.arguments.image ?? ''));
+  // Amplify Gen2 passes the field at the top level; `info` is the AppSync shape.
+  const field = event.info?.fieldName ?? event.fieldName ?? '';
+  if (field === 'boothStopEmails') return stopEmails(key);
+  if (field === 'boothGuestLink') return guestLink(String(event.arguments.code ?? ''));
+  if (field === 'boothGuestUpload') return guestUpload(key, String(event.arguments.image ?? ''));
   if (!isGalleryKey(key)) return NOT_FOUND;
 
   const attendee = await attendeeByKey(key);

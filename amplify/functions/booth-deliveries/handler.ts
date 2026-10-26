@@ -580,11 +580,12 @@ interface InvocationEvent {
   arguments?: { eventId?: string | null; attendeeId?: string | null };
   identity?: { sub?: string | null; groups?: string[] | null } | null;
   info?: { fieldName?: string };
+  fieldName?: string;
 }
 
 /** Invoked hourly by the schedule, and by boothResendEmail from the host's attendee list. */
 export const handler = async (event: InvocationEvent): Promise<JobResult | ResendResult> => {
-  if (event?.info?.fieldName === 'boothResendEmail') {
+  if ((event?.info?.fieldName ?? event?.fieldName) === 'boothResendEmail') {
     try {
       return await resend(event.arguments ?? {}, event.identity);
     } catch (error) {
