@@ -23,7 +23,7 @@ export default function BoothGuestLinkPage() {
       .then((res) => {
         if (!live) return;
         if (res.ok && res.key) void router.replace(`/booth/photos/${encodeURIComponent(res.key)}`);
-        else setMessage(res.message || 'This code could not be opened.');
+        else setMessage(res.message || 'This code isn’t valid for any event. Ask the host for a new one.');
       })
       .catch((err: unknown) => {
         if (live) setMessage(err instanceof Error ? err.message : 'Your page could not be opened.');

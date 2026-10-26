@@ -96,3 +96,18 @@ describe('shared gallery publishing', () => {
     expect(photos[2].momentId).toBeNull();
   });
 });
+
+describe('booth functions read the field name the way Amplify sends it', () => {
+  // Live, Amplify Gen2 sent no `info.fieldName` here: every boothGuestLink,
+  // boothGuestUpload and boothStopEmails call fell through to the gallery.
+  it.each(['booth-gallery', 'booth-deliveries'])('%s falls back to the top-level fieldName', (dir) => {
+    const src = readFileSync(`amplify/functions/${dir}/handler.ts`, 'utf8');
+    expect(src).toMatch(/info\?\.fieldName \?\? event\??\.fieldName/);
+  });
+  it('a /b/ code for no event says so in plain words, not the email wording', () => {
+    const src = readFileSync('amplify/functions/booth-gallery/handler.ts', 'utf8');
+    const fn = src.slice(src.indexOf('async function guestLink'));
+    expect(fn).toContain('This code isn’t valid for any event. Ask the host for a new one.');
+    expect(fn.slice(0, fn.indexOf('\n}\n'))).not.toContain('email it came in');
+  });
+});
