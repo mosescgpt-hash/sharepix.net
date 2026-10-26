@@ -35,6 +35,7 @@ interface ResolverEvent {
   arguments?: Record<string, unknown>;
   identity?: { sub?: string; groups?: string[] | null } | null;
   info?: { fieldName?: string };
+  fieldName?: string;
 }
 
 /** Same shape as mayEdit in update-event/settings.ts. */
@@ -231,7 +232,7 @@ export const handler = async (event: ResolverEvent): Promise<Result> => {
   if (!found?.Item || !mayEdit(event.identity, found.Item.owner?.S ?? '')) return NOT_FOUND;
 
   try {
-    switch (event.info?.fieldName) {
+    switch (event.info?.fieldName ?? event.fieldName) {
       case 'saveChallenge':
         return await save(eventId, args);
       case 'removeChallenge':
@@ -243,7 +244,7 @@ export const handler = async (event: ResolverEvent): Promise<Result> => {
     }
   } catch (error) {
     console.error('save-challenge failed', {
-      field: event.info?.fieldName,
+      field: event.info?.fieldName ?? event.fieldName,
       eventId,
       error: error instanceof Error ? error.message : String(error),
     });

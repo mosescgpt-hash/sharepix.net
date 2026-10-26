@@ -216,7 +216,8 @@ async function addComment(event: CommentEvent): Promise<{ id: string; createdAt:
  * it, not quietly behave like a like.
  */
 export const handler = async (event: LikeEvent & CommentEvent) => {
-  const field = (event as { info?: { fieldName?: string } }).info?.fieldName ?? '';
+  const field =
+    (event as { info?: { fieldName?: string } }).info?.fieldName ?? (event as { fieldName?: string }).fieldName ?? '';
   if (field === 'togglePhotoLike') return toggleLike(event);
   if (field === 'addPhotoComment') return addComment(event);
   throw new Error(REFUSED);

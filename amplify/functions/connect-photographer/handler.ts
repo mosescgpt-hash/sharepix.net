@@ -128,7 +128,8 @@ export const handler: Handler = async (event) => {
 
   // Also backs eventPhotographerNames; same function, so it shares the
   // ownership rule above rather than restating it somewhere new.
-  if ((event as { info?: { fieldName?: string } }).info?.fieldName === 'eventPhotographerNames') {
+  const field = (event as { info?: { fieldName?: string }; fieldName?: string }).info?.fieldName ?? (event as { fieldName?: string }).fieldName;
+  if (field === 'eventPhotographerNames') {
     return photographerNames(event.arguments as unknown as NamesArgs, sub, groups) as never;
   }
 

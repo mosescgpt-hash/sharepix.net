@@ -230,12 +230,13 @@ async function run(): Promise<JobResult> {
 interface InvocationEvent {
   arguments?: { probe?: boolean | null };
   info?: { fieldName?: string };
+  fieldName?: string;
 }
 
 /** Invoked hourly by the schedule, and by runUploadReminders from the admin dashboard. */
 export const handler = async (event: InvocationEvent): Promise<JobResult> => {
   // The probe answers before any work, as on the other job runners.
-  if (event?.info?.fieldName === 'runUploadReminders' && event.arguments?.probe) {
+  if ((event?.info?.fieldName ?? event?.fieldName) === 'runUploadReminders' && event.arguments?.probe) {
     return {
       ok: true,
       dryRun: !SENDING_ENABLED,
