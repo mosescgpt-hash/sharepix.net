@@ -28,6 +28,7 @@ interface ResolverEvent {
   arguments?: Record<string, unknown>;
   identity?: { sub?: string; groups?: string[] | null } | null;
   info?: { fieldName?: string };
+  fieldName?: string;
 }
 
 /** The id of a guest's opt-in: one per address per event, by construction. */
@@ -231,7 +232,7 @@ async function setReminders(args: Record<string, unknown>, identity: ResolverEve
 export const handler = async (event: ResolverEvent): Promise<Result> => {
   const args = event.arguments ?? {};
   try {
-    switch (event.info?.fieldName) {
+    switch (event.info?.fieldName ?? event.fieldName) {
       case 'requestUploadReminder':
         return await requestReminder(args);
       case 'stopUploadReminders':
@@ -244,7 +245,7 @@ export const handler = async (event: ResolverEvent): Promise<Result> => {
   } catch (error) {
     // Addresses are deliberately never logged.
     console.error('upload-reminders failed', {
-      field: event.info?.fieldName,
+      field: event.info?.fieldName ?? event.fieldName,
       error: error instanceof Error ? error.message : String(error),
     });
     return { ok: false, message: 'Something went wrong. Try again in a moment.' };
