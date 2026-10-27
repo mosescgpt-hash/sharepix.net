@@ -52,7 +52,7 @@ export default function Navbar() {
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
         <Link
           href="/"
-          className="flex items-center gap-2 font-sans text-lg font-bold tracking-[-0.02em] text-charcoal"
+          className="flex min-h-[44px] items-center gap-2 font-sans text-lg font-bold tracking-[-0.02em] text-charcoal"
         >
           <Logo />
           <span className="lowercase">
@@ -63,7 +63,7 @@ export default function Navbar() {
 
         <button
           type="button"
-          className="-mr-2 p-2 sm:hidden"
+          className="-mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center p-2 sm:hidden"
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={menuOpen}
           aria-controls="primary-navigation"

@@ -22,7 +22,7 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
     n: '02',
     title: 'Guests scan and share',
-    body: 'They point a phone camera at the code. The upload page opens in the browser — no app, no sign-up, nothing to explain.',
+    body: 'They point a phone camera at the code and the upload page opens in their browser.',
   },
   {
     n: '03',

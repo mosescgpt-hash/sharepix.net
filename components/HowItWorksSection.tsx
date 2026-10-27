@@ -12,16 +12,19 @@ import { HOW_IT_WORKS_STEPS } from '@/lib/howItWorks';
 export default function HowItWorksSection({
   first = 'Three steps.',
   second = "That's the whole thing.",
+  compact = false,
 }: {
   first?: string;
   second?: string;
+  /** Tighter vertical spacing, for the homepage. */
+  compact?: boolean;
 }) {
   return (
-    <section className="spx-section-ink">
+    <section className={`spx-section-ink${compact ? ' !py-10 sm:!py-14' : ''}`}>
       <div className="spx-inner">
         <p className="spx-eyebrow">How it works</p>
         <SectionHeading first={first} second={second} />
-        <div className="mt-12 grid gap-10 sm:grid-cols-3">
+        <div className={`grid sm:grid-cols-3 ${compact ? 'mt-8 gap-8' : 'mt-12 gap-10'}`}>
           {HOW_IT_WORKS_STEPS.map((step) => (
             <div key={step.n}>
               <div className="spx-step-icon bg-canvas/15 text-canvas">

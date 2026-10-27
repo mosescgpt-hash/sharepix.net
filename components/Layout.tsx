@@ -179,12 +179,12 @@ export default function Layout({
             <div className="flex flex-wrap gap-10 sm:gap-16">
               <div>
                 <p className="spx-eyebrow text-mint">Use cases</p>
-                <nav aria-label="Use cases" className="mt-3 flex flex-col gap-3 text-sm">
+                <nav aria-label="Use cases" className="mt-3 flex flex-col text-sm">
                   {USE_CASES.map((useCase) => (
                     <Link
                       key={useCase.slug}
                       href={`/${useCase.slug}`}
-                      className="text-canvas/65 transition hover:text-mint"
+                      className="inline-flex min-h-[44px] items-center text-canvas/65 transition hover:text-mint"
                     >
                       {useCase.navLabel}
                     </Link>
@@ -193,13 +193,13 @@ export default function Layout({
               </div>
               <nav
                 aria-label="Footer"
-                className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm sm:gap-x-16"
+                className="grid grid-cols-2 gap-x-10 text-sm sm:gap-x-16"
               >
                 {FOOTER_LINKS.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="text-canvas/65 transition hover:text-mint"
+                    className="inline-flex min-h-[44px] items-center text-canvas/65 transition hover:text-mint"
                   >
                     {link.label}
                   </Link>
@@ -209,7 +209,7 @@ export default function Layout({
           </div>
           <div className="mt-12 flex flex-col gap-2 border-t border-canvas/15 pt-6 text-sm text-canvas/75 sm:flex-row sm:items-center sm:justify-between">
             <p>&copy; {new Date().getFullYear()} sharepix.net</p>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="transition hover:text-mint">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="inline-flex min-h-[44px] items-center transition hover:text-mint">
               {SUPPORT_EMAIL}
             </a>
           </div>

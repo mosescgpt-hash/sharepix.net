@@ -1,18 +1,20 @@
 import Link from 'next/link';
+import { LAUNCH_PROMO_TEXT, SHOW_LAUNCH_PROMO } from '@/lib/launchPromo';
 
 /**
- * The SHAREFREE launch offer. The wording is fixed by the owner and used
- * word-for-word in marketing, so change it in one place only: here.
+ * The launch-offer banner. Switched on and off by `SHOW_LAUNCH_PROMO` in
+ * lib/launchPromo.ts, which also holds the wording.
  */
-export const SHAREFREE_OFFER =
-  'The first 20 events booked with code SHAREFREE are free. That\u2019s 20 total, first come, first served.';
-
 export default function OfferBanner() {
+  if (!SHOW_LAUNCH_PROMO) return null;
   return (
     <div className="bg-pine text-canvas">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-2 px-5 py-3 text-center text-sm sm:flex-row sm:gap-4 sm:px-8">
-        <p className="font-medium">{SHAREFREE_OFFER}</p>
-        <Link href="/create-event" className="font-semibold underline underline-offset-2">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-1 px-5 py-3 text-center text-sm sm:flex-row sm:gap-4 sm:px-8">
+        <p className="font-medium">{LAUNCH_PROMO_TEXT}</p>
+        <Link
+          href="/create-event"
+          className="inline-flex min-h-[44px] items-center font-semibold underline underline-offset-2"
+        >
           Create an event
         </Link>
       </div>

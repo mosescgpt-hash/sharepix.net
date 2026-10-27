@@ -295,7 +295,10 @@ describe('the homepage says these things', () => {
   it('renders the claims from the module rather than retyping them', () => {
     // Copy typed into JSX is copy no test can check. The whole mechanism above
     // depends on the page and the module being the same words.
-    expect(page).toContain('DIFFERENTIATORS.map');
+    //
+    // The homepage shows four of them (HOMEPAGE_PROMISE_IDS); the rest live on
+    // /pricing and the use-case pages.
+    expect(page).toContain('HOMEPAGE_PROMISES.map');
   });
 
   it('carries no two-column comparison against anybody', () => {
@@ -346,13 +349,31 @@ describe('the homepage says these things', () => {
     expect(page).toContain('Download the originals and keep them.');
   });
 
-  it('sets the fine print at body size', () => {
+  it('keeps the fair-use line small but never fine print', () => {
     // The fair-use line — the only sentence on the page that names a limit on
     // what you get — was 11px at under half opacity. Terms are set small when
-    // somebody would rather they were not read.
+    // somebody would rather they were not read. The owner asked for it to sit
+    // small under the price line, so it is 12px (text-xs) at 70% opacity with
+    // a link that is a full tap target: small, not hidden.
     const rendered = codeOnly(page);
-    expect(rendered).not.toContain('text-[0.7rem] text-charcoal/45');
-    expect(rendered).toContain('see fair use');
+    expect(rendered).not.toContain('text-[0.7rem]');
+    expect(rendered).not.toContain('text-charcoal/45');
+    expect(rendered).toContain('See fair use');
+    expect(rendered).toContain('min-h-[44px]');
+  });
+
+  it('puts the free-event limit on /pricing, not in the hero', () => {
+    // "One event per account" is a rule of the free plan. It lives on the
+    // pricing page; the homepage hero says what the plans cost.
+    expect(codeOnly(page).toLowerCase()).not.toContain('one event per account');
+    expect(codeOnly(page)).toContain('per account');
+    expect(readSource('components/PricingCards.tsx')).toContain('One per account');
+  });
+
+  it('says "no app, no account" in the hero and the trust strip only', () => {
+    const rendered = codeOnly(page);
+    const hits = rendered.match(/no app, no account/gi) ?? [];
+    expect(hits).toHaveLength(2);
   });
 
   it('keeps the illustrative stat row off the page', () => {
