@@ -2,7 +2,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { QRCodeSVG } from 'qrcode.react';
-import { fetchEvent, fetchEventPhotoRecords, getPhotoDisplaySource } from '@/lib/api';
+import {
+  fetchEvent,
+  fetchEventPhotoRecords,
+  getCurrentUserInfo,
+  getPhotoDisplaySource,
+  submitGalleryPin,
+} from '@/lib/api';
+import GalleryPinPrompt from '@/components/GalleryPinPrompt';
+import { isGlobalAdmin } from '@/lib/admin';
+import { isEventHost } from '@/lib/gallery';
+import { galleryAudienceFor } from '@/lib/galleryAudience';
+import {
+  getAccessToken,
+  isPinRequiredError,
+  pinFromFragment,
+  pinRequired,
+  rememberSessionPin,
+} from '@/lib/galleryAccess';
 import { liveSlideshowAvailable } from '@/lib/pricing';
 import { FallbackImage } from '@/components/FallbackMedia';
 import { initialSource, type MediaSource } from '@/lib/mediaSource';
@@ -49,6 +66,10 @@ export default function LiveSlideshowPage() {
   const [isNew, setIsNew] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
   const [photoCount, setPhotoCount] = useState(0);
+  // The host has put a PIN on the gallery and this screen has not been given it.
+  const [needsPin, setNeedsPin] = useState(false);
+  // Bumped to start again after the PIN is entered.
+  const [attempt, setAttempt] = useState(0);
   // Photo challenges, for the caption under a challenge photo. [] unless the
   // host turned challenges on.
   const challenges = useEventChallenges(event);
@@ -94,8 +115,10 @@ export default function LiveSlideshowPage() {
         const queued = new Set(queueRef.current.map((item) => item.id));
         queueRef.current.push(...arrivals.filter((item) => !queued.has(item.id)));
       }
-    } catch {
-      // A failed poll is not fatal — the reel we already have keeps playing.
+    } catch (err) {
+      // The PIN came on, or was changed, while the screen was running.
+      if (isPinRequiredError(err)) setNeedsPin(true);
+      // Any other failed poll is not fatal — the reel we already have keeps playing.
     }
   }, [eventId]);
 
@@ -150,6 +173,36 @@ export default function LiveSlideshowPage() {
           );
           return;
         }
+
+        // Who may watch. The server refuses everything it should (this only
+        // decides what to show), and a host who is signed in as themselves
+        // always sees their own event.
+        const [user, admin] = await Promise.all([
+          getCurrentUserInfo(),
+          isGlobalAdmin().catch(() => false),
+        ]);
+        const privileged = isEventHost(ev, user) || admin;
+        if (!privileged && (ev.guestViewBlocked === true || galleryAudienceFor(ev) === 'host')) {
+          setError(
+            'The live slideshow is off because the host is keeping this gallery to themselves. The host can open it while signed in, or allow guests to view the gallery.',
+          );
+          return;
+        }
+        // A screen link made with the PIN carries it after the #. It stays in
+        // the address bar here, unlike on the gallery page, so a venue screen
+        // that is reloaded in the middle of the night still opens.
+        const pinInLink = pinFromFragment(window.location.hash);
+        if (!privileged && pinRequired(ev)) {
+          if (pinInLink) {
+            if (getAccessToken(eventId)) rememberSessionPin(eventId, pinInLink);
+            else await submitGalleryPin(eventId, pinInLink).catch(() => null);
+          }
+          if (!getAccessToken(eventId)) {
+            setNeedsPin(true);
+            return;
+          }
+        }
+        setNeedsPin(false);
         await refresh();
         if (!cancelled) await advance();
       } catch {
@@ -161,7 +214,7 @@ export default function LiveSlideshowPage() {
     return () => {
       cancelled = true;
     };
-  }, [eventId, refresh, advance]);
+  }, [eventId, refresh, advance, attempt]);
 
   // Poll for new photos.
   useEffect(() => {
@@ -245,6 +298,18 @@ export default function LiveSlideshowPage() {
         {error ? (
           <div className="flex h-full items-center justify-center px-8 text-center">
             <p className="text-xl text-white/80">{error}</p>
+          </div>
+        ) : needsPin && eventId ? (
+          <div className="flex h-full items-center justify-center px-6">
+            <GalleryPinPrompt
+              dark
+              what="the slideshow"
+              onSubmit={(pin) => submitGalleryPin(eventId, pin)}
+              onUnlocked={() => {
+                setNeedsPin(false);
+                setAttempt((n) => n + 1);
+              }}
+            />
           </div>
         ) : loading ? (
           <div className="flex h-full items-center justify-center">

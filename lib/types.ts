@@ -69,6 +69,14 @@ export interface QREvent {
   guestDownloadEnabled?: boolean | null;
   /** Host withheld guest downloads. Absent/false = downloads allowed. */
   guestDownloadsBlocked?: boolean | null;
+  /** Host keeps the gallery to themselves; guests can still add photos. */
+  guestViewBlocked?: boolean | null;
+  /** 'auto' (absent) | 'on' | 'off'. See lib/galleryAccess.ts. */
+  galleryPinMode?: string | null;
+  /** Days after the event date that 'auto' turns the PIN on. Default 30. */
+  galleryPinAutoDays?: number | null;
+  /** True once the host has set a PIN. The PIN itself is never on this row. */
+  galleryPinSet?: boolean | null;
   liveSlideshowEnabled?: boolean | null;
   /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;
@@ -145,7 +153,7 @@ export interface QRPhoto {
   approved?: boolean | null;
   eventOwner?: string | null;
   contentHash?: string | null;
-  /** 'ok' | 'flagged' | 'released' | 'skipped'; missing on pre-screening photos. */
+  /** 'ok' | 'flagged' | 'released' | 'skipped' | 'held' (a guest video awaiting the host); missing on pre-screening photos. */
   moderationStatus?: string | null;
   /** What the screener detected, when flagged. */
   moderationReasons?: string | null;

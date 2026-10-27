@@ -59,6 +59,7 @@ import { corporateSeats } from './functions/corporate-seats/resource';
 import { sanitizeUpload } from './functions/sanitize-upload/resource';
 import { recordBytes } from './functions/record-bytes/resource';
 import { mediaUrl } from './functions/media-url/resource';
+import { galleryAccess } from './functions/gallery-access/resource';
 import { moderatePhoto } from './functions/moderate-photo/resource';
 import { dailyTasks } from './functions/daily-tasks/resource';
 import { unsubscribeEmail } from './functions/unsubscribe-email/resource';
@@ -124,6 +125,7 @@ const backend = defineBackend({
   sanitizeUpload,
   recordBytes,
   mediaUrl,
+  galleryAccess,
   moderatePhoto,
   dailyTasks,
   unsubscribeEmail,
@@ -161,6 +163,7 @@ const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
 const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
 const quotaTable = backend.data.resources.tables.QuotaCounter;
+const galleryPinTable = backend.data.resources.tables.GalleryPin;
 const contributorTable = backend.data.resources.tables.EventContributor;
 const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
@@ -406,6 +409,21 @@ mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 // path cannot settle it from the key alone.
 photoTable.grantReadData(mediaUrlFn);
 mediaUrlFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// The same gallery rules as listEventPhotos, so the picture URLs are gated by
+// the PIN token, a host's download share and a moderation review link exactly
+// as the list is. All read-only.
+galleryPinTable.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('GALLERY_PIN_TABLE_NAME', galleryPinTable.tableName);
+backend.data.resources.tables.DownloadShare.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('DOWNLOAD_SHARE_TABLE_NAME', backend.data.resources.tables.DownloadShare.tableName);
+reviewTable.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('REVIEW_TABLE_NAME', reviewTable.tableName);
+// S3 reads for the signed fallback links. Guests and signed-in users no longer
+// hold S3 read access to events/* (amplify/storage/resource.ts); this function
+// is the only way to it, after the checks above. Quarantine is for admins only
+// and the function enforces that before signing.
+bucket.grantRead(mediaUrlFn, 'events/*');
+mediaUrlFn.addEnvironment('PHOTO_BUCKET_NAME', bucket.bucketName);
 mediaUrlFn.addEnvironment('R2_ACCOUNT_ENDPOINT', process.env.R2_ACCOUNT_ENDPOINT ?? '');
 mediaUrlFn.addEnvironment('R2_BUCKET', process.env.R2_BUCKET ?? '');
 mediaUrlFn.addEnvironment('R2_ACCESS_KEY_ID', process.env.R2_ACCESS_KEY_ID ?? '');
@@ -661,6 +679,21 @@ listFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 const downloadShareTable = backend.data.resources.tables.DownloadShare;
 downloadShareTable.grantReadData(listFn);
 listFn.addEnvironment('DOWNLOAD_SHARE_TABLE_NAME', downloadShareTable.tableName);
+// Read-only: the key that signs gallery PIN tokens, to check one. Never the PIN.
+galleryPinTable.grantReadData(listFn);
+listFn.addEnvironment('GALLERY_PIN_TABLE_NAME', galleryPinTable.tableName);
+
+// The gallery PIN (docs/gallery-access.md). Guests enter it, the host sets it.
+// It hashes the PIN into GalleryPin, counts wrong guesses in QuotaCounter, and
+// flips one flag on the Event (galleryPinSet) so guests know to ask. Event
+// write is for that flag only; the function updates nothing else on the row.
+const galleryAccessFn = backend.galleryAccess.resources.lambda as LambdaFunction;
+eventTable.grantReadWriteData(galleryAccessFn);
+galleryPinTable.grantReadWriteData(galleryAccessFn);
+quotaTable.grantReadWriteData(galleryAccessFn);
+galleryAccessFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+galleryAccessFn.addEnvironment('GALLERY_PIN_TABLE_NAME', galleryPinTable.tableName);
+galleryAccessFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
 
 // Guest book write: reads the event to re-derive entitlement and state, bumps
 // the entry counter atomically, reads the Photo table to prove an attached

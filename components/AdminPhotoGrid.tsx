@@ -55,7 +55,7 @@ export default function AdminPhotoGrid({
    */
   function clickShare(id: string, e: MouseEvent) {
     if (!selectedIds || !onToggleSelected) return;
-    const ids = photos.filter((p) => p.approved !== false).map((p) => p.id);
+    const ids = photos.filter((p) => p.approved !== false && p.moderationStatus !== 'held').map((p) => p.id);
     const next = applyClick(selectedIds, ids, shareAnchor.current, id, e.shiftKey);
     for (const each of ids) {
       if (next.has(each) !== selectedIds.has(each)) onToggleSelected(each);
@@ -215,10 +215,13 @@ export default function AdminPhotoGrid({
           const hidden = photo.approved === false;
           // Held back by content screening — visible to the host only.
           const flagged = photo.moderationStatus === 'flagged';
+          // A guest's video waits here until the host says yes: videos are not
+          // screened, so nobody else sees one first.
+          const held = photo.moderationStatus === 'held';
           const busy = workingId === photo.id;
           const isVideo = isVideoFilename(photo.s3Key);
           // Only approved photos can be shared, so the toggle is offered on them.
-          const canSelect = selectable && !hidden && !deleteMode;
+          const canSelect = selectable && !hidden && !held && !deleteMode;
           const isSelected = selectedIds?.has(photo.id) ?? false;
           const markedForDelete = deleteMode && toDelete.has(photo.id);
           return (
@@ -229,6 +232,8 @@ export default function AdminPhotoGrid({
                   ? 'border-red-600 ring-2 ring-red-600'
                   : hidden
                     ? 'border-amber-500'
+                    : held
+                      ? 'border-amber-500'
                     : isSelected && !deleteMode
                       ? 'border-ink'
                       : 'border-charcoal/10'
@@ -295,6 +300,23 @@ export default function AdminPhotoGrid({
                 {hidden ? (
                   <p className="font-medium text-amber-600">Hidden from gallery</p>
                 ) : null}
+                {held ? (
+                  <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-900">
+                    <p className="font-semibold">Waiting for your OK</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-amber-800/80">
+                      Videos are not screened, so only you can see this one. Watch it, then
+                      approve it to show guests, the slideshow and downloads, or delete it.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => handleRelease(photo)}
+                      className="mt-1.5 min-h-[44px] w-full rounded-full bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      Approve video
+                    </button>
+                  </div>
+                ) : null}
                 {flagged ? (
                   <div className="rounded-lg bg-amber-50 px-2 py-1.5 text-amber-900">
                     <p className="font-semibold">Held for review</p>
@@ -308,7 +330,7 @@ export default function AdminPhotoGrid({
                       type="button"
                       disabled={busy}
                       onClick={() => handleRelease(photo)}
-                      className="mt-1.5 w-full rounded-full bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                      className="mt-1.5 min-h-[44px] w-full rounded-full bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
                     >
                       Release photo
                     </button>

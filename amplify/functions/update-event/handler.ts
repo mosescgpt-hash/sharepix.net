@@ -18,7 +18,7 @@ type Handler = Schema['updateEventSettings']['functionHandler'];
  * list can't become an expression-injection question.
  */
 function expressionFor(
-  patch: { set: Record<string, string | boolean>; remove: string[] },
+  patch: { set: Record<string, string | boolean | number>; remove: string[] },
   // Server-derived, never from the request. See the call site.
   reschedule: Rescheduled | null = null,
 ) {
@@ -31,7 +31,11 @@ function expressionFor(
     const valueRef = `:s${index}`;
     names[nameRef] = field;
     values[valueRef] =
-      typeof value === 'boolean' ? { BOOL: value } : ({ S: value } as AttributeValue);
+      typeof value === 'boolean'
+        ? { BOOL: value }
+        : typeof value === 'number'
+          ? { N: String(value) }
+          : ({ S: value } as AttributeValue);
     sets.push(`${nameRef} = ${valueRef}`);
   });
 
@@ -101,6 +105,9 @@ export const handler: Handler = async (event) => {
       commentsEnabled: event.arguments.commentsEnabled,
       coverStyle: event.arguments.coverStyle,
       galleryAudience: event.arguments.galleryAudience,
+      guestViewBlocked: event.arguments.guestViewBlocked,
+      galleryPinMode: event.arguments.galleryPinMode,
+      galleryPinAutoDays: event.arguments.galleryPinAutoDays,
     },
     { photoCount: Number(found.Item.photoCount?.N ?? '0'), id: eventId },
   );

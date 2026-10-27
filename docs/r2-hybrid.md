@@ -131,6 +131,10 @@ So every read carries two URLs, both signed locally at no per-photo cost:
 | Live slideshow | R2 preview | S3 |
 | Download, ZIP, print order | R2 original | S3 `downloadData` |
 
+Both URLs are signed in `media-url`, after the same visibility checks. Guests
+have no direct S3 read (see `docs/gallery-access.md`), so the S3 fallback is a
+server-signed URL (`fallbackUrl`), not something the browser signs itself.
+
 The browser settles which one works. When R2 is unconfigured, every primary is
 the S3 URL and the fallback is absent — exactly the behaviour that predates all
 of this.

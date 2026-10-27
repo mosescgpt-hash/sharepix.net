@@ -11,6 +11,8 @@
  * stated rather than assumed.
  */
 
+import { photoVisibleTo, type PhotoRowFacts, type ViewContext } from './visibility';
+
 /**
  * How many objects one request may ask to sign.
  *
@@ -152,8 +154,8 @@ export type AccessDecision =
  *     event's id could be used to fetch another event's photos.
  *  2. The key must be a variant we recognise — no signing arbitrary paths.
  *  3. The host and admins get anything in their own event.
- *  4. Videos are host-only, matching the gallery: a still is served as a small
- *     preview, a video streams at full size every play.
+ *  4. (Videos: per-row, see the handler. Held or unapproved ones are never
+ *     signed for a guest; approved ones follow rule 6.)
  *  5. A guest gets nothing once the gallery has closed to them.
  *  6. A guest of an event whose host withheld downloads, or one past its
  *     full-resolution window, gets the thumbnail only — never the original.
@@ -197,7 +199,11 @@ export function canSign({
   // cannot settle it alone. The handler drops unpublished ones before calling
   // here; `allowed` from this point means "allowed if published", and
   // proUploadIdOf is how the handler knows which rows to check.
-  if (isVideoKey(key)) return refuse;
+  // Videos are not refused here any more: whether a guest may see a particular
+  // video is a fact about its row (released by the host, or not), which a key
+  // cannot answer. The handler's allow-list settles it; what this still
+  // decides for a video is the download rule below, since a video has no
+  // thumbnail and every play streams the original.
   if (event.guestResolution === 'none') return refuse;
 
   // The cover is the page's masthead, not one of the event's photos: the host
@@ -219,24 +225,6 @@ export function isEventPhotoKey(key: string): boolean {
   return v === 'original' || v === 'preview' || v === 'thumb';
 }
 
-/** The parts of a Photo row the guest-visibility check reads. */
-export interface PhotoVisibilityRow {
-  s3Key?: string | null;
-  previewS3Key?: string | null;
-  thumbS3Key?: string | null;
-  approved?: boolean | null;
-  moderationStatus?: string | null;
-}
-
-/**
- * Whether a guest may see this photo: the same rule listEventPhotos applies to
- * the public gallery and slideshow. Hidden by the host (`approved === false`)
- * or held by screening (`moderationStatus === 'flagged'`) means no.
- */
-export function guestMayView(row: PhotoVisibilityRow): boolean {
-  return row.approved !== false && row.moderationStatus !== 'flagged';
-}
-
 /**
  * The photo a key belongs to, independent of variant: the event plus the file
  * name with its extension and any -preview/-thumb suffix removed. Previews and
@@ -252,19 +240,29 @@ export function photoStemOf(key: string): string {
 }
 
 /**
- * Stems of photos guests must NOT see (hidden or flagged). A guest key whose
- * stem is in this set gets no link, even if the guest knows the key (the
- * uploader does). Unknown keys are left to the other rules so a photo whose
- * row is still being written is not blanked.
+ * What a guest may be signed a URL for, as an allow-list built from the Photo
+ * rows that pass the same rule listEventPhotos applies (photoVisibleTo).
+ *
+ * It was a deny-list (hidden and flagged photos), which had to be extended for
+ * every new way a photo could be withheld and failed open for any it missed. An
+ * allow-list fails the other way: a key whose photo is not in it is not signed.
+ * The cost is that a photo whose row is still being written is not signed for a
+ * guest for a moment; the uploader's own upload preview is a local blob, so
+ * nothing on screen waits on it.
  */
-export function withheldPhotoStems(rows: PhotoVisibilityRow[]): Set<string> {
-  const withheld = new Set<string>();
+export function visibleStemsAndIds(
+  rows: PhotoRowFacts[],
+  ctx: ViewContext,
+): { stems: Set<string>; ids: Set<string> } {
+  const stems = new Set<string>();
+  const ids = new Set<string>();
   for (const row of rows) {
-    if (guestMayView(row)) continue;
+    if (!photoVisibleTo(row, ctx)) continue;
+    if (row.id) ids.add(row.id);
     for (const key of [row.s3Key, row.previewS3Key, row.thumbS3Key]) {
       const stem = key ? photoStemOf(key) : '';
-      if (stem) withheld.add(stem);
+      if (stem) stems.add(stem);
     }
   }
-  return withheld;
+  return { stems, ids };
 }

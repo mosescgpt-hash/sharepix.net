@@ -96,9 +96,14 @@ describe('canSign — guests', () => {
     expect(sign(thumb, guest).allowed).toBe(true);
   });
 
-  it('never gets a video', () => {
-    // Matches the gallery: a video streams at full size on every play.
-    expect(sign(video, guest).allowed).toBe(false);
+  it('gets a video key only while downloads are allowed', () => {
+    // Whether this video is released is a fact about its row, which the
+    // handler's allow-list settles. What the key rule still decides is size:
+    // a video has no thumbnail and streams at full size on every play, so a
+    // guest whose host withheld downloads gets none.
+    expect(sign(video, guest).allowed).toBe(true);
+    expect(sign(video, guest, { ...openEvent, guestDownloadsBlocked: true }).allowed).toBe(false);
+    expect(sign(video, guest, { ...openEvent, guestResolution: 'small' as const }).allowed).toBe(false);
   });
 
   it('gets nothing once the gallery has closed to them', () => {
@@ -123,8 +128,9 @@ describe('canSign — guests', () => {
 
   it('is not treated as the host of an ownerless event', () => {
     // An empty owner must not match a caller with no sub.
-    const ownerless = { owner: '', guestResolution: 'full' as const };
-    expect(sign(video, guest, ownerless).allowed).toBe(false);
+    // A host would get the original at any resolution; this caller does not.
+    const ownerless = { owner: '', guestResolution: 'small' as const };
+    expect(sign(original, guest, ownerless).allowed).toBe(false);
   });
 });
 
@@ -171,7 +177,7 @@ describe('canSign — refusals are indistinguishable', () => {
   it('gives one message for wrong event, unknown path, and not allowed', () => {
     const wrongEvent = sign('events/evt-2/photos/a.jpg', host);
     const unknownPath = sign(`events/${EVENT}/nope/a.jpg`, host);
-    const notAllowed = sign(video, guest);
+    const notAllowed = sign(original, guest, { ...openEvent, guestDownloadsBlocked: true });
     expect(wrongEvent).toEqual(unknownPath);
     expect(unknownPath).toEqual(notAllowed);
   });

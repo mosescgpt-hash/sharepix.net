@@ -65,13 +65,18 @@ describe('the scan that is left', () => {
 
 describe('what the change did not touch', () => {
   it('still withholds photos held for review from guests', () => {
-    // This query serves guests, so it is where screening is enforced.
-    expect(code).toContain("item.moderationStatus?.S !== 'flagged'");
-    expect(code).toContain('item.approved?.BOOL !== false');
+    // This query serves guests, so it is where screening is enforced. The
+    // rule itself lives in visibility.ts (photoVisibleTo), shared with media-url.
+    const rule = codeOnly(readSource('amplify/functions/list-event-photos/visibility.ts'));
+    expect(rule).toContain("row.moderationStatus === 'flagged'");
+    expect(rule).toContain('row.approved === false');
+    expect(rule).toContain("item.moderationStatus === 'held'");
+    expect(code).toContain('photoVisibleTo(');
   });
 
   it('still applies the per-viewer visibility rule', () => {
-    expect(code).toContain('isVisibleTo(');
+    expect(code).toContain('photoVisibleTo(');
+    expect(code).toContain('galleryGateFor(');
   });
 
   it('still returns nothing for a missing event id', () => {

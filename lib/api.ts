@@ -4,7 +4,7 @@ import { fetchAuthSession, getCurrentUser } from 'aws-amplify/auth';
 import { authModeFor, getClient, type DataAuthMode } from '@/lib/dataClient';
 import type { QuotaCounterRow } from '@/lib/quotaCounters';
 import { needsContentReview } from '@/lib/contentReview';
-import { uploadData, getUrl, downloadData, getProperties } from 'aws-amplify/storage';
+import { uploadData } from 'aws-amplify/storage';
 import type { Schema } from '@/amplify/data/resource';
 import {
   CorporateSubscription,
@@ -33,7 +33,15 @@ import type { PhotographerProfileForm } from '@/lib/photographerProfile';
 import { previewLongEdge } from '@/lib/professionalMedia';
 import { isGlobalAdmin } from '@/lib/admin';
 import { ownerCandidatesFor, ownerIsSubject } from '@/lib/eventOwner';
-import { createSignedUrlCache } from '@/lib/signedUrlCache';
+import {
+  clearAccessToken,
+  getAccessToken,
+  accessTokenNeedsRenewal,
+  isPinRequiredError,
+  setAccessToken,
+  rememberSessionPin,
+  sessionPinFor,
+} from '@/lib/galleryAccess';
 import { guestLabelFor } from '@/lib/guestLabel';
 import { canTransition, type IncentiveStatus } from '@/lib/researchIncentive';
 import { canTransition as canTransitionRefund } from '@/lib/refunds';
@@ -142,27 +150,150 @@ export async function setMyDisplayName(name: string): Promise<string> {
 
 
 /**
- * Amplify's `getUrl` signs for 15 minutes. Reusing for 10 leaves five minutes of
- * validity on the most stale URL we ever hand out, which is ample for a page
- * that is already rendered — and it means revisiting a gallery serves images
- * and video from the browser cache instead of pulling them from S3 again.
+ * Signed URLs are reused for 10 of the 15 minutes they last, which leaves five
+ * minutes of validity on the most stale URL we hand out — ample for a page that
+ * is already rendered — and means revisiting a gallery serves images and video
+ * from the browser cache instead of pulling them again.
  */
 const SIGNED_URL_REUSE_MS = 10 * 60 * 1000;
 
-/**
- * Lazy for the same reason as the data client above: a top-level call here
- * closes over `getUrl`, which pinned `aws-amplify/storage` into every page that
- * imported anything from this file, whether or not it ever showed an image.
- */
-let signedUrls: ReturnType<typeof createSignedUrlCache> | null = null;
+/** The most keys one `mediaUrls` call is asked for; the function caps at 600. */
+const MEDIA_URL_BATCH = 500;
 
-/** A signed display URL for a storage path, reused while it is still fresh. */
-async function signedUrlFor(path: string): Promise<string> {
-  signedUrls ??= createSignedUrlCache(
-    async (p: string) => (await getUrl({ path: p })).url.toString(),
-    SIGNED_URL_REUSE_MS,
+/** Both places an object can be fetched from. Either may be null. */
+interface SignedMedia {
+  url: string | null;
+  fallbackUrl: string | null;
+}
+
+const signedMediaCache = new Map<string, { value: SignedMedia; signedAt: number }>();
+/** Calls in flight, so 200 paths signed at once never ask twice for one key. */
+const signedMediaPending = new Map<string, Promise<SignedMedia | null>>();
+
+/** A host's download share per event, remembered for the pages that follow it. */
+const sharesByEvent = new Map<string, string>();
+
+/** Forget every signed URL: the viewer's access changed (a PIN was entered or lapsed). */
+export function clearSignedMedia(): void {
+  signedMediaCache.clear();
+  signedMediaPending.clear();
+}
+
+/**
+ * Signed URLs for stored objects, from the server.
+ *
+ * Browsers hold no S3 read credentials any more, so this is the only way a
+ * photo, a video or a cover is fetched. The function checks the host's gallery
+ * settings (view, whose photos, PIN, downloads, held videos) for every key and
+ * returns R2 and S3 URLs for the ones this viewer may have. A key missing from
+ * the result means "not available to you", whatever the reason.
+ *
+ * Batched, cached for 10 minutes, and never throws: a failure is an empty
+ * result, which callers already treat as "no image" rather than a broken page.
+ */
+async function signedMediaFor(
+  eventId: string | undefined,
+  keys: string[],
+  extra: { reviewToken?: string } = {},
+): Promise<Map<string, SignedMedia>> {
+  const out = new Map<string, SignedMedia>();
+  const unique = [...new Set(keys.filter(Boolean))];
+  if (!eventId || unique.length === 0) return out;
+  const now = Date.now();
+  const useCache = !extra.reviewToken;
+  const missing: string[] = [];
+  for (const key of unique) {
+    const cached = useCache ? signedMediaCache.get(`${eventId}|${key}`) : undefined;
+    if (cached && now - cached.signedAt < SIGNED_URL_REUSE_MS) out.set(key, cached.value);
+    else missing.push(key);
+  }
+  if (missing.length === 0) return out;
+
+  await renewGalleryAccess(eventId);
+  const authMode = await authModeFor();
+  const accessToken = getAccessToken(eventId) || undefined;
+  const shareId = sharesByEvent.get(eventId);
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < missing.length; i += MEDIA_URL_BATCH) chunks.push(missing.slice(i, i + MEDIA_URL_BATCH));
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const { data } = await getClient().queries.mediaUrls(
+          { eventId, keys: chunk, accessToken, shareId, reviewToken: extra.reviewToken },
+          { authMode },
+        );
+        for (const entry of data ?? []) {
+          if (!entry?.key || (!entry.url && !entry.fallbackUrl)) continue;
+          const value = { url: entry.url ?? null, fallbackUrl: entry.fallbackUrl ?? null };
+          out.set(entry.key, value);
+          if (useCache) signedMediaCache.set(`${eventId}|${entry.key}`, { value, signedAt: Date.now() });
+        }
+      } catch {
+        // An empty result: the caller shows nothing for these rather than failing.
+      }
+    }),
   );
-  return signedUrls.get(path);
+  return out;
+}
+
+/** The pair of URLs as a display source: R2 first when there is one, S3 behind it. */
+function sourceOf(signed: SignedMedia | undefined): MediaSource | null {
+  if (!signed) return null;
+  const primary = signed.url || signed.fallbackUrl;
+  if (!primary) return null;
+  return signed.url && signed.fallbackUrl ? { primary, fallback: signed.fallbackUrl } : { primary };
+}
+
+/** The storage event id a key lives under, for callers that only hold a key. */
+function eventIdOfStorageKey(key: string): string | undefined {
+  return key.match(/^(?:events|pro)\/([^/]+)\//)?.[1];
+}
+
+/**
+ * Enter the gallery PIN. A right one stores a short-lived access token for this
+ * tab, and every signed URL is re-requested with it. A wrong one is counted per
+ * address and per event on the server, and too many lock the entry for a while.
+ */
+export async function submitGalleryPin(
+  eventId: string,
+  pin: string,
+): Promise<{ ok: boolean; message: string; retryAfterSeconds?: number }> {
+  const { data, errors } = await getClient().mutations.verifyGalleryPin(
+    { eventId, pin },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length || !data) {
+    return { ok: false, message: 'The PIN could not be checked. Please try again.' };
+  }
+  if (data.ok && data.token && data.expiresAt) {
+    setAccessToken(eventId, data.token, data.expiresAt);
+    // Held in memory only (never storage) so a slideshow left running all night
+    // can renew its own token; it is gone when the tab is.
+    rememberSessionPin(eventId, pin);
+    clearSignedMedia();
+    return { ok: true, message: '' };
+  }
+  return {
+    ok: false,
+    message: data.message || 'That PIN is not right.',
+    retryAfterSeconds: data.retryAfterSeconds ?? undefined,
+  };
+}
+
+/**
+ * Renew this tab's PIN token shortly before it lapses, when the PIN is still
+ * held from entering it. A no-op otherwise. Never throws.
+ */
+export async function renewGalleryAccess(eventId: string): Promise<void> {
+  if (!accessTokenNeedsRenewal(eventId)) return;
+  const pin = sessionPinFor(eventId);
+  if (!pin) return;
+  try {
+    await submitGalleryPin(eventId, pin);
+  } catch {
+    // The current token keeps working until it expires.
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -2224,6 +2355,10 @@ async function updateEventSettings(
     /** The whole cover as JSON; '' clears it. */
     coverStyle?: string;
     galleryAudience?: string;
+    guestViewBlocked?: boolean;
+    /** 'auto' (30 days after the event, by default) | 'on' | 'off'. */
+    galleryPinMode?: 'auto' | 'on' | 'off';
+    galleryPinAutoDays?: number;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -2254,6 +2389,9 @@ async function updateEventSettings(
       commentsEnabled: changes.commentsEnabled,
       coverStyle: changes.coverStyle,
       galleryAudience: changes.galleryAudience,
+      guestViewBlocked: changes.guestViewBlocked,
+      galleryPinMode: changes.galleryPinMode,
+      galleryPinAutoDays: changes.galleryPinAutoDays,
     },
     { authMode: 'userPool' },
   );
@@ -2576,13 +2714,7 @@ export async function uploadEventCoverImage(eventId: string, file: File): Promis
  * the same as a gallery photo.
  */
 export async function getEventCoverSource(eventId: string, key: string): Promise<MediaSource> {
-  const [r2, s3] = await Promise.all([
-    r2UrlsFor(eventId, [key]),
-    signedUrlFor(key).catch(() => ''),
-  ]);
-  const primary = r2.get(key);
-  if (primary) return s3 ? { primary, fallback: s3 } : { primary };
-  return { primary: s3 };
+  return sourceOf((await signedMediaFor(eventId, [key])).get(key)) ?? { primary: '' };
 }
 
 /**
@@ -2598,6 +2730,86 @@ export async function setEventGalleryAudience(
     { galleryAudience: audience },
     'Who can see the gallery could not be saved.',
   );
+}
+
+/** Let guests see the gallery, or keep it to the host. Guests can always add photos. */
+export async function setEventGuestViewBlocked(eventId: string, blocked: boolean): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    { guestViewBlocked: blocked },
+    'The viewing setting could not be saved.',
+  );
+}
+
+/** When the gallery PIN applies: 'auto' (after the event, by default 30 days), always, or never. */
+export async function setEventGalleryPinPolicy(
+  eventId: string,
+  policy: { mode?: 'auto' | 'on' | 'off'; autoDays?: number },
+): Promise<void> {
+  await updateEventSettings(
+    eventId,
+    { galleryPinMode: policy.mode, galleryPinAutoDays: policy.autoDays },
+    'The PIN setting could not be saved.',
+  );
+}
+
+/**
+ * Apply what a host chose on the create form, once the event exists. Only what
+ * differs from the defaults is sent, so an event made with the defaults makes no
+ * extra calls. Returns false when something did not save, so the page can tell
+ * the host to finish it from the dashboard — the event itself is already made.
+ */
+export async function applyInitialGalleryAccess(
+  eventId: string,
+  choices: { viewBlocked: boolean; downloadsBlocked: boolean; pin: string; pinNow: boolean },
+): Promise<boolean> {
+  let ok = true;
+  const changes: Parameters<typeof updateEventSettings>[1] = {};
+  if (choices.viewBlocked) changes.guestViewBlocked = true;
+  if (choices.downloadsBlocked) changes.guestDownloadsBlocked = true;
+  if (choices.pin && choices.pinNow) changes.galleryPinMode = 'on';
+  if (Object.keys(changes).length > 0) {
+    await updateEventSettings(eventId, changes, 'The guest access settings could not be saved.').catch(
+      () => {
+        ok = false;
+      },
+    );
+  }
+  if (choices.pin) {
+    const result = await manageGalleryPin(eventId, 'set', choices.pin).catch(() => null);
+    if (!result?.ok) ok = false;
+  }
+  return ok;
+}
+
+export interface GalleryPinManageResult {
+  ok: boolean;
+  message: string;
+  retryAfterSeconds?: number;
+}
+
+/**
+ * The host's side of the gallery PIN: set a new one, remove it, or check one
+ * they typed (to put it in a QR code or link — the server never gives a stored
+ * PIN back, because it only keeps a hash).
+ */
+export async function manageGalleryPin(
+  eventId: string,
+  action: 'set' | 'clear' | 'check',
+  pin?: string,
+): Promise<GalleryPinManageResult> {
+  const { data, errors } = await getClient().mutations.manageGalleryPin(
+    { eventId, action, pin },
+    { authMode: 'userPool' },
+  );
+  if (errors?.length || !data) {
+    return { ok: false, message: 'The PIN could not be saved. Please try again.' };
+  }
+  return {
+    ok: Boolean(data.ok),
+    message: data.message ?? '',
+    retryAfterSeconds: data.retryAfterSeconds ?? undefined,
+  };
 }
 
 /** Close or reopen an event's uploads. Closed events stay viewable but reject new uploads. */
@@ -3273,11 +3485,11 @@ export async function uploadEventPhotoWithContext(
     }).result,
   );
 
-  // Confirm the original actually landed in storage before we create any record.
-  // This prevents "orphan" photo records that point at a missing original (which
-  // then can't be downloaded). If the object isn't there, fail the upload — no
-  // record is created, and the guest can retry.
-  await retryTransient(() => getProperties({ path: key }));
+  // Whether the original actually landed in storage is confirmed by
+  // createEventPhoto (a server-side HEAD) before any record is created, which
+  // is what prevents "orphan" records that point at a missing original. The
+  // browser used to do this itself with a storage read, which guests no longer
+  // have.
 
   if (preview && previewKey) {
     await retryTransient(() =>
@@ -3476,11 +3688,23 @@ export async function fetchEventPhotos(
   } else {
     // Public gallery: scoped query that only returns this event's approved
     // photos, so photos can't be enumerated across events.
+    if (opts.shareId) sharesByEvent.set(eventId, opts.shareId);
+    await renewGalleryAccess(eventId);
     const { data, errors } = await getClient().queries.listEventPhotos(
-      { eventId, shareId: opts.shareId },
+      {
+        eventId,
+        shareId: opts.shareId,
+        accessToken: getAccessToken(eventId) || undefined,
+      },
       { authMode: await authModeFor() },
     );
-    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+    if (errors?.length) {
+      const failure = new Error(errors.map((e) => e.message).join(' · '));
+      // A token that was good is no longer (the PIN changed, or it lapsed):
+      // drop it so the page shows the PIN prompt instead of a stale error.
+      if (isPinRequiredError(failure)) clearAccessToken(eventId);
+      throw failure;
+    }
     photos = (data ?? []).filter((p): p is NonNullable<typeof p> => p !== null) as QRPhoto[];
   }
 
@@ -3496,19 +3720,13 @@ export async function fetchEventPhotos(
         : p.previewS3Key || p.s3Key,
   );
 
-  // Two signed URLs per photo, both produced locally: Amplify's getUrl signs
-  // with the browser's own credentials and the R2 ones come back from a single
-  // batched query. Neither costs a request per photo, which is what makes it
-  // reasonable to carry both and let the browser choose.
-  const [r2Urls, s3Urls] = await Promise.all([
-    r2UrlsFor(eventId, displayPaths),
-    Promise.all(displayPaths.map((path) => signedUrlFor(path))),
-  ]);
+  // Both URLs for every photo come back from one batched query, so carrying
+  // both and letting the browser choose costs no request per photo.
+  const signed = await signedMediaFor(eventId, displayPaths);
 
   const withUrls: DisplayPhoto[] = photos.map((p, index) => {
-    const s3 = s3Urls[index];
-    const r2 = r2Urls.get(displayPaths[index]);
-    return { ...p, url: r2 || s3, fallbackUrl: r2 ? s3 : undefined };
+    const source = sourceOf(signed.get(displayPaths[index]));
+    return { ...p, url: source?.primary ?? '', fallbackUrl: source?.fallback ?? undefined };
   });
 
   return withUrls.sort((a, b) =>
@@ -3541,13 +3759,10 @@ export async function fetchModerationReview(
   );
   if (errors?.length || !data) return null;
 
-  let url = '';
-  try {
-    const resolved = await getUrl({ path: data.photoS3Key });
-    url = resolved.url.toString();
-  } catch {
-    return null; // the photo is gone; nothing meaningful to review
-  }
+  // The review link's own token is the credential for this one photo.
+  const signed = await signedMediaFor(data.eventId, [data.photoS3Key], { reviewToken: token });
+  const url = sourceOf(signed.get(data.photoS3Key))?.primary ?? '';
+  if (!url) return null; // the photo is gone; nothing meaningful to review
 
   return {
     token: data.token,
@@ -3579,8 +3794,8 @@ export async function reviewFlaggedPhoto(
 }
 
 /**
- * Release a photo the content screener held back, making it visible to guests
- * and the live slideshow. Host/admin only (enforced by the Photo model's owner
+ * Release a photo the content screener held back, or approve a guest video that
+ * was waiting for the host, making it visible to guests and the live slideshow. Host/admin only (enforced by the Photo model's owner
  * auth). Denying is just deleting the photo, which already has its own flow.
  */
 export async function releaseFlaggedPhoto(photoId: string): Promise<void> {
@@ -3691,12 +3906,9 @@ export async function fetchDownloadShare(shareId: string): Promise<DownloadShare
  * the same treatment as a download.
  */
 export async function getOriginalMediaSource(photo: QRPhoto): Promise<MediaSource> {
-  const [r2, s3] = await Promise.all([
-    r2UrlsFor(photo.eventId, [photo.s3Key]),
-    getUrl({ path: photo.s3Key }).then(({ url }) => url.toString()),
-  ]);
-  const primary = r2.get(photo.s3Key);
-  return primary ? { primary, fallback: s3 } : { primary: s3 };
+  const source = sourceOf((await signedMediaFor(photo.eventId, [photo.s3Key])).get(photo.s3Key));
+  if (!source) throw new Error('That file is not available.');
+  return source;
 }
 
 /**
@@ -3706,11 +3918,16 @@ export async function getOriginalMediaSource(photo: QRPhoto): Promise<MediaSourc
  * on every poll.
  */
 export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]> {
+  await renewGalleryAccess(eventId);
   const { data, errors } = await getClient().queries.listEventPhotos(
-    { eventId },
+    { eventId, accessToken: getAccessToken(eventId) || undefined },
     { authMode: await authModeFor() },
   );
-  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
+  if (errors?.length) {
+    const failure = new Error(errors.map((e) => e.message).join(' · '));
+    if (isPinRequiredError(failure)) clearAccessToken(eventId);
+    throw failure;
+  }
   return (data ?? [])
     .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
     .filter((photo) => photo.approved !== false) as QRPhoto[];
@@ -3726,71 +3943,33 @@ export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]
  */
 export async function getPhotoDisplaySource(photo: QRPhoto): Promise<MediaSource> {
   const path = photo.previewS3Key || photo.s3Key;
-  const [r2, s3] = await Promise.all([
-    r2UrlsFor(photo.eventId, [path]),
-    signedUrlFor(path),
-  ]);
-  const primary = r2.get(path);
-  return primary ? { primary, fallback: s3 } : { primary: s3 };
-}
-
-/**
- * Signed Cloudflare R2 URLs for a batch of stored objects, keyed by storage key.
- *
- * R2 costs nothing in egress, which on a busy event is most of the bill. A key
- * missing from the returned map means R2 can't serve it and the caller should
- * use S3. There are several ordinary reasons for that: nothing was backfilled,
- * so anything uploaded before the mirror went live is S3-only; the mirror is
- * best-effort and may have skipped a newer file; R2 may not be configured; and
- * the object may be one this caller isn't allowed (a guest asking for a video,
- * say). All of them land in the same place — the S3 path that served everything
- * before this existed.
- *
- * Batched deliberately. A gallery resolves every photo in one query rather than
- * one query per photo; a download asks for a single key through the same path.
- * Never throws: R2 being unreachable must not stop a gallery rendering.
- */
-async function r2UrlsFor(
-  eventId: string | undefined,
-  keys: string[],
-): Promise<Map<string, string>> {
-  const urls = new Map<string, string>();
-  if (!eventId || keys.length === 0) return urls;
-  try {
-    const { data } = await getClient().queries.mediaUrls(
-      { eventId, keys },
-      { authMode: await authModeFor() },
-    );
-    for (const entry of data ?? []) {
-      if (entry?.key && entry.url) urls.set(entry.key, entry.url);
-    }
-  } catch {
-    // Fall through with an empty map: every caller treats a miss as "use S3".
-  }
-  return urls;
+  const source = sourceOf((await signedMediaFor(photo.eventId, [path])).get(path));
+  if (!source) throw new Error('That file is not available.');
+  return source;
 }
 
 /**
  * Fetch one stored object, preferring Cloudflare R2.
  *
  * Downloads are where the bytes actually are — an original is megabytes where a
- * preview is kilobytes — so a download asks for the R2 URL first and only falls
- * back to S3 when there isn't one, or when the one there is doesn't resolve.
+ * preview is kilobytes — so a download tries the R2 URL first and only falls
+ * back to S3 when there isn't one, or when the one there doesn't resolve. Both
+ * come from the server after it has checked the host's download setting, so a
+ * guest of an event with downloads off gets nothing here whatever key they ask for.
  */
 async function fetchStoredBlob(eventId: string | undefined, key: string): Promise<Blob> {
-  const url = (await r2UrlsFor(eventId, [key])).get(key);
-  if (url) {
+  const signed = (await signedMediaFor(eventId ?? eventIdOfStorageKey(key), [key])).get(key);
+  for (const url of [signed?.url, signed?.fallbackUrl]) {
+    if (!url) continue;
     try {
       const response = await fetch(url);
-      // A 404 here is ordinary: the object was never mirrored. It cost one
-      // request and no bytes, and S3 has it.
+      // A 404 on R2 is ordinary: the object was never mirrored. S3 has it.
       if (response.ok) return await response.blob();
     } catch {
-      // Any trouble reaching R2 is not the guest's problem — use S3.
+      // Any trouble reaching one side is not the guest's problem — try the other.
     }
   }
-  const { body } = await downloadData({ path: key }).result;
-  return body.blob();
+  throw new Error('That file is not available to download.');
 }
 
 /**
@@ -3841,11 +4020,21 @@ async function loadZip() {
   return new JSZip();
 }
 
+/** How many files a ZIP signs per request. Small, so URLs are fresh when fetched. */
+const ZIP_SIGN_BATCH = 25;
+
+/** A guest's video the host has not approved is not downloadable, even by the host's ZIP. */
+function isNotAwaitingApproval(photo: QRPhoto): boolean {
+  return photo.moderationStatus !== 'held';
+}
+
 export async function downloadPhotosAsZip(
   photos: QRPhoto[],
   archiveName: string,
   onProgress?: (completed: number, total: number) => void,
 ): Promise<{ skipped: number; failedIds: string[] }> {
+  // A video the host has not approved yet is not part of the event's media.
+  photos = photos.filter(isNotAwaitingApproval);
   if (photos.length === 0) throw new Error('Select at least one photo or video.');
 
   const zip = await loadZip();
@@ -3853,6 +4042,14 @@ export async function downloadPhotosAsZip(
   const failedIds: string[] = [];
   for (let index = 0; index < photos.length; index += 1) {
     const photo = photos[index];
+    if (index % ZIP_SIGN_BATCH === 0) {
+      // Sign the next few files together, just before they are fetched: one
+      // request instead of one per file, and the URLs are fresh when used.
+      await signedMediaFor(
+        photo.eventId,
+        photos.slice(index, index + ZIP_SIGN_BATCH).filter((p) => p.eventId === photo.eventId).map((p) => p.s3Key),
+      );
+    }
     try {
       const blob = await fetchStoredBlob(photo.eventId, photo.s3Key);
       zip.file(
@@ -3901,7 +4098,9 @@ export async function downloadEventsAsZip(
   // Gather each event's photos first so we know the grand total for progress.
   const groups: { name: string; photos: QRPhoto[] }[] = [];
   for (const ev of events) {
-    const photos = await fetchEventPhotos(ev.id, { includeUnapproved: true });
+    const photos = (await fetchEventPhotos(ev.id, { includeUnapproved: true })).filter(
+      isNotAwaitingApproval,
+    );
     groups.push({ name: ev.name, photos });
   }
   const total = groups.reduce((sum, group) => sum + group.photos.length, 0);
@@ -3925,6 +4124,12 @@ export async function downloadEventsAsZip(
 
     for (let index = 0; index < group.photos.length; index += 1) {
       const photo = group.photos[index];
+      if (index % ZIP_SIGN_BATCH === 0) {
+        await signedMediaFor(
+          photo.eventId,
+          group.photos.slice(index, index + ZIP_SIGN_BATCH).map((p) => p.s3Key),
+        );
+      }
       try {
         const blob = await fetchStoredBlob(photo.eventId, photo.s3Key);
         folder.file(

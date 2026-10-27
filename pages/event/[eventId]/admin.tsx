@@ -7,6 +7,7 @@ import ChallengesManager from '@/components/challenges/ChallengesManager';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import AdminPhotoGrid from '@/components/AdminPhotoGrid';
+import GalleryAccessSettings from '@/components/GalleryAccessSettings';
 import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
@@ -35,7 +36,6 @@ import {
   setEventModerationMode,
   setEventUploadAudience,
   setEventUploadsClosed,
-  setEventGuestDownloadsBlocked,
   setEventVideoUploads,
   claimGuestUploadPromise,
   connectPhotographer,
@@ -197,7 +197,6 @@ function AdminDashboardPage() {
   const [alertEmail, setAlertEmail] = useState('');
   const [alertWorking, setAlertWorking] = useState(false);
   const [videoWorking, setVideoWorking] = useState(false);
-  const [downloadsWorking, setDownloadsWorking] = useState(false);
   const [audienceWorking, setAudienceWorking] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Optional discount code applied to the extension or slideshow add-on.
@@ -220,7 +219,11 @@ function AdminDashboardPage() {
   // Download-QR share selection, built by toggling photos in the gallery below.
   const [shareSelected, setShareSelected] = useState<Set<string>>(new Set());
   const approvedPhotoIds = useMemo(
-    () => photos.filter((photo) => photo.approved !== false).map((photo) => photo.id),
+    // A guest video still waiting for the host is not part of what a download link can carry.
+    () =>
+      photos
+        .filter((photo) => photo.approved !== false && photo.moderationStatus !== 'held')
+        .map((photo) => photo.id),
     [photos],
   );
   // Default the selection to the whole (approved) event whenever the photo set
@@ -386,6 +389,7 @@ function AdminDashboardPage() {
 
   const tier = event ? getTier(event.tier) : undefined;
   const hiddenCount = photos.filter((p) => p.approved === false).length;
+  const heldVideoCount = photos.filter((p) => p.moderationStatus === 'held').length;
   // Name/date can be edited only until the first photo lands. Prefer the
   // server-maintained counter, falling back to what we loaded.
   const photoCount = event?.photoCount ?? photos.length;
@@ -561,31 +565,6 @@ function AdminDashboardPage() {
       });
     } finally {
       setClosing(false);
-    }
-  }
-
-  async function handleGuestDownloads(blocked: boolean) {
-    if (!event) return;
-    setDownloadsWorking(true);
-    setSettingsMsg(null);
-    try {
-      await setEventGuestDownloadsBlocked(event.id, blocked);
-      setEvent({ ...event, guestDownloadsBlocked: blocked });
-      setSettingsMsg({
-        text: blocked
-          ? 'Guests can view the gallery but not download. They now see viewing copies rather than full-size photos.'
-          : 'Guests can download the photos again, at full resolution.',
-        ok: true,
-        where: 'guests',
-      });
-    } catch (err) {
-      setSettingsMsg({
-        text: err instanceof Error ? err.message : 'The setting could not be updated.',
-        ok: false,
-        where: 'guests',
-      });
-    } finally {
-      setDownloadsWorking(false);
     }
   }
 
@@ -984,6 +963,22 @@ function AdminDashboardPage() {
                 </div>
               </div>
 
+              {heldVideoCount > 0 ? (
+                <div id="held-videos" className="mt-6 sm:max-w-md">
+                  <Notice tone="warn" label="Videos waiting for you">
+                    {heldVideoCount} guest video{heldVideoCount === 1 ? ' is' : 's are'} waiting for
+                    your OK. Videos are not screened, so only you can see them until you approve
+                    them.
+                    <a
+                      href="#photo-grid"
+                      className="mt-2 flex min-h-[44px] items-center font-medium text-ink underline"
+                    >
+                      Review them below
+                    </a>
+                  </Notice>
+                </div>
+              ) : null}
+
               {/* Only when the event actually has comments on. A moderation
                   queue for a feature the host switched off is a panel that
                   explains nothing and worries them. */}
@@ -1113,32 +1108,11 @@ function AdminDashboardPage() {
                       : 'A flagged photo is hidden from guests and the slideshow until you release it. Only you can see it.'}
                   </p>
 
-                  <div id="guest-downloads" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">Guest downloads</p>
-                      <p className="text-xs text-charcoal/70">
-                        {event.guestDownloadsBlocked === true
-                          ? 'Off — guests can view the gallery but not download, and they see smaller viewing copies rather than full-size photos. You still have everything at full resolution.'
-                          : 'On. Guests can save the photos at full resolution, no account needed. Turn this off for an event where you would rather the pictures stayed with you.'}
-                      </p>
-                      {event.guestDownloadsBlocked === true ? (
-                        <p className="mt-1 text-xs text-charcoal/70">
-                          This lowers what a guest can take away — it cannot stop a screenshot.
-                        </p>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      disabled={downloadsWorking}
-                      onClick={() => void handleGuestDownloads(event.guestDownloadsBlocked !== true)}
-                      className="shrink-0 border border-charcoal/25 px-5 py-3 text-sm font-medium text-charcoal transition hover:border-charcoal/60 disabled:opacity-50"
-                    >
-                      {downloadsWorking
-                        ? 'Saving…'
-                        : event.guestDownloadsBlocked === true
-                          ? 'Allow downloads'
-                          : 'Turn off downloads'}
-                    </button>
+                  <div id="guest-downloads" className="scroll-mt-24">
+                    <GalleryAccessSettings
+                      event={event}
+                      onChange={(patch) => setEvent((current) => (current ? { ...current, ...patch } : current))}
+                    />
                   </div>
 
                   <div id="guest-videos" className="scroll-mt-24 mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
@@ -1147,7 +1121,7 @@ function AdminDashboardPage() {
                       <p className="text-xs text-charcoal/70">
                         {event.videoUploadsEnabled === false
                           ? 'Off — guests can add photos only.'
-                          : 'On. Videos are yours alone: guests can upload them but only you can watch them, which is also what keeps them from costing a fortune to serve. Screening checks photos but not videos, so turn this off if you want screened media only.'}
+                          : 'On. Guests can upload videos. Screening checks photos but not videos, so unless you have chosen to show everything, each guest video waits for your approval and only appears in the gallery, the slideshow and downloads once you approve it. Turn this off if you want photos only.'}
                       </p>
                       {event.videoUploadsEnabled !== false && event.videoLimit != null ? (
                         <p className="mt-1 text-sm text-charcoal/70">

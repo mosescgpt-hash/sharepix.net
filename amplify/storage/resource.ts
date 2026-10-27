@@ -2,7 +2,8 @@ import { defineStorage } from '@aws-amplify/backend';
 import { sanitizeUpload } from '../functions/sanitize-upload/resource';
 
 /**
- * Photo storage. Guests and hosts can upload and view photos under events/.
+ * Photo storage. Guests and hosts can upload photos under events/; they read
+ * them only through signed URLs from the `mediaUrls` function.
  * Deletes are NOT granted here: any signed-in user would otherwise be able to
  * remove another event's files. Deletion runs through the `deleteEventPhoto`
  * function, which checks event ownership before touching S3.
@@ -17,14 +18,18 @@ export const storage = defineStorage({
   },
   access: (allow) => ({
     'events/*': [
-      // `get`, not `read`. In Amplify Gen 2, `read` is get AND list, and list
-      // let anyone holding guest credentials enumerate every file in any
-      // event's folder they knew the id of — held-for-review photos, videos,
-      // and, once a host chose "guests see only their own", everyone else's
-      // photos too. The site never lists: every read is by a key it was given
-      // by listEventPhotos, which is where visibility is decided.
-      allow.guest.to(['get', 'write']),
-      allow.authenticated.to(['get', 'write']),
+      // `write` and nothing else for guests and signed-in users: no get, no
+      // list. Reads used to be granted here (`get`), which meant anybody
+      // holding guest credentials could fetch any event photo whose key they
+      // had — including held-for-review photos and videos, photos the host
+      // chose not to show, and every photo once the host turned the gallery
+      // PIN or "host only" on. Every gallery rule was advisory. Now the browser
+      // reads nothing from S3 directly: the `mediaUrls` function checks the
+      // rules (view, audience, PIN, downloads, held videos) and returns
+      // short-lived signed URLs, and it is the only way a photo is fetched.
+      // See docs/gallery-access.md.
+      allow.guest.to(['write']),
+      allow.authenticated.to(['write']),
       // Users in the ADMINS group use the admin IAM role, which otherwise
       // wouldn't inherit the authenticated role's storage access — so admins
       // couldn't load photos. Grant it explicitly.

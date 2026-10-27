@@ -8,19 +8,22 @@ import {
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import {
-  audienceAllows,
   galleryAudienceOf,
+  galleryGateFor,
   isHostOrAdmin,
-  isVisibleTo,
+  photoVisibleTo,
   uploaderIdOf,
   type GalleryAudience,
+  type PhotoRowFacts,
 } from './visibility';
+import { pinRequired, verifyAccessToken, type PinFacts } from './galleryGate';
 
 const dynamo = new DynamoDBClient({});
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
 const PROFILE_TABLE = process.env.PROFILE_TABLE_NAME ?? '';
+const PIN_TABLE = process.env.GALLERY_PIN_TABLE_NAME ?? '';
 
 interface Credit {
   name: string | null;
@@ -70,6 +73,9 @@ interface EventFacts {
   takenDown: boolean;
   owner: string;
   audience: GalleryAudience;
+  /** The host turned guest viewing off. */
+  viewBlocked: boolean;
+  pin: PinFacts;
 }
 
 /**
@@ -81,15 +87,22 @@ interface EventFacts {
  * regardless.
  */
 async function eventFacts(eventId: string): Promise<EventFacts> {
-  const fallback: EventFacts = { takenDown: false, owner: '', audience: 'everyone' };
+  const fallback: EventFacts = {
+    takenDown: false,
+    owner: '',
+    audience: 'everyone',
+    viewBlocked: false,
+    pin: {},
+  };
   if (!EVENT_TABLE) return fallback;
   const found = await dynamo
     .send(
       new GetItemCommand({
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'takenDownAt, #owner, galleryAudience',
-        ExpressionAttributeNames: { '#owner': 'owner' },
+        ProjectionExpression:
+          'takenDownAt, #owner, galleryAudience, guestViewBlocked, galleryPinSet, galleryPinMode, galleryPinAutoDays, #date, createdAt',
+        ExpressionAttributeNames: { '#owner': 'owner', '#date': 'date' },
       }),
     )
     .catch(() => null);
@@ -98,7 +111,29 @@ async function eventFacts(eventId: string): Promise<EventFacts> {
     takenDown: Boolean(found.Item.takenDownAt?.S),
     owner: found.Item.owner?.S ?? '',
     audience: galleryAudienceOf(found.Item.galleryAudience?.S),
+    viewBlocked: found.Item.guestViewBlocked?.BOOL === true,
+    pin: {
+      galleryPinSet: found.Item.galleryPinSet?.BOOL === true,
+      galleryPinMode: found.Item.galleryPinMode?.S ?? null,
+      galleryPinAutoDays: found.Item.galleryPinAutoDays?.N ? Number(found.Item.galleryPinAutoDays.N) : null,
+      date: found.Item.date?.S ?? null,
+      createdAt: found.Item.createdAt?.S ?? null,
+    },
   };
+}
+
+/**
+ * Whether this PIN token is good for this event. Reads the event's signing key,
+ * which lives in a table guests cannot read. Fails closed: no key, no token,
+ * or a failed read all mean "not entered".
+ */
+async function tokenIsValid(eventId: string, token: string): Promise<boolean> {
+  if (!PIN_TABLE || !token) return false;
+  const found = await dynamo
+    .send(new GetItemCommand({ TableName: PIN_TABLE, Key: { id: { S: eventId } }, ProjectionExpression: 'tokenKey' }))
+    .catch(() => null);
+  const key = found?.Item?.tokenKey?.S ?? '';
+  return verifyAccessToken(key, eventId, token);
 }
 
 /**
@@ -205,6 +240,24 @@ async function photosForEvent(eventId: string): Promise<PhotoItem[]> {
   return scanned;
 }
 
+function factsOf(item: PhotoItem): PhotoRowFacts {
+  return {
+    id: item.id?.S,
+    s3Key: item.s3Key?.S,
+    previewS3Key: item.previewS3Key?.S,
+    thumbS3Key: item.thumbS3Key?.S,
+    approved: item.approved?.BOOL,
+    moderationStatus: item.moderationStatus?.S,
+    eventOwner: item.eventOwner?.S,
+    boothMatch: item.boothMatch?.S,
+    publishStatus: item.publishStatus?.S,
+    boothDivider: item.boothDivider?.BOOL,
+    boothSegment: item.boothSegment?.S,
+    uploaderId: item.uploaderId?.S,
+    uploadedByUserId: item.uploadedByUserId?.S,
+  };
+}
+
 type Handler = Schema['listEventPhotos']['functionHandler'];
 
 export const handler: Handler = async (event) => {
@@ -221,48 +274,47 @@ export const handler: Handler = async (event) => {
   // A closed event lists nothing to anyone but an admin.
   if (!(identity?.groups ?? []).includes('ADMINS') && facts.takenDown) return [];
 
-  // The host's gallery setting. The host and admins see everything; a share
+  // The host's gallery settings. The host and admins see everything; a share
   // link sees exactly what the host put in it; everyone else sees what the
-  // setting allows.
+  // settings allow, once through the PIN when it is on.
   const privileged = isHostOrAdmin(identity, facts.owner);
   const shared = privileged ? null : await sharedPhotoIds(event.arguments.shareId ?? '', eventId);
-  const callerId = uploaderIdOf(identity);
-  const audienceFilter = (item: PhotoItem) => {
-    if (privileged) return true;
-    if (shared) return shared.has(item.id?.S ?? '');
-    return audienceAllows(
-      facts.audience,
-      { uploaderId: item.uploaderId?.S, uploadedByUserId: item.uploadedByUserId?.S },
-      callerId,
-    );
-  };
-
+  const needsPin = pinRequired(facts.pin);
+  const gate = galleryGateFor({
+    privileged,
+    shared: shared !== null,
+    viewBlocked: facts.viewBlocked,
+    audience: facts.audience,
+    pinRequired: needsPin,
+    // Only looked up when it can matter: a PIN is on and a token came with the call.
+    tokenValid:
+      needsPin && !privileged && !shared
+        ? await tokenIsValid(eventId, event.arguments.accessToken ?? '')
+        : false,
+  });
   // Nothing to read for a guest of a host-only gallery.
-  if (!privileged && !shared && facts.audience === 'host') return [];
+  if (gate === 'blocked') return [];
+  // The client matches on this to show the PIN prompt rather than an error.
+  if (gate === 'pin') throw new Error('PIN_REQUIRED');
 
+  const callerId = uploaderIdOf(identity);
   const items = await photosForEvent(eventId);
 
   // This query serves guests — the public gallery and the live slideshow — so it
   // is where content screening and video visibility are enforced. A photo held
   // for review is withheld here; the host reads the Photo model directly (owner
   // auth) and still sees everything, which is how flagged photos stay
-  // reviewable and how the host keeps every video.
-  const visible = items
-    .filter((item) => item.approved?.BOOL !== false)
-    // Booth photos: only published event or category photos, never a person's
-    // (docs/booth-mode.md, "Shared gallery"). Belt and braces over `approved`.
-    .filter(
-      (item) =>
-        item.boothMatch?.S === undefined ||
-        (item.publishStatus?.S === 'published' &&
-          item.boothDivider?.BOOL !== true &&
-          (item.boothSegment?.S === 'event' || item.boothSegment?.S === 'category')),
-    )
-    .filter((item) => item.moderationStatus?.S !== 'flagged')
-    .filter((item) =>
-      isVisibleTo({ s3Key: item.s3Key?.S, eventOwner: item.eventOwner?.S }, identity),
-    )
-    .filter(audienceFilter);
+  // reviewable and how the host sees every video waiting for them. One rule
+  // (photoVisibleTo) decides, and media-url applies the same one to every URL.
+  const visible = items.filter((item) =>
+    photoVisibleTo(factsOf(item), {
+      identity,
+      audience: facts.audience,
+      callerId,
+      privileged,
+      shared,
+    }),
+  );
 
   const photographerIds = [
     ...new Set(

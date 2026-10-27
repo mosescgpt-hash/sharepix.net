@@ -223,7 +223,7 @@ export default function GuestUploadPage() {
 
               {/* A host who keeps the gallery to themselves has nothing to
                   link guests to; one who shows guests their own says so. */}
-              {galleryAudienceFor(event) !== 'host' ? (
+              {galleryAudienceFor(event) !== 'host' && event.guestViewBlocked !== true ? (
                 <p className="mt-8 text-center text-sm">
                   <Link href={`/event/${event.id}`} className="text-pine underline">
                     {galleryAudienceFor(event) === 'own'

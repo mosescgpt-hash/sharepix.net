@@ -29,7 +29,8 @@ and flagging them would train the host to ignore alerts:
 | `ok` | Screened, clean | Visible | Visible |
 | `flagged` | Held for review | **Hidden** | Visible, with reasons + Release |
 | `released` | Host reviewed and allowed it | Visible | Visible |
-| `skipped` | Not screened (video, or screening unavailable) | Visible | Visible |
+| `skipped` | Not screened (screening unavailable, or a video from before review existed) | Photos visible, videos host-only | Visible |
+| `held` | A guest video waiting for the host's OK | **Hidden** | Visible, with Approve video |
 
 Enforcement is in the `list-event-photos` function — the single query that serves
 the public gallery *and* the live slideshow. The host reads the Photo model
@@ -39,13 +40,33 @@ from everyone except the host" is achieved without a second code path.
 The host releases a flagged photo from the event dashboard; denying it is just
 deleting it, which already has its own flow.
 
-## Videos are not screened
+## Videos are held for the host
 
-Rekognition image moderation covers stills only. Videos are recorded as
-`skipped`. They never reach the live slideshow (which is stills-only), but they
-**do** appear in the gallery unscreened. Screening video needs Rekognition Video,
-which is a different, asynchronous, more expensive API — a deliberate later
-decision, not an oversight.
+Rekognition image moderation covers stills only, and screening video needs
+Rekognition Video, which is a different, asynchronous, more expensive API: a
+deliberate later decision, not an oversight. Until then a person is the screen.
+
+**A guest's video is recorded as `held`** (`videoStatusFor` in
+`create-event-photo/moderation.ts`). It is not in the gallery, the live
+slideshow, the guest ZIP or a shared download until the host approves it, and
+`media-url` will not sign it for anyone but the host or an admin. The host sees
+it on the dashboard's photo tab, in an amber box that says *Waiting for your OK*
+with **Approve video** (the same `releaseFlaggedPhoto` call that releases a held
+photo, which sets it to `released`) and the usual delete. A banner above the
+photo grid counts how many are waiting. Denying a video is deleting it.
+
+- **The host's own videos** are `released` straight away, as there is nobody to
+  approve them.
+- **Show all photos immediately** (`allow_all`) also releases guest videos
+  immediately. That is the host's explicit choice and it is the only way a
+  guest video skips review.
+- **A video from before this existed** has no verdict (`skipped` or none) and
+  was already host-only until approved, so nothing old becomes visible.
+- **Held videos are left out** of the host's own "select all" and the ZIP
+  helpers (`isNotAwaitingApproval` in `lib/api.ts`), so a bulk download or share
+  cannot include one by accident.
+- There is **no alert email for held videos yet**. The banner is the only prompt.
+  Emailing the host is a possible follow-up.
 
 ## The homepage demo is the one anonymous upload target
 
@@ -314,9 +335,10 @@ Closing runs server-side in `event-takedown` (admin-only `setEventTakedown`):
    `media-url` signs nothing for anyone but an admin, host included.
 2. **The media moves.** Every object under `events/<eventId>/` is copied to
    `quarantine/events/<eventId>/…`, then the original is deleted. The copy
-   always comes first, so an object is never in neither place. Storage rules
-   give guests and hosts read on `events/*` only and give `quarantine/*` to
-   admins, read-only, so a key someone saved before the closure stops working.
+   always comes first, so an object is never in neither place. Guests and
+   hosts cannot read `events/*` directly (they use signed URLs from `media-url`,
+   see `docs/gallery-access.md`), and `quarantine/*` is admins, read-only, so a
+   key or a signed link someone saved before the closure stops working.
    The R2 copies are deleted. `quarantine/` sits outside the bucket's 90-day
    expiry rule and the upload trigger, so preserved content is neither expired
    nor reprocessed.

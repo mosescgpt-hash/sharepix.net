@@ -8,6 +8,7 @@ import { updateEvent as updateEventFn } from '../functions/update-event/resource
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
 import { printCheckout as printCheckoutFn } from '../functions/print-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
+import { galleryAccess as galleryAccessFn } from '../functions/gallery-access/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
@@ -308,6 +309,21 @@ const schema = a.schema({
       // only their own uploads) or 'host'. Enforced in listEventPhotos. See
       // amplify/functions/list-event-photos/visibility.ts.
       galleryAudience: a.string(),
+      // Phase 2 gallery access (docs/gallery-access.md). Guests can always
+      // upload; these decide what they can do afterwards.
+      //
+      // guestViewBlocked: true means guests see no gallery at all (their photos
+      // still go to the host). Absent or false = guests can view, which is
+      // every event made before this existed. Download is the existing
+      // guestDownloadsBlocked above.
+      guestViewBlocked: a.boolean(),
+      // The optional gallery PIN. 'auto' (absent) turns it on
+      // galleryPinAutoDays after the event date, 'on' requires it now, 'off'
+      // never. It only applies once a PIN has been set (galleryPinSet) — the
+      // PIN itself is hashed in GalleryPin, never on this guest-readable row.
+      galleryPinMode: a.string(),
+      galleryPinAutoDays: a.integer(),
+      galleryPinSet: a.boolean(),
       // Whether guests may upload video. Missing means allowed, so existing
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
@@ -870,6 +886,8 @@ const schema = a.schema({
   //   corporate-month#<sub>#<YYYY-MM>   a subscriber's included events that month
   //   guestbook#<eventId>#guest#<key>   notes one guest has left on one event
   //   guestbook#<eventId>#ip#<ip>       notes from one address on one event
+  //   pin#<eventId>#ip#<ip>#<window>    wrong gallery PINs from one address in one 15-minute window
+  //   pin#<eventId>#all#<window>        wrong gallery PINs on one event in one 15-minute window
   //
   // Same authorization as FreeEventClaim and for the same reason: every row is
   // a limit on somebody, and anybody who could write or delete one could lift
@@ -895,6 +913,25 @@ const schema = a.schema({
       recordedAt: a.datetime(),
     })
     .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // The gallery PIN, hashed, and the key that signs this event's PIN access
+  // tokens. The row id is the event id. Written and read only by the
+  // gallery-access function (and read by media-url and list-event-photos to
+  // check a token), so it never rides on the guest-readable Event row: a PIN
+  // hash on Event would be handed to every guest. No host or guest rule at all.
+  // Changing or clearing the PIN replaces tokenKey, which revokes every token
+  // and PIN link made with the old one.
+  GalleryPin: a
+    .model({
+      eventId: a.string(),
+      /** `s1$<salt>$<scrypt hash>`. Never the PIN. */
+      pinHash: a.string(),
+      /** Random per-event HMAC key for access tokens. */
+      tokenKey: a.string(),
+      pinLength: a.integer(),
+      changedAt: a.datetime(),
+    })
     .authorization((allow) => [allow.group('ADMINS')]),
 
   QuotaCounter: a
@@ -1637,7 +1674,9 @@ const schema = a.schema({
   listEventPhotos: a
     .query()
     // shareId: a host's download share, honoured whatever the gallery setting.
-    .arguments({ eventId: a.id().required(), shareId: a.string() })
+    // accessToken: the short-lived token verifyGalleryPin issues, needed while
+    // the gallery PIN is on.
+    .arguments({ eventId: a.id().required(), shareId: a.string(), accessToken: a.string() })
     .returns(a.ref('EventPhoto').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listEventPhotosFn)),
@@ -2709,6 +2748,9 @@ const schema = a.schema({
       commentsEnabled: a.boolean(),
       coverStyle: a.string(),
       galleryAudience: a.string(),
+      guestViewBlocked: a.boolean(),
+      galleryPinMode: a.string(),
+      galleryPinAutoDays: a.integer(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])
@@ -2801,9 +2843,15 @@ const schema = a.schema({
   // is free. `url` is null whenever R2 cannot serve it — unconfigured, the
   // object was never mirrored, or the caller may not have it — and the client
   // falls back to S3, which is what every caller did before this existed.
+  //
+  // `fallbackUrl` is the same object from S3, signed by the function. Browsers
+  // no longer hold S3 read credentials (guests used to have blanket get on
+  // events/*, which made every gallery rule advisory), so S3 is reached only
+  // through this function, after the same checks as R2.
   MediaUrl: a.customType({
     key: a.string().required(),
     url: a.string(),
+    fallbackUrl: a.string(),
   }),
 
   // Batched, because a gallery needs one URL per photo and a per-photo query
@@ -2811,12 +2859,54 @@ const schema = a.schema({
   // for one key through the same path.
   mediaUrls: a
     .query()
-    .arguments({ eventId: a.id().required(), keys: a.string().array().required() })
+    // accessToken: from verifyGalleryPin. shareId: a host's download share, which
+    // is honoured whatever the gallery setting. reviewToken: a moderation
+    // review link, which may see only the one photo it was made for.
+    .arguments({
+      eventId: a.id().required(),
+      keys: a.string().array().required(),
+      accessToken: a.string(),
+      shareId: a.string(),
+      reviewToken: a.string(),
+    })
     .returns(a.ref('MediaUrl').array())
     // Guests have no account, so this has to be reachable by them; the handler
     // decides which of the requested keys any given caller may actually have.
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(mediaUrlFn)),
+
+  GalleryPinResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    // A signed, short-lived access token (verifyGalleryPin only).
+    token: a.string(),
+    expiresAt: a.string(),
+    // When a lockout turns the guest away: how long to wait.
+    retryAfterSeconds: a.integer(),
+    pinSet: a.boolean(),
+  }),
+
+  // A guest (or anyone) enters the gallery PIN. A right PIN returns a signed
+  // token good for a few hours, which listEventPhotos and mediaUrls then
+  // require. A wrong one is counted per address and per event, and too many
+  // lock that address (or the event's PIN entry) for the rest of a 15-minute
+  // window. See amplify/functions/gallery-access.
+  verifyGalleryPin: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), pin: a.string().required() })
+    .returns(a.ref('GalleryPinResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(galleryAccessFn)),
+
+  // The host sets, changes or clears the PIN, or checks one they typed (to
+  // build a QR with it). The PIN is hashed here and stored in GalleryPin; it is
+  // never returned. action: 'set' | 'clear' | 'check'.
+  manageGalleryPin: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), action: a.string().required(), pin: a.string() })
+    .returns(a.ref('GalleryPinResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(galleryAccessFn)),
 
   // `redeemDiscountCode` used to live here: a mutation that spent one use of a
   // code and gave nothing back but a confirmation. Any signed-in caller could
