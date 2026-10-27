@@ -15,7 +15,7 @@ describe('the homepage image manifest', () => {
   });
 
   it('uses at most one AI-generated image', () => {
-    expect(images.filter(([, image]) => image.source === 'ai').length).toBeLessThanOrEqual(1);
+    expect(images.filter(([, image]) => (image.source as string) === 'ai').length).toBeLessThanOrEqual(1);
   });
 
   it('keeps the AI-image footer notice while any sample photo is on the page', () => {

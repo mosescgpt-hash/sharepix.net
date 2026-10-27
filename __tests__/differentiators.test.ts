@@ -3,6 +3,7 @@ import { codeOnly, proseOf, readSource } from './sourceGuards';
 import {
   COMPARATIVE_PHRASES,
   DIFFERENTIATORS,
+  HOMEPAGE_PROMISES,
   comparativePhrasesIn,
   differentiatorFor,
 } from '../lib/differentiators';
@@ -310,8 +311,18 @@ describe('the homepage says these things', () => {
   it('shows each claim next to its boundary', () => {
     // A page that rendered `claim` and dropped `boundary` would be making the
     // unqualified promise this whole file exists to prevent.
-    expect(page).toContain('{item.claim}');
+    expect(page).toContain('{item.short ?? item.claim}');
     expect(page).toContain('{item.boundary}');
+  });
+
+  it('keeps the one-line version of each homepage promise short and non-empty', () => {
+    // The card shows `short`, so it has to say something, and it must stay
+    // shorter than the full claim it stands in for.
+    for (const item of HOMEPAGE_PROMISES) {
+      expect(item.short ?? '').not.toBe('');
+      expect((item.short ?? '').length).toBeLessThan(item.claim.length);
+      expect(item.boundary.length).toBeGreaterThan(20);
+    }
   });
 
   it('leads on what a guest does not have to do', () => {

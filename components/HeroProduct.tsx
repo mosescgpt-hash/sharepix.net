@@ -9,7 +9,7 @@ export default function HeroProduct() {
   const guest = HOMEPAGE_IMAGES.heroGuestUpload;
   const gallery = HOMEPAGE_IMAGES.heroGallery;
   return (
-    <div className="mx-auto flex w-full max-w-md items-end gap-3 sm:max-w-lg sm:gap-4 lg:max-w-none">
+    <div className="mx-auto flex w-full max-w-xs items-end gap-3 sm:max-w-md sm:gap-4 lg:ml-auto lg:max-w-[26rem]">
       <figure className="w-[40%] shrink-0">
         <div className="overflow-hidden rounded-[1.4rem] border-[4px] border-ink bg-ink shadow-xl sm:rounded-[1.8rem] sm:border-[5px]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -22,7 +22,7 @@ export default function HeroProduct() {
             fetchPriority="high"
           />
         </div>
-        <figcaption className="mt-2 text-center text-xs text-charcoal/70">
+        <figcaption className="mt-1.5 text-center text-xs text-charcoal/70">
           What a guest sees
         </figcaption>
       </figure>
