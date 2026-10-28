@@ -1,29 +1,37 @@
-import { UNLIMITED_PHOTOS_NOTE } from '@/lib/fairUse';
 import { useEffect } from 'react';
 import Link from 'next/link';
-import Artwork from '@/components/Artwork';
+import type { ReactNode } from 'react';
+import HeroProduct from '@/components/HeroProduct';
 import HowItWorksSection from '@/components/HowItWorksSection';
 import Layout from '@/components/Layout';
 import OfferBanner from '@/components/OfferBanner';
 import SectionHeading from '@/components/SectionHeading';
-import { trackEvent } from '@/lib/trackEvent';
 import StyledQrCode from '@/components/StyledQrCode';
-import { DIFFERENTIATORS } from '@/lib/differentiators';
-import { CORPORATE_PLAN, PRICING_TIERS, getTier } from '@/lib/pricing';
+import { HOMEPAGE_PROMISES } from '@/lib/differentiators';
+import { HOMEPAGE_IMAGES } from '@/lib/homepageImages';
+import { CORPORATE_PLAN, getTier } from '@/lib/pricing';
 import { SITE_ORIGIN, organizationJsonLd, webSiteJsonLd } from '@/lib/seo';
+import { trackEvent } from '@/lib/trackEvent';
 
 /**
  * The homepage, on the redesign system (docs/design-system.md).
  *
- * Pricing is read from `lib/pricing.ts` — a free trial and one paid plan.
- * Never hard-code a price here: the tier string is stamped on every existing
- * event row, so the tier table is the only thing that knows what a given event
- * was actually sold.
+ * Order: banner, hero, try-it-now, three steps, promises, what is included,
+ * pricing, closing call to action.
  *
- * Every image is a slot in `lib/imagery.ts`. With no licensed photography yet
- * each one renders a palette gradient at the right aspect ratio; when assets
- * land the registry changes and this file does not.
+ * Pricing is read from `lib/pricing.ts`. Never hard-code a price here: the tier
+ * string is stamped on every existing event row, so the tier table is the only
+ * thing that knows what a given event was actually sold.
+ *
+ * Every picture comes from `lib/homepageImages.ts`, the single manifest.
+ *
+ * "No app, no account" is said twice on purpose — once in the hero and once in
+ * the strip under the QR code — and not again. Say it a third time and it
+ * stops reading as a promise.
  */
+/** Homepage sections run tighter than the design-system default (py-16/24). */
+const TIGHT = '!py-8 sm:!py-10';
+
 export default function HomePage() {
   // The Discover stage.
   useEffect(() => {
@@ -33,6 +41,7 @@ export default function HomePage() {
   return (
     <Layout
       width="bleed"
+      compactFooter
       // Both belong on the homepage and nowhere else — a crawler wants one
       // statement of who this is, not one per page.
       structuredData={[organizationJsonLd(), webSiteJsonLd()]}
@@ -40,12 +49,10 @@ export default function HomePage() {
       <div className="bg-canvas font-sans">
         <OfferBanner />
         <Hero />
-        <PriceSummary />
         <TryItLive />
-        <OurStandard />
-        <HowItWorksSection />
-        <Occasions />
-        <WhatYouGet />
+        <HowItWorksSection compact />
+        <Promises />
+        <Included />
         <Pricing />
         <ClosingCta />
       </div>
@@ -54,166 +61,89 @@ export default function HomePage() {
 }
 
 function Hero() {
+  const full = getTier('plus');
   return (
-    <section className="spx-section-canvas pt-12 sm:pt-20">
-      <div className="spx-inner grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+    <section className="spx-section-canvas !pb-6 !pt-6 sm:!pb-8 sm:!pt-8">
+      <div className="spx-inner grid items-center gap-5 lg:grid-cols-2 lg:gap-10">
         <div>
           <p className="spx-eyebrow">Shared event galleries</p>
-          {/* The old headline was "Every moment. Everyone's perspective." — true
-              of every product in this category, and therefore worth nothing
-              when somebody has four tabs open comparing them. The promise now
-              names the two things a guest actually experiences (nothing to
-              install, nothing to join) and the thing a host finds out later
-              (the file comes back at the resolution the camera recorded). */}
-          <h1 className="mt-3">
-            <span className="spx-display block">Nothing to install.</span>
-            <span className="spx-display-serif block">Nothing to sign up for.</span>
+          <h1 className="mt-2">
+            <span className="spx-display block !text-[1.9rem] sm:!text-5xl">Nothing to install.</span>
+            <span className="spx-display-serif block !text-[1.9rem] sm:!text-5xl">Nothing to sign up for.</span>
           </h1>
-          <p className="spx-body mt-5 max-w-md">
-            Your guests point a camera at a code and start sending photos. No app, no
-            account, no phone number, nothing to explain to anyone. You get the original
-            files, at the size the camera recorded them.
+          <p className="spx-body mt-3 max-w-md text-[0.95rem] leading-snug">
+            Your guests scan a code and start sending photos. No app, no account. You get the
+            original files, at the size the camera recorded them.
           </p>
-          <ul className="mt-6 flex max-w-md flex-wrap gap-x-4 gap-y-1.5 text-sm text-charcoal/70">
-            {[
-              'No app',
-              'No guest accounts',
-              'Original quality',
-              'Location data removed',
-              'Unlisted galleries',
-              '$79 once',
-            ].map((claim) => (
-              <li key={claim} className="flex items-center gap-1.5">
-                <span aria-hidden className="h-1 w-1 shrink-0 bg-pine" />
-                {claim}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link href="/create-event" className="spx-btn-ink">
-              Create an event gallery
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link href="/create-event" className="spx-btn-ink !px-5 !py-3">
+              Create an event
             </Link>
-            <Link href="/demo/gallery" className="spx-btn-outline">
-              View a live demo gallery
+            <Link href="/demo/gallery" className="spx-btn-outline !px-5 !py-3">
+              See a live demo
             </Link>
           </div>
-          {/* Was text-[0.7rem] text-charcoal/70 — about 11px at under half
-              opacity, for the one line on the page that names a limit on what
-              you get. Small grey type is where terms go when somebody would
-              rather they were not read; these are ours, so they are body size
-              and readable. */}
-          <p className="mt-4 text-sm text-charcoal/70">
-            Free to try, one event per account. Photo and video allowances are for normal
-            event use —{' '}
-            <Link href="/fair-use" className="underline">
-              see fair use
+          <p className="mt-3 text-sm font-medium sm:text-base">
+            Free to try. {full ? `$${full.price} per event.` : null} Corporate plans available.
+          </p>
+          <p className="mt-1 text-xs text-charcoal/70">
+            Photo and video allowances are for normal event use.{' '}
+            <Link
+              href="/fair-use"
+              className="-my-3 inline-block min-h-[44px] py-3 underline"
+            >
+              See fair use
             </Link>
-            .
           </p>
         </div>
 
-        <Artwork slot="home-hero" className="spx-arch aspect-[4/5] w-full" priority />
+        <HeroProduct />
       </div>
     </section>
   );
 }
 
 /**
- * Prices up front, so nobody has to scroll to the bottom to find out what it
- * costs. Read from lib/pricing.ts like every other price on the site.
- */
-function PriceSummary() {
-  const trial = getTier('trial');
-  const full = getTier('plus');
-  const items = [
-    trial ? { name: trial.name, price: 'Free', note: 'Try it at something small' } : null,
-    full
-      ? { name: full.name, price: `$${full.price} once`, note: 'Per event, unlimited photos, no subscription' }
-      : null,
-    {
-      name: CORPORATE_PLAN.name,
-      price: CORPORATE_PLAN.priceLabel,
-      note: `${CORPORATE_PLAN.includedEvents} new events every month`,
-    },
-  ].filter(Boolean) as { name: string; price: string; note: string }[];
-  return (
-    <section className="spx-section-canvas pt-0">
-      <div className="spx-inner">
-        <div className="grid gap-px bg-charcoal/10 sm:grid-cols-3">
-          {items.map((item) => (
-            <div key={item.name} className="bg-canvas p-5">
-              <p className="text-xs font-medium uppercase tracking-[0.16em] text-charcoal/70">
-                {item.name}
-              </p>
-              <p className="mt-1 text-2xl font-bold tracking-[-0.02em]">{item.price}</p>
-              <p className="mt-1 text-sm text-charcoal/70">{item.note}</p>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-sm text-charcoal/70">
-          Unlimited photos on paid events. {UNLIMITED_PHOTOS_NOTE}
-        </p>
-        <p className="mt-2 text-sm">
-          <Link href="/pricing" className="text-pine underline">
-            Compare plans
-          </Link>
-        </p>
-      </div>
-    </section>
-  );
-}
-
-/**
- * A working QR code, in the hero, encoding the demo walkthrough.
+ * A working QR code encoding the demo walkthrough. Deliberately a real code:
+ * the pitch is "scanning it just works", and a decorative one would disprove
+ * that the moment somebody pointed a phone at it.
  *
- * Deliberately a real code rather than a decorative one. The entire pitch is
- * "scanning it just works" — a mock that does nothing when somebody points a
- * phone at it would disprove the claim at the exact moment they tested it, and
- * they would be holding the evidence.
- *
- * `StyledQrCode` imports `qr-code-styling` dynamically, so putting this on the
- * homepage costs nothing until it renders. The artwork it replaces stays below
- * it on large screens, where there is room for both.
+ * The badges are the trust strip — the second and last place the page says
+ * "no app, no account".
  */
 function TryItLive() {
   return (
-    <section className="spx-section-canvas pt-0">
+    <section className="spx-section-canvas !pb-8 !pt-0 sm:!pb-10">
       <div className="spx-inner">
-        <div className="spx-card flex flex-col gap-8 p-6 sm:p-8 md:flex-row md:items-center">
-          <div className="mx-auto shrink-0 bg-canvas p-3 md:mx-0">
+        <div className="spx-card flex flex-col gap-4 p-4 sm:p-6 md:flex-row md:items-center md:gap-8">
+          <div className="mx-auto shrink-0 bg-canvas p-2 md:mx-0">
             <StyledQrCode
               data={`${SITE_ORIGIN}/demo/try-upload`}
-              size={168}
+              size={136}
               label="Try an upload"
             />
           </div>
 
           <div className="min-w-0">
             <p className="spx-eyebrow">Try it right now</p>
-            <p className="mt-3 font-sans text-xl font-semibold leading-snug">
+            <p className="mt-2 font-sans text-lg font-semibold leading-snug sm:text-xl">
               Point your phone at that code and add a photo yourself.
             </p>
-            <p className="spx-body mt-2 max-w-xl text-sm">
-              It opens a sample gallery in whatever browser your phone already has, and
-              you can put one of your own photos into it — no install, no sign-up,
-              nothing to undo afterwards. Your photo is deleted within the hour, and
-              there is no page anywhere that shows it to anyone else.
+            <p className="spx-body mt-1 max-w-xl text-sm leading-snug">
+              It opens a sample gallery in your phone's browser. Your photo is deleted within the
+              hour and never shown to anyone else.
             </p>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              {/* Reading this on a phone, the code is useless — you cannot scan
-                  the screen you are holding. The link is not a fallback behind
-                  a breakpoint; it is there for everybody. */}
-              <Link href="/demo/try-upload" className="spx-btn-ink">
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {/* On a phone the code is useless — you cannot scan the screen you
+                  are holding — so the link is for everybody, not a fallback. */}
+              <Link href="/demo/try-upload" className="spx-btn-ink !py-3">
                 Or just tap here
               </Link>
-              <span className="text-xs text-charcoal/70">
-                On a phone? Tapping does the same thing.
-              </span>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-2 border-t border-charcoal/10 pt-5">
-              {['Zero app required', 'No account', 'Original quality', 'GPS removed'].map(
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-charcoal/10 pt-3">
+              {['No app, no account', 'Original quality', 'Location data removed'].map(
                 (badge) => (
                   <span
                     key={badge}
@@ -231,76 +161,24 @@ function TryItLive() {
   );
 }
 
-const OCCASIONS = [
-  { slot: 'occasion-wedding', label: 'Weddings' },
-  { slot: 'occasion-birthday', label: 'Birthdays' },
-  { slot: 'occasion-graduation', label: 'Graduations' },
-  { slot: 'occasion-corporate', label: 'Corporate' },
-  { slot: 'occasion-holiday', label: 'Holidays' },
-  { slot: 'occasion-reunion', label: 'Reunions' },
-] as const;
-
-function Occasions() {
-  return (
-    <section className="spx-section-sand">
-      <div className="spx-inner">
-        <p className="spx-eyebrow">Not just weddings</p>
-        <SectionHeading first="For everything" second="worth sharing." />
-        <p className="spx-body mt-5 max-w-lg">
-          Anywhere people take out their phones, SharePix collects what they shoot. Same code,
-          same gallery, whatever the occasion.
-        </p>
-        <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
-          {OCCASIONS.map((item) => (
-            <Artwork
-              key={item.slot}
-              slot={item.slot}
-              caption={item.label}
-              className="aspect-[4/3]"
-            />
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /**
- * What SharePix commits to, each with the limit where it stops holding.
- *
- * The boundaries are the point. Anybody can write "private by design"; saying
- * which formats are covered and which are not makes a claim the reader can
- * check.
- *
- * Nothing here mentions anybody else, by decision — see the note at the top of
- * lib/differentiators.ts. The commitments are meant to stand up with no rival
- * in the room.
+ * Four promises, each with the limit where it stops holding. The set is
+ * `HOMEPAGE_PROMISE_IDS` in lib/differentiators.ts; the rest live on /pricing
+ * and the use-case pages. Nothing here mentions anybody else, by decision.
  */
-function OurStandard() {
+function Promises() {
   return (
-    <section className="spx-section-canvas">
+    <section className={`spx-section-canvas ${TIGHT}`}>
       <div className="spx-inner">
         <p className="spx-eyebrow">Our standard</p>
-        <SectionHeading first="What we promise" second="and exactly where it ends." />
-        <p className="spx-body mt-5 max-w-lg">
-          Each promise comes with a plain note about where it stops, so you know exactly
-          what you are getting.
-        </p>
+        <SectionHeading first="What we promise" second="and exactly where it ends." compact />
 
-        <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
-          {DIFFERENTIATORS.map((item) => (
-            <div key={item.id} className="flex flex-col bg-canvas p-7">
-              <span className="self-start bg-sage/60 px-2 py-1 text-xs font-medium tracking-wide text-pine">
-                {item.badge}
-              </span>
-              <h3 className="mt-4 text-lg font-semibold">{item.title}</h3>
-              <p className="spx-body mt-2 text-sm">{item.claim}</p>
-              {/* The boundary is the limit on the claim above it, and this
-                  module's own documentation says it is "not a disclaimer to
-                  bury". It was set two steps smaller than the claim at just
-                  over half opacity, which is burying it. Same size as the
-                  claim now; the left rule is what separates them. */}
-              <p className="mt-3 border-l-2 border-charcoal/15 pl-3 text-sm leading-relaxed text-charcoal/70">
+        <div className="mt-5 grid gap-px bg-charcoal/10 sm:grid-cols-2">
+          {HOMEPAGE_PROMISES.map((item) => (
+            <div key={item.id} className="flex flex-col bg-canvas px-4 py-4 sm:px-5 sm:py-3">
+              <h3 className="text-base font-semibold">{item.title}</h3>
+              <p className="spx-body mt-1 text-sm leading-snug">{item.short ?? item.claim}</p>
+              <p className="mt-2 border-l-2 border-charcoal/15 pl-3 text-xs leading-snug text-charcoal/70">
                 {item.boundary}
               </p>
             </div>
@@ -311,109 +189,235 @@ function OurStandard() {
   );
 }
 
-const FEATURES = [
-  {
-    title: 'Live slideshow',
-    body: 'Put the gallery on a screen at the venue and watch photos appear through the evening. Screened stills only — nothing reaches the projector unchecked.',
-  },
+const iconProps = {
+  width: 24,
+  height: 24,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.75,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+} as const;
+
+const INCLUDED: { title: string; body: string; icon: ReactNode }[] = [
   {
     title: 'Digital guest book',
-    body: 'Notes, photos and short video messages, signed by the people who were there.',
+    body: 'Signed notes, photos and short video messages.',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
+        <path d="M9 9h6M9 13h4" />
+      </svg>
+    ),
   },
   {
-    title: 'Automatic photo screening',
-    body: 'Photos that look explicit are held back until you review them, and you can hide or delete anything at any time. Included on every plan.',
+    title: 'Automatic screening',
+    body: 'Explicit-looking photos are held back until you review them.',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+    ),
   },
   {
     title: 'One ZIP, every original',
-    body: 'Download the whole event in a single archive, at full resolution. Your guests can take theirs too, without an account.',
+    body: 'The whole event at full resolution. Guests can take theirs too.',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M12 4v11m0 0-4-4m4 4 4-4" />
+        <path d="M5 20h14" />
+      </svg>
+    ),
+  },
+  {
+    title: 'Hide or delete anything',
+    body: 'Remove any photo from the gallery whenever you like.',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
+        <path d="m4 4 16 16" />
+      </svg>
+    ),
   },
 ];
 
-function WhatYouGet() {
+function Included() {
+  const slideshow = HOMEPAGE_IMAGES.slideshow;
+  const dashboard = HOMEPAGE_IMAGES.hostDashboard;
+  const shots = [
+    {
+      image: slideshow,
+      title: 'Live slideshow',
+      body: 'Put the gallery on a screen at the venue. Screened stills only, so nothing reaches the projector unchecked.',
+    },
+    {
+      image: dashboard,
+      title: 'Your dashboard',
+      body: 'Every photo in one place, with the code to print, the slideshow and the settings.',
+    },
+  ];
   return (
-    <section className="spx-section-canvas">
+    <section className={`spx-section-sand ${TIGHT}`}>
       <div className="spx-inner">
-        <p className="spx-eyebrow">Also included</p>
-        <SectionHeading first="And the rest" second="of what you get." />
-        <div className="mt-12 grid gap-px bg-charcoal/10 sm:grid-cols-2">
-          {FEATURES.map((feature) => (
-            <div key={feature.title} className="bg-canvas p-7">
-              <h3 className="text-lg font-semibold">{feature.title}</h3>
-              <p className="spx-body mt-2 text-sm">{feature.body}</p>
-            </div>
+        <p className="spx-eyebrow">What you get</p>
+        <SectionHeading first="Everything for the night," second="and the morning after." compact />
+
+        {/* Side by side at every width: the pair is one picture of the product,
+            and stacking them doubled the section on a phone. */}
+        <div className="mt-5 grid grid-cols-[1.5fr_1fr] gap-3 sm:gap-5">
+          {shots.map(({ image, title, body }) => (
+            <figure key={title} className="spx-card overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={image.src}
+                alt={image.alt}
+                width={image.width}
+                height={image.height}
+                loading="lazy"
+                className="block h-auto w-full"
+              />
+              <figcaption className="px-3 py-2 sm:px-4 sm:py-3">
+                <h3 className="text-sm font-semibold sm:text-base">{title}</h3>
+                <p className="mt-1 hidden text-sm leading-snug text-charcoal/70 sm:block">{body}</p>
+              </figcaption>
+            </figure>
           ))}
         </div>
+
+        <ul className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 lg:grid-cols-4">
+          {INCLUDED.map((item) => (
+            <li key={item.title} className="flex gap-2 sm:gap-3">
+              <span className="mt-0.5 shrink-0 text-pine">{item.icon}</span>
+              <div>
+                <h3 className="text-sm font-semibold leading-tight">{item.title}</h3>
+                <p className="mt-1 text-xs leading-snug text-charcoal/70 sm:text-sm">{item.body}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
 }
 
+/**
+ * Free, Full Event and Corporate, side by side. Every figure and feature comes
+ * from lib/pricing.ts. "One free event per account" is filtered out here — it
+ * is a rule of the free plan and lives on /pricing, not in a homepage card.
+ */
 function Pricing() {
+  const trial = getTier('trial');
+  const full = getTier('plus');
+  const cards = [
+    trial && {
+      key: trial.id,
+      name: trial.name,
+      price: 'Free',
+      features: trial.features.filter((f) => !/per account/i.test(f)).slice(0, 3),
+      href: '/create-event',
+      cta: 'Start free',
+      featured: false,
+    },
+    full && {
+      key: full.id,
+      name: full.name,
+      price: `$${full.price}`,
+      priceNote: 'per event',
+      features: full.features.filter((f) => !/no app/i.test(f)).slice(0, 3),
+      href: '/create-event',
+      cta: `Choose ${full.name}`,
+      featured: true,
+    },
+    {
+      key: 'corporate',
+      name: CORPORATE_PLAN.name,
+      price: CORPORATE_PLAN.priceLabel,
+      features: CORPORATE_PLAN.features.slice(0, 3),
+      href: '/corporate',
+      cta: 'See Corporate',
+      featured: false,
+    },
+  ].filter(Boolean) as {
+    key: string;
+    name: string;
+    price: string;
+    priceNote?: string;
+    features: string[];
+    href: string;
+    cta: string;
+    featured: boolean;
+  }[];
+
   return (
-    <section className="spx-section-sand">
+    <section className={`spx-section-canvas ${TIGHT}`}>
       <div className="spx-inner">
         <p className="spx-eyebrow">Pricing</p>
-        <SectionHeading first="One event. One payment." second="No surprises." />
-        <p className="spx-body mt-5 max-w-lg">
-          One plan, priced per event rather than per guest or per photo. Nothing renews, and
-          nothing is charged until you publish. Try it first with a free event.
-        </p>
-
-        <div className="mt-10 grid gap-4 md:grid-cols-2">
-          {PRICING_TIERS.map((tier) => {
-            const featured = tier.highlight === true;
-            return (
-              <div
-                key={tier.id}
-                className={
-                  featured
-                    ? 'border border-ink bg-ink p-7 text-canvas'
-                    : 'spx-card p-7'
-                }
-              >
-                {/* No "Most popular" badge: nothing has sold yet, so popularity
-                    would be invented, and with one paid plan there is nothing
-                    for it to be more popular than. */}
-                <p
-                  className={`font-sans text-xs font-medium uppercase tracking-[0.16em] ${
-                    featured ? 'text-canvas/70' : 'text-charcoal/70'
-                  }`}
-                >
-                  {tier.name}
-                </p>
-                <p className="mt-2 text-4xl font-bold tracking-[-0.02em]">
-                  {tier.price === 0 ? 'Free' : `$${tier.price}`}
-                </p>
-                <ul className="mt-5 space-y-2">
-                  {tier.features.slice(0, 4).map((feature) => (
-                    <li
-                      key={feature}
-                      className={`text-sm leading-relaxed ${
-                        featured ? 'text-canvas/75' : 'text-charcoal/70'
-                      }`}
-                    >
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href="/pricing"
-                  className={`${featured ? 'spx-btn-canvas' : 'spx-btn-outline'} mt-7 w-full`}
-                >
-                  {tier.price === 0 ? 'Start free' : `Choose ${tier.name}`}
-                </Link>
-              </div>
-            );
-          })}
+        <SectionHeading first="One event. One payment." second="No surprises." compact />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-6">
+          <p className="spx-body max-w-lg text-[0.95rem] leading-snug">
+            Priced per event, not per guest or per photo. Nothing renews.
+          </p>
+          <Link href="/pricing" className="hidden min-h-[44px] items-center text-sm text-pine underline sm:inline-flex">
+            Compare every plan
+          </Link>
         </div>
 
-        <p className="mt-6 text-sm text-charcoal/70">
-          Running events all year?{' '}
-          <Link href="/pricing" className="text-pine underline">
-            The Corporate plan
-          </Link>{' '}
-          covers multiple active events on a monthly subscription.
+        <div className="mt-5 grid gap-3 md:grid-cols-3 md:gap-4">
+          {cards.map((card) => (
+            <div
+              key={card.key}
+              className={`flex flex-col p-4 sm:p-5 ${
+                card.featured ? 'border border-ink bg-ink text-canvas' : 'spx-card'
+              }`}
+            >
+              <p
+                className={`font-sans text-xs font-medium uppercase tracking-[0.16em] ${
+                  card.featured ? 'text-canvas/70' : 'text-charcoal/70'
+                }`}
+              >
+                {card.name}
+              </p>
+              <p className="mt-1 text-2xl font-bold tracking-[-0.02em] sm:text-3xl">
+                {card.price}
+                {card.priceNote ? (
+                  <span
+                    className={`ml-2 text-sm font-medium tracking-normal ${
+                      card.featured ? 'text-canvas/70' : 'text-charcoal/70'
+                    }`}
+                  >
+                    {card.priceNote}
+                  </span>
+                ) : null}
+              </p>
+              <ul className="mt-3 flex-1 space-y-1.5">
+                {card.features.map((feature) => (
+                  <li
+                    key={feature}
+                    className={`text-sm leading-relaxed ${
+                      card.featured ? 'text-canvas/75' : 'text-charcoal/70'
+                    }`}
+                  >
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href={card.href}
+                className={`${card.featured ? 'spx-btn-canvas' : 'spx-btn-outline'} mt-4 w-full !py-3`}
+              >
+                {card.cta}
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-2 text-sm text-charcoal/70 sm:hidden">
+          <Link href="/pricing" className="inline-flex min-h-[44px] items-center text-pine underline">
+            Compare every plan
+          </Link>
         </p>
       </div>
     </section>
@@ -422,25 +426,39 @@ function Pricing() {
 
 function ClosingCta() {
   return (
-    <section className="spx-section-ink text-center">
+    <section className={`spx-section-ink text-center ${TIGHT}`}>
       <div className="spx-inner">
         <p className="spx-eyebrow">Ready when you are</p>
-        <h2 className="mt-3">
-          <span className="spx-display block">Set it up in five minutes.</span>
-          {/* Was "Keep the photos forever." SharePix does not host anything
-              forever — the gallery has a window and the archive after it has an
-              end. What is actually permanent is the copy a host downloads, and
-              that is what this now promises. */}
-          <span className="spx-display-serif block">Download the originals and keep them.</span>
+        <h2 className="mt-2">
+          <span className="spx-display block !text-[1.65rem] sm:!text-4xl">Set it up in five minutes.</span>
+          {/* Not "keep the photos forever": the gallery has a window and the
+              archive after it has an end. What is permanent is the copy a host
+              downloads, and that is what this promises. */}
+          <span className="spx-display-serif block !text-[1.65rem] sm:!text-4xl">Download the originals and keep them.</span>
         </h2>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link href="/create-event" className="spx-btn-canvas">
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <Link href="/create-event" className="spx-btn-canvas !px-5 !py-3">
             Create your event
           </Link>
-          <Link href="/demo" className="spx-btn-outline">
-            See an example gallery
+          <Link href="/demo" className="spx-btn-outline !px-5 !py-3">
+            See an example
           </Link>
         </div>
+        <p className="mt-1 flex flex-wrap items-center justify-center gap-x-1 text-sm text-canvas/75">
+          Planning
+          <Link href="/weddings" className="inline-flex min-h-[44px] items-center px-1 underline">
+            a wedding
+          </Link>
+          ,
+          <Link href="/company-events" className="inline-flex min-h-[44px] items-center px-1 underline">
+            a company event
+          </Link>
+          or
+          <Link href="/graduation-parties" className="inline-flex min-h-[44px] items-center px-1 underline">
+            a party
+          </Link>
+          ?
+        </p>
       </div>
     </section>
   );

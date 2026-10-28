@@ -173,6 +173,10 @@ export default function ProHomePage() {
               Your originals stay yours. We make the preview and delete the original unless
               you ask us to keep it &mdash; that switch is on the review page.
             </p>
+            <p className="mt-2 text-xs text-charcoal/70">
+              At an event, guests see your pictures as smaller previews and the full-resolution
+              files stay with you. Everything else guests upload is unaffected.
+            </p>
           </div>
         </div>
       </section>

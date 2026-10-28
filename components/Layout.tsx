@@ -45,6 +45,11 @@ interface LayoutProps {
    * allowlist calls private stays private whatever is passed here.
    */
   noindex?: boolean;
+  /**
+   * A slimmer footer: less padding, no blurb, and the link lists two to a row on
+   * a phone. The homepage uses it; every other page keeps the full footer.
+   */
+  compactFooter?: boolean;
   /** JSON-LD for this page, already an object. Emitted as a script tag. */
   structuredData?: Record<string, unknown> | Record<string, unknown>[];
   children: ReactNode;
@@ -75,6 +80,7 @@ export default function Layout({
   description,
   noindex = false,
   structuredData,
+  compactFooter = false,
   children,
 }: LayoutProps) {
   const router = useRouter();
@@ -161,30 +167,53 @@ export default function Layout({
       {/* Square, navy, no gradient hairline. The footer is the last full-bleed
           colour block on every page rather than a decorated strip. */}
       <footer className="mt-auto bg-ink text-canvas">
-        <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8">
-          <div className="flex flex-col gap-10 sm:flex-row sm:items-start sm:justify-between">
+        <div
+          className={`mx-auto w-full max-w-6xl px-5 sm:px-8 ${
+            compactFooter ? 'py-8 sm:py-10' : 'py-14'
+          }`}
+        >
+          <div
+            className={`flex flex-col sm:flex-row sm:items-start sm:justify-between ${
+              compactFooter ? 'gap-5 sm:gap-10' : 'gap-10'
+            }`}
+          >
             <div className="max-w-xs">
               <p className="font-sans text-lg font-bold tracking-[-0.02em]">
                 share<span className="text-mint">pix</span>
                 <span className="text-canvas/75">.net</span>
               </p>
-              <p className="mt-4 font-serif text-xl italic leading-snug text-canvas/85">
+              <p
+                className={`font-serif text-xl italic leading-snug text-canvas/85 ${
+                  compactFooter ? 'mt-2' : 'mt-4'
+                }`}
+              >
                 Every moment. Everyone&rsquo;s perspective.
               </p>
-              <p className="mt-4 text-sm leading-relaxed text-canvas/75">
+              <p
+                className={`mt-4 text-sm leading-relaxed text-canvas/75 ${
+                  compactFooter ? 'hidden' : ''
+                }`}
+              >
                 One gallery for every photo your guests took. Pay per event, or take the
                 Corporate plan monthly.
               </p>
             </div>
-            <div className="flex flex-wrap gap-10 sm:gap-16">
+            <div className={`flex flex-wrap sm:gap-16 ${compactFooter ? 'gap-x-10 gap-y-3' : 'gap-10'}`}>
               <div>
                 <p className="spx-eyebrow text-mint">Use cases</p>
-                <nav aria-label="Use cases" className="mt-3 flex flex-col gap-3 text-sm">
+                <nav
+                  aria-label="Use cases"
+                  className={`mt-2 text-sm ${
+                    compactFooter ? 'grid grid-cols-2 gap-x-6 sm:flex sm:flex-col' : 'flex flex-col'
+                  }`}
+                >
                   {USE_CASES.map((useCase) => (
                     <Link
                       key={useCase.slug}
                       href={`/${useCase.slug}`}
-                      className="text-canvas/65 transition hover:text-mint"
+                      className={`inline-flex items-center text-canvas/65 transition hover:text-mint ${
+                      compactFooter ? 'min-h-[44px] sm:min-h-[32px]' : 'min-h-[44px]'
+                    }`}
                     >
                       {useCase.navLabel}
                     </Link>
@@ -193,13 +222,15 @@ export default function Layout({
               </div>
               <nav
                 aria-label="Footer"
-                className="grid grid-cols-2 gap-x-10 gap-y-3 text-sm sm:gap-x-16"
+                className="grid grid-cols-2 gap-x-10 text-sm sm:gap-x-16"
               >
                 {FOOTER_LINKS.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="text-canvas/65 transition hover:text-mint"
+                    className={`inline-flex items-center text-canvas/65 transition hover:text-mint ${
+                      compactFooter ? 'min-h-[44px] sm:min-h-[32px]' : 'min-h-[44px]'
+                    }`}
                   >
                     {link.label}
                   </Link>
@@ -207,9 +238,15 @@ export default function Layout({
               </nav>
             </div>
           </div>
-          <div className="mt-12 flex flex-col gap-2 border-t border-canvas/15 pt-6 text-sm text-canvas/75 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            className={`flex border-t border-canvas/15 text-sm text-canvas/75 sm:flex-row sm:items-center sm:justify-between ${
+              compactFooter
+                ? 'mt-4 flex-row items-center justify-between pt-3'
+                : 'mt-12 flex-col gap-2 pt-6'
+            }`}
+          >
             <p>&copy; {new Date().getFullYear()} sharepix.net</p>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="transition hover:text-mint">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="inline-flex min-h-[44px] items-center transition hover:text-mint">
               {SUPPORT_EMAIL}
             </a>
           </div>

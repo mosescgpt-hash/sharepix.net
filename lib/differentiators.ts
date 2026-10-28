@@ -55,6 +55,8 @@ export interface Differentiator {
   title: string;
   /** The claim, in the customer's language. Must be literally true. */
   claim: string;
+  /** A one-line version of the claim, for the homepage cards. Same meaning, fewer words. */
+  short?: string;
   /**
    * Where it does not hold, or '' when there is no meaningful exception.
    *
@@ -76,6 +78,7 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
       'Guests just scan the code with their phone camera and start sharing, with no app to download and no sign-up.',
     boundary:
       'You, the host, sign in to run the event. Your guests never have to.',
+    short: 'Guests scan the code and start sharing. No app to download, no sign-up.',
     backedBy: 'amplify/data/resource.ts',
     badge: 'No sign-up',
   },
@@ -86,6 +89,7 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
       'We remove the hidden location from every photo and video when it is uploaded, so nobody can tell where it was taken.',
     boundary:
       'Photos lose all hidden details. A video keeps the rest, like the time and phone model, but its location is still removed.',
+    short: 'We remove the hidden location from every photo and video when it is uploaded.',
     backedBy: 'amplify/functions/sanitize-upload/video.ts',
     badge: 'Location removed',
   },
@@ -95,9 +99,22 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
     claim:
       'You get every photo and video at the full resolution the phone took it, never shrunk or blurred.',
     boundary:
-      'With SharePix Pro, guests see a smaller preview of the photographer\u2019s pictures instead of the originals.',
+      'The gallery shows a lighter copy on screen so it loads quickly. What you download is the full-resolution original.',
+    short: 'Every photo and video at the full resolution the phone took it.',
     backedBy: 'amplify/functions/sanitize-upload/handler.ts',
     badge: 'Full quality',
+  },
+  {
+    id: 'audience',
+    title: 'You choose who sees it',
+    claim:
+      'Let guests see everything, let each guest see only what they added, or keep every photo to yourself.',
+    boundary:
+      'There is no password on a gallery. If guests can see it, so can anyone you give the link to. You can pause sharing at any time, or replace the QR code so older links stop working.',
+    // The setting itself, and the function that applies it.
+    short: 'Guests see everything, only what they added, or nothing at all.',
+    backedBy: 'amplify/functions/list-event-photos/visibility.ts',
+    badge: 'Your call',
   },
   {
     id: 'screened-free',
@@ -177,6 +194,26 @@ export function comparativePhrasesIn(text: string): string[] {
     return new RegExp(`\\b${escaped}(?:es|s)?\\b`).test(haystack);
   });
 }
+
+/**
+ * The four promises the homepage shows, in order.
+ *
+ * The rest of the module stays whole — the pricing page, the help articles and
+ * the tests still read every claim — but a homepage that prints all of them is
+ * the page nobody reads to the end.
+ */
+export const HOMEPAGE_PROMISE_IDS = [
+  'no-account',
+  'location-stripped',
+  'full-resolution',
+  'audience',
+] as const;
+
+export const HOMEPAGE_PROMISES: readonly Differentiator[] = HOMEPAGE_PROMISE_IDS.map((id) => {
+  const found = DIFFERENTIATORS.find((item) => item.id === id);
+  if (!found) throw new Error(`Homepage promise "${id}" is not in DIFFERENTIATORS`);
+  return found;
+});
 
 export function differentiatorFor(id: string): Differentiator | undefined {
   return DIFFERENTIATORS.find((item) => item.id === id);
