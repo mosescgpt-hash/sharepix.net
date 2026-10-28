@@ -274,7 +274,7 @@ export function parseCategories(raw: unknown): { id: string; name: string }[] {
 // ---------------------------------------------------------------------------
 // Guest uploads (a scanned guest adding their own photos). Pure rules.
 
-export const MAX_GUEST_UPLOADS = 50;
+export const MAX_GUEST_UPLOADS = 1000;
 /** Decoded bytes. The page shrinks photos to 2000 px before sending. */
 export const MAX_GUEST_UPLOAD_BYTES = 700 * 1024;
 

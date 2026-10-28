@@ -150,6 +150,7 @@ export const PRIVATE_ROUTES = [
   '/booth/[eventId]',
   '/booth/kiosk/[eventId]',
   '/booth/photos/[key]',
+  '/booth/capture/[key]',
   '/b/[eventId]/[code]',
   '/pro/join',
   '/pro/profile',

@@ -10,6 +10,9 @@
  * Link: https://www.sharepix.net/b/<eventId>/<inner>
  *   inner = `t.<token>`             an online sign-up (the token, never an email)
  *   inner = `SPB1.<personId>.<blob>` an offline kiosk code (contact encrypted)
+ *   inner = `SPK1.<kind>.<id>.<mac>` a host start/stop/category code (signed
+ *                                    for the event); a phone camera opens a
+ *                                    page that explains it, not a raw string
  * The kiosk only builds a string, so it still works with no connection.
  * Old codes (`sharepix-booth:<token>`, bare `SPB1.…`) still work everywhere.
  *
@@ -20,6 +23,7 @@
 export const BOOTH_LINK_BASE = 'https://www.sharepix.net/b/';
 const ONLINE_PREFIX = 'sharepix-booth:';
 const OFFLINE_PREFIX = 'SPB1.';
+const CONTROL_PREFIX = 'SPK1.';
 const LINK = /^https?:\/\/(?:www\.)?sharepix\.net\/b\/([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9._-]{1,400})\/?$/i;
 const TOKEN = /^[A-Za-z0-9_-]{16,64}$/;
 
@@ -38,7 +42,7 @@ export function readBoothLink(text: string): { eventId: string; payload: string 
     const token = inner.slice(2);
     return TOKEN.test(token) ? { eventId: m[1], payload: `${ONLINE_PREFIX}${token}` } : null;
   }
-  if (inner.startsWith(OFFLINE_PREFIX)) return { eventId: m[1], payload: inner };
+  if (inner.startsWith(OFFLINE_PREFIX) || inner.startsWith(CONTROL_PREFIX)) return { eventId: m[1], payload: inner };
   return null;
 }
 

@@ -2,12 +2,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Notice from '@/components/Notice';
 import { boothCodes, type BoothCodesView } from '@/lib/api';
+import { boothLink } from '@/lib/boothLink';
 
 /**
  * The host's "Start & stop codes" (docs/booth-mode.md). Each code is signed
  * for this event by the server; the photographer photographs (or scans) one
  * to say where the following photos go. The codes are dividers: never in a
  * gallery, never emailed.
+ *
+ * Optional: guests no longer need a start or stop code to take photos. They
+ * scan their own code once and use the in-app camera until they tap Stop.
+ * These codes are for a photographer who shoots with a separate camera and
+ * sorts the photos afterwards. Each QR holds a sharepix.net link (never a
+ * raw string), so a phone camera opens an explanation; the sorter reads the
+ * code inside the link, and older printed codes still work.
  */
 
 const BTN = 'inline-flex min-h-[44px] items-center justify-center px-4 py-2 text-sm font-medium disabled:opacity-40';
@@ -17,7 +25,7 @@ export const HOW_IT_WORKS = [
   'A person’s code: photos after it go to that person and are emailed to them once you approve them. Another person’s code switches to them.',
   'A category start (a day or session): photos after it go to that category.',
   'Stop: photos after it are kept but held, not sent, until the next start code. Scanning a person’s code while stopped carries on with that person.',
-  'Once a person’s code has been scanned, they can add their own photos from their photo page until uploads close. Stop closes uploads; the next start code opens them again. “Close uploads” below keeps them closed until you reopen them.',
+  'Guests do not need these to take photos: when a guest scans their own code with their phone camera they get a live camera and can take as many photos as they like until they tap Stop. Stop (the code) closes uploads for everyone; the next start code opens them again. “Close uploads” below keeps them closed until you reopen them.',
   'Every photo still waits for your approval in step 5, and you can fix the grouping in step 4.',
 ];
 
@@ -37,6 +45,7 @@ export default function BoothCodes({
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [working, setWorking] = useState(false);
   const [newName, setNewName] = useState('');
+  const asLink = (code: string | null) => (code ? boothLink(eventId, code) : null);
 
   const act = useCallback(
     async (input: Parameters<typeof boothCodes>[0]) => {
@@ -68,8 +77,10 @@ export default function BoothCodes({
         Start &amp; stop codes
       </h2>
       <p className="spx-body mt-2 text-sm">
-        Print these and keep them at the booth. Take a photo of a code (or scan it in the booth app) to tell
-        SharePix where the next photos go. Code photos are only used for sorting and never sent or shown.
+        Optional, for a photographer using a separate camera. Guests do not need these: they scan their own
+        code and take photos in the app until they tap Stop. To use them, print them and photograph a code (or
+        scan it in the booth app) to tell SharePix where the next photos go. Code photos are only used for
+        sorting and never sent or shown. Scanned with a phone camera, a code opens a page that explains it.
       </p>
       <details className="mt-3 text-sm">
         <summary className="min-h-[44px] cursor-pointer font-medium">How it works</summary>
@@ -85,14 +96,14 @@ export default function BoothCodes({
       ) : (
         <>
           <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CodeCard label="Event start" sub={eventName} value={view.eventCode} />
-            <CodeCard label="Stop" sub={eventName} value={view.stopCode} />
+            <CodeCard label="Event start" sub={eventName} value={asLink(view.eventCode)} />
+            <CodeCard label="Stop" sub={eventName} value={asLink(view.stopCode)} />
             {view.categories.map((c) => (
               <CodeCard
                 key={c.id}
                 label={`Start: ${c.name}`}
                 sub={eventName}
-                value={c.code}
+                value={asLink(c.code)}
                 onRename={(name) => act({ eventId, action: 'rename', categoryId: c.id, name })}
                 working={working}
               />

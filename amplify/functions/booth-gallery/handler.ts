@@ -174,6 +174,16 @@ async function guestLink(code: string): Promise<{ ok: boolean; message: string; 
   };
   const link = readBoothLink(code);
   if (!link) return invalid;
+  // A host's start/stop/category code opened with a phone camera: say what it
+  // is instead of failing as if it were a guest's page.
+  if (link.payload.startsWith('SPK1.')) {
+    return {
+      ok: false,
+      message:
+        'This is a booth control code for the host or photographer. Guests do not scan it. To take photos, scan your own code from sign-up.',
+      key: null,
+    };
+  }
   if (!ATTENDEE_TABLE) return fail;
   const ev = await dynamo
     .send(
@@ -218,6 +228,24 @@ async function guestLink(code: string): Promise<{ ok: boolean; message: string; 
   if (!attendee || attendee.eventId?.S !== link.eventId) return fail;
   const key = attendee.galleryKey?.S;
   if (!key) return fail;
+  // The guest scanning their own code with their phone starts their photo
+  // session: that is what lets them take photos, with no start code needed.
+  // Only the first time, so the host's own scans keep their category. Closed
+  // uploads still stop them (guestUploadRefusal).
+  const attendeeId = attendee.id?.S;
+  if (attendeeId && !attendee.boothSessionAt?.S) {
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: ATTENDEE_TABLE,
+          Key: { id: { S: attendeeId } },
+          UpdateExpression: 'SET boothSessionAt = if_not_exists(boothSessionAt, :now)',
+          ConditionExpression: 'attribute_exists(id)',
+          ExpressionAttributeValues: { ':now': { S: new Date().toISOString() } },
+        }),
+      )
+      .catch(() => undefined);
+  }
   return { ok: true, message: '', key };
 }
 
