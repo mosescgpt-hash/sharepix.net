@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import Notice from '@/components/Notice';
 import { uploadBoothGuestPhoto } from '@/lib/api';
+import { GUEST_LONG_EDGE, canvasToJpeg } from '@/lib/boothCapture';
 
-/** Longest edge after shrinking on the phone; also drops location data. */
-export const GUEST_LONG_EDGE = 2000;
+export { GUEST_LONG_EDGE };
 
 /** Shrink a picked photo to a JPEG data URL (the canvas carries no EXIF). */
 export async function shrinkToJpeg(file: File): Promise<string> {
@@ -20,11 +20,7 @@ export async function shrinkToJpeg(file: File): Promise<string> {
     c.width = Math.round(img.naturalWidth * scale);
     c.height = Math.round(img.naturalHeight * scale);
     c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height);
-    for (const q of [0.85, 0.75, 0.6, 0.5]) {
-      const data = c.toDataURL('image/jpeg', q);
-      if (data.length * 0.75 < 680 * 1024) return data;
-    }
-    return c.toDataURL('image/jpeg', 0.4);
+    return canvasToJpeg(c);
   } finally {
     URL.revokeObjectURL(url);
   }

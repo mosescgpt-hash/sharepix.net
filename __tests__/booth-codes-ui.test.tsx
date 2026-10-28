@@ -26,7 +26,9 @@ jest.mock('@/lib/api', () => ({
   boothCodes: (i: { action: string }) => boothCodes(i),
   uploadBoothGuestPhoto: (...a: unknown[]) => (uploadBoothGuestPhoto as (...x: unknown[]) => unknown)(...a),
 }));
-jest.mock('qrcode.react', () => ({ QRCodeSVG: (p: { 'aria-label': string }) => <svg aria-label={p['aria-label']} /> }));
+jest.mock('qrcode.react', () => ({
+  QRCodeSVG: (p: { value: string; 'aria-label': string }) => <svg aria-label={p['aria-label']} data-value={p.value} />,
+}));
 
 import BoothCodes from '@/components/BoothCodes';
 import BoothGuestUpload from '@/components/BoothGuestUpload';
@@ -47,6 +49,22 @@ describe('Start & stop codes section', () => {
     expect(await screen.findByLabelText('Start: Sunday QR code')).toBeTruthy();
     expect(boothCodes).toHaveBeenCalledWith({ eventId: 'e1', action: 'add', name: 'Sunday' });
     expect(onCategories).toHaveBeenLastCalledWith(expect.arrayContaining([{ id: 'BBBBBBBB', name: 'Sunday', code: 'c2' }]));
+  });
+
+  it('puts a sharepix.net link in every code, never a raw string a phone camera would just print', async () => {
+    render(<BoothCodes eventId="e1" />);
+    const start = await screen.findByLabelText('Event start QR code');
+    expect(start.getAttribute('data-value')).toBe('https://www.sharepix.net/b/e1/SPK1.e.-.x');
+    expect(screen.getByLabelText('Stop QR code').getAttribute('data-value')).toBe('https://www.sharepix.net/b/e1/SPK1.s.-.y');
+    expect(screen.getByLabelText('Start: Saturday QR code').getAttribute('data-value')).toBe(
+      'https://www.sharepix.net/b/e1/SPK1.c.AAAAAAAA.z',
+    );
+  });
+
+  it('says guests do not need these codes', async () => {
+    render(<BoothCodes eventId="e1" />);
+    await screen.findByLabelText('Stop QR code');
+    expect(screen.getAllByText(/Guests do not need these/).length).toBeGreaterThan(0);
   });
 
   it('closes guest uploads', async () => {

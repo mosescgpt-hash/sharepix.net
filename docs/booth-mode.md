@@ -347,8 +347,16 @@ Before the start the page says "You can add photos once the event has
 started."; after a close it says "Uploads for this event are closed. Thanks
 for sharing!". The phone shrinks each photo to 2000 px (which also drops its
 location data) before sending. Each upload is one of that person's booth
-photos, waiting for the host's approval like any other. Limit: 50 per person
-(confirmed).
+photos, waiting for the host's approval like any other. Limit: 1000 per
+person (`MAX_GUEST_UPLOADS`; it was 50). It is a safety stop against abuse and
+runaway storage (each photo is at most 700 KB), not something a person at a
+booth should reach; a guest who does gets "You have added the most photos
+allowed for this event."
+
+**A guest opening their own code is a scan.** When a guest points their phone
+camera at their own code (see "One code" and "Take photos in the app"), their
+session is recorded then (`boothSessionAt`, first time only), so they can take
+photos with no start code scanned. Closed uploads still stop them.
 
 **Why "started" and not only "scanned":** a guest who signed up but was never
 photographed could otherwise never add anything. Opening on the start code
@@ -367,8 +375,9 @@ A guest's QR code (from online sign-up or the offline kiosk) is one link:
   into process-pro-photo, booth-scan and booth-gallery). A link for a
   different event is ignored ("That code is not for this event.").
 - **The guest's own camera** opens `/b/…`, which swaps the code for their
-  private page (`boothGuestLink` query): their photos, their uploads and a
-  button to the event's shared gallery.
+  photo session (`boothGuestLink` query, then `/booth/capture/<key>`): a live
+  camera with unlimited photos until Stop, then their private page (their
+  photos, their uploads and a button to the event's shared gallery).
 - **The kiosk still works offline**: it only builds the link text; nothing is
   fetched until someone opens it.
 - **Old codes** (`sharepix-booth:<token>` and bare `SPB1.…`) still sort as
@@ -384,6 +393,43 @@ Opening rules, so a code cannot be forged into someone else's page:
 
 Whoever holds a guest's code (including the photographer) can open that
 guest's page, the same as whoever has their email link.
+
+### Take photos in the app
+
+The simple flow, for a guest with their own phone:
+
+1. The guest scans their own booth code **once** with the normal phone camera.
+   It is a plain link, so the camera offers to open it (no app, no raw string).
+2. `/booth/capture/<key>` asks for the camera once (**Start camera**). The
+   camera then stays open: no picker, no restart, no checkbox.
+3. They take as many photos as they like. Each is shrunk to 2000 px on the
+   phone (dropping location data) and uploaded in the background to that
+   guest, with retries if the connection drops. Photos are never lost to a
+   slow upload; if too many are stuck (30) the shutter waits.
+4. They tap the big **Stop** button. It waits for the last uploads, then shows
+   their personal QR (the link to `/booth/photos/<key>`, which is also where
+   they add more photos later), a **See my photos** button and, when guests may
+   see it, the shared-gallery button.
+5. Every photo from the session is on that guest's personal page together,
+   once the host approves it (nothing changes about approval).
+
+If the camera is blocked or unavailable the page explains how to allow it and
+still offers the photo picker. Gallery pause, the replace-QR rules and
+closed uploads apply exactly as before.
+
+**Start and stop codes are now optional.** They remain for a photographer who
+shoots with a separate camera and sorts photos afterwards (the divider
+workflow above). Their QR now holds a link
+(`https://www.sharepix.net/b/<eventId>/SPK1.<kind>.<id>.<mac>`) instead of the
+raw `SPK1.…` string, so a phone camera opens a page that says what it is. The
+sorter and the in-app scanner read the code inside the link, and older printed
+codes (bare `SPK1.…`) still work. The codes are still signed per event, so
+nothing about the encryption or offline design changed.
+
+**Offline kiosk codes:** the in-app session opens only for an online sign-up,
+or for an offline code the photographer has already photographed (the
+existing rule, so a made-up sealed contact can never unlock anyone's page).
+Until then the page says "This code is not ready yet."
 
 ### Shared gallery
 
