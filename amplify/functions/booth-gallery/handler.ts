@@ -12,7 +12,7 @@ import { GUEST_UPLOAD_MESSAGES, MAX_GUEST_UPLOADS, guestUploadRefusal } from './
 import { readBoothLink } from './boothLink';
 import { openContact } from './boothSeal';
 import { sharedGalleryFor } from './sharedGallery';
-import { pinRequired } from './galleryGate';
+import { linkRequired, sharingPaused } from './galleryGate';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   LINK_TTL_SECONDS,
@@ -380,13 +380,8 @@ export const handler = async (event: {
       audience: ev.Item.galleryAudience?.S ?? null,
       takenDown: false,
       viewBlocked: ev.Item.guestViewBlocked?.BOOL === true,
-      pinRequired: pinRequired({
-        galleryPinSet: ev.Item.galleryPinSet?.BOOL === true,
-        galleryPinMode: ev.Item.galleryPinMode?.S ?? null,
-        galleryPinAutoDays: ev.Item.galleryPinAutoDays?.N ? Number(ev.Item.galleryPinAutoDays.N) : null,
-        date: ev.Item.date?.S ?? null,
-        createdAt: ev.Item.createdAt?.S ?? null,
-      }),
+      paused: sharingPaused({ sharingPaused: ev.Item.sharingPaused?.BOOL === true }),
+      linkRequired: linkRequired({ galleryLinkSet: ev.Item.galleryLinkSet?.BOOL === true }),
     }),
   };
 };

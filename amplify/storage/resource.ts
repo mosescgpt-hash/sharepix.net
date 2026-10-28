@@ -22,10 +22,10 @@ export const storage = defineStorage({
       // list. Reads used to be granted here (`get`), which meant anybody
       // holding guest credentials could fetch any event photo whose key they
       // had — including held-for-review photos and videos, photos the host
-      // chose not to show, and every photo once the host turned the gallery
-      // PIN or "host only" on. Every gallery rule was advisory. Now the browser
+      // chose not to show, and every photo once the host paused sharing,
+      // replaced the QR code or turned "host only" on. Every gallery rule was advisory. Now the browser
       // reads nothing from S3 directly: the `mediaUrls` function checks the
-      // rules (view, audience, PIN, downloads, held videos) and returns
+      // rules (view, audience, pause, link key, downloads, held videos) and returns
       // short-lived signed URLs, and it is the only way a photo is fetched.
       // See docs/gallery-access.md.
       allow.guest.to(['write']),

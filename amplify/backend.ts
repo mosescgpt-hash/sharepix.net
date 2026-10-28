@@ -163,7 +163,7 @@ const guestBookTable = backend.data.resources.tables.GuestBookEntry;
 const momentTable = backend.data.resources.tables.Moment;
 const freeEventClaimTable = backend.data.resources.tables.FreeEventClaim;
 const quotaTable = backend.data.resources.tables.QuotaCounter;
-const galleryPinTable = backend.data.resources.tables.GalleryPin;
+const galleryLinkTable = backend.data.resources.tables.GalleryLink;
 const contributorTable = backend.data.resources.tables.EventContributor;
 const notificationTable = backend.data.resources.tables.EventNotification;
 const emailPreferenceTable = backend.data.resources.tables.EmailPreference;
@@ -410,10 +410,10 @@ mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 photoTable.grantReadData(mediaUrlFn);
 mediaUrlFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
 // The same gallery rules as listEventPhotos, so the picture URLs are gated by
-// the PIN token, a host's download share and a moderation review link exactly
-// as the list is. All read-only.
-galleryPinTable.grantReadData(mediaUrlFn);
-mediaUrlFn.addEnvironment('GALLERY_PIN_TABLE_NAME', galleryPinTable.tableName);
+// pause, the guest link key, a host's download share and a moderation review
+// link exactly as the list is. All read-only.
+galleryLinkTable.grantReadData(mediaUrlFn);
+mediaUrlFn.addEnvironment('GALLERY_LINK_TABLE_NAME', galleryLinkTable.tableName);
 backend.data.resources.tables.DownloadShare.grantReadData(mediaUrlFn);
 mediaUrlFn.addEnvironment('DOWNLOAD_SHARE_TABLE_NAME', backend.data.resources.tables.DownloadShare.tableName);
 reviewTable.grantReadData(mediaUrlFn);
@@ -679,21 +679,20 @@ listFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 const downloadShareTable = backend.data.resources.tables.DownloadShare;
 downloadShareTable.grantReadData(listFn);
 listFn.addEnvironment('DOWNLOAD_SHARE_TABLE_NAME', downloadShareTable.tableName);
-// Read-only: the key that signs gallery PIN tokens, to check one. Never the PIN.
-galleryPinTable.grantReadData(listFn);
-listFn.addEnvironment('GALLERY_PIN_TABLE_NAME', galleryPinTable.tableName);
+// Read-only: the guest link key, to check one a caller presents.
+galleryLinkTable.grantReadData(listFn);
+listFn.addEnvironment('GALLERY_LINK_TABLE_NAME', galleryLinkTable.tableName);
 
-// The gallery PIN (docs/gallery-access.md). Guests enter it, the host sets it.
-// It hashes the PIN into GalleryPin, counts wrong guesses in QuotaCounter, and
-// flips one flag on the Event (galleryPinSet) so guests know to ask. Event
-// write is for that flag only; the function updates nothing else on the row.
+// "Replace QR code" (docs/gallery-access.md). The host reads and replaces the
+// guest link key in GalleryLink, and the function flips two fields on the Event
+// (galleryLinkSet, linkRotatedAt) so guests know to present it and old download
+// shares can be voided. Event write is for those fields only; the function
+// updates nothing else on the row.
 const galleryAccessFn = backend.galleryAccess.resources.lambda as LambdaFunction;
 eventTable.grantReadWriteData(galleryAccessFn);
-galleryPinTable.grantReadWriteData(galleryAccessFn);
-quotaTable.grantReadWriteData(galleryAccessFn);
+galleryLinkTable.grantReadWriteData(galleryAccessFn);
 galleryAccessFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
-galleryAccessFn.addEnvironment('GALLERY_PIN_TABLE_NAME', galleryPinTable.tableName);
-galleryAccessFn.addEnvironment('QUOTA_TABLE_NAME', quotaTable.tableName);
+galleryAccessFn.addEnvironment('GALLERY_LINK_TABLE_NAME', galleryLinkTable.tableName);
 
 // Guest book write: reads the event to re-derive entitlement and state, bumps
 // the entry counter atomically, reads the Photo table to prove an attached

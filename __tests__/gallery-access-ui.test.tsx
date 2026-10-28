@@ -3,145 +3,117 @@ import { TextEncoder, TextDecoder } from 'node:util';
 Object.assign(globalThis, { TextEncoder, TextDecoder });
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const manageGalleryPin = jest.fn();
-const setEventGalleryPinPolicy = jest.fn();
+const manageGalleryLink = jest.fn();
+const setEventSharingPaused = jest.fn();
 const setEventGuestDownloadsBlocked = jest.fn();
 const setEventGuestViewBlocked = jest.fn();
 jest.mock('@/lib/api', () => ({
-  manageGalleryPin: (...a: unknown[]) => manageGalleryPin(...a),
-  setEventGalleryPinPolicy: (...a: unknown[]) => setEventGalleryPinPolicy(...a),
+  manageGalleryLink: (...a: unknown[]) => manageGalleryLink(...a),
+  setEventSharingPaused: (...a: unknown[]) => setEventSharingPaused(...a),
   setEventGuestDownloadsBlocked: (...a: unknown[]) => setEventGuestDownloadsBlocked(...a),
   setEventGuestViewBlocked: (...a: unknown[]) => setEventGuestViewBlocked(...a),
 }));
 jest.mock('qrcode.react', () => ({
-  QRCodeSVG: ({ value }: { value: string }) => <svg aria-label="PIN QR code" data-value={value} />,
+  QRCodeSVG: ({ value }: { value: string }) => <svg aria-label="Guest QR code" data-value={value} />,
 }));
 
 import GalleryAccessSettings from '@/components/GalleryAccessSettings';
-import GalleryPinPrompt from '@/components/GalleryPinPrompt';
+import GalleryAccessNotice from '@/components/GalleryAccessNotice';
 import {
-  accessTokenNeedsRenewal,
-  clearAccessToken,
-  getAccessToken,
-  pinFromFragment,
-  pinLinkPath,
-  resetAccessTokens,
-  setAccessToken,
+  captureLinkKey,
+  forgetLinkKey,
+  getLinkKey,
+  guestLinkPath,
+  isLinkRequiredError,
+  isSharingPausedError,
+  linkKeyFromFragment,
+  rememberLinkKey,
+  resetLinkKeys,
 } from '@/lib/galleryAccess';
 import type { QREvent } from '@/lib/types';
 
 const EVENT = { id: 'e1', name: 'Wedding', eventCode: 'ABC', tier: 'free', date: '2026-06-01' } as QREvent;
+const KEY = 'AbCdEfGhIjKlMnOpQrStUv';
+const KEY2 = 'ZyXwVuTsRqPoNmLkJiHgFe';
 
 beforeEach(() => {
   jest.clearAllMocks();
-  resetAccessTokens();
+  resetLinkKeys();
   window.sessionStorage.clear();
-  manageGalleryPin.mockResolvedValue({ ok: true, message: '' });
-  setEventGalleryPinPolicy.mockResolvedValue(undefined);
+  manageGalleryLink.mockResolvedValue({ ok: true, message: '', linkKey: KEY, rotatedAt: '2026-06-02T00:00:00.000Z' });
+  setEventSharingPaused.mockResolvedValue(undefined);
   setEventGuestDownloadsBlocked.mockResolvedValue(undefined);
   setEventGuestViewBlocked.mockResolvedValue(undefined);
 });
 
-describe('PIN links', () => {
-  it('puts the PIN in the fragment, never the query', () => {
-    expect(pinLinkPath('e 1', '123456')).toBe('/event/e%201#pin=123456');
-    expect(pinLinkPath('e1', '123456', 'live')).toBe('/event/e1/live#pin=123456');
-    expect(pinLinkPath('e1', '123456')).not.toContain('?');
+describe('guest links', () => {
+  it('puts the key in the fragment, never the query', () => {
+    expect(guestLinkPath('e 1', KEY)).toBe(`/event/e%201/upload#k=${KEY}`);
+    expect(guestLinkPath('e1', KEY, 'live')).toBe(`/event/e1/live#k=${KEY}`);
+    expect(guestLinkPath('e1', KEY, 'gallery')).toBe(`/event/e1#k=${KEY}`);
+    expect(guestLinkPath('e1', KEY)).not.toContain('?');
   });
 
-  it('makes a plain link when there is no usable PIN', () => {
-    expect(pinLinkPath('e1', null)).toBe('/event/e1');
-    expect(pinLinkPath('e1', '12')).toBe('/event/e1');
+  it('makes a plain link when there is no usable key', () => {
+    expect(guestLinkPath('e1', null)).toBe('/event/e1/upload');
+    expect(guestLinkPath('e1', '', 'gallery')).toBe('/event/e1');
+    expect(guestLinkPath('e1', 'short', 'live')).toBe('/event/e1/live');
   });
 
-  it('reads the PIN back from a fragment, and only a well-formed one', () => {
-    expect(pinFromFragment('#pin=4829')).toBe('4829');
-    expect(pinFromFragment('#a=b&pin=482913')).toBe('482913');
-    for (const bad of ['', '#pin=12', '#pin=1234567', '#pin=abcd', '#spin=1234', null, undefined]) {
-      expect(pinFromFragment(bad)).toBeNull();
+  it('reads the key back from a fragment, and only a well-formed one', () => {
+    expect(linkKeyFromFragment(`#k=${KEY}`)).toBe(KEY);
+    expect(linkKeyFromFragment(`#a=b&k=${KEY}`)).toBe(KEY);
+    for (const bad of ['', '#k=short', `#k=${KEY}x`, '#k=', `#key=${KEY}`, null, undefined]) {
+      expect(linkKeyFromFragment(bad)).toBeNull();
     }
   });
-});
 
-describe('the access token kept for the tab', () => {
-  const now = Date.parse('2026-06-01T12:00:00Z');
-  const later = (ms: number) => new Date(now + ms).toISOString();
-
-  it('hands back a live token and nothing once it has lapsed', () => {
-    setAccessToken('e1', 'tok', later(60 * 60 * 1000));
-    expect(getAccessToken('e1', now)).toBe('tok');
-    expect(getAccessToken('e1', now + 61 * 60 * 1000)).toBe('');
-    expect(getAccessToken('other', now)).toBe('');
-  });
-
-  it('survives a reload of the page but not a closed tab', () => {
-    setAccessToken('e1', 'tok', later(60 * 60 * 1000));
-    expect(window.sessionStorage.length).toBe(1);
-    clearAccessToken('e1');
-    expect(window.sessionStorage.length).toBe(0);
-    expect(getAccessToken('e1', now)).toBe('');
-  });
-
-  it('asks for renewal inside the last ten minutes only', () => {
-    expect(accessTokenNeedsRenewal('e1', now)).toBe(false);
-    setAccessToken('e1', 'tok', later(60 * 60 * 1000));
-    expect(accessTokenNeedsRenewal('e1', now)).toBe(false);
-    expect(accessTokenNeedsRenewal('e1', now + 51 * 60 * 1000)).toBe(true);
-  });
-
-  it('ignores an empty token or an unreadable expiry', () => {
-    setAccessToken('e1', '', later(1000));
-    setAccessToken('e1', 'tok', 'soon');
-    expect(getAccessToken('e1', now)).toBe('');
+  it('recognises the two errors the server uses', () => {
+    expect(isSharingPausedError(new Error('SHARING_PAUSED'))).toBe(true);
+    expect(isLinkRequiredError(new Error('LINK_REQUIRED'))).toBe(true);
+    expect(isSharingPausedError(new Error('LINK_REQUIRED'))).toBe(false);
+    expect(isLinkRequiredError('nope')).toBe(false);
   });
 });
 
-describe('GalleryPinPrompt', () => {
-  const setup = (onSubmit = jest.fn().mockResolvedValue({ ok: true, message: '' })) => {
-    const onUnlocked = jest.fn();
-    render(<GalleryPinPrompt onSubmit={onSubmit} onUnlocked={onUnlocked} />);
-    return { onSubmit, onUnlocked, input: screen.getByLabelText('PIN') as HTMLInputElement };
-  };
-
-  it('keeps digits only, six at most, with a number keypad and 44px controls', () => {
-    const { input } = setup();
-    fireEvent.change(input, { target: { value: '12ab3456789' } });
-    expect(input.value).toBe('123456');
-    expect(input).toHaveAttribute('inputmode', 'numeric');
-    expect(input.className).toContain('min-h-[44px]');
-    expect(screen.getByRole('button', { name: 'Open' }).className).toContain('min-h-[44px]');
+describe('the key held for a tab', () => {
+  it('keeps the key it arrived with, per event', () => {
+    expect(captureLinkKey('e1', `#k=${KEY}`)).toBe(KEY);
+    expect(getLinkKey('e1')).toBe(KEY);
+    expect(getLinkKey('other')).toBe('');
   });
 
-  it('does not ask the server about a PIN that cannot be right', () => {
-    const { onSubmit, input } = setup();
-    fireEvent.change(input, { target: { value: '12' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
-    expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('4 to 6 digit');
+  it('survives a reload through session storage', () => {
+    rememberLinkKey('e1', KEY);
+    resetLinkKeys();
+    expect(getLinkKey('e1')).toBe(KEY);
   });
 
-  it('opens the gallery on the right PIN', async () => {
-    const { onSubmit, onUnlocked, input } = setup();
-    fireEvent.change(input, { target: { value: '4829' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
-    await waitFor(() => expect(onUnlocked).toHaveBeenCalled());
-    expect(onSubmit).toHaveBeenCalledWith('4829');
+  it('replaces an old key with the new one, and forgets on request', () => {
+    captureLinkKey('e1', `#k=${KEY}`);
+    captureLinkKey('e1', `#k=${KEY2}`);
+    expect(getLinkKey('e1')).toBe(KEY2);
+    forgetLinkKey('e1');
+    expect(getLinkKey('e1')).toBe('');
   });
 
-  it('shows the server\'s message on a wrong PIN and clears the box', async () => {
-    const { onUnlocked, input } = setup(jest.fn().mockResolvedValue({ ok: false, message: 'That PIN is not right.' }));
-    fireEvent.change(input, { target: { value: '4829' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('That PIN is not right.');
-    expect(onUnlocked).not.toHaveBeenCalled();
-    expect(input.value).toBe('');
+  it('refuses to store a malformed key', () => {
+    rememberLinkKey('e1', 'nope');
+    expect(getLinkKey('e1')).toBe('');
+  });
+});
+
+describe('GalleryAccessNotice', () => {
+  it('says sharing is paused and that adding photos still works', () => {
+    render(<GalleryAccessNotice reason="paused" />);
+    expect(screen.getByRole('status')).toHaveTextContent('Sharing is paused');
+    expect(screen.getByRole('status')).toHaveTextContent('adding photos still works');
   });
 
-  it('survives the check itself failing', async () => {
-    const { input } = setup(jest.fn().mockRejectedValue(new Error('offline')));
-    fireEvent.change(input, { target: { value: '4829' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('could not be checked');
+  it('says the link was replaced, for the slideshow too', () => {
+    render(<GalleryAccessNotice reason="replaced" what="the slideshow" dark />);
+    expect(screen.getByRole('status')).toHaveTextContent('This link was replaced');
+    expect(screen.getByRole('status')).toHaveTextContent('the slideshow');
   });
 });
 
@@ -152,95 +124,108 @@ describe('GalleryAccessSettings', () => {
     return { onChange };
   };
 
-  it('says there is no PIN until one is set, and offers no link tools', () => {
+  it('explains pause and replace in a short note', () => {
     setup();
-    expect(screen.getByText(/No PIN is set/)).toBeInTheDocument();
-    expect(screen.queryByText('Make link and QR code')).not.toBeInTheDocument();
-    expect(screen.queryByText('Remove the PIN')).not.toBeInTheDocument();
+    const note = document.getElementById('gallery-access-note');
+    expect(note).toHaveTextContent('Pause sharing');
+    expect(note).toHaveTextContent('Replace QR code');
+    expect(note).toHaveTextContent('reprint');
+    expect((note?.textContent ?? '').length).toBeLessThan(450);
   });
 
   it('turns viewing off and saves it at once', async () => {
     const { onChange } = setup();
-    fireEvent.click(screen.getByRole('switch', { name: /view/i }));
+    fireEvent.click(screen.getByRole('switch', { name: /^Guests can view/ }));
     await waitFor(() => expect(setEventGuestViewBlocked).toHaveBeenCalledWith('e1', true));
     expect(onChange).toHaveBeenCalledWith({ guestViewBlocked: true });
   });
 
   it('turns downloads off and saves it at once', async () => {
     const { onChange } = setup();
-    fireEvent.click(screen.getByRole('switch', { name: /download/i }));
+    fireEvent.click(screen.getByRole('switch', { name: /^Guests can download/ }));
     await waitFor(() => expect(setEventGuestDownloadsBlocked).toHaveBeenCalledWith('e1', true));
     expect(onChange).toHaveBeenCalledWith({ guestDownloadsBlocked: true });
   });
 
-  it('shows the failure and keeps the old setting when a save fails', async () => {
-    setEventGuestViewBlocked.mockRejectedValue(new Error('The viewing setting could not be saved.'));
+  it('pauses sharing at once and says guests can still add photos', async () => {
     const { onChange } = setup();
-    fireEvent.click(screen.getByRole('switch', { name: /view/i }));
-    expect(await screen.findByText('The viewing setting could not be saved.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('switch', { name: /pause sharing/i }));
+    await waitFor(() => expect(setEventSharingPaused).toHaveBeenCalledWith('e1', true));
+    expect(onChange).toHaveBeenCalledWith({ sharingPaused: true });
+    expect(await screen.findByText(/Guests can add photos but cannot view or download/)).toBeInTheDocument();
+  });
+
+  it('resumes sharing from the paused state', async () => {
+    const { onChange } = setup({ sharingPaused: true });
+    const toggle = screen.getByRole('switch', { name: /pause sharing/i });
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(setEventSharingPaused).toHaveBeenCalledWith('e1', false));
+    expect(onChange).toHaveBeenCalledWith({ sharingPaused: false });
+  });
+
+  it('shows the failure and keeps the old setting when a save fails', async () => {
+    setEventSharingPaused.mockRejectedValue(new Error('The pause could not be saved.'));
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole('switch', { name: /pause sharing/i }));
+    expect(await screen.findByText('The pause could not be saved.')).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('saves a new PIN, digits only', async () => {
+  it('warns about reprinting and does nothing until the host confirms', async () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace QR code' }));
+    expect(manageGalleryLink).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(/reprint/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(manageGalleryLink).not.toHaveBeenCalled();
+  });
+
+  it('replaces the QR code on confirm and shows the new code and links with the key in the fragment', async () => {
     const { onChange } = setup();
-    const input = screen.getByLabelText('Set a PIN') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: '12x3456789' } });
-    expect(input.value).toBe('123456');
-    fireEvent.click(screen.getByRole('button', { name: 'Save PIN' }));
-    await waitFor(() => expect(manageGalleryPin).toHaveBeenCalledWith('e1', 'set', '123456'));
-    expect(onChange).toHaveBeenCalledWith({ galleryPinSet: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Replace QR code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, replace it' }));
+    await waitFor(() => expect(manageGalleryLink).toHaveBeenCalledWith('e1', 'rotate'));
+    expect(onChange).toHaveBeenCalledWith({ galleryLinkSet: true, linkRotatedAt: '2026-06-02T00:00:00.000Z' });
+    const qr = await screen.findByLabelText('Guest QR code');
+    expect(qr.getAttribute('data-value')).toMatch(new RegExp(`/event/e1/upload#k=${KEY}$`));
+    expect(screen.getByRole('alert')).toHaveTextContent(/Reprint your signs/);
+    expect((screen.getByLabelText('Gallery link') as HTMLInputElement).value).toMatch(new RegExp(`/event/e1#k=${KEY}$`));
+    expect((screen.getByLabelText('Slideshow screen link') as HTMLInputElement).value).toMatch(
+      new RegExp(`/event/e1/live#k=${KEY}$`),
+    );
   });
 
-  it('describes the default schedule when a PIN is set', () => {
-    setup({ galleryPinSet: true, date: '2099-06-01' });
-    expect(screen.getByText(/switches on .*30 days after your event/)).toBeInTheDocument();
+  it('shows no new code when the replacement fails', async () => {
+    manageGalleryLink.mockResolvedValue({ ok: false, message: 'Only the host can do that.' });
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Replace QR code' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, replace it' }));
+    expect(await screen.findByText('Only the host can do that.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Guest QR code')).not.toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('can set the schedule to always on, and back to automatic', async () => {
-    const { onChange } = setup({ galleryPinSet: true, date: '2099-06-01' });
-    fireEvent.click(screen.getByRole('radio', { name: 'Always on' }));
-    await waitFor(() => expect(setEventGalleryPinPolicy).toHaveBeenCalledWith('e1', { mode: 'on' }));
-    expect(onChange).toHaveBeenCalledWith({ galleryPinMode: 'on' });
+  it('offers to show the current code once one has been made', async () => {
+    setup({ galleryLinkSet: true });
+    expect(screen.getByText(/has been replaced/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show current QR code and links' }));
+    await waitFor(() => expect(manageGalleryLink).toHaveBeenCalledWith('e1', 'get'));
+    expect(await screen.findByLabelText('Guest QR code')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('changes the number of days', async () => {
-    const { onChange } = setup({ galleryPinSet: true, date: '2099-06-01' });
-    fireEvent.change(screen.getByLabelText('Days after the event'), { target: { value: '90' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(setEventGalleryPinPolicy).toHaveBeenCalledWith('e1', { autoDays: 90 }));
-    expect(onChange).toHaveBeenCalledWith({ galleryPinAutoDays: 90 });
+  it('has no PIN controls', () => {
+    setup();
+    expect(screen.queryByText(/PIN/)).not.toBeInTheDocument();
   });
 
-  it('makes a QR code and links with the PIN in the fragment, after confirming the PIN', async () => {
-    setup({ galleryPinSet: true, date: '2020-01-01' });
-    fireEvent.change(screen.getByLabelText('Type the PIN to confirm it'), { target: { value: '4829' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Make link and QR code' }));
-    await waitFor(() => expect(manageGalleryPin).toHaveBeenCalledWith('e1', 'check', '4829'));
-    const qr = await screen.findByLabelText('PIN QR code');
-    expect(qr.getAttribute('data-value')).toMatch(/\/event\/e1#pin=4829$/);
-  });
-
-  it('makes no link from a PIN the server says is wrong', async () => {
-    manageGalleryPin.mockResolvedValue({ ok: false, message: 'That is not the PIN for this event.' });
-    setup({ galleryPinSet: true, date: '2020-01-01' });
-    fireEvent.change(screen.getByLabelText('Type the PIN to confirm it'), { target: { value: '0000' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Make link and QR code' }));
-    expect(await screen.findByText('That is not the PIN for this event.')).toBeInTheDocument();
-    expect(screen.queryByLabelText('PIN QR code')).not.toBeInTheDocument();
-  });
-
-  it('removes the PIN', async () => {
-    const { onChange } = setup({ galleryPinSet: true, date: '2020-01-01' });
-    fireEvent.click(screen.getByRole('button', { name: 'Remove the PIN' }));
-    await waitFor(() => expect(manageGalleryPin).toHaveBeenCalledWith('e1', 'clear'));
-    expect(onChange).toHaveBeenCalledWith({ galleryPinSet: false });
-  });
-
-  it('keeps every button and field at least 44px tall for a phone', () => {
-    setup({ galleryPinSet: true, date: '2020-01-01' });
+  it('keeps every control at least 44px tall', () => {
+    setup({ galleryLinkSet: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Replace QR code' }));
     const controls = [
       ...screen.getAllByRole('button'),
-      ...screen.getAllByRole('radio'),
       ...screen.getAllByRole('switch'),
       ...document.querySelectorAll('input'),
     ];

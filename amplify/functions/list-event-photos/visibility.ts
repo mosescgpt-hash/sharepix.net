@@ -152,7 +152,7 @@ export interface ViewContext {
  * Whether one photo may be shown to this caller: the one rule behind both the
  * gallery listing and the signed URLs, so a photo that is not listed can never
  * be fetched either. Duplicated byte for byte in media-url (no cross-bundle
- * imports) and pinned that way by __tests__/gallery-pin.test.ts.
+ * imports) and pinned that way by __tests__/gallery-access.test.ts.
  */
 export function photoVisibleTo(row: PhotoRowFacts, ctx: ViewContext): boolean {
   if (row.approved === false) return false;
@@ -179,24 +179,31 @@ export function photoVisibleTo(row: PhotoRowFacts, ctx: ViewContext): boolean {
  * What stands between a caller and the gallery, before any photo is looked at.
  *
  *   open     carry on to the per-photo rules
+ *   paused   the host paused sharing: guests view and download nothing
  *   blocked  the host turned guest viewing off (or chose host-only)
- *   pin      the gallery PIN is on and this caller has not entered it
+ *   key      the host replaced the QR code and this caller has not got the
+ *            new link (or never had one)
  *
- * The host and admins are never held up, and neither is a host's download
- * share, which is the host choosing particular photos for particular people.
+ * The host and admins are never held up. A host's download share is the host
+ * choosing particular photos for particular people, so it opens the gate, but
+ * never while sharing is paused, and handlers drop a share made before the
+ * latest QR replacement before they call this.
  */
-export type GalleryGate = 'open' | 'blocked' | 'pin';
+export type GalleryGate = 'open' | 'paused' | 'blocked' | 'key';
 
 export function galleryGateFor(input: {
   privileged: boolean;
   shared: boolean;
+  paused: boolean;
   viewBlocked: boolean;
   audience: GalleryAudience;
-  pinRequired: boolean;
-  tokenValid: boolean;
+  linkRequired: boolean;
+  keyValid: boolean;
 }): GalleryGate {
-  if (input.privileged || input.shared) return 'open';
+  if (input.privileged) return 'open';
+  if (input.paused) return 'paused';
+  if (input.shared) return 'open';
   if (input.viewBlocked || input.audience === 'host') return 'blocked';
-  if (input.pinRequired && !input.tokenValid) return 'pin';
+  if (input.linkRequired && !input.keyValid) return 'key';
   return 'open';
 }

@@ -111,31 +111,21 @@ describe('creating an event', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Birthday' }));
     fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Ana' } });
     fireEvent.click(screen.getByRole('switch', { name: /Guests can download/ }));
-    fireEvent.change(screen.getByLabelText(/Gallery PIN/), { target: { value: '12ab3456789' } });
-    // Letters are dropped and six digits is the longest.
-    expect(screen.getByLabelText(/Gallery PIN/)).toHaveValue('123456');
-    fireEvent.click(screen.getByRole('switch', { name: /Require it from the start/ }));
     fireEvent.submit(screen.getByLabelText('Event name').closest('form')!);
 
     await waitFor(() => expect(applyInitialGalleryAccess).toHaveBeenCalled());
     expect(applyInitialGalleryAccess).toHaveBeenCalledWith('evt-3', {
       viewBlocked: false,
       downloadsBlocked: true,
-      pin: '123456',
-      pinNow: true,
     });
     expect(await screen.findByText('is live.')).toBeInTheDocument();
     expect(screen.queryByText('Check guest access')).toBeNull();
   });
 
-  it('refuses a PIN that is not 4 to 6 digits', async () => {
+  it('offers no gallery PIN', () => {
     render(<CreateEventPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Birthday' }));
-    fireEvent.change(screen.getByLabelText('Event name'), { target: { value: 'Ana' } });
-    fireEvent.change(screen.getByLabelText(/Gallery PIN/), { target: { value: '12' } });
-    fireEvent.submit(screen.getByLabelText('Event name').closest('form')!);
-    expect(await screen.findByText(/A gallery PIN is 4 to 6 digits/)).toBeInTheDocument();
-    expect(createNewEvent).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/PIN/)).toBeNull();
+    expect(screen.queryByText(/PIN/)).toBeNull();
   });
 
   it('says so when the guest-access choices did not save, and still finishes', async () => {

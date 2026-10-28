@@ -5,7 +5,6 @@ import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import EventQRCode from '@/components/EventQRCode';
 import SwitchRow from '@/components/SwitchRow';
-import { PIN_PATTERN } from '@/lib/galleryAccess';
 import {
   CORPORATE_PLAN,
   PRICING_TIERS,
@@ -84,8 +83,6 @@ function CreateEventPage() {
   // all of it can be changed from the dashboard at any time.
   const [viewBlocked, setViewBlocked] = useState(false);
   const [downloadsBlocked, setDownloadsBlocked] = useState(false);
-  const [pin, setPin] = useState('');
-  const [pinNow, setPinNow] = useState(false);
   // Set when the event was made but its guest-access choices did not all save.
   const [accessNotSaved, setAccessNotSaved] = useState(false);
   // A link to a retired plan (an old bookmark, a stale email) must not select
@@ -199,10 +196,6 @@ function CreateEventPage() {
       setError('Give your event a name.');
       return;
     }
-    if (pin && !PIN_PATTERN.test(pin)) {
-      setError('A gallery PIN is 4 to 6 digits, or leave it empty.');
-      return;
-    }
     setBusy(true);
     setError(null);
     try {
@@ -233,8 +226,6 @@ function CreateEventPage() {
       const accessSaved = await applyInitialGalleryAccess(event.id, {
         viewBlocked,
         downloadsBlocked,
-        pin,
-        pinNow,
       }).catch(() => false);
       if (!accessSaved) setAccessNotSaved(true);
 
@@ -274,8 +265,8 @@ function CreateEventPage() {
             {accessNotSaved ? (
               <div className="mb-6">
                 <Notice tone="warn" label="Check guest access">
-                  Your event is live, but one of your choices about who can view, download or use a
-                  PIN did not save. Open the dashboard to set it; until then guests can view and
+                  Your event is live, but one of your choices about who can view or download
+                  did not save. Open the dashboard to set it; until then guests can view and
                   download.
                 </Notice>
               </div>
@@ -565,35 +556,6 @@ function CreateEventPage() {
                 checked={!downloadsBlocked}
                 onChange={(next) => setDownloadsBlocked(!next)}
               />
-              <div className="border border-charcoal/15 bg-paper p-4">
-                <label htmlFor="create-gallery-pin" className="block text-sm font-medium text-charcoal">
-                  Gallery PIN <span className="font-normal text-charcoal/70">(optional)</span>
-                </label>
-                <p className="mt-0.5 text-xs text-charcoal/70">
-                  4 to 6 digits. By default it switches on 30 days after your event, so the gallery
-                  is easy to open while everyone is sharing and locked afterwards.
-                </p>
-                <input
-                  id="create-gallery-pin"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="new-password"
-                  maxLength={6}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="spx-input mt-2 min-h-[44px] tracking-[0.3em]"
-                />
-                {pin ? (
-                  <div className="mt-2">
-                    <SwitchRow
-                      label="Require it from the start"
-                      description="Instead of waiting 30 days after the event."
-                      checked={pinNow}
-                      onChange={setPinNow}
-                    />
-                  </div>
-                ) : null}
-              </div>
             </div>
           </fieldset>
 

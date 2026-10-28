@@ -12,6 +12,7 @@ import {
   validateMoment,
 } from '@/lib/moments';
 import type { EventMoment } from '@/lib/types';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 
 interface MomentsManagerProps {
   eventId: string;
@@ -46,6 +47,7 @@ export default function MomentsManager({
   const [description, setDescription] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showQrFor, setShowQrFor] = useState<string | null>(null);
+  const { key: linkKey } = useGuestLinkKey(eventId);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -199,7 +201,7 @@ export default function MomentsManager({
                   {showQrFor === moment.id ? (
                     <div className="mt-4 flex flex-col items-center gap-3 bg-sand p-5 text-center">
                       <StyledQrCode
-                        data={`${origin}${momentUploadPath(eventId, moment.id)}`}
+                        data={`${origin}${momentUploadPath(eventId, moment.id)}${linkKey ? `#k=${linkKey}` : ''}`}
                         size={168}
                         branding={branding}
                         label={`QR code for ${moment.name}`}

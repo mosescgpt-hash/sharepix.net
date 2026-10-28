@@ -27,12 +27,12 @@ import {
   uploaderIdOf,
   type PhotoRowFacts,
 } from './visibility';
-import { pinRequired, verifyAccessToken } from './galleryGate';
+import { linkKeyMatches, linkRequired, shareIsCurrent, sharingPaused, type SharingFacts } from './galleryGate';
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
-const PIN_TABLE = process.env.GALLERY_PIN_TABLE_NAME ?? '';
+const LINK_TABLE = process.env.GALLERY_LINK_TABLE_NAME ?? '';
 const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
 const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME ?? '';
 const PHOTO_BUCKET = process.env.PHOTO_BUCKET_NAME ?? '';
@@ -124,33 +124,33 @@ export const handler: Handler = async (event) => {
 
   const audience = galleryAudienceOf(found.Item.galleryAudience?.S);
   const args = event.arguments as {
-    accessToken?: string | null;
+    linkKey?: string | null;
     shareId?: string | null;
     reviewToken?: string | null;
   };
 
+  const sharing: SharingFacts = {
+    sharingPaused: found.Item.sharingPaused?.BOOL === true,
+    galleryLinkSet: found.Item.galleryLinkSet?.BOOL === true,
+    linkRotatedAt: found.Item.linkRotatedAt?.S ?? null,
+  };
+  const paused = sharingPaused(sharing);
+
   // A host's download share, or a moderation review link: two ways a caller
-  // holds a credential for particular photos rather than for the gallery.
-  const shared = host ? null : await sharedPhotoIds(args.shareId ?? '', eventId);
+  // holds a credential for particular photos rather than for the gallery. A
+  // share stops while sharing is paused and once the QR code is replaced.
+  const shared = host || paused ? null : await sharedPhotoIds(args.shareId ?? '', eventId, sharing);
   const reviewed = host ? null : await reviewedStem(args.reviewToken ?? '', eventId);
 
-  const needsPin = pinRequired({
-    galleryPinSet: found.Item.galleryPinSet?.BOOL === true,
-    galleryPinMode: found.Item.galleryPinMode?.S ?? null,
-    galleryPinAutoDays: found.Item.galleryPinAutoDays?.N ? Number(found.Item.galleryPinAutoDays.N) : null,
-    date: found.Item.date?.S ?? null,
-    createdAt: found.Item.createdAt?.S ?? null,
-  });
+  const needsKey = linkRequired(sharing);
   const gate = galleryGateFor({
     privileged: host,
     shared: shared !== null,
+    paused,
     viewBlocked: found.Item.guestViewBlocked?.BOOL === true,
     audience,
-    pinRequired: needsPin,
-    tokenValid:
-      needsPin && !host && !shared
-        ? await tokenIsValid(eventId, args.accessToken ?? '')
-        : false,
+    linkRequired: needsKey,
+    keyValid: needsKey && !host && !shared ? await keyIsValid(eventId, args.linkKey ?? '') : false,
   });
 
   // The guest allow-list: the photos this caller may see right now, by the one
@@ -250,35 +250,40 @@ async function signS3(key: string): Promise<string | null> {
   }
 }
 
-/** The event's PIN token key lives in a table guests cannot read. Fails closed. */
-async function tokenIsValid(eventId: string, token: string): Promise<boolean> {
-  if (!PIN_TABLE || !token) return false;
+/** The event's link key lives in a table guests cannot read. Fails closed. */
+async function keyIsValid(eventId: string, key: string): Promise<boolean> {
+  if (!LINK_TABLE || !key) return false;
   const found = await dynamo
     .send(
       new GetItemCommand({
-        TableName: PIN_TABLE,
+        TableName: LINK_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'tokenKey',
+        ProjectionExpression: 'linkKey',
       }),
     )
     .catch(() => null);
-  return verifyAccessToken(found?.Item?.tokenKey?.S ?? '', eventId, token);
+  return linkKeyMatches(found?.Item?.linkKey?.S, key);
 }
 
 /** A download share's photo ids when it is this event's and unexpired, else null. */
-async function sharedPhotoIds(shareId: string, eventId: string): Promise<Set<string> | null> {
+async function sharedPhotoIds(
+  shareId: string,
+  eventId: string,
+  sharing: SharingFacts,
+): Promise<Set<string> | null> {
   if (!shareId || !SHARE_TABLE) return null;
   const found = await dynamo
     .send(
       new GetItemCommand({
         TableName: SHARE_TABLE,
         Key: { id: { S: shareId } },
-        ProjectionExpression: 'eventId, expiresAt, photoIdsJson',
+        ProjectionExpression: 'eventId, expiresAt, photoIdsJson, createdAt',
       }),
     )
     .catch(() => null);
   const item = found?.Item;
   if (!item || item.eventId?.S !== eventId) return null;
+  if (!shareIsCurrent(item.createdAt?.S, sharing)) return null;
   const expires = item.expiresAt?.S;
   if (expires && Date.now() > new Date(expires).getTime()) return null;
   try {

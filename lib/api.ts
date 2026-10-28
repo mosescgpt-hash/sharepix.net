@@ -33,15 +33,7 @@ import type { PhotographerProfileForm } from '@/lib/photographerProfile';
 import { previewLongEdge } from '@/lib/professionalMedia';
 import { isGlobalAdmin } from '@/lib/admin';
 import { ownerCandidatesFor, ownerIsSubject } from '@/lib/eventOwner';
-import {
-  clearAccessToken,
-  getAccessToken,
-  accessTokenNeedsRenewal,
-  isPinRequiredError,
-  setAccessToken,
-  rememberSessionPin,
-  sessionPinFor,
-} from '@/lib/galleryAccess';
+import { getLinkKey } from '@/lib/galleryAccess';
 import { guestLabelFor } from '@/lib/guestLabel';
 import { canTransition, type IncentiveStatus } from '@/lib/researchIncentive';
 import { canTransition as canTransitionRefund } from '@/lib/refunds';
@@ -173,7 +165,7 @@ const signedMediaPending = new Map<string, Promise<SignedMedia | null>>();
 /** A host's download share per event, remembered for the pages that follow it. */
 const sharesByEvent = new Map<string, string>();
 
-/** Forget every signed URL: the viewer's access changed (a PIN was entered or lapsed). */
+/** Forget every signed URL: the viewer's access changed (sharing paused, QR code replaced). */
 export function clearSignedMedia(): void {
   signedMediaCache.clear();
   signedMediaPending.clear();
@@ -184,7 +176,7 @@ export function clearSignedMedia(): void {
  *
  * Browsers hold no S3 read credentials any more, so this is the only way a
  * photo, a video or a cover is fetched. The function checks the host's gallery
- * settings (view, whose photos, PIN, downloads, held videos) for every key and
+ * settings (view, whose photos, pause, link key, downloads, held videos) for every key and
  * returns R2 and S3 URLs for the ones this viewer may have. A key missing from
  * the result means "not available to you", whatever the reason.
  *
@@ -209,9 +201,8 @@ async function signedMediaFor(
   }
   if (missing.length === 0) return out;
 
-  await renewGalleryAccess(eventId);
   const authMode = await authModeFor();
-  const accessToken = getAccessToken(eventId) || undefined;
+  const linkKey = getLinkKey(eventId) || undefined;
   const shareId = sharesByEvent.get(eventId);
 
   const chunks: string[][] = [];
@@ -220,7 +211,7 @@ async function signedMediaFor(
     chunks.map(async (chunk) => {
       try {
         const { data } = await getClient().queries.mediaUrls(
-          { eventId, keys: chunk, accessToken, shareId, reviewToken: extra.reviewToken },
+          { eventId, keys: chunk, linkKey, shareId, reviewToken: extra.reviewToken },
           { authMode },
         );
         for (const entry of data ?? []) {
@@ -248,52 +239,6 @@ function sourceOf(signed: SignedMedia | undefined): MediaSource | null {
 /** The storage event id a key lives under, for callers that only hold a key. */
 function eventIdOfStorageKey(key: string): string | undefined {
   return key.match(/^(?:events|pro)\/([^/]+)\//)?.[1];
-}
-
-/**
- * Enter the gallery PIN. A right one stores a short-lived access token for this
- * tab, and every signed URL is re-requested with it. A wrong one is counted per
- * address and per event on the server, and too many lock the entry for a while.
- */
-export async function submitGalleryPin(
-  eventId: string,
-  pin: string,
-): Promise<{ ok: boolean; message: string; retryAfterSeconds?: number }> {
-  const { data, errors } = await getClient().mutations.verifyGalleryPin(
-    { eventId, pin },
-    { authMode: await authModeFor() },
-  );
-  if (errors?.length || !data) {
-    return { ok: false, message: 'The PIN could not be checked. Please try again.' };
-  }
-  if (data.ok && data.token && data.expiresAt) {
-    setAccessToken(eventId, data.token, data.expiresAt);
-    // Held in memory only (never storage) so a slideshow left running all night
-    // can renew its own token; it is gone when the tab is.
-    rememberSessionPin(eventId, pin);
-    clearSignedMedia();
-    return { ok: true, message: '' };
-  }
-  return {
-    ok: false,
-    message: data.message || 'That PIN is not right.',
-    retryAfterSeconds: data.retryAfterSeconds ?? undefined,
-  };
-}
-
-/**
- * Renew this tab's PIN token shortly before it lapses, when the PIN is still
- * held from entering it. A no-op otherwise. Never throws.
- */
-export async function renewGalleryAccess(eventId: string): Promise<void> {
-  if (!accessTokenNeedsRenewal(eventId)) return;
-  const pin = sessionPinFor(eventId);
-  if (!pin) return;
-  try {
-    await submitGalleryPin(eventId, pin);
-  } catch {
-    // The current token keeps working until it expires.
-  }
 }
 
 function errorMessage(error: unknown): string {
@@ -2356,9 +2301,7 @@ async function updateEventSettings(
     coverStyle?: string;
     galleryAudience?: string;
     guestViewBlocked?: boolean;
-    /** 'auto' (30 days after the event, by default) | 'on' | 'off'. */
-    galleryPinMode?: 'auto' | 'on' | 'off';
-    galleryPinAutoDays?: number;
+    sharingPaused?: boolean;
   },
   failureMessage: string,
 ): Promise<void> {
@@ -2390,8 +2333,7 @@ async function updateEventSettings(
       coverStyle: changes.coverStyle,
       galleryAudience: changes.galleryAudience,
       guestViewBlocked: changes.guestViewBlocked,
-      galleryPinMode: changes.galleryPinMode,
-      galleryPinAutoDays: changes.galleryPinAutoDays,
+      sharingPaused: changes.sharingPaused,
     },
     { authMode: 'userPool' },
   );
@@ -2741,15 +2683,15 @@ export async function setEventGuestViewBlocked(eventId: string, blocked: boolean
   );
 }
 
-/** When the gallery PIN applies: 'auto' (after the event, by default 30 days), always, or never. */
-export async function setEventGalleryPinPolicy(
-  eventId: string,
-  policy: { mode?: 'auto' | 'on' | 'off'; autoDays?: number },
-): Promise<void> {
+/**
+ * Pause or resume sharing. While paused, guests can still add photos but cannot
+ * see the gallery or download anything; the server refuses them at once.
+ */
+export async function setEventSharingPaused(eventId: string, paused: boolean): Promise<void> {
   await updateEventSettings(
     eventId,
-    { galleryPinMode: policy.mode, galleryPinAutoDays: policy.autoDays },
-    'The PIN setting could not be saved.',
+    { sharingPaused: paused },
+    paused ? 'Sharing could not be paused.' : 'Sharing could not be resumed.',
   );
 }
 
@@ -2761,54 +2703,49 @@ export async function setEventGalleryPinPolicy(
  */
 export async function applyInitialGalleryAccess(
   eventId: string,
-  choices: { viewBlocked: boolean; downloadsBlocked: boolean; pin: string; pinNow: boolean },
+  choices: { viewBlocked: boolean; downloadsBlocked: boolean },
 ): Promise<boolean> {
-  let ok = true;
   const changes: Parameters<typeof updateEventSettings>[1] = {};
   if (choices.viewBlocked) changes.guestViewBlocked = true;
   if (choices.downloadsBlocked) changes.guestDownloadsBlocked = true;
-  if (choices.pin && choices.pinNow) changes.galleryPinMode = 'on';
-  if (Object.keys(changes).length > 0) {
-    await updateEventSettings(eventId, changes, 'The guest access settings could not be saved.').catch(
-      () => {
-        ok = false;
-      },
-    );
-  }
-  if (choices.pin) {
-    const result = await manageGalleryPin(eventId, 'set', choices.pin).catch(() => null);
-    if (!result?.ok) ok = false;
-  }
+  if (Object.keys(changes).length === 0) return true;
+  let ok = true;
+  await updateEventSettings(eventId, changes, 'The guest access settings could not be saved.').catch(() => {
+    ok = false;
+  });
   return ok;
 }
 
-export interface GalleryPinManageResult {
+export interface GalleryLinkResult {
   ok: boolean;
   message: string;
-  retryAfterSeconds?: number;
+  /** The current guest link key, or '' before the QR code was first replaced. */
+  linkKey: string;
+  rotatedAt: string | null;
 }
 
 /**
- * The host's side of the gallery PIN: set a new one, remove it, or check one
- * they typed (to put it in a QR code or link — the server never gives a stored
- * PIN back, because it only keeps a hash).
+ * The host's side of the guest link key. 'get' reads the current key (for QR
+ * codes and links); 'rotate' replaces it, which stops every older QR code, link
+ * and download share opening the gallery. Host or admin only, checked on the server.
  */
-export async function manageGalleryPin(
+export async function manageGalleryLink(
   eventId: string,
-  action: 'set' | 'clear' | 'check',
-  pin?: string,
-): Promise<GalleryPinManageResult> {
-  const { data, errors } = await getClient().mutations.manageGalleryPin(
-    { eventId, action, pin },
+  action: 'get' | 'rotate',
+): Promise<GalleryLinkResult> {
+  const { data, errors } = await getClient().mutations.manageGalleryLink(
+    { eventId, action },
     { authMode: 'userPool' },
   );
   if (errors?.length || !data) {
-    return { ok: false, message: 'The PIN could not be saved. Please try again.' };
+    return { ok: false, message: 'That could not be done. Please try again.', linkKey: '', rotatedAt: null };
   }
+  if (action === 'rotate' && data.ok) clearSignedMedia();
   return {
     ok: Boolean(data.ok),
     message: data.message ?? '',
-    retryAfterSeconds: data.retryAfterSeconds ?? undefined,
+    linkKey: data.linkKey ?? '',
+    rotatedAt: data.rotatedAt ?? null,
   };
 }
 
@@ -3428,7 +3365,7 @@ export async function computeContentHash(file: File): Promise<string | null> {
 export async function fetchEventPhotoHashes(eventId: string): Promise<Set<string>> {
   try {
     const { data, errors } = await getClient().queries.listEventPhotos(
-      { eventId },
+      { eventId, linkKey: getLinkKey(eventId) || undefined },
       { authMode: await authModeFor() },
     );
     if (errors?.length) return new Set();
@@ -3689,22 +3626,17 @@ export async function fetchEventPhotos(
     // Public gallery: scoped query that only returns this event's approved
     // photos, so photos can't be enumerated across events.
     if (opts.shareId) sharesByEvent.set(eventId, opts.shareId);
-    await renewGalleryAccess(eventId);
     const { data, errors } = await getClient().queries.listEventPhotos(
       {
         eventId,
         shareId: opts.shareId,
-        accessToken: getAccessToken(eventId) || undefined,
+        linkKey: getLinkKey(eventId) || undefined,
       },
       { authMode: await authModeFor() },
     );
-    if (errors?.length) {
-      const failure = new Error(errors.map((e) => e.message).join(' · '));
-      // A token that was good is no longer (the PIN changed, or it lapsed):
-      // drop it so the page shows the PIN prompt instead of a stale error.
-      if (isPinRequiredError(failure)) clearAccessToken(eventId);
-      throw failure;
-    }
+    // SHARING_PAUSED and LINK_REQUIRED are thrown as they are: the pages match
+    // on them (lib/galleryAccess.ts) to explain instead of showing an error.
+    if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
     photos = (data ?? []).filter((p): p is NonNullable<typeof p> => p !== null) as QRPhoto[];
   }
 
@@ -3918,16 +3850,11 @@ export async function getOriginalMediaSource(photo: QRPhoto): Promise<MediaSourc
  * on every poll.
  */
 export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]> {
-  await renewGalleryAccess(eventId);
   const { data, errors } = await getClient().queries.listEventPhotos(
-    { eventId, accessToken: getAccessToken(eventId) || undefined },
+    { eventId, linkKey: getLinkKey(eventId) || undefined },
     { authMode: await authModeFor() },
   );
-  if (errors?.length) {
-    const failure = new Error(errors.map((e) => e.message).join(' · '));
-    if (isPinRequiredError(failure)) clearAccessToken(eventId);
-    throw failure;
-  }
+  if (errors?.length) throw new Error(errors.map((e) => e.message).join(' · '));
   return (data ?? [])
     .filter((photo): photo is NonNullable<typeof photo> => photo !== null)
     .filter((photo) => photo.approved !== false) as QRPhoto[];

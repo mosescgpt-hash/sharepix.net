@@ -71,12 +71,12 @@ export interface QREvent {
   guestDownloadsBlocked?: boolean | null;
   /** Host keeps the gallery to themselves; guests can still add photos. */
   guestViewBlocked?: boolean | null;
-  /** 'auto' (absent) | 'on' | 'off'. See lib/galleryAccess.ts. */
-  galleryPinMode?: string | null;
-  /** Days after the event date that 'auto' turns the PIN on. Default 30. */
-  galleryPinAutoDays?: number | null;
-  /** True once the host has set a PIN. The PIN itself is never on this row. */
-  galleryPinSet?: boolean | null;
+  /** Host paused sharing: guests can add photos but view and download nothing. */
+  sharingPaused?: boolean | null;
+  /** True once the host has replaced the QR code, so guests need the current link. */
+  galleryLinkSet?: boolean | null;
+  /** When the QR code was last replaced. */
+  linkRotatedAt?: string | null;
   liveSlideshowEnabled?: boolean | null;
   /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;

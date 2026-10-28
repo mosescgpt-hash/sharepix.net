@@ -317,13 +317,17 @@ const schema = a.schema({
       // every event made before this existed. Download is the existing
       // guestDownloadsBlocked above.
       guestViewBlocked: a.boolean(),
-      // The optional gallery PIN. 'auto' (absent) turns it on
-      // galleryPinAutoDays after the event date, 'on' requires it now, 'off'
-      // never. It only applies once a PIN has been set (galleryPinSet) — the
-      // PIN itself is hashed in GalleryPin, never on this guest-readable row.
-      galleryPinMode: a.string(),
-      galleryPinAutoDays: a.integer(),
-      galleryPinSet: a.boolean(),
+      // sharingPaused: the host's "Pause sharing" switch. While true, guests
+      // can still upload but view and download nothing: listEventPhotos and
+      // mediaUrls refuse them and download shares stop. Absent/false = normal.
+      sharingPaused: a.boolean(),
+      // galleryLinkSet / linkRotatedAt: set by manageGalleryLink (never by the
+      // host's own writes) when the host replaces the QR code. galleryLinkSet
+      // means guests must present the current link key, which is held in
+      // GalleryLink, not on this guest-readable row. linkRotatedAt voids any
+      // download share made before it.
+      galleryLinkSet: a.boolean(),
+      linkRotatedAt: a.string(),
       // Whether guests may upload video. Missing means allowed, so existing
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
@@ -886,8 +890,6 @@ const schema = a.schema({
   //   corporate-month#<sub>#<YYYY-MM>   a subscriber's included events that month
   //   guestbook#<eventId>#guest#<key>   notes one guest has left on one event
   //   guestbook#<eventId>#ip#<ip>       notes from one address on one event
-  //   pin#<eventId>#ip#<ip>#<window>    wrong gallery PINs from one address in one 15-minute window
-  //   pin#<eventId>#all#<window>        wrong gallery PINs on one event in one 15-minute window
   //
   // Same authorization as FreeEventClaim and for the same reason: every row is
   // a limit on somebody, and anybody who could write or delete one could lift
@@ -915,22 +917,17 @@ const schema = a.schema({
     .secondaryIndexes((index) => [index('eventId')])
     .authorization((allow) => [allow.group('ADMINS')]),
 
-  // The gallery PIN, hashed, and the key that signs this event's PIN access
-  // tokens. The row id is the event id. Written and read only by the
-  // gallery-access function (and read by media-url and list-event-photos to
-  // check a token), so it never rides on the guest-readable Event row: a PIN
-  // hash on Event would be handed to every guest. No host or guest rule at all.
-  // Changing or clearing the PIN replaces tokenKey, which revokes every token
-  // and PIN link made with the old one.
-  GalleryPin: a
+  // The guest link key: the secret in the event's QR codes and links once the
+  // host has used "Replace QR code". The row id is the event id. Written by the
+  // gallery-access function and read by it, media-url and list-event-photos, so
+  // it never rides on the guest-readable Event row, where every guest would be
+  // handed it. No host or guest rule at all. Replacing the QR code overwrites
+  // linkKey, which stops every link and QR code made with the old one.
+  GalleryLink: a
     .model({
       eventId: a.string(),
-      /** `s1$<salt>$<scrypt hash>`. Never the PIN. */
-      pinHash: a.string(),
-      /** Random per-event HMAC key for access tokens. */
-      tokenKey: a.string(),
-      pinLength: a.integer(),
-      changedAt: a.datetime(),
+      linkKey: a.string(),
+      rotatedAt: a.datetime(),
     })
     .authorization((allow) => [allow.group('ADMINS')]),
 
@@ -1674,9 +1671,9 @@ const schema = a.schema({
   listEventPhotos: a
     .query()
     // shareId: a host's download share, honoured whatever the gallery setting.
-    // accessToken: the short-lived token verifyGalleryPin issues, needed while
-    // the gallery PIN is on.
-    .arguments({ eventId: a.id().required(), shareId: a.string(), accessToken: a.string() })
+    // linkKey: the key in the event's current QR code or link, needed once the
+    // host has replaced the QR code.
+    .arguments({ eventId: a.id().required(), shareId: a.string(), linkKey: a.string() })
     .returns(a.ref('EventPhoto').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listEventPhotosFn)),
@@ -2749,8 +2746,7 @@ const schema = a.schema({
       coverStyle: a.string(),
       galleryAudience: a.string(),
       guestViewBlocked: a.boolean(),
-      galleryPinMode: a.string(),
-      galleryPinAutoDays: a.integer(),
+      sharingPaused: a.boolean(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])
@@ -2859,13 +2855,13 @@ const schema = a.schema({
   // for one key through the same path.
   mediaUrls: a
     .query()
-    // accessToken: from verifyGalleryPin. shareId: a host's download share, which
+    // linkKey: the key in the current QR code or link. shareId: a host's download share, which
     // is honoured whatever the gallery setting. reviewToken: a moderation
     // review link, which may see only the one photo it was made for.
     .arguments({
       eventId: a.id().required(),
       keys: a.string().array().required(),
-      accessToken: a.string(),
+      linkKey: a.string(),
       shareId: a.string(),
       reviewToken: a.string(),
     })
@@ -2875,36 +2871,22 @@ const schema = a.schema({
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(mediaUrlFn)),
 
-  GalleryPinResult: a.customType({
+  GalleryLinkResult: a.customType({
     ok: a.boolean().required(),
     message: a.string(),
-    // A signed, short-lived access token (verifyGalleryPin only).
-    token: a.string(),
-    expiresAt: a.string(),
-    // When a lockout turns the guest away: how long to wait.
-    retryAfterSeconds: a.integer(),
-    pinSet: a.boolean(),
+    /** The current guest link key, or null before the QR code was first replaced. */
+    linkKey: a.string(),
+    rotatedAt: a.string(),
   }),
 
-  // A guest (or anyone) enters the gallery PIN. A right PIN returns a signed
-  // token good for a few hours, which listEventPhotos and mediaUrls then
-  // require. A wrong one is counted per address and per event, and too many
-  // lock that address (or the event's PIN entry) for the rest of a 15-minute
-  // window. See amplify/functions/gallery-access.
-  verifyGalleryPin: a
+  // The host reads the guest link key (to put it in QR codes and links) or
+  // replaces it. Replacing it stops every older QR code, link and download
+  // share opening the gallery. action: 'get' | 'rotate'. Host or admin only,
+  // checked in the function. See amplify/functions/gallery-access.
+  manageGalleryLink: a
     .mutation()
-    .arguments({ eventId: a.id().required(), pin: a.string().required() })
-    .returns(a.ref('GalleryPinResult'))
-    .authorization((allow) => [allow.guest(), allow.authenticated()])
-    .handler(a.handler.function(galleryAccessFn)),
-
-  // The host sets, changes or clears the PIN, or checks one they typed (to
-  // build a QR with it). The PIN is hashed here and stored in GalleryPin; it is
-  // never returned. action: 'set' | 'clear' | 'check'.
-  manageGalleryPin: a
-    .mutation()
-    .arguments({ eventId: a.id().required(), action: a.string().required(), pin: a.string() })
-    .returns(a.ref('GalleryPinResult'))
+    .arguments({ eventId: a.id().required(), action: a.string().required() })
+    .returns(a.ref('GalleryLinkResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(galleryAccessFn)),
 

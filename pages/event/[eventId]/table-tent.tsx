@@ -21,6 +21,8 @@ import {
   tentContent,
 } from '@/lib/tableTent';
 import { DisplayPhoto, QREvent } from '@/lib/types';
+import { guestLinkPath } from '@/lib/galleryAccess';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 
 /**
  * One face of the tent. Two of these print per sheet — the top one rotated so
@@ -105,6 +107,7 @@ function TableTentPage() {
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadUrl, setUploadUrl] = useState('');
+  const { key: linkKey, ready: keyReady } = useGuestLinkKey(eventId);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   // Customization — every one of these starts at the default, so a host who
@@ -155,9 +158,9 @@ function TableTentPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!eventId) return;
-    setUploadUrl(`${window.location.origin}/event/${eventId}/upload`);
-  }, [eventId]);
+    if (!eventId || !keyReady) return;
+    setUploadUrl(`${window.location.origin}${guestLinkPath(eventId, linkKey, 'upload')}`);
+  }, [eventId, keyReady, linkKey]);
 
   // Render the QR once, to a data URL, so both panels can show the same image
   // without generating it twice and without a canvas that print might drop.

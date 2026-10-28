@@ -195,7 +195,7 @@ describe('storage does not undo it', () => {
     const rules = read('amplify/storage/resource.ts');
     const events = rules.slice(rules.indexOf("'events/*': ["), rules.indexOf("'demo/*'"));
     // Reads go through mediaUrls' signed URLs, issued after the host's view
-    // and PIN rules. A direct 'get' here would let anyone with an event id
+    // and sharing rules. A direct 'get' here would let anyone with an event id
     // and a file name walk around all of them.
     expect(events).toContain("allow.guest.to(['write'])");
     expect(events).toContain("allow.authenticated.to(['write'])");

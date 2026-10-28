@@ -8,19 +8,17 @@ import PhotoGrid from '@/components/PhotoGrid';
 import EventCover from '@/components/EventCover';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
-import GalleryPinPrompt from '@/components/GalleryPinPrompt';
+import GalleryAccessNotice from '@/components/GalleryAccessNotice';
 import {
   fetchEvent,
   fetchEventMoments,
   fetchEventPhotos,
   getCurrentUserInfo,
-  submitGalleryPin,
 } from '@/lib/api';
 import {
-  getAccessToken,
-  isPinRequiredError,
-  pinFromFragment,
-  pinRequired,
+  captureLinkKey,
+  isLinkRequiredError,
+  isSharingPausedError,
 } from '@/lib/galleryAccess';
 import { isGlobalAdmin } from '@/lib/admin';
 import { eventLifecycle } from '@/lib/lifecycle';
@@ -56,8 +54,9 @@ export default function EventGalleryPage() {
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState(false);
   const [admin, setAdmin] = useState(false);
-  // The host has put a PIN on the gallery and this guest has not entered it.
-  const [pinPrompt, setPinPrompt] = useState(false);
+  // Why a guest sees no gallery: the host paused sharing, or the QR code or
+  // link they hold was replaced. The server decides; this only explains.
+  const [gateNotice, setGateNotice] = useState<'paused' | 'replaced' | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -92,20 +91,17 @@ export default function EventGalleryPage() {
       const lc = eventLifecycle(ev);
       const privilegedViewer = isHost || isAdmin;
 
-      // A link or QR code made with the PIN carries it after the #, which the
-      // browser never sends to a server. Use it once, then take it out of the
-      // address bar so a screenshot or a copied URL does not hand it on.
-      const pinInLink = pinFromFragment(window.location.hash);
-      if (pinInLink) {
-        if (!privilegedViewer) await submitGalleryPin(eventId, pinInLink).catch(() => null);
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      }
+      // A link or QR code the host replaced the QR code for carries its key
+      // after the #, which the browser never sends to a server. Pick it up and
+      // keep it for this tab; every gallery call then presents it.
+      if (!privilegedViewer) captureLinkKey(eventId);
 
-      // The host can keep the gallery to themselves, and can put a PIN on it.
+      // The host can pause sharing and can keep the gallery to themselves.
       // Both are enforced by the server; this only decides what to show.
       const viewBlocked = !privilegedViewer && ev.guestViewBlocked === true;
-      let needsPin = !privilegedViewer && !viewBlocked && pinRequired(ev) && !getAccessToken(eventId);
-      if (!viewBlocked && !needsPin && (privilegedViewer || lc.guestResolution !== 'none')) {
+      let notice: 'paused' | 'replaced' | null =
+        !privilegedViewer && ev.sharingPaused === true ? 'paused' : null;
+      if (!notice && !viewBlocked && (privilegedViewer || lc.guestResolution !== 'none')) {
         try {
           const items = await fetchEventPhotos(eventId, {
             // Small variant either because the window has closed, or because the
@@ -116,13 +112,14 @@ export default function EventGalleryPage() {
           });
           setPhotos(items);
         } catch (err) {
-          // The PIN came on, or changed, since this page opened.
-          if (!isPinRequiredError(err)) throw err;
-          needsPin = true;
+          // Sharing was paused, or the QR code replaced, since this page opened.
+          if (isSharingPausedError(err)) notice = 'paused';
+          else if (isLinkRequiredError(err)) notice = 'replaced';
+          else throw err;
         }
       }
-      setPinPrompt(needsPin);
-      if (needsPin) setPhotos([]);
+      setGateNotice(notice);
+      if (notice) setPhotos([]);
       // Never fatal. A gallery that cannot load its labels is still a gallery.
       setMoments(await fetchEventMoments(eventId).catch(() => []));
     } catch {
@@ -184,7 +181,7 @@ export default function EventGalleryPage() {
             event={event}
             eyebrow={
               <>
-                {pinPrompt || (!privileged && audience === 'host')
+                {gateNotice || (!privileged && audience === 'host')
                   ? 'A private gallery'
                   : `${photos.length} ${photos.length === 1 ? 'memory' : 'memories'} ${
                       !privileged && audience === 'own' ? 'from you' : 'shared'
@@ -256,11 +253,8 @@ export default function EventGalleryPage() {
                     onSelect={setChallengeFilter}
                   />
                 ) : null}
-                {pinPrompt && !privileged ? (
-                  <GalleryPinPrompt
-                    onSubmit={(pin) => submitGalleryPin(event.id, pin)}
-                    onUnlocked={load}
-                  />
+                {gateNotice && !privileged ? (
+                  <GalleryAccessNotice reason={gateNotice} />
                 ) : !canSee ? (
                   <Notice tone="warn" label="Gallery closed">
                     This gallery has closed. Hosts can still reach it from the admin dashboard.

@@ -17,6 +17,7 @@ import {
 } from '@/lib/signKit/pieces';
 import { buildSignPdf, measureWith } from '@/lib/signKit/render';
 import type { Measure } from '@/lib/signKit/text';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 import { useHostEvent } from '@/lib/signKit/useHostEvent';
 
 type JsPdfModule = typeof import('jspdf');
@@ -47,6 +48,7 @@ function SignsPage() {
   const [failed, setFailed] = useState<string | null>(null);
   const [origin, setOrigin] = useState('');
   const [host, setHost] = useState('');
+  const { key: linkKey, ready: keyReady } = useGuestLinkKey(eventId);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -58,8 +60,8 @@ function SignsPage() {
   }, []);
 
   const content: SignContent | null = useMemo(
-    () => (event && origin ? signContent(event, origin, host) : null),
-    [event, origin, host],
+    () => (event && origin && keyReady ? signContent(event, origin, host, Date.now(), linkKey) : null),
+    [event, origin, host, keyReady, linkKey],
   );
 
   const measure: Measure | null = useMemo(

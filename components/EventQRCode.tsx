@@ -12,6 +12,8 @@ import {
 } from '@/lib/qrBranding';
 import { prepareQrLogo } from '@/lib/qrLogoImage';
 import { invitesUploads, parseAudience } from '@/lib/eventAudience';
+import { guestLinkPath } from '@/lib/galleryAccess';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 
 interface EventQRCodeProps {
   eventId: string;
@@ -66,6 +68,7 @@ export default function EventQRCode({
   const [centerImage, setCenterImage] = useState<string | undefined>(saved.qrLogo ?? undefined);
   const [imageError, setImageError] = useState<string | null>(null);
   const [uploadUrl, setUploadUrl] = useState('');
+  const { key: linkKey, ready: keyReady } = useGuestLinkKey(eventId);
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
@@ -77,8 +80,9 @@ export default function EventQRCode({
   }, [saved]);
 
   useEffect(() => {
-    setUploadUrl(`${window.location.origin}/event/${eventId}/upload`);
-  }, [eventId]);
+    if (!keyReady) return;
+    setUploadUrl(`${window.location.origin}${guestLinkPath(eventId, linkKey, 'upload')}`);
+  }, [eventId, keyReady, linkKey]);
 
   const dirty =
     fgColor !== saved.qrColor ||

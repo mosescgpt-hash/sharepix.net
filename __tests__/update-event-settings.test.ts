@@ -30,10 +30,6 @@ describe('the allow-list is the whole surface', () => {
       'date',
       // Who may see the gallery — a privacy choice, not a priced one.
       'galleryAudience',
-      // Gallery PIN policy: when it applies. The PIN itself and the
-      // galleryPinSet flag are server-kept (gallery-access), never here.
-      'galleryPinAutoDays',
-      'galleryPinMode',
       'guestDownloadsBlocked',
       // Whether guests can look at the gallery at all.
       'guestViewBlocked',
@@ -46,6 +42,10 @@ describe('the allow-list is the whole surface', () => {
       'qrColor',
       'qrDotStyle',
       'qrLogo',
+      // "Pause sharing": closes the gallery and downloads to guests at once.
+      // The link key facts (galleryLinkSet, linkRotatedAt) are server-kept
+      // (gallery-access), never here.
+      'sharingPaused',
       'uploadsClosed',
       'videoUploadsEnabled',
     ]);

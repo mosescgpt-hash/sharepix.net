@@ -16,14 +16,14 @@ import {
   type GalleryAudience,
   type PhotoRowFacts,
 } from './visibility';
-import { pinRequired, verifyAccessToken, type PinFacts } from './galleryGate';
+import { linkKeyMatches, linkRequired, shareIsCurrent, sharingPaused, type SharingFacts } from './galleryGate';
 
 const dynamo = new DynamoDBClient({});
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
 const PROFILE_TABLE = process.env.PROFILE_TABLE_NAME ?? '';
-const PIN_TABLE = process.env.GALLERY_PIN_TABLE_NAME ?? '';
+const LINK_TABLE = process.env.GALLERY_LINK_TABLE_NAME ?? '';
 
 interface Credit {
   name: string | null;
@@ -75,7 +75,7 @@ interface EventFacts {
   audience: GalleryAudience;
   /** The host turned guest viewing off. */
   viewBlocked: boolean;
-  pin: PinFacts;
+  sharing: SharingFacts;
 }
 
 /**
@@ -92,7 +92,7 @@ async function eventFacts(eventId: string): Promise<EventFacts> {
     owner: '',
     audience: 'everyone',
     viewBlocked: false,
-    pin: {},
+    sharing: {},
   };
   if (!EVENT_TABLE) return fallback;
   const found = await dynamo
@@ -101,8 +101,8 @@ async function eventFacts(eventId: string): Promise<EventFacts> {
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
         ProjectionExpression:
-          'takenDownAt, #owner, galleryAudience, guestViewBlocked, galleryPinSet, galleryPinMode, galleryPinAutoDays, #date, createdAt',
-        ExpressionAttributeNames: { '#owner': 'owner', '#date': 'date' },
+          'takenDownAt, #owner, galleryAudience, guestViewBlocked, sharingPaused, galleryLinkSet, linkRotatedAt',
+        ExpressionAttributeNames: { '#owner': 'owner' },
       }),
     )
     .catch(() => null);
@@ -112,28 +112,25 @@ async function eventFacts(eventId: string): Promise<EventFacts> {
     owner: found.Item.owner?.S ?? '',
     audience: galleryAudienceOf(found.Item.galleryAudience?.S),
     viewBlocked: found.Item.guestViewBlocked?.BOOL === true,
-    pin: {
-      galleryPinSet: found.Item.galleryPinSet?.BOOL === true,
-      galleryPinMode: found.Item.galleryPinMode?.S ?? null,
-      galleryPinAutoDays: found.Item.galleryPinAutoDays?.N ? Number(found.Item.galleryPinAutoDays.N) : null,
-      date: found.Item.date?.S ?? null,
-      createdAt: found.Item.createdAt?.S ?? null,
+    sharing: {
+      sharingPaused: found.Item.sharingPaused?.BOOL === true,
+      galleryLinkSet: found.Item.galleryLinkSet?.BOOL === true,
+      linkRotatedAt: found.Item.linkRotatedAt?.S ?? null,
     },
   };
 }
 
 /**
- * Whether this PIN token is good for this event. Reads the event's signing key,
- * which lives in a table guests cannot read. Fails closed: no key, no token,
- * or a failed read all mean "not entered".
+ * Whether this link key is the event's current one. The key lives in a table
+ * guests cannot read. Fails closed: no key set, none given, or a failed read all
+ * mean "not presented".
  */
-async function tokenIsValid(eventId: string, token: string): Promise<boolean> {
-  if (!PIN_TABLE || !token) return false;
+async function keyIsValid(eventId: string, key: string): Promise<boolean> {
+  if (!LINK_TABLE || !key) return false;
   const found = await dynamo
-    .send(new GetItemCommand({ TableName: PIN_TABLE, Key: { id: { S: eventId } }, ProjectionExpression: 'tokenKey' }))
+    .send(new GetItemCommand({ TableName: LINK_TABLE, Key: { id: { S: eventId } }, ProjectionExpression: 'linkKey' }))
     .catch(() => null);
-  const key = found?.Item?.tokenKey?.S ?? '';
-  return verifyAccessToken(key, eventId, token);
+  return linkKeyMatches(found?.Item?.linkKey?.S, key);
 }
 
 /**
@@ -142,15 +139,23 @@ async function tokenIsValid(eventId: string, token: string): Promise<boolean> {
  *
  * A share is the host choosing particular photos for particular people, so it
  * is honoured whatever the gallery setting — a host who keeps the gallery to
- * themselves and then sends a share link meant it to work.
+ * themselves and then sends a share link meant it to work. Two things end it
+ * anyway: pausing sharing (checked by the caller) and replacing the QR code,
+ * which voids every share made before it.
  */
-async function sharedPhotoIds(shareId: string, eventId: string): Promise<Set<string> | null> {
+async function sharedPhotoIds(
+  shareId: string,
+  eventId: string,
+  sharing: SharingFacts,
+): Promise<Set<string> | null> {
   if (!SHARE_TABLE || !shareId) return null;
   const found = await dynamo
     .send(new GetItemCommand({ TableName: SHARE_TABLE, Key: { id: { S: shareId } } }))
     .catch(() => null);
   const item = found?.Item;
   if (!item || item.eventId?.S !== eventId) return null;
+  // A share made before the host replaced the QR code is void.
+  if (!shareIsCurrent(item.createdAt?.S, sharing)) return null;
   const expires = item.expiresAt?.S ? Date.parse(item.expiresAt.S) : NaN;
   if (Number.isFinite(expires) && expires <= Date.now()) return null;
   try {
@@ -275,27 +280,34 @@ export const handler: Handler = async (event) => {
   if (!(identity?.groups ?? []).includes('ADMINS') && facts.takenDown) return [];
 
   // The host's gallery settings. The host and admins see everything; a share
-  // link sees exactly what the host put in it; everyone else sees what the
-  // settings allow, once through the PIN when it is on.
+  // link sees exactly what the host put in it (until sharing is paused or the QR
+  // code is replaced); everyone else sees what the settings allow, once they
+  // hold the current guest link when the host has replaced it.
   const privileged = isHostOrAdmin(identity, facts.owner);
-  const shared = privileged ? null : await sharedPhotoIds(event.arguments.shareId ?? '', eventId);
-  const needsPin = pinRequired(facts.pin);
+  const paused = sharingPaused(facts.sharing);
+  const shared =
+    privileged || paused
+      ? null
+      : await sharedPhotoIds(event.arguments.shareId ?? '', eventId, facts.sharing);
+  const needsKey = linkRequired(facts.sharing);
   const gate = galleryGateFor({
     privileged,
     shared: shared !== null,
+    paused,
     viewBlocked: facts.viewBlocked,
     audience: facts.audience,
-    pinRequired: needsPin,
-    // Only looked up when it can matter: a PIN is on and a token came with the call.
-    tokenValid:
-      needsPin && !privileged && !shared
-        ? await tokenIsValid(eventId, event.arguments.accessToken ?? '')
+    linkRequired: needsKey,
+    // Only looked up when it can matter: a key is required and one came with the call.
+    keyValid:
+      needsKey && !privileged && !shared
+        ? await keyIsValid(eventId, event.arguments.linkKey ?? '')
         : false,
   });
   // Nothing to read for a guest of a host-only gallery.
   if (gate === 'blocked') return [];
-  // The client matches on this to show the PIN prompt rather than an error.
-  if (gate === 'pin') throw new Error('PIN_REQUIRED');
+  // The client matches on these to explain, rather than show an error.
+  if (gate === 'paused') throw new Error('SHARING_PAUSED');
+  if (gate === 'key') throw new Error('LINK_REQUIRED');
 
   const callerId = uploaderIdOf(identity);
   const items = await photosForEvent(eventId);

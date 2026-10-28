@@ -7,18 +7,17 @@ import {
   fetchEventPhotoRecords,
   getCurrentUserInfo,
   getPhotoDisplaySource,
-  submitGalleryPin,
 } from '@/lib/api';
-import GalleryPinPrompt from '@/components/GalleryPinPrompt';
+import GalleryAccessNotice from '@/components/GalleryAccessNotice';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 import { isGlobalAdmin } from '@/lib/admin';
 import { isEventHost } from '@/lib/gallery';
 import { galleryAudienceFor } from '@/lib/galleryAudience';
 import {
-  getAccessToken,
-  isPinRequiredError,
-  pinFromFragment,
-  pinRequired,
-  rememberSessionPin,
+  captureLinkKey,
+  guestLinkPath,
+  isLinkRequiredError,
+  isSharingPausedError,
 } from '@/lib/galleryAccess';
 import { liveSlideshowAvailable } from '@/lib/pricing';
 import { FallbackImage } from '@/components/FallbackMedia';
@@ -66,10 +65,13 @@ export default function LiveSlideshowPage() {
   const [isNew, setIsNew] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
   const [photoCount, setPhotoCount] = useState(0);
-  // The host has put a PIN on the gallery and this screen has not been given it.
-  const [needsPin, setNeedsPin] = useState(false);
-  // Bumped to start again after the PIN is entered.
-  const [attempt, setAttempt] = useState(0);
+  // Why this screen has nothing to show: the host paused sharing, or the link
+  // it was opened from was replaced. Cleared by the next poll that succeeds, so
+  // a screen left running picks up again when the host resumes.
+  const [gate, setGate] = useState<'paused' | 'replaced' | null>(null);
+  // The host (or an admin) is watching, so the server will not turn them away.
+  const [hostView, setHostView] = useState(false);
+  const { key: linkKey } = useGuestLinkKey(eventId, hostView);
   // Photo challenges, for the caption under a challenge photo. [] unless the
   // host turned challenges on.
   const challenges = useEventChallenges(event);
@@ -84,7 +86,7 @@ export default function LiveSlideshowPage() {
 
   const uploadUrl =
     typeof window !== 'undefined' && eventId
-      ? `${window.location.origin}/event/${eventId}/upload`
+      ? `${window.location.origin}${guestLinkPath(eventId, linkKey, 'upload')}`
       : '';
 
   /** Where to load a photo from, reusing a cached pair until it is near expiry. */
@@ -105,6 +107,7 @@ export default function LiveSlideshowPage() {
     if (!eventId) return;
     try {
       const records = await fetchEventPhotoRecords(eventId);
+      setGate(null);
       const eligible = slideshowEligible(records);
       reelRef.current = eligible;
       setPhotoCount(eligible.length);
@@ -116,8 +119,9 @@ export default function LiveSlideshowPage() {
         queueRef.current.push(...arrivals.filter((item) => !queued.has(item.id)));
       }
     } catch (err) {
-      // The PIN came on, or was changed, while the screen was running.
-      if (isPinRequiredError(err)) setNeedsPin(true);
+      // Sharing was paused, or the QR code replaced, while the screen was running.
+      if (isSharingPausedError(err)) setGate('paused');
+      else if (isLinkRequiredError(err)) setGate('replaced');
       // Any other failed poll is not fatal — the reel we already have keeps playing.
     }
   }, [eventId]);
@@ -188,21 +192,11 @@ export default function LiveSlideshowPage() {
           );
           return;
         }
-        // A screen link made with the PIN carries it after the #. It stays in
-        // the address bar here, unlike on the gallery page, so a venue screen
-        // that is reloaded in the middle of the night still opens.
-        const pinInLink = pinFromFragment(window.location.hash);
-        if (!privileged && pinRequired(ev)) {
-          if (pinInLink) {
-            if (getAccessToken(eventId)) rememberSessionPin(eventId, pinInLink);
-            else await submitGalleryPin(eventId, pinInLink).catch(() => null);
-          }
-          if (!getAccessToken(eventId)) {
-            setNeedsPin(true);
-            return;
-          }
-        }
-        setNeedsPin(false);
+        setHostView(privileged);
+        // A screen link made after the QR code was replaced carries its key
+        // after the #. It stays in the address bar, so a venue screen that is
+        // reloaded in the middle of the night still opens.
+        if (!privileged) captureLinkKey(eventId);
         await refresh();
         if (!cancelled) await advance();
       } catch {
@@ -214,7 +208,7 @@ export default function LiveSlideshowPage() {
     return () => {
       cancelled = true;
     };
-  }, [eventId, refresh, advance, attempt]);
+  }, [eventId, refresh, advance]);
 
   // Poll for new photos.
   useEffect(() => {
@@ -299,17 +293,9 @@ export default function LiveSlideshowPage() {
           <div className="flex h-full items-center justify-center px-8 text-center">
             <p className="text-xl text-white/80">{error}</p>
           </div>
-        ) : needsPin && eventId ? (
+        ) : gate ? (
           <div className="flex h-full items-center justify-center px-6">
-            <GalleryPinPrompt
-              dark
-              what="the slideshow"
-              onSubmit={(pin) => submitGalleryPin(eventId, pin)}
-              onUnlocked={() => {
-                setNeedsPin(false);
-                setAttempt((n) => n + 1);
-              }}
-            />
+            <GalleryAccessNotice dark what="the slideshow" reason={gate} />
           </div>
         ) : loading ? (
           <div className="flex h-full items-center justify-center">

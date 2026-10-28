@@ -23,10 +23,6 @@ import { isFontSetKey, isGalleryLayout, normalizeAccent } from './galleryTheme';
 import { sanitizeCoverStyle } from './eventCover';
 import { eventDateProblem } from './uploadWindowStart';
 
-// Mirrors gallery-access/galleryGate.ts (pinned equal by __tests__/gallery-pin.test.ts).
-const MIN_PIN_AUTO_DAYS = 1;
-const MAX_PIN_AUTO_DAYS = 365;
-
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
 
@@ -114,10 +110,8 @@ export interface SettingsRequest {
   galleryAudience?: string | null;
   /** True hides the gallery from guests altogether. See docs/gallery-access.md. */
   guestViewBlocked?: boolean | null;
-  /** 'auto' | 'on' | 'off': when the gallery PIN applies, once one is set. */
-  galleryPinMode?: string | null;
-  /** Days after the event date that 'auto' switches the PIN on. */
-  galleryPinAutoDays?: number | null;
+  /** True pauses sharing: guests can upload but view and download nothing. */
+  sharingPaused?: boolean | null;
 }
 
 /** The event as stored, insofar as these rules care. */
@@ -130,7 +124,7 @@ export interface EventState {
 
 export interface Patch {
   /** Attributes to write, already cleaned. */
-  set: Record<string, string | boolean | number>;
+  set: Record<string, string | boolean>;
   /** Attributes to remove, for the fields a host can clear. */
   remove: string[];
 }
@@ -171,7 +165,7 @@ export function buildPatch(
   event: EventState,
   now: Date = new Date(),
 ): PatchResult {
-  const set: Record<string, string | boolean | number> = {};
+  const set: Record<string, string | boolean> = {};
   const remove: string[] = [];
 
   // The name and date lock once guests have uploaded, so an event can't rename
@@ -314,32 +308,6 @@ export function buildPatch(
     else return { ok: false, reason: 'Choose who can see the gallery.' };
   }
 
-  // The PIN's schedule. The PIN itself is never here: it is set through
-  // manageGalleryPin, which hashes it into a table guests cannot read. 'auto'
-  // is stored as absent, like 'everyone' above.
-  if (provided(request.galleryPinMode)) {
-    const mode = (request.galleryPinMode ?? '').trim().toLowerCase();
-    if (mode === 'on' || mode === 'off') set.galleryPinMode = mode;
-    else if (mode === 'auto' || mode === '') remove.push('galleryPinMode');
-    else return { ok: false, reason: 'Choose when the PIN applies.' };
-  }
-
-  if (provided(request.galleryPinAutoDays)) {
-    const days = request.galleryPinAutoDays;
-    if (
-      typeof days !== 'number' ||
-      !Number.isInteger(days) ||
-      days < MIN_PIN_AUTO_DAYS ||
-      days > MAX_PIN_AUTO_DAYS
-    ) {
-      return {
-        ok: false,
-        reason: `Choose between ${MIN_PIN_AUTO_DAYS} and ${MAX_PIN_AUTO_DAYS} days.`,
-      };
-    }
-    set.galleryPinAutoDays = days;
-  }
-
   // The cover is one value, validated whole. A photo key must point inside
   // this event's own folder, so a host cannot borrow another event's media
   // (or anything else in the bucket) as their background.
@@ -358,6 +326,7 @@ export function buildPatch(
     'commentsEnabled',
     'boothMode',
     'guestViewBlocked',
+    'sharingPaused',
   ] as const) {
     const value = request[flag];
     if (!provided(value)) continue;
@@ -416,6 +385,5 @@ export const EDITABLE_FIELDS = [
   'coverStyle',
   'galleryAudience',
   'guestViewBlocked',
-  'galleryPinMode',
-  'galleryPinAutoDays',
+  'sharingPaused',
 ];
