@@ -3,6 +3,11 @@ import { useRouter } from 'next/router';
 import Layout from '@/components/Layout';
 import PhotoGrid from '@/components/PhotoGrid';
 import { fetchDownloadShare, fetchEvent, fetchEventPhotos } from '@/lib/api';
+import {
+  isLinkRequiredError,
+  isSharingPausedError,
+  SHARING_PAUSED_NOTICE,
+} from '@/lib/galleryAccess';
 import { DisplayPhoto, DownloadShare } from '@/lib/types';
 import { isGalleryActive } from '@/lib/validation';
 
@@ -37,8 +42,13 @@ export default function DownloadSharePage() {
           setDownloadsEnabled(true);
           setPhotos(eventPhotos.filter((photo) => allowedIds.has(photo.id)));
         }
-      } catch {
-        if (!cancelled) setError('The shared event could not be loaded. Try again in a moment.');
+      } catch (err) {
+        if (cancelled) return;
+        // Paused sharing and a replaced QR code both end download links too.
+        if (isSharingPausedError(err)) setError(SHARING_PAUSED_NOTICE);
+        else if (isLinkRequiredError(err)) {
+          setError('This download link was replaced by the host. Ask them for a new one.');
+        } else setError('The shared event could not be loaded. Try again in a moment.');
       } finally {
         if (!cancelled) setLoading(false);
       }

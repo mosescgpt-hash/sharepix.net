@@ -12,17 +12,32 @@ import {
   MAX_KEYS_PER_REQUEST,
   canSign,
   dedupeKeys,
+  eventIdOfKey,
   photoStemOf,
-  withheldPhotoStems,
+  visibleStemsAndIds,
   isEventPhotoKey,
   isHostOrAdmin,
   isProKey,
   proUploadIdOf,
+  variantOf,
 } from './access';
+import {
+  galleryAudienceOf,
+  galleryGateFor,
+  uploaderIdOf,
+  type PhotoRowFacts,
+} from './visibility';
+import { linkKeyMatches, linkRequired, shareIsCurrent, sharingPaused, type SharingFacts } from './galleryGate';
 
 const dynamo = new DynamoDBClient({});
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
+const LINK_TABLE = process.env.GALLERY_LINK_TABLE_NAME ?? '';
+const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
+const REVIEW_TABLE = process.env.REVIEW_TABLE_NAME ?? '';
+const PHOTO_BUCKET = process.env.PHOTO_BUCKET_NAME ?? '';
+
+const s3 = new S3Client({});
 
 /** How long a signed URL stays valid. Long enough to download a 250 MB video. */
 const URL_TTL_SECONDS = 15 * 60;
@@ -81,16 +96,12 @@ export const handler: Handler = async (event) => {
   // for an unbounded amount of signing work.
   const keys = dedupeKeys(requested, MAX_KEYS_PER_REQUEST);
   if (keys.length === 0) return [];
-
-  const client = r2();
-  // Not configured, or configured badly: say so plainly and let the caller use
-  // S3. This is the default, and it is why merging never changed behaviour.
-  if (!client) return keys.map((key) => ({ key, url: null }));
+  const none = () => keys.map((key) => ({ key, url: null, fallbackUrl: null }));
 
   const found = await dynamo
     .send(new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }))
     .catch(() => null);
-  if (!found?.Item) return keys.map((key) => ({ key, url: null }));
+  if (!found?.Item) return none();
 
   // One row read for the whole batch — the access rules are per-key but the
   // event state they read is not.
@@ -100,60 +111,206 @@ export const handler: Handler = async (event) => {
     guestResolution: guestResolutionOf(found.Item),
     takenDown: Boolean(found.Item.takenDownAt?.S),
   };
-  const caller = event.identity as { sub?: string | null; groups?: string[] | null } | undefined;
-
-  // Which professional photos in this batch a guest may actually see.
-  //
-  // canSign settles everything a key can answer on its own; publish status
-  // cannot be one of those, because it lives on the photo's row and changes
-  // after the key is minted. So the rows are read here — only for pro keys, so
-  // an all-guest gallery costs exactly what it did before — and an unpublished,
-  // rejected or still-in-review photo is dropped whatever its key says.
-  const publishedPro = await publishedProIds(keys);
-
-  // Guest photos held by screening or hidden by the host are not signed for
-  // guests — the same rule listEventPhotos applies to the gallery and the
-  // slideshow. Read only when a non-host asks for event photo keys.
+  const caller = event.identity as {
+    sub?: string | null;
+    cognitoIdentityId?: string | null;
+    groups?: string[] | null;
+  } | undefined;
   const host = isHostOrAdmin(caller, eventState.owner);
-  const withheld =
-    !host && keys.some(isEventPhotoKey) ? await withheldGuestPhotos(eventId) : null;
+  const isAdmin = (caller?.groups ?? []).includes('ADMINS');
+
+  // A closed event signs nothing for anyone but an admin, whatever else is true.
+  if (eventState.takenDown && !isAdmin) return none();
+
+  const audience = galleryAudienceOf(found.Item.galleryAudience?.S);
+  const args = event.arguments as {
+    linkKey?: string | null;
+    shareId?: string | null;
+    reviewToken?: string | null;
+  };
+
+  const sharing: SharingFacts = {
+    sharingPaused: found.Item.sharingPaused?.BOOL === true,
+    galleryLinkSet: found.Item.galleryLinkSet?.BOOL === true,
+    linkRotatedAt: found.Item.linkRotatedAt?.S ?? null,
+  };
+  const paused = sharingPaused(sharing);
+
+  // A host's download share, or a moderation review link: two ways a caller
+  // holds a credential for particular photos rather than for the gallery. A
+  // share stops while sharing is paused and once the QR code is replaced.
+  const shared = host || paused ? null : await sharedPhotoIds(args.shareId ?? '', eventId, sharing);
+  const reviewed = host ? null : await reviewedStem(args.reviewToken ?? '', eventId);
+
+  const needsKey = linkRequired(sharing);
+  const gate = galleryGateFor({
+    privileged: host,
+    shared: shared !== null,
+    paused,
+    viewBlocked: found.Item.guestViewBlocked?.BOOL === true,
+    audience,
+    linkRequired: needsKey,
+    keyValid: needsKey && !host && !shared ? await keyIsValid(eventId, args.linkKey ?? '') : false,
+  });
+
+  // The guest allow-list: the photos this caller may see right now, by the one
+  // rule the gallery listing uses. Not read for the host, who may fetch
+  // anything of their own event, nor for a closed gate, where nothing is signed.
+  const visible =
+    !host && gate === 'open' && keys.some((key) => isEventPhotoKey(key) || isProKey(key))
+      ? await guestVisible(eventId, {
+          identity: caller ?? null,
+          audience,
+          callerId: uploaderIdOf(caller ?? null),
+          privileged: false,
+          shared,
+          owner: eventState.owner,
+        })
+      : null;
+
+  // Which professional photos in this batch a guest may actually see: row is
+  // visible AND its publish status is `published`. See publishedProIds.
+  const publishedPro =
+    gate === 'open' || host ? await publishedProIds(keys) : new Set<string>();
+
+  const r2Client = r2();
 
   return Promise.all(
     keys.map(async (key) => {
-      const decision = canSign({ eventId, key, event: eventState, caller });
-      if (!decision.allowed) return { key, url: null };
-      // The host and admins reach their own event's professional previews the
-      // same way a guest does, and are gated the same way. A host looking at
-      // their gallery should see what their guests see; the photographer's own
-      // queue is served by the Pro dashboard, not by this function.
-      if (isProKey(key) && !publishedPro.has(proUploadIdOf(key))) {
-        return { key, url: null };
+      const refused = { key, url: null, fallbackUrl: null };
+
+      let allowed = false;
+      if (host) {
+        allowed = canSign({ eventId, key, event: eventState, caller }).allowed;
+      } else if (reviewed !== null && photoStemOf(key) === reviewed && photoStemOf(key) !== '') {
+        // The reviewer sees the one photo their link is about, flagged or not,
+        // and nothing else. Resolution rules do not apply: they are deciding
+        // whether it may be shown at all.
+        allowed = eventIdOfKey(key) === eventId;
+      } else if (variantOf(key) === 'cover') {
+        // The masthead the host chose: not one of the event's photos, so the
+        // gallery settings do not hide it. Closed event and expired access still do.
+        allowed = canSign({ eventId, key, event: eventState, caller }).allowed;
+      } else if (gate === 'open') {
+        allowed = canSign({ eventId, key, event: eventState, caller }).allowed;
+        if (allowed && isProKey(key)) {
+          const id = proUploadIdOf(key);
+          allowed = publishedPro.has(id) && (visible?.ids.has(id) ?? false);
+        } else if (allowed) {
+          allowed = isEventPhotoKey(key) && (visible?.stems.has(photoStemOf(key)) ?? false);
+        }
       }
-      if (withheld && isEventPhotoKey(key) && (withheld === 'all' || withheld.has(photoStemOf(key)))) {
-        return { key, url: null };
-      }
-      try {
-        const url = await getSignedUrl(
-          client,
-          new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }),
-          { expiresIn: URL_TTL_SECONDS },
-        );
-        return { key, url };
-      } catch (error) {
-        // No fallback. This said "falling back to S3" and then returned null,
-        // which was never true — gallery reads have been R2-only since the
-        // mirror shipped. Saying otherwise in a log is how somebody concludes
-        // the S3 copy is still load-bearing for reads. It is not.
-        console.error('Could not sign an R2 URL; this key will not resolve', {
-          at: new Date().toISOString(),
-          key,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return { key, url: null };
-      }
+      if (!allowed) return refused;
+      // The host reaches their own event's professional previews the same way
+      // a guest does, and is gated on publish status the same way.
+      if (host && isProKey(key) && !publishedPro.has(proUploadIdOf(key))) return refused;
+
+      // R2 where it can serve the object, S3 behind it. S3 is signed here with
+      // this function's own role: guests have no storage read of their own on
+      // events/* any more, so this is the only way an event photo is read.
+      const [url, fallbackUrl] = await Promise.all([
+        r2Client ? signR2(r2Client, key) : Promise.resolve(null),
+        key.startsWith('events/') ? signS3(key) : Promise.resolve(null),
+      ]);
+      return { key, url, fallbackUrl };
     }),
   );
 };
+
+async function signR2(client: S3Client, key: string): Promise<string | null> {
+  try {
+    return await getSignedUrl(
+      client,
+      new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }),
+      { expiresIn: URL_TTL_SECONDS },
+    );
+  } catch (error) {
+    console.error('Could not sign an R2 URL', {
+      at: new Date().toISOString(),
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function signS3(key: string): Promise<string | null> {
+  if (!PHOTO_BUCKET) return null;
+  try {
+    return await getSignedUrl(s3, new GetObjectCommand({ Bucket: PHOTO_BUCKET, Key: key }), {
+      expiresIn: URL_TTL_SECONDS,
+    });
+  } catch (error) {
+    console.error('Could not sign an S3 URL', {
+      at: new Date().toISOString(),
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/** The event's link key lives in a table guests cannot read. Fails closed. */
+async function keyIsValid(eventId: string, key: string): Promise<boolean> {
+  if (!LINK_TABLE || !key) return false;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: LINK_TABLE,
+        Key: { id: { S: eventId } },
+        ProjectionExpression: 'linkKey',
+      }),
+    )
+    .catch(() => null);
+  return linkKeyMatches(found?.Item?.linkKey?.S, key);
+}
+
+/** A download share's photo ids when it is this event's and unexpired, else null. */
+async function sharedPhotoIds(
+  shareId: string,
+  eventId: string,
+  sharing: SharingFacts,
+): Promise<Set<string> | null> {
+  if (!shareId || !SHARE_TABLE) return null;
+  const found = await dynamo
+    .send(
+      new GetItemCommand({
+        TableName: SHARE_TABLE,
+        Key: { id: { S: shareId } },
+        ProjectionExpression: 'eventId, expiresAt, photoIdsJson, createdAt',
+      }),
+    )
+    .catch(() => null);
+  const item = found?.Item;
+  if (!item || item.eventId?.S !== eventId) return null;
+  if (!shareIsCurrent(item.createdAt?.S, sharing)) return null;
+  const expires = item.expiresAt?.S;
+  if (expires && Date.now() > new Date(expires).getTime()) return null;
+  try {
+    const ids = JSON.parse(item.photoIdsJson?.S ?? '[]');
+    return Array.isArray(ids) ? new Set(ids.filter((id): id is string => typeof id === 'string')) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The photo stem a moderation review link is about, when the link is real, for
+ * this event and unexpired. The token is the credential, as it is for the
+ * review page itself.
+ */
+async function reviewedStem(token: string, eventId: string): Promise<string | null> {
+  if (!token || !REVIEW_TABLE) return null;
+  const found = await dynamo
+    .send(new GetItemCommand({ TableName: REVIEW_TABLE, Key: { token: { S: token } } }))
+    .catch(() => null);
+  const item = found?.Item;
+  if (!item || item.eventId?.S !== eventId) return null;
+  const expires = item.expiresAt?.S;
+  if (expires && Date.now() > new Date(expires).getTime()) return null;
+  const stem = photoStemOf(item.photoS3Key?.S ?? '');
+  return stem || null;
+}
 
 /**
  * The upload ids in this batch whose photo row says `published`.
@@ -195,12 +352,19 @@ async function publishedProIds(keys: string[]): Promise<Set<string>> {
 const PHOTOS_BY_EVENT_INDEX = 'photosByEventId';
 
 /**
- * Stems of this event's photos that guests may not see. Fails closed: if the
- * read fails, 'all' — no guest photo is signed — matching the Pro check above.
+ * The stems and ids of this event's photos the caller may see. Fails closed: if
+ * the read fails, nothing is visible and no guest photo is signed.
  */
-async function withheldGuestPhotos(eventId: string): Promise<Set<string> | 'all'> {
-  if (!PHOTO_TABLE) return 'all';
-  const rows: Parameters<typeof withheldPhotoStems>[0] = [];
+async function guestVisible(
+  eventId: string,
+  ctx: Omit<Parameters<typeof visibleStemsAndIds>[1], 'identity'> & {
+    identity: unknown;
+    owner: string;
+  },
+): Promise<{ stems: Set<string>; ids: Set<string> }> {
+  const empty = { stems: new Set<string>(), ids: new Set<string>() };
+  if (!PHOTO_TABLE) return empty;
+  const rows: PhotoRowFacts[] = [];
   let startKey: Record<string, AttributeValue> | undefined;
   try {
     do {
@@ -209,7 +373,8 @@ async function withheldGuestPhotos(eventId: string): Promise<Set<string> | 'all'
           TableName: PHOTO_TABLE,
           IndexName: PHOTOS_BY_EVENT_INDEX,
           KeyConditionExpression: '#eventId = :eventId',
-          ProjectionExpression: 's3Key, previewS3Key, thumbS3Key, approved, moderationStatus',
+          ProjectionExpression:
+            'id, s3Key, previewS3Key, thumbS3Key, approved, moderationStatus, eventOwner, boothMatch, publishStatus, boothDivider, boothSegment, uploaderId, uploadedByUserId',
           ExpressionAttributeNames: { '#eventId': 'eventId' },
           ExpressionAttributeValues: { ':eventId': { S: eventId } },
           ExclusiveStartKey: startKey,
@@ -217,11 +382,19 @@ async function withheldGuestPhotos(eventId: string): Promise<Set<string> | 'all'
       );
       for (const item of result.Items ?? []) {
         rows.push({
+          id: item.id?.S,
           s3Key: item.s3Key?.S,
           previewS3Key: item.previewS3Key?.S,
           thumbS3Key: item.thumbS3Key?.S,
           approved: item.approved?.BOOL,
           moderationStatus: item.moderationStatus?.S,
+          eventOwner: item.eventOwner?.S,
+          boothMatch: item.boothMatch?.S,
+          publishStatus: item.publishStatus?.S,
+          boothDivider: item.boothDivider?.BOOL,
+          boothSegment: item.boothSegment?.S,
+          uploaderId: item.uploaderId?.S,
+          uploadedByUserId: item.uploadedByUserId?.S,
         });
       }
       startKey = result.LastEvaluatedKey;
@@ -232,7 +405,7 @@ async function withheldGuestPhotos(eventId: string): Promise<Set<string> | 'all'
       eventId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return 'all';
+    return empty;
   }
-  return withheldPhotoStems(rows);
+  return visibleStemsAndIds(rows, ctx as Parameters<typeof visibleStemsAndIds>[1]);
 }

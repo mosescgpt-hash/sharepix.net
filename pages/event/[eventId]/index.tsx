@@ -8,7 +8,18 @@ import PhotoGrid from '@/components/PhotoGrid';
 import EventCover from '@/components/EventCover';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
-import { fetchEvent, fetchEventMoments, fetchEventPhotos, getCurrentUserInfo } from '@/lib/api';
+import GalleryAccessNotice from '@/components/GalleryAccessNotice';
+import {
+  fetchEvent,
+  fetchEventMoments,
+  fetchEventPhotos,
+  getCurrentUserInfo,
+} from '@/lib/api';
+import {
+  captureLinkKey,
+  isLinkRequiredError,
+  isSharingPausedError,
+} from '@/lib/galleryAccess';
 import { isGlobalAdmin } from '@/lib/admin';
 import { eventLifecycle } from '@/lib/lifecycle';
 import { canDownloadEventMedia, galleryVariantFor, isEventHost } from '@/lib/gallery';
@@ -43,6 +54,9 @@ export default function EventGalleryPage() {
   const [error, setError] = useState<string | null>(null);
   const [host, setHost] = useState(false);
   const [admin, setAdmin] = useState(false);
+  // Why a guest sees no gallery: the host paused sharing, or the QR code or
+  // link they hold was replaced. The server decides; this only explains.
+  const [gateNotice, setGateNotice] = useState<'paused' | 'replaced' | null>(null);
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -76,16 +90,36 @@ export default function EventGalleryPage() {
       // post-window low-res phase get the small thumbnails.
       const lc = eventLifecycle(ev);
       const privilegedViewer = isHost || isAdmin;
-      if (privilegedViewer || lc.guestResolution !== 'none') {
-        const items = await fetchEventPhotos(eventId, {
-          // Small variant either because the window has closed, or because the
-          // host has withheld downloads for this event.
-          useThumbs:
-            !privilegedViewer &&
-            (lc.guestResolution === 'small' || galleryVariantFor(ev, privilegedViewer) === 'thumb'),
-        });
-        setPhotos(items);
+
+      // A link or QR code the host replaced the QR code for carries its key
+      // after the #, which the browser never sends to a server. Pick it up and
+      // keep it for this tab; every gallery call then presents it.
+      if (!privilegedViewer) captureLinkKey(eventId);
+
+      // The host can pause sharing and can keep the gallery to themselves.
+      // Both are enforced by the server; this only decides what to show.
+      const viewBlocked = !privilegedViewer && ev.guestViewBlocked === true;
+      let notice: 'paused' | 'replaced' | null =
+        !privilegedViewer && ev.sharingPaused === true ? 'paused' : null;
+      if (!notice && !viewBlocked && (privilegedViewer || lc.guestResolution !== 'none')) {
+        try {
+          const items = await fetchEventPhotos(eventId, {
+            // Small variant either because the window has closed, or because the
+            // host has withheld downloads for this event.
+            useThumbs:
+              !privilegedViewer &&
+              (lc.guestResolution === 'small' || galleryVariantFor(ev, privilegedViewer) === 'thumb'),
+          });
+          setPhotos(items);
+        } catch (err) {
+          // Sharing was paused, or the QR code replaced, since this page opened.
+          if (isSharingPausedError(err)) notice = 'paused';
+          else if (isLinkRequiredError(err)) notice = 'replaced';
+          else throw err;
+        }
       }
+      setGateNotice(notice);
+      if (notice) setPhotos([]);
       // Never fatal. A gallery that cannot load its labels is still a gallery.
       setMoments(await fetchEventMoments(eventId).catch(() => []));
     } catch {
@@ -100,6 +134,8 @@ export default function EventGalleryPage() {
   }, [load]);
 
   const privileged = host || admin;
+  // 'host' when the host keeps the gallery to themselves, by either setting.
+  const audience = event?.guestViewBlocked === true ? 'host' : galleryAudienceFor(event);
   const lifecycle = eventLifecycle(event);
   // The host/admin can always see the gallery; guests can while it's not closed.
   const canSee = privileged || lifecycle.guestResolution !== 'none';
@@ -145,10 +181,10 @@ export default function EventGalleryPage() {
             event={event}
             eyebrow={
               <>
-                {!privileged && galleryAudienceFor(event) === 'host'
+                {gateNotice || (!privileged && audience === 'host')
                   ? 'A private gallery'
                   : `${photos.length} ${photos.length === 1 ? 'memory' : 'memories'} ${
-                      !privileged && galleryAudienceFor(event) === 'own' ? 'from you' : 'shared'
+                      !privileged && audience === 'own' ? 'from you' : 'shared'
                     }`}
               </>
             }
@@ -190,12 +226,12 @@ export default function EventGalleryPage() {
                     Uploads for this event have closed. These previews stay available for a little
                     longer before the gallery closes.
                   </Notice>
-                ) : !privileged && galleryAudienceFor(event) === 'own' ? (
+                ) : !privileged && audience === 'own' ? (
                   <Notice label="Private gallery">
                     The host is keeping this gallery private. You can see the photos you&rsquo;ve
                     added from this phone; everyone&rsquo;s photos go to the host.
                   </Notice>
-                ) : !privileged && galleryAudienceFor(event) === 'host' ? (
+                ) : !privileged && audience === 'host' ? (
                   <Notice label="Private gallery">
                     The host is keeping this gallery to themselves. Every photo you add goes
                     straight to them.
@@ -217,21 +253,23 @@ export default function EventGalleryPage() {
                     onSelect={setChallengeFilter}
                   />
                 ) : null}
-                {!canSee ? (
+                {gateNotice && !privileged ? (
+                  <GalleryAccessNotice reason={gateNotice} />
+                ) : !canSee ? (
                   <Notice tone="warn" label="Gallery closed">
                     This gallery has closed. Hosts can still reach it from the admin dashboard.
                   </Notice>
                 ) : photos.length === 0 ? (
                   <div className="spx-empty">
                     <p className="spx-display-serif text-2xl">
-                      {!privileged && galleryAudienceFor(event) !== 'everyone'
+                      {!privileged && audience !== 'everyone'
                         ? 'Your photos will show here.'
                         : 'Nothing here yet.'}
                     </p>
                     <p className="spx-body mt-2 max-w-sm text-sm">
-                      {!privileged && galleryAudienceFor(event) === 'host'
+                      {!privileged && audience === 'host'
                         ? 'Only the host sees this gallery. Add yours and they will have them.'
-                        : !privileged && galleryAudienceFor(event) === 'own'
+                        : !privileged && audience === 'own'
                           ? 'Add some and they will appear here for you, and for the host.'
                           : 'Be the first to add something — every photo your guests take lands here.'}
                     </p>

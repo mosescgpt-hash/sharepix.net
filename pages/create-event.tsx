@@ -4,6 +4,7 @@ import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import EventQRCode from '@/components/EventQRCode';
+import SwitchRow from '@/components/SwitchRow';
 import {
   CORPORATE_PLAN,
   PRICING_TIERS,
@@ -13,6 +14,7 @@ import {
   isTrialTier,
 } from '@/lib/pricing';
 import {
+  applyInitialGalleryAccess,
   applyStarterLook,
   createNewEvent,
   getMyCorporateSubscription,
@@ -77,6 +79,12 @@ function CreateEventPage() {
   // (see asksAudience in lib/eventTypes.ts); everyone else can change it later
   // under Guests.
   const [audience, setAudience] = useState<'guests' | 'host-only'>('guests');
+  // What guests may do with the gallery. The defaults are the open ones, and
+  // all of it can be changed from the dashboard at any time.
+  const [viewBlocked, setViewBlocked] = useState(false);
+  const [downloadsBlocked, setDownloadsBlocked] = useState(false);
+  // Set when the event was made but its guest-access choices did not all save.
+  const [accessNotSaved, setAccessNotSaved] = useState(false);
   // A link to a retired plan (an old bookmark, a stale email) must not select
   // something that is no longer for sale.
   const [tierId, setTierId] = useState(isSellableTier(initialTier) ? initialTier : 'plus');
@@ -214,6 +222,13 @@ function CreateEventPage() {
       const look = starterLookFor(lookKey);
       if (look) await applyStarterLook(event.id, look).catch(() => undefined);
 
+      // The guest-access choices, likewise: the event exists either way.
+      const accessSaved = await applyInitialGalleryAccess(event.id, {
+        viewBlocked,
+        downloadsBlocked,
+      }).catch(() => false);
+      if (!accessSaved) setAccessNotSaved(true);
+
       // Active already: covered by a Corporate subscription, or comped outright.
       if (event.paid !== false) {
         setCreatedEvent(event);
@@ -247,6 +262,15 @@ function CreateEventPage() {
         <section className="spx-section-canvas py-10 sm:py-14">
           <div className="mx-auto w-full max-w-lg">
           <div>
+            {accessNotSaved ? (
+              <div className="mb-6">
+                <Notice tone="warn" label="Check guest access">
+                  Your event is live, but one of your choices about who can view or download
+                  did not save. Open the dashboard to set it; until then guests can view and
+                  download.
+                </Notice>
+              </div>
+            ) : null}
             <EventQRCode
               eventId={createdEvent.id}
               eventName={createdEvent.name}
@@ -513,6 +537,27 @@ function CreateEventPage() {
             </div>
           </fieldset>
           ) : null}
+
+          <fieldset>
+            <legend className="text-sm font-medium text-charcoal">What guests can do with the gallery</legend>
+            <p className="mt-1 text-xs text-charcoal/70">
+              Guests can always add photos and videos. Change any of this later from your dashboard.
+            </p>
+            <div className="mt-2 space-y-2">
+              <SwitchRow
+                label="Guests can view the gallery"
+                description="Turn off to keep every photo to yourself."
+                checked={!viewBlocked}
+                onChange={(next) => setViewBlocked(!next)}
+              />
+              <SwitchRow
+                label="Guests can download"
+                description="Turn off and guests see smaller viewing copies."
+                checked={!downloadsBlocked}
+                onChange={(next) => setDownloadsBlocked(!next)}
+              />
+            </div>
+          </fieldset>
 
           <fieldset>
             <legend className="text-sm font-medium text-charcoal">Plan</legend>

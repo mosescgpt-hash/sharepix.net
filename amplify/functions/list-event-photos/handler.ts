@@ -8,19 +8,22 @@ import {
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import type { Schema } from '../../data/resource';
 import {
-  audienceAllows,
   galleryAudienceOf,
+  galleryGateFor,
   isHostOrAdmin,
-  isVisibleTo,
+  photoVisibleTo,
   uploaderIdOf,
   type GalleryAudience,
+  type PhotoRowFacts,
 } from './visibility';
+import { linkKeyMatches, linkRequired, shareIsCurrent, sharingPaused, type SharingFacts } from './galleryGate';
 
 const dynamo = new DynamoDBClient({});
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
 const SHARE_TABLE = process.env.DOWNLOAD_SHARE_TABLE_NAME ?? '';
 const PROFILE_TABLE = process.env.PROFILE_TABLE_NAME ?? '';
+const LINK_TABLE = process.env.GALLERY_LINK_TABLE_NAME ?? '';
 
 interface Credit {
   name: string | null;
@@ -70,6 +73,9 @@ interface EventFacts {
   takenDown: boolean;
   owner: string;
   audience: GalleryAudience;
+  /** The host turned guest viewing off. */
+  viewBlocked: boolean;
+  sharing: SharingFacts;
 }
 
 /**
@@ -81,14 +87,21 @@ interface EventFacts {
  * regardless.
  */
 async function eventFacts(eventId: string): Promise<EventFacts> {
-  const fallback: EventFacts = { takenDown: false, owner: '', audience: 'everyone' };
+  const fallback: EventFacts = {
+    takenDown: false,
+    owner: '',
+    audience: 'everyone',
+    viewBlocked: false,
+    sharing: {},
+  };
   if (!EVENT_TABLE) return fallback;
   const found = await dynamo
     .send(
       new GetItemCommand({
         TableName: EVENT_TABLE,
         Key: { id: { S: eventId } },
-        ProjectionExpression: 'takenDownAt, #owner, galleryAudience',
+        ProjectionExpression:
+          'takenDownAt, #owner, galleryAudience, guestViewBlocked, sharingPaused, galleryLinkSet, linkRotatedAt',
         ExpressionAttributeNames: { '#owner': 'owner' },
       }),
     )
@@ -98,7 +111,26 @@ async function eventFacts(eventId: string): Promise<EventFacts> {
     takenDown: Boolean(found.Item.takenDownAt?.S),
     owner: found.Item.owner?.S ?? '',
     audience: galleryAudienceOf(found.Item.galleryAudience?.S),
+    viewBlocked: found.Item.guestViewBlocked?.BOOL === true,
+    sharing: {
+      sharingPaused: found.Item.sharingPaused?.BOOL === true,
+      galleryLinkSet: found.Item.galleryLinkSet?.BOOL === true,
+      linkRotatedAt: found.Item.linkRotatedAt?.S ?? null,
+    },
   };
+}
+
+/**
+ * Whether this link key is the event's current one. The key lives in a table
+ * guests cannot read. Fails closed: no key set, none given, or a failed read all
+ * mean "not presented".
+ */
+async function keyIsValid(eventId: string, key: string): Promise<boolean> {
+  if (!LINK_TABLE || !key) return false;
+  const found = await dynamo
+    .send(new GetItemCommand({ TableName: LINK_TABLE, Key: { id: { S: eventId } }, ProjectionExpression: 'linkKey' }))
+    .catch(() => null);
+  return linkKeyMatches(found?.Item?.linkKey?.S, key);
 }
 
 /**
@@ -107,15 +139,23 @@ async function eventFacts(eventId: string): Promise<EventFacts> {
  *
  * A share is the host choosing particular photos for particular people, so it
  * is honoured whatever the gallery setting — a host who keeps the gallery to
- * themselves and then sends a share link meant it to work.
+ * themselves and then sends a share link meant it to work. Two things end it
+ * anyway: pausing sharing (checked by the caller) and replacing the QR code,
+ * which voids every share made before it.
  */
-async function sharedPhotoIds(shareId: string, eventId: string): Promise<Set<string> | null> {
+async function sharedPhotoIds(
+  shareId: string,
+  eventId: string,
+  sharing: SharingFacts,
+): Promise<Set<string> | null> {
   if (!SHARE_TABLE || !shareId) return null;
   const found = await dynamo
     .send(new GetItemCommand({ TableName: SHARE_TABLE, Key: { id: { S: shareId } } }))
     .catch(() => null);
   const item = found?.Item;
   if (!item || item.eventId?.S !== eventId) return null;
+  // A share made before the host replaced the QR code is void.
+  if (!shareIsCurrent(item.createdAt?.S, sharing)) return null;
   const expires = item.expiresAt?.S ? Date.parse(item.expiresAt.S) : NaN;
   if (Number.isFinite(expires) && expires <= Date.now()) return null;
   try {
@@ -205,6 +245,24 @@ async function photosForEvent(eventId: string): Promise<PhotoItem[]> {
   return scanned;
 }
 
+function factsOf(item: PhotoItem): PhotoRowFacts {
+  return {
+    id: item.id?.S,
+    s3Key: item.s3Key?.S,
+    previewS3Key: item.previewS3Key?.S,
+    thumbS3Key: item.thumbS3Key?.S,
+    approved: item.approved?.BOOL,
+    moderationStatus: item.moderationStatus?.S,
+    eventOwner: item.eventOwner?.S,
+    boothMatch: item.boothMatch?.S,
+    publishStatus: item.publishStatus?.S,
+    boothDivider: item.boothDivider?.BOOL,
+    boothSegment: item.boothSegment?.S,
+    uploaderId: item.uploaderId?.S,
+    uploadedByUserId: item.uploadedByUserId?.S,
+  };
+}
+
 type Handler = Schema['listEventPhotos']['functionHandler'];
 
 export const handler: Handler = async (event) => {
@@ -221,48 +279,54 @@ export const handler: Handler = async (event) => {
   // A closed event lists nothing to anyone but an admin.
   if (!(identity?.groups ?? []).includes('ADMINS') && facts.takenDown) return [];
 
-  // The host's gallery setting. The host and admins see everything; a share
-  // link sees exactly what the host put in it; everyone else sees what the
-  // setting allows.
+  // The host's gallery settings. The host and admins see everything; a share
+  // link sees exactly what the host put in it (until sharing is paused or the QR
+  // code is replaced); everyone else sees what the settings allow, once they
+  // hold the current guest link when the host has replaced it.
   const privileged = isHostOrAdmin(identity, facts.owner);
-  const shared = privileged ? null : await sharedPhotoIds(event.arguments.shareId ?? '', eventId);
-  const callerId = uploaderIdOf(identity);
-  const audienceFilter = (item: PhotoItem) => {
-    if (privileged) return true;
-    if (shared) return shared.has(item.id?.S ?? '');
-    return audienceAllows(
-      facts.audience,
-      { uploaderId: item.uploaderId?.S, uploadedByUserId: item.uploadedByUserId?.S },
-      callerId,
-    );
-  };
-
+  const paused = sharingPaused(facts.sharing);
+  const shared =
+    privileged || paused
+      ? null
+      : await sharedPhotoIds(event.arguments.shareId ?? '', eventId, facts.sharing);
+  const needsKey = linkRequired(facts.sharing);
+  const gate = galleryGateFor({
+    privileged,
+    shared: shared !== null,
+    paused,
+    viewBlocked: facts.viewBlocked,
+    audience: facts.audience,
+    linkRequired: needsKey,
+    // Only looked up when it can matter: a key is required and one came with the call.
+    keyValid:
+      needsKey && !privileged && !shared
+        ? await keyIsValid(eventId, event.arguments.linkKey ?? '')
+        : false,
+  });
   // Nothing to read for a guest of a host-only gallery.
-  if (!privileged && !shared && facts.audience === 'host') return [];
+  if (gate === 'blocked') return [];
+  // The client matches on these to explain, rather than show an error.
+  if (gate === 'paused') throw new Error('SHARING_PAUSED');
+  if (gate === 'key') throw new Error('LINK_REQUIRED');
 
+  const callerId = uploaderIdOf(identity);
   const items = await photosForEvent(eventId);
 
   // This query serves guests — the public gallery and the live slideshow — so it
   // is where content screening and video visibility are enforced. A photo held
   // for review is withheld here; the host reads the Photo model directly (owner
   // auth) and still sees everything, which is how flagged photos stay
-  // reviewable and how the host keeps every video.
-  const visible = items
-    .filter((item) => item.approved?.BOOL !== false)
-    // Booth photos: only published event or category photos, never a person's
-    // (docs/booth-mode.md, "Shared gallery"). Belt and braces over `approved`.
-    .filter(
-      (item) =>
-        item.boothMatch?.S === undefined ||
-        (item.publishStatus?.S === 'published' &&
-          item.boothDivider?.BOOL !== true &&
-          (item.boothSegment?.S === 'event' || item.boothSegment?.S === 'category')),
-    )
-    .filter((item) => item.moderationStatus?.S !== 'flagged')
-    .filter((item) =>
-      isVisibleTo({ s3Key: item.s3Key?.S, eventOwner: item.eventOwner?.S }, identity),
-    )
-    .filter(audienceFilter);
+  // reviewable and how the host sees every video waiting for them. One rule
+  // (photoVisibleTo) decides, and media-url applies the same one to every URL.
+  const visible = items.filter((item) =>
+    photoVisibleTo(factsOf(item), {
+      identity,
+      audience: facts.audience,
+      callerId,
+      privileged,
+      shared,
+    }),
+  );
 
   const photographerIds = [
     ...new Set(

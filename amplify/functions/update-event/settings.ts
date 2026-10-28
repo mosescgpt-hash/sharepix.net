@@ -108,6 +108,10 @@ export interface SettingsRequest {
   coverStyle?: string | null;
   /** 'everyone' | 'own' | 'host'. Who may see the gallery. */
   galleryAudience?: string | null;
+  /** True hides the gallery from guests altogether. See docs/gallery-access.md. */
+  guestViewBlocked?: boolean | null;
+  /** True pauses sharing: guests can upload but view and download nothing. */
+  sharingPaused?: boolean | null;
 }
 
 /** The event as stored, insofar as these rules care. */
@@ -321,6 +325,8 @@ export function buildPatch(
     'reactionsEnabled',
     'commentsEnabled',
     'boothMode',
+    'guestViewBlocked',
+    'sharingPaused',
   ] as const) {
     const value = request[flag];
     if (!provided(value)) continue;
@@ -378,4 +384,6 @@ export const EDITABLE_FIELDS = [
   'qrLogo',
   'coverStyle',
   'galleryAudience',
+  'guestViewBlocked',
+  'sharingPaused',
 ];

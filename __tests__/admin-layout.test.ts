@@ -109,7 +109,7 @@ describe('the settings tabs', () => {
     inPanel('guests', 'extras', [
       'What guests can do',
       'Photo screening',
-      'Guest downloads',
+      '<GalleryAccessSettings',
       'Guest videos',
       '<HostReminderSettings',
       '<ChallengesManager',
@@ -191,7 +191,7 @@ describe('nothing was dropped in the move', () => {
     'Save details',
     '<GalleryStyleSettings',
     'Photo screening',
-    'Guest downloads',
+    '<GalleryAccessSettings',
     'Guest videos',
     'alert-email',
     'Invite a photographer',

@@ -69,6 +69,14 @@ export interface QREvent {
   guestDownloadEnabled?: boolean | null;
   /** Host withheld guest downloads. Absent/false = downloads allowed. */
   guestDownloadsBlocked?: boolean | null;
+  /** Host keeps the gallery to themselves; guests can still add photos. */
+  guestViewBlocked?: boolean | null;
+  /** Host paused sharing: guests can add photos but view and download nothing. */
+  sharingPaused?: boolean | null;
+  /** True once the host has replaced the QR code, so guests need the current link. */
+  galleryLinkSet?: boolean | null;
+  /** When the QR code was last replaced. */
+  linkRotatedAt?: string | null;
   liveSlideshowEnabled?: boolean | null;
   /** Guest book bought as an add-on. Included on Plus/Corporate regardless. */
   guestBookEnabled?: boolean | null;
@@ -145,7 +153,7 @@ export interface QRPhoto {
   approved?: boolean | null;
   eventOwner?: string | null;
   contentHash?: string | null;
-  /** 'ok' | 'flagged' | 'released' | 'skipped'; missing on pre-screening photos. */
+  /** 'ok' | 'flagged' | 'released' | 'skipped' | 'held' (a guest video awaiting the host); missing on pre-screening photos. */
   moderationStatus?: string | null;
   /** What the screener detected, when flagged. */
   moderationReasons?: string | null;

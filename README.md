@@ -91,9 +91,9 @@ amplify/
   backend.ts           Wiring: every function's env, IAM, queues and triggers
   auth/resource.ts     Cognito — email sign-in for hosts
   data/resource.ts     Models, auth rules, and the custom mutations
-  storage/resource.ts  S3 — read/write for everyone, delete for nobody
+  storage/resource.ts  S3 — write for guests, no direct reads, delete for nobody
   waf.ts               API rate limiting, off unless WAF_ENABLED is set
-  functions/           51 Lambdas; each has resource.ts (config) + handler.ts
+  functions/           52 Lambdas; each has resource.ts (config) + handler.ts
 pages/                 Routes. lib/seo.ts says which are public
 components/            Shared UI
 lib/                   Rules, as pure functions. This is where behaviour lives
@@ -133,6 +133,7 @@ two copies that quietly disagree about money.
 | [docs/decisions.md](docs/decisions.md) | Product decisions, each naming what it supersedes |
 | [docs/r2-hybrid.md](docs/r2-hybrid.md) | Why writes go to S3 and reads come from R2 |
 | [docs/event-authorization.md](docs/event-authorization.md) | Who may write an event, and why the obvious approach was not safe |
+| [docs/gallery-access.md](docs/gallery-access.md) | Who can view and download a gallery, pausing sharing, replacing the QR code, and how it is enforced |
 | [docs/moderation.md](docs/moderation.md) | Content screening, and what is deliberately never flagged |
 | [docs/media-limits.md](docs/media-limits.md) | Upload size limits and where each is enforced |
 | [docs/alerting.md](docs/alerting.md) | What pages an operator when a Lambda starts failing |
@@ -151,8 +152,11 @@ two copies that quietly disagree about money.
 
 - **Hosts** sign in with email. Events are `owner`-protected.
 - **Guests** never sign in. The identity pool's unauthenticated role lets them
-  read events, create photos, and write to `events/*` in S3.
-- **Nobody gets S3 delete.** `storage/resource.ts` grants `read` and `write` and
+  read events, create photos, and write to `events/*` in S3. They can **not**
+  read `events/*`: every photo is fetched through a short-lived signed URL from
+  `mediaUrls`, issued only after the host's view, pause and QR-code rules pass
+  (see [docs/gallery-access.md](docs/gallery-access.md)).
+- **Nobody gets S3 delete.** `storage/resource.ts` grants `write` and
   stops there; deletion runs through the `deleteEventPhoto` function, which
   checks ownership first. A blanket delete grant would let any signed-in user
   remove another event's files.

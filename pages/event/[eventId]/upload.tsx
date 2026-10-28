@@ -11,6 +11,7 @@ import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
 import type { EventChallenge } from '@/lib/challenges/api';
 import { NO_PER_GUEST_LIMIT_LINE } from '@/lib/fairUse';
 import { galleryAudienceFor } from '@/lib/galleryAudience';
+import { captureLinkKey } from '@/lib/galleryAccess';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { fetchEvent, fetchEventMoments } from '@/lib/api';
 import { eventLifecycle } from '@/lib/lifecycle';
@@ -49,6 +50,9 @@ export default function GuestUploadPage() {
     if (!eventId) return;
     let cancelled = false;
     setLoading(true);
+    // A QR code made after the host replaced the QR code carries a key after the
+    // #. Keep it for this tab so the gallery links below open with it.
+    captureLinkKey(eventId);
     fetchEvent(eventId)
       .then((ev) => {
         if (cancelled) return;
@@ -223,7 +227,12 @@ export default function GuestUploadPage() {
 
               {/* A host who keeps the gallery to themselves has nothing to
                   link guests to; one who shows guests their own says so. */}
-              {galleryAudienceFor(event) !== 'host' ? (
+              {event.sharingPaused === true ? (
+                <p className="mt-8 text-center text-sm text-charcoal/70">
+                  The host has paused sharing for now — the gallery is closed, but your photos still
+                  reach them.
+                </p>
+              ) : galleryAudienceFor(event) !== 'host' && event.guestViewBlocked !== true ? (
                 <p className="mt-8 text-center text-sm">
                   <Link href={`/event/${event.id}`} className="text-pine underline">
                     {galleryAudienceFor(event) === 'own'

@@ -12,6 +12,7 @@ import { GUEST_UPLOAD_MESSAGES, MAX_GUEST_UPLOADS, guestUploadRefusal } from './
 import { readBoothLink } from './boothLink';
 import { openContact } from './boothSeal';
 import { sharedGalleryFor } from './sharedGallery';
+import { linkRequired, sharingPaused } from './galleryGate';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   LINK_TTL_SECONDS,
@@ -374,7 +375,14 @@ export const handler = async (event: {
     emailsStopped: attendee.emailsStopped?.BOOL === true,
     ...uploadState(attendee, ev.Item),
     eventId,
-    ...sharedGalleryFor({ eventId, audience: ev.Item.galleryAudience?.S ?? null, takenDown: false }),
+    ...sharedGalleryFor({
+      eventId,
+      audience: ev.Item.galleryAudience?.S ?? null,
+      takenDown: false,
+      viewBlocked: ev.Item.guestViewBlocked?.BOOL === true,
+      paused: sharingPaused({ sharingPaused: ev.Item.sharingPaused?.BOOL === true }),
+      linkRequired: linkRequired({ galleryLinkSet: ev.Item.galleryLinkSet?.BOOL === true }),
+    }),
   };
 };
 

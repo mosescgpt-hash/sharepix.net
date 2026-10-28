@@ -8,6 +8,7 @@ import { updateEvent as updateEventFn } from '../functions/update-event/resource
 import { stripeCheckout as stripeCheckoutFn } from '../functions/stripe-checkout/resource';
 import { printCheckout as printCheckoutFn } from '../functions/print-checkout/resource';
 import { listEventPhotos as listEventPhotosFn } from '../functions/list-event-photos/resource';
+import { galleryAccess as galleryAccessFn } from '../functions/gallery-access/resource';
 import { adminUserActions as adminUserActionsFn } from '../functions/admin-user-actions/resource';
 import { accountEmails as accountEmailsFn } from '../functions/account-emails/resource';
 import { boothSignup as boothSignupFn } from '../functions/booth-signup/resource';
@@ -308,6 +309,25 @@ const schema = a.schema({
       // only their own uploads) or 'host'. Enforced in listEventPhotos. See
       // amplify/functions/list-event-photos/visibility.ts.
       galleryAudience: a.string(),
+      // Phase 2 gallery access (docs/gallery-access.md). Guests can always
+      // upload; these decide what they can do afterwards.
+      //
+      // guestViewBlocked: true means guests see no gallery at all (their photos
+      // still go to the host). Absent or false = guests can view, which is
+      // every event made before this existed. Download is the existing
+      // guestDownloadsBlocked above.
+      guestViewBlocked: a.boolean(),
+      // sharingPaused: the host's "Pause sharing" switch. While true, guests
+      // can still upload but view and download nothing: listEventPhotos and
+      // mediaUrls refuse them and download shares stop. Absent/false = normal.
+      sharingPaused: a.boolean(),
+      // galleryLinkSet / linkRotatedAt: set by manageGalleryLink (never by the
+      // host's own writes) when the host replaces the QR code. galleryLinkSet
+      // means guests must present the current link key, which is held in
+      // GalleryLink, not on this guest-readable row. linkRotatedAt voids any
+      // download share made before it.
+      galleryLinkSet: a.boolean(),
+      linkRotatedAt: a.string(),
       // Whether guests may upload video. Missing means allowed, so existing
       // events are unchanged. Hosts who want only screened media can turn it
       // off, since automated screening covers stills but not video.
@@ -895,6 +915,20 @@ const schema = a.schema({
       recordedAt: a.datetime(),
     })
     .secondaryIndexes((index) => [index('eventId')])
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  // The guest link key: the secret in the event's QR codes and links once the
+  // host has used "Replace QR code". The row id is the event id. Written by the
+  // gallery-access function and read by it, media-url and list-event-photos, so
+  // it never rides on the guest-readable Event row, where every guest would be
+  // handed it. No host or guest rule at all. Replacing the QR code overwrites
+  // linkKey, which stops every link and QR code made with the old one.
+  GalleryLink: a
+    .model({
+      eventId: a.string(),
+      linkKey: a.string(),
+      rotatedAt: a.datetime(),
+    })
     .authorization((allow) => [allow.group('ADMINS')]),
 
   QuotaCounter: a
@@ -1637,7 +1671,9 @@ const schema = a.schema({
   listEventPhotos: a
     .query()
     // shareId: a host's download share, honoured whatever the gallery setting.
-    .arguments({ eventId: a.id().required(), shareId: a.string() })
+    // linkKey: the key in the event's current QR code or link, needed once the
+    // host has replaced the QR code.
+    .arguments({ eventId: a.id().required(), shareId: a.string(), linkKey: a.string() })
     .returns(a.ref('EventPhoto').array())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(listEventPhotosFn)),
@@ -2709,6 +2745,8 @@ const schema = a.schema({
       commentsEnabled: a.boolean(),
       coverStyle: a.string(),
       galleryAudience: a.string(),
+      guestViewBlocked: a.boolean(),
+      sharingPaused: a.boolean(),
     })
     .returns(a.ref('UserActionResult'))
     .authorization((allow) => [allow.authenticated()])
@@ -2801,9 +2839,15 @@ const schema = a.schema({
   // is free. `url` is null whenever R2 cannot serve it — unconfigured, the
   // object was never mirrored, or the caller may not have it — and the client
   // falls back to S3, which is what every caller did before this existed.
+  //
+  // `fallbackUrl` is the same object from S3, signed by the function. Browsers
+  // no longer hold S3 read credentials (guests used to have blanket get on
+  // events/*, which made every gallery rule advisory), so S3 is reached only
+  // through this function, after the same checks as R2.
   MediaUrl: a.customType({
     key: a.string().required(),
     url: a.string(),
+    fallbackUrl: a.string(),
   }),
 
   // Batched, because a gallery needs one URL per photo and a per-photo query
@@ -2811,12 +2855,40 @@ const schema = a.schema({
   // for one key through the same path.
   mediaUrls: a
     .query()
-    .arguments({ eventId: a.id().required(), keys: a.string().array().required() })
+    // linkKey: the key in the current QR code or link. shareId: a host's download share, which
+    // is honoured whatever the gallery setting. reviewToken: a moderation
+    // review link, which may see only the one photo it was made for.
+    .arguments({
+      eventId: a.id().required(),
+      keys: a.string().array().required(),
+      linkKey: a.string(),
+      shareId: a.string(),
+      reviewToken: a.string(),
+    })
     .returns(a.ref('MediaUrl').array())
     // Guests have no account, so this has to be reachable by them; the handler
     // decides which of the requested keys any given caller may actually have.
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(mediaUrlFn)),
+
+  GalleryLinkResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    /** The current guest link key, or null before the QR code was first replaced. */
+    linkKey: a.string(),
+    rotatedAt: a.string(),
+  }),
+
+  // The host reads the guest link key (to put it in QR codes and links) or
+  // replaces it. Replacing it stops every older QR code, link and download
+  // share opening the gallery. action: 'get' | 'rotate'. Host or admin only,
+  // checked in the function. See amplify/functions/gallery-access.
+  manageGalleryLink: a
+    .mutation()
+    .arguments({ eventId: a.id().required(), action: a.string().required() })
+    .returns(a.ref('GalleryLinkResult'))
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(galleryAccessFn)),
 
   // `redeemDiscountCode` used to live here: a mutation that spent one use of a
   // code and gave nothing back but a confirmation. Any signed-in caller could

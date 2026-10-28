@@ -2,7 +2,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { QRCodeSVG } from 'qrcode.react';
-import { fetchEvent, fetchEventPhotoRecords, getPhotoDisplaySource } from '@/lib/api';
+import {
+  fetchEvent,
+  fetchEventPhotoRecords,
+  getCurrentUserInfo,
+  getPhotoDisplaySource,
+} from '@/lib/api';
+import GalleryAccessNotice from '@/components/GalleryAccessNotice';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
+import { isGlobalAdmin } from '@/lib/admin';
+import { isEventHost } from '@/lib/gallery';
+import { galleryAudienceFor } from '@/lib/galleryAudience';
+import {
+  captureLinkKey,
+  guestLinkPath,
+  isLinkRequiredError,
+  isSharingPausedError,
+} from '@/lib/galleryAccess';
 import { liveSlideshowAvailable } from '@/lib/pricing';
 import { FallbackImage } from '@/components/FallbackMedia';
 import { initialSource, type MediaSource } from '@/lib/mediaSource';
@@ -49,6 +65,13 @@ export default function LiveSlideshowPage() {
   const [isNew, setIsNew] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
   const [photoCount, setPhotoCount] = useState(0);
+  // Why this screen has nothing to show: the host paused sharing, or the link
+  // it was opened from was replaced. Cleared by the next poll that succeeds, so
+  // a screen left running picks up again when the host resumes.
+  const [gate, setGate] = useState<'paused' | 'replaced' | null>(null);
+  // The host (or an admin) is watching, so the server will not turn them away.
+  const [hostView, setHostView] = useState(false);
+  const { key: linkKey } = useGuestLinkKey(eventId, hostView);
   // Photo challenges, for the caption under a challenge photo. [] unless the
   // host turned challenges on.
   const challenges = useEventChallenges(event);
@@ -63,7 +86,7 @@ export default function LiveSlideshowPage() {
 
   const uploadUrl =
     typeof window !== 'undefined' && eventId
-      ? `${window.location.origin}/event/${eventId}/upload`
+      ? `${window.location.origin}${guestLinkPath(eventId, linkKey, 'upload')}`
       : '';
 
   /** Where to load a photo from, reusing a cached pair until it is near expiry. */
@@ -84,6 +107,7 @@ export default function LiveSlideshowPage() {
     if (!eventId) return;
     try {
       const records = await fetchEventPhotoRecords(eventId);
+      setGate(null);
       const eligible = slideshowEligible(records);
       reelRef.current = eligible;
       setPhotoCount(eligible.length);
@@ -94,8 +118,11 @@ export default function LiveSlideshowPage() {
         const queued = new Set(queueRef.current.map((item) => item.id));
         queueRef.current.push(...arrivals.filter((item) => !queued.has(item.id)));
       }
-    } catch {
-      // A failed poll is not fatal — the reel we already have keeps playing.
+    } catch (err) {
+      // Sharing was paused, or the QR code replaced, while the screen was running.
+      if (isSharingPausedError(err)) setGate('paused');
+      else if (isLinkRequiredError(err)) setGate('replaced');
+      // Any other failed poll is not fatal — the reel we already have keeps playing.
     }
   }, [eventId]);
 
@@ -150,6 +177,26 @@ export default function LiveSlideshowPage() {
           );
           return;
         }
+
+        // Who may watch. The server refuses everything it should (this only
+        // decides what to show), and a host who is signed in as themselves
+        // always sees their own event.
+        const [user, admin] = await Promise.all([
+          getCurrentUserInfo(),
+          isGlobalAdmin().catch(() => false),
+        ]);
+        const privileged = isEventHost(ev, user) || admin;
+        if (!privileged && (ev.guestViewBlocked === true || galleryAudienceFor(ev) === 'host')) {
+          setError(
+            'The live slideshow is off because the host is keeping this gallery to themselves. The host can open it while signed in, or allow guests to view the gallery.',
+          );
+          return;
+        }
+        setHostView(privileged);
+        // A screen link made after the QR code was replaced carries its key
+        // after the #. It stays in the address bar, so a venue screen that is
+        // reloaded in the middle of the night still opens.
+        if (!privileged) captureLinkKey(eventId);
         await refresh();
         if (!cancelled) await advance();
       } catch {
@@ -245,6 +292,10 @@ export default function LiveSlideshowPage() {
         {error ? (
           <div className="flex h-full items-center justify-center px-8 text-center">
             <p className="text-xl text-white/80">{error}</p>
+          </div>
+        ) : gate ? (
+          <div className="flex h-full items-center justify-center px-6">
+            <GalleryAccessNotice dark what="the slideshow" reason={gate} />
           </div>
         ) : loading ? (
           <div className="flex h-full items-center justify-center">

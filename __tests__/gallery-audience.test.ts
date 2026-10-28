@@ -191,12 +191,15 @@ describe('listEventPhotos with the setting', () => {
 });
 
 describe('storage does not undo it', () => {
-  it('lets guests and signed-in users open files by key but not list a folder', () => {
+  it('lets guests and signed-in users write files but never open them by key or list a folder', () => {
     const rules = read('amplify/storage/resource.ts');
     const events = rules.slice(rules.indexOf("'events/*': ["), rules.indexOf("'demo/*'"));
-    expect(events).toContain("allow.guest.to(['get', 'write'])");
-    expect(events).toContain("allow.authenticated.to(['get', 'write'])");
-    expect(events).not.toMatch(/allow\.(guest|authenticated)\.to\(\[[^\]]*'(read|list)'/);
+    // Reads go through mediaUrls' signed URLs, issued after the host's view
+    // and sharing rules. A direct 'get' here would let anyone with an event id
+    // and a file name walk around all of them.
+    expect(events).toContain("allow.guest.to(['write'])");
+    expect(events).toContain("allow.authenticated.to(['write'])");
+    expect(events).not.toMatch(/allow\.(guest|authenticated)\.to\(\[[^\]]*'(get|read|list)'/);
   });
 
   it('and the browser never asks to list', () => {

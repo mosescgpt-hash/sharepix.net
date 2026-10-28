@@ -5,7 +5,7 @@ describe('deleting several photos at once on Manage', () => {
 
   it('keeps the delete selection separate from the download-QR selection', () => {
     expect(grid).toContain('const [toDelete, setToDelete]');
-    expect(grid).toMatch(/const canSelect = selectable && !hidden && !deleteMode;/);
+    expect(grid).toMatch(/const canSelect = selectable && !hidden && !held && !deleteMode;/);
   });
 
   it('asks once for the whole batch, then deletes each through the same call as one', () => {

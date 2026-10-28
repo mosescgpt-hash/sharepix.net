@@ -153,8 +153,12 @@ describe('the S3 copy is a repair window, not a second archive', () => {
     // that sentence. This is the sixth time that has happened in this codebase.
     expect(printFulfill).toContain('falling back to S3');
     expect(codeOnly(mediaUrl)).not.toContain('falling back to S3');
-    expect(mediaUrl).toContain('this key will not resolve');
-    // The real assertion behind it: media-url signs against R2 and nothing else.
+    // Guests no longer hold an S3 read of their own, so media-url signs the S3
+    // copy itself and returns it as `fallbackUrl`, after the same visibility
+    // check as the R2 URL. It is the repair window, signed server-side, and it
+    // is only ever handed out beside an R2 URL for the same checked key.
+    expect(mediaUrl).toContain('Could not sign an R2 URL');
+    expect(mediaUrl).toContain('fallbackUrl');
     expect(codeOnly(mediaUrl)).not.toContain('Bucket: BUCKET');
   });
 });

@@ -9,6 +9,8 @@ import { fetchEvent, getCurrentUserInfo } from '@/lib/api';
 import { isGlobalAdmin } from '@/lib/admin';
 import { QREvent } from '@/lib/types';
 import { invitesUploads, parseAudience, signHeadline, signMessage } from '@/lib/eventAudience';
+import { guestLinkPath } from '@/lib/galleryAccess';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 
 function formatDate(value?: string | null) {
   if (!value) return null;
@@ -30,6 +32,7 @@ function EventBrochurePage() {
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadUrl, setUploadUrl] = useState('');
+  const { key: linkKey, ready: keyReady } = useGuestLinkKey(eventId);
   const qrContainerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -65,9 +68,9 @@ function EventBrochurePage() {
   }, [load]);
 
   useEffect(() => {
-    if (!eventId) return;
-    setUploadUrl(`${window.location.origin}/event/${eventId}/upload`);
-  }, [eventId]);
+    if (!eventId || !keyReady) return;
+    setUploadUrl(`${window.location.origin}${guestLinkPath(eventId, linkKey, 'upload')}`);
+  }, [eventId, keyReady, linkKey]);
 
   // Render a crisp, high-error-correction QR that points at the guest upload page.
   useEffect(() => {

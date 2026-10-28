@@ -8,7 +8,7 @@ import {
   RekognitionClient,
   DetectModerationLabelsCommand,
 } from '@aws-sdk/client-rekognition';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
 import {
@@ -29,7 +29,7 @@ import {
   milestonesCrossed,
   type AnalyticsEventName,
 } from './analytics';
-import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD } from './moderation';
+import { evaluateModeration, MODERATION_CONFIDENCE_THRESHOLD, videoStatusFor } from './moderation';
 import { uploadWindowClosed, UPLOAD_WINDOW_CLOSED_MESSAGE } from './uploadWindow';
 import { anchoredWindowEnd, uploadWindowDaysFor } from './uploadWindowStart';
 import { contributorKey, contributorRowId, isSuccessfulEvent } from './successfulEvent';
@@ -771,6 +771,29 @@ export const handler: Handler = async (event) => {
     if (existing) return readPhoto(existing, true);
   }
 
+  // The original must actually be in storage before a record points at it. The
+  // browser used to check this itself with a storage read; guests no longer
+  // have one, so the check lives here. Only a definite "not there" fails the
+  // upload; any other trouble (a throttle, a permissions gap) is logged and
+  // lets the upload through, because a record without a file is a retryable
+  // nuisance and a gallery that cannot take uploads is an outage.
+  if (BUCKET_NAME) {
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: s3Key }));
+    } catch (error) {
+      const name = (error as { name?: string }).name;
+      const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+      if (name === 'NotFound' || name === 'NoSuchKey' || status === 404) {
+        throw new Error('That upload did not finish. Please try again.');
+      }
+      console.error('Could not confirm an uploaded file exists', {
+        at: new Date().toISOString(),
+        s3Key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   const found = await dynamo.send(
     new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }),
   );
@@ -1114,8 +1137,21 @@ export const handler: Handler = async (event) => {
   // briefly visible to guests. A host who has chosen to allow everything skips
   // screening altogether — nothing is held back, and no Rekognition call is
   // made or paid for.
-  const screening =
-    (ev.moderationMode?.S ?? 'review') === 'allow_all'
+  //
+  // A video cannot be screened, so a guest's waits for the host instead: it is
+  // stored 'held', kept out of the gallery, slideshow and ZIP, and shown in the
+  // dashboard's approval queue (docs/moderation.md). Not 'flagged' — that
+  // status drives the alert emails and the flagged count, and nothing about a
+  // video is suspect; it is simply unreviewed.
+  const screening = isVideo
+    ? {
+        status: videoStatusFor({
+          isGuestUpload,
+          moderationMode: ev.moderationMode?.S,
+        }) as string,
+        reasons: [] as string[],
+      }
+    : (ev.moderationMode?.S ?? 'review') === 'allow_all'
       ? { status: 'skipped', reasons: [] as string[] }
       : await screenPhoto(s3Key);
 

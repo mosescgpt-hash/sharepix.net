@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
 import NfcOrderCard from '@/components/signKit/NfcOrderCard';
 import { eventUploadUrl } from '@/lib/signKit/content';
+import { useGuestLinkKey } from '@/lib/useGuestLinkKey';
 import { useHostEvent } from '@/lib/signKit/useHostEvent';
 
 /**
@@ -15,12 +16,13 @@ import { useHostEvent } from '@/lib/signKit/useHostEvent';
 function NfcPage() {
   const { eventId, event, loading, denied, error } = useHostEvent();
   const [link, setLink] = useState('');
+  const { key: linkKey, ready: keyReady } = useGuestLinkKey(eventId);
   const [copied, setCopied] = useState<'yes' | 'manual' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (event) setLink(eventUploadUrl(window.location.origin, event.id));
-  }, [event]);
+    if (event && keyReady) setLink(eventUploadUrl(window.location.origin, event.id, linkKey));
+  }, [event, keyReady, linkKey]);
 
   const copy = async () => {
     try {

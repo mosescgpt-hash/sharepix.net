@@ -107,3 +107,22 @@ export function evaluateModeration(
 
   return { flagged: reasons.length > 0, reasons: [...new Set(reasons)] };
 }
+
+/**
+ * The verdict stored on a video, which image screening cannot give.
+ *
+ * A guest's video waits for the host ('held') unless the host has chosen to
+ * allow everything. A video the host uploaded themselves, or any video in an
+ * allow-everything event, is 'released' — already approved, there being
+ * nobody to approve it. Guests only ever see a video whose status is
+ * 'released' (list-event-photos/visibility.ts), so this is the line between
+ * "in the gallery" and "waiting". Videos from before this existed carry
+ * 'skipped' and stay host-only until the host approves them.
+ */
+export function videoStatusFor(input: {
+  isGuestUpload: boolean;
+  moderationMode: string | undefined;
+}): 'held' | 'released' {
+  if (!input.isGuestUpload) return 'released';
+  return (input.moderationMode ?? 'review') === 'allow_all' ? 'released' : 'held';
+}

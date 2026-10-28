@@ -42,25 +42,31 @@ export function isHostOrAdmin(
 }
 
 /**
- * Whether a photo record should be returned to this caller.
+ * Whether a photo record should be returned to this caller, as far as its
+ * status and kind go.
  *
- * Videos are **host-only**. A still is resized to a 1280px preview before it is
- * ever served; a video is streamed from S3 at full size on every play, which
- * makes guest playback by far the largest variable cost in the product. Hosts
- * still get every video — they are what the couple actually wants — but a
- * hundred guests re-watching each other's clips is a bill with no ceiling.
+ * Held videos are shown to nobody here. A guest's video waits for the host's
+ * OK (`moderationStatus: 'held'`, set by createEventPhoto) because automated
+ * screening covers stills and not video; the host decides in the dashboard,
+ * which reads the Photo model directly and so still sees it. Once the host
+ * approves it ('released') it is a normal gallery item for guests too.
  *
- * Enforced here rather than in the gallery because guests hold S3 get
- * credentials for the bucket: hiding a video in the UI while still handing out
- * its object key would not be a gate at all. (They cannot list the bucket —
- * see amplify/storage/resource.ts — so a key they were never given is one they
- * would have to guess.)
+ * Videos that predate review have no verdict ('skipped' or none) and stay
+ * host-only, as they always were, until the host approves them the same way.
+ * A still is resized to a 1280px preview before it is ever served; a video
+ * streams at full size every play, which is why a guest only ever gets one the
+ * host has looked at and let through.
+ *
+ * Enforced here and in media-url, not in the gallery: hiding a video in the UI
+ * while handing out its key or its URL would not be a gate at all.
  */
 export function isVisibleTo(
-  item: { s3Key?: string; eventOwner?: string },
+  item: { s3Key?: string; eventOwner?: string; moderationStatus?: string },
   identity: CallerIdentity | null | undefined,
 ): boolean {
+  if (item.moderationStatus === 'held') return false;
   if (!isVideoKey(item.s3Key)) return true;
+  if (item.moderationStatus === 'released') return true;
   return isHostOrAdmin(identity, item.eventOwner);
 }
 
@@ -112,4 +118,92 @@ export function audienceAllows(
   if (audience === 'everyone') return true;
   if (audience === 'host' || !callerId) return false;
   return photo.uploaderId === callerId || photo.uploadedByUserId === callerId;
+}
+
+/** The parts of a Photo row the visibility rules read. */
+export interface PhotoRowFacts {
+  id?: string;
+  s3Key?: string;
+  previewS3Key?: string;
+  thumbS3Key?: string;
+  approved?: boolean;
+  moderationStatus?: string;
+  eventOwner?: string;
+  /** Present on booth photos; undefined for ordinary uploads. */
+  boothMatch?: string;
+  publishStatus?: string;
+  boothDivider?: boolean;
+  boothSegment?: string;
+  uploaderId?: string;
+  uploadedByUserId?: string;
+}
+
+export interface ViewContext {
+  identity: CallerIdentity | null | undefined;
+  audience: GalleryAudience;
+  callerId: string;
+  /** The host or an admin. */
+  privileged: boolean;
+  /** A valid download share's photo ids, else null. */
+  shared: Set<string> | null;
+}
+
+/**
+ * Whether one photo may be shown to this caller: the one rule behind both the
+ * gallery listing and the signed URLs, so a photo that is not listed can never
+ * be fetched either. Duplicated byte for byte in media-url (no cross-bundle
+ * imports) and pinned that way by __tests__/gallery-access.test.ts.
+ */
+export function photoVisibleTo(row: PhotoRowFacts, ctx: ViewContext): boolean {
+  if (row.approved === false) return false;
+  // Booth photos: only published event or category photos, never a person's
+  // (docs/booth-mode.md, "Shared gallery"). Belt and braces over `approved`.
+  if (
+    row.boothMatch !== undefined &&
+    !(
+      row.publishStatus === 'published' &&
+      row.boothDivider !== true &&
+      (row.boothSegment === 'event' || row.boothSegment === 'category')
+    )
+  ) {
+    return false;
+  }
+  if (row.moderationStatus === 'flagged') return false;
+  if (!isVisibleTo(row, ctx.identity)) return false;
+  if (ctx.privileged) return true;
+  if (ctx.shared) return ctx.shared.has(row.id ?? '');
+  return audienceAllows(ctx.audience, row, ctx.callerId);
+}
+
+/**
+ * What stands between a caller and the gallery, before any photo is looked at.
+ *
+ *   open     carry on to the per-photo rules
+ *   paused   the host paused sharing: guests view and download nothing
+ *   blocked  the host turned guest viewing off (or chose host-only)
+ *   key      the host replaced the QR code and this caller has not got the
+ *            new link (or never had one)
+ *
+ * The host and admins are never held up. A host's download share is the host
+ * choosing particular photos for particular people, so it opens the gate, but
+ * never while sharing is paused, and handlers drop a share made before the
+ * latest QR replacement before they call this.
+ */
+export type GalleryGate = 'open' | 'paused' | 'blocked' | 'key';
+
+export function galleryGateFor(input: {
+  privileged: boolean;
+  shared: boolean;
+  paused: boolean;
+  viewBlocked: boolean;
+  audience: GalleryAudience;
+  linkRequired: boolean;
+  keyValid: boolean;
+}): GalleryGate {
+  if (input.privileged) return 'open';
+  if (input.paused) return 'paused';
+  if (input.shared) return 'open';
+  if (input.viewBlocked || input.audience === 'host') return 'blocked';
+  if (input.linkRequired && !input.keyValid) return 'key';
+  return 'open';
 }

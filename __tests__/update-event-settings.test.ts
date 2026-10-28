@@ -31,6 +31,8 @@ describe('the allow-list is the whole surface', () => {
       // Who may see the gallery — a privacy choice, not a priced one.
       'galleryAudience',
       'guestDownloadsBlocked',
+      // Whether guests can look at the gallery at all.
+      'guestViewBlocked',
       'location',
       'moderationMode',
       'name',
@@ -40,6 +42,10 @@ describe('the allow-list is the whole surface', () => {
       'qrColor',
       'qrDotStyle',
       'qrLogo',
+      // "Pause sharing": closes the gallery and downloads to guests at once.
+      // The link key facts (galleryLinkSet, linkRotatedAt) are server-kept
+      // (gallery-access), never here.
+      'sharingPaused',
       'uploadsClosed',
       'videoUploadsEnabled',
     ]);
