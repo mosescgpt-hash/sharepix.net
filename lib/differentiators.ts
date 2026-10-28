@@ -110,7 +110,7 @@ export const DIFFERENTIATORS: readonly Differentiator[] = [
     claim:
       'Let guests see everything, let each guest see only what they added, or keep every photo to yourself.',
     boundary:
-      'There is no password on a gallery. If guests can see it, so can anyone you give the link to.',
+      'There is no password on a gallery. If guests can see it, so can anyone you give the link to. You can pause sharing at any time, or replace the QR code so older links stop working.',
     // The setting itself, and the function that applies it.
     short: 'Guests see everything, only what they added, or nothing at all.',
     backedBy: 'amplify/functions/list-event-photos/visibility.ts',
