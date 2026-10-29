@@ -16,7 +16,7 @@ export const POSTAL_ADDRESS_LINES = [
   'United States',
 ];
 
-export type BoothMessageKind = 'ready' | 'more' | 'reminder';
+export type BoothMessageKind = 'ready' | 'more' | 'reminder' | 'session';
 
 export interface BoothMessageInput {
   kind: BoothMessageKind;
@@ -60,23 +60,31 @@ export function buildBoothMessage(input: BoothMessageInput): BoothMessage {
       ? `Your photos from ${event} are ready`
       : input.kind === 'more'
         ? `More of your photos from ${event}`
-        : `Download your photos from ${event} before they're removed`;
+        : input.kind === 'session'
+          ? `Your SharePix photo link for ${event}`
+          : `Download your photos from ${event} before they're removed`;
 
   const lead =
     input.kind === 'ready'
       ? `Hi ${first}, the photographer at ${event} has sent you ${photos}, full resolution.`
       : input.kind === 'more'
         ? `Hi ${first}, more of your photos from ${event} are ready. You now have ${photos}.`
-        : `Hi ${first}, your full-resolution photos from ${event} will be removed${
+        : input.kind === 'session'
+          ? `Hi ${first}, thanks for taking photos at ${event}. This is your personal link. Your photos appear there after the event host approves them, and we'll email you again when they are ready.`
+          : `Hi ${first}, your full-resolution photos from ${event} will be removed${
             input.removedOn ? ` on ${input.removedOn}` : ' soon'
           }. Download any you want to keep before then.`;
 
   const keep =
-    input.kind !== 'reminder' && input.removedOn
+    input.kind !== 'reminder' && input.kind !== 'session' && input.removedOn
       ? `Full-resolution downloads are available until ${input.removedOn}.`
       : '';
-  const why = `You're getting this because you signed up for your photos at ${event}.`;
-  const button = input.kind === 'reminder' ? 'Download your photos' : 'See your photos';
+  const why =
+    input.kind === 'session'
+      ? `You're getting this because you asked for your photo link at ${event}.`
+      : `You're getting this because you signed up for your photos at ${event}.`;
+  const button =
+    input.kind === 'reminder' ? 'Download your photos' : input.kind === 'session' ? 'Open my photo page' : 'See your photos';
 
   const text = [
     lead,

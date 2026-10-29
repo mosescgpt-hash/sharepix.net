@@ -917,6 +917,12 @@ boothDeliveriesFn.addEnvironment('EMAIL_SENDING_ENABLED', process.env.EMAIL_SEND
 boothDeliveriesFn.addToRolePolicy(
   new PolicyStatement({ actions: ['ses:SendEmail', 'ses:SendRawEmail'], resources: ['*'] }),
 );
+// The host approving a person's booth photo emails them within a minute: an
+// asynchronous invoke from decide-pro-photo, the only function allowed to make
+// it. The hourly job stays as the backstop, and both claim the same
+// deliveredCount, so nobody is emailed twice.
+boothDeliveriesFn.grantInvoke(decideProFn);
+decideProFn.addEnvironment('BOOTH_DELIVERIES_FUNCTION_NAME', boothDeliveriesFn.functionName);
 // Booth texts (docs/booth-mode.md, SMS_SETUP.md). Off unless BOOTH_SMS_ENABLED
 // is 'true'; SNS publishes to phone numbers have no resource ARN, hence '*'.
 boothDeliveriesFn.addEnvironment('BOOTH_SMS_ENABLED', process.env.BOOTH_SMS_ENABLED ?? '');
