@@ -4,7 +4,15 @@ import { withHostAuth } from '@/components/hostAuth';
 import HostHeader from '@/components/HostHeader';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
-import { deleteMyEvent, downloadEventsAsZip, listMyEvents, startCheckout } from '@/lib/api';
+import BulkDeleteEventsDialog from '@/components/BulkDeleteEventsDialog';
+import {
+  deleteEventWithPhotos,
+  deleteMyEvent,
+  downloadEventsAsZip,
+  listMyEvents,
+  startCheckout,
+} from '@/lib/api';
+import { deleteEventsOneByOne, eventCountLabel, type BulkDeleteResult } from '@/lib/bulkDeleteEvents';
 import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
@@ -25,6 +33,11 @@ function MyEventsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState('');
+  // Delete selected: the confirm dialog, the run, and what each event did.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState('');
+  const [bulkResults, setBulkResults] = useState<{ name: string; result: BulkDeleteResult }[] | null>(null);
 
   useEffect(() => {
     Promise.all([listMyEvents(), isGlobalAdmin().catch(() => false)])
@@ -110,6 +123,32 @@ function MyEventsPage() {
     }
   }
 
+  async function handleDeleteSelected() {
+    const chosen = downloadableEvents.filter((event) => selected.has(event.id));
+    if (chosen.length === 0) return;
+    const names = new Map(chosen.map((event) => [event.id, event.name]));
+    setBulkDeleting(true);
+    setError(null);
+    setBulkResults(null);
+    try {
+      // Each one exactly as the Delete button on its own dashboard does it.
+      const results = await deleteEventsOneByOne(
+        chosen.map((event) => event.id),
+        deleteEventWithPhotos,
+        (done, total) => setBulkProgress(`Deleting ${done} of ${total}…`),
+      );
+      const gone = new Set(results.filter((r) => r.ok).map((r) => r.id));
+      setEvents((prev) => prev.filter((event) => !gone.has(event.id)));
+      // What failed stays selected, so a retry is one click.
+      setSelected((prev) => new Set([...prev].filter((id) => !gone.has(id))));
+      setBulkResults(results.map((result) => ({ name: names.get(result.id) ?? 'Event', result })));
+    } finally {
+      setBulkDeleting(false);
+      setBulkProgress('');
+      setConfirmingDelete(false);
+    }
+  }
+
   return (
     <Layout title="My events" width="bleed">
       <HostHeader
@@ -164,13 +203,52 @@ function MyEventsPage() {
                     <button
                       type="button"
                       onClick={() => void handleDownloadSelected()}
-                      disabled={zipping || selected.size === 0}
+                      disabled={zipping || bulkDeleting || selected.size === 0}
                       className="bg-ink px-4 py-2 font-medium text-canvas transition hover:bg-night disabled:opacity-50"
                     >
                       {zipping ? zipProgress || 'Preparing…' : `Download selected (${selected.size})`}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(true)}
+                      disabled={zipping || bulkDeleting || selected.size === 0}
+                      className="border border-red-300 px-4 py-2 font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Delete selected ({selected.size})
+                    </button>
                   </div>
                 </div>
+              ) : null}
+
+              {bulkResults ? (
+                <div className="mt-4" role="status">
+                  <Notice tone={bulkResults.some((r) => !r.result.ok) ? 'warn' : 'success'}>
+                    <p className="font-medium">
+                      {bulkResults.filter((r) => r.result.ok).length} of {eventCountLabel(bulkResults.length)} deleted.
+                    </p>
+                    {bulkResults.some((r) => !r.result.ok) ? (
+                      <ul className="mt-2 list-disc pl-5 text-sm">
+                        {bulkResults
+                          .filter((r) => !r.result.ok)
+                          .map((r) => (
+                            <li key={r.result.id}>
+                              {r.name}: {r.result.error} It is still selected, so you can try again.
+                            </li>
+                          ))}
+                      </ul>
+                    ) : null}
+                  </Notice>
+                </div>
+              ) : null}
+
+              {confirmingDelete ? (
+                <BulkDeleteEventsDialog
+                  events={downloadableEvents.filter((event) => selected.has(event.id))}
+                  deleting={bulkDeleting}
+                  progress={bulkProgress}
+                  onCancel={() => setConfirmingDelete(false)}
+                  onConfirm={() => void handleDeleteSelected()}
+                />
               ) : null}
 
               <div className="mt-6 grid gap-4 lg:grid-cols-2">
