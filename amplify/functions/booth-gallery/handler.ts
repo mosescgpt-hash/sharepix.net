@@ -46,6 +46,7 @@ const NOT_FOUND = {
   removeOriginalsAt: null,
   originalsRemoved: false,
   emailsStopped: false,
+  emailHint: null,
   uploadsOpen: false,
   uploadsMessage: null,
   uploadsLeft: 0,
@@ -53,6 +54,13 @@ const NOT_FOUND = {
   sharedGalleryPath: null,
   sharedGalleryMessage: null,
 };
+
+/** "j***@example.com" (same shape as booth-deliveries/linkEmail.ts maskEmail). */
+function maskEmail(email: string | undefined): string | null {
+  if (!email) return null;
+  const [user, domain] = email.split('@');
+  return domain ? `${user.slice(0, 1)}***@${domain}` : null;
+}
 
 /** Whether uploads are closed on the event row. */
 function closedOn(ev: Record<string, AttributeValue> | undefined): boolean {
@@ -401,6 +409,8 @@ export const handler = async (event: {
     removeOriginalsAt,
     originalsRemoved: Boolean(removedAt),
     emailsStopped: attendee.emailsStopped?.BOOL === true,
+    // "j***@gmail.com": only this guest, holding their own key, sees it.
+    emailHint: attendee.emailsStopped?.BOOL === true ? null : maskEmail(attendee.email?.S),
     ...uploadState(attendee, ev.Item),
     eventId,
     ...sharedGalleryFor({

@@ -49,6 +49,8 @@ export default function BoothCapturePage() {
           uploadsMessage={view.uploadsMessage}
           sharedGalleryPath={view.sharedGalleryPath}
           sharedGalleryMessage={view.sharedGalleryMessage}
+          emailHint={view.emailHint}
+          emailsStopped={view.emailsStopped}
         />
       )}
     </>

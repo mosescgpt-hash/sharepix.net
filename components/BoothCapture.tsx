@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import BoothGuestUpload from '@/components/BoothGuestUpload';
+import BoothLinkEmail from '@/components/BoothLinkEmail';
 import { uploadBoothGuestPhoto } from '@/lib/api';
 import {
   captureSize,
@@ -27,6 +28,9 @@ export interface BoothCaptureProps {
   uploadsMessage: string | null;
   sharedGalleryPath: string | null;
   sharedGalleryMessage: string | null;
+  /** Their address, masked ("j***@gmail.com"), when we have one; they stopped emails. */
+  emailHint?: string | null;
+  emailsStopped?: boolean;
 }
 
 /** Why the camera would not start, in words a guest can act on. */
@@ -261,6 +265,11 @@ export default function BoothCapture(props: BoothCaptureProps) {
             </button>
           </p>
         ) : null}
+        <BoothLinkEmail
+          galleryKey={galleryKey}
+          emailHint={props.emailHint ?? null}
+          emailsStopped={props.emailsStopped === true}
+        />
         <div className="mx-auto mt-5 w-fit bg-white p-3">
           <QRCodeSVG value={mine} size={176} level="M" includeMargin aria-label="Your personal photo page QR code" />
         </div>

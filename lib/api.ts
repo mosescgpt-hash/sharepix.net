@@ -3060,6 +3060,8 @@ export interface BoothGalleryView {
   removeOriginalsAt: string | null;
   originalsRemoved: boolean;
   emailsStopped: boolean;
+  /** Where their link is emailed, masked ("j***@gmail.com"); null when no address. */
+  emailHint: string | null;
   /** Whether this guest may add their own photos now; if not, why. */
   uploadsOpen: boolean;
   uploadsMessage: string | null;
@@ -3094,6 +3096,7 @@ export async function fetchBoothGallery(key: string): Promise<BoothGalleryView> 
     removeOriginalsAt: data?.removeOriginalsAt ?? null,
     originalsRemoved: data?.originalsRemoved === true,
     emailsStopped: data?.emailsStopped === true,
+    emailHint: data?.emailHint ?? null,
     uploadsOpen: data?.uploadsOpen === true,
     uploadsMessage: data?.uploadsMessage ?? null,
     uploadsLeft: data?.uploadsLeft ?? 0,
@@ -3163,6 +3166,27 @@ export async function stopBoothEmails(key: string): Promise<{ ok: boolean; messa
   );
   if (errors?.length) throw new Error('That did not work. Try again in a moment.');
   return { ok: data?.ok === true, message: data?.message ?? '' };
+}
+
+/**
+ * A guest tapped Stop: email them their personal link now. With no address on
+ * file, `email` plus `consent` saves the one they give and sends to it. Public.
+ */
+export async function emailBoothLink(
+  key: string,
+  extra?: { email: string; consent: boolean },
+): Promise<{ ok: boolean; message: string; emailHint: string | null; sent: boolean }> {
+  const { data, errors } = await getClient().mutations.boothEmailMyLink(
+    { key, ...(extra ? { email: extra.email, consent: extra.consent } : {}) },
+    { authMode: await authModeFor() },
+  );
+  if (errors?.length) throw new Error('We could not send the email just now. Your link still works.');
+  return {
+    ok: data?.ok === true,
+    message: data?.message ?? '',
+    emailHint: data?.emailHint ?? null,
+    sent: data?.sent === true,
+  };
 }
 
 /** Host: email one attendee their gallery link again. */

@@ -3,6 +3,7 @@ import {
   GetItemCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
+import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { publishesToGallery } from './boothPublish';
 import type { Schema } from '../../data/resource';
 import { connectionId, mayReviewEvent, mayRunOwnBooth } from './photographerAccess';
@@ -16,6 +17,9 @@ import {
 } from './professionalMedia';
 
 const dynamo = new DynamoDBClient({});
+const lambda = new LambdaClient({});
+/** booth-deliveries, for the prompt "your photos are ready" email. Unset: the hourly job still sends. */
+const DELIVERIES_FUNCTION = process.env.BOOTH_DELIVERIES_FUNCTION_NAME ?? '';
 const CONNECTION_TABLE = process.env.CONNECTION_TABLE_NAME as string;
 const PHOTO_TABLE = process.env.PHOTO_TABLE_NAME as string;
 const EVENT_TABLE = process.env.EVENT_TABLE_NAME ?? '';
@@ -142,12 +146,49 @@ export const handler: DecideHandler = async (event) => {
     }),
   );
 
+  // A person's booth photo was approved: tell booth-deliveries so their email
+  // goes out within a minute, not at the next hourly run. Fire and forget: the
+  // approval above is the source of truth and the hourly job is the backstop.
+  if (boothPhoto && !boothToGallery && decision === 'approve' && landing === 'approved') {
+    await notifyDeliveries(photoEventId, recipientsOf(photo));
+  }
+
   return {
     uploadId,
     publishStatus: landing,
     message: landing === 'published' ? 'Live in the gallery.' : `Marked ${landing}.`,
   };
 };
+
+/** The attendees a booth photo is for: the list, else the single id. */
+function recipientsOf(photo: Record<string, import('@aws-sdk/client-dynamodb').AttributeValue>): string[] {
+  const list = photo.boothAttendeeIds?.L?.map((v) => v.S ?? '').filter(Boolean) ?? [];
+  if (list.length > 0) return list;
+  return photo.boothAttendeeId?.S ? [photo.boothAttendeeId.S] : [];
+}
+
+/**
+ * Asynchronously ask booth-deliveries to email these people now. `task` is
+ * what marks a direct invoke; an AppSync call can never carry it. Never
+ * throws: a failure here must not undo or hide an approval.
+ */
+async function notifyDeliveries(eventId: string, attendeeIds: string[]): Promise<void> {
+  if (!DELIVERIES_FUNCTION || !eventId || attendeeIds.length === 0) return;
+  await lambda
+    .send(
+      new InvokeCommand({
+        FunctionName: DELIVERIES_FUNCTION,
+        InvocationType: 'Event',
+        Payload: Buffer.from(JSON.stringify({ task: 'deliver-now', eventId, attendeeIds })),
+      }),
+    )
+    .catch((error) =>
+      console.error('Could not start a prompt booth delivery', {
+        eventId,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+}
 
 async function loadConnection(eventId: string, sub: string) {
   if (!eventId) return null;

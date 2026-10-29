@@ -431,6 +431,44 @@ or for an offline code the photographer has already photographed (the
 existing rule, so a made-up sealed contact can never unlock anyone's page).
 Until then the page says "This code is not ready yet."
 
+### Your link by email, and prompt "ready" emails
+
+Booth sign-up itself sends no email. A guest is emailed in three ways, all
+from `SharePix <noreply@sharepix.net>` through the existing SES setup, all
+off unless `EMAIL_SENDING_ENABLED=true`, and none ever after the guest used
+the stop-emails link:
+
+1. **Stop on `/booth/capture`.** If the guest has an address on file, the
+   Stop screen calls `boothEmailMyLink` (handled by `booth-deliveries`) and
+   their personal link is emailed at once. The email says photos appear on
+   that page after the host approves them, and that another email follows
+   when they are ready. The screen shows "We'll email you at j\*\*\*@gmail.com"
+   (masked, same shape the host sees). With no address on file, the screen
+   shows a small form: an email field, the sign-up consent line
+   (`BOOTH_CONSENT_TEXT`) as a required tick, and **Email me my link**.
+2. **Limits (no spam, no enumeration).** The secret gallery key is the only
+   authorization; a bad key and an unknown key get the same answer, and no
+   reply names anyone else. A link email goes out at most once per 10
+   minutes and five times in all per guest (a conditional write claims it
+   before sending, so a double tap sends once, and the claim is released if
+   SES fails). An address typed on the form is saved only when none is on
+   file (it never replaces an existing one) and only with the tick
+   (`emailConsentAt`). `emailsStopped` is checked on read and again in the
+   conditional write.
+3. **Host approves a photo.** `decide-pro-photo` makes a best-effort
+   asynchronous Lambda invoke of `booth-deliveries` (`task: 'deliver-now'`;
+   AppSync calls can never carry it). It waits one minute so a run of
+   approvals becomes one email, recomputes each person's approved count, and
+   uses the **same** `deliveredCount` conditional claim as the hourly job, so
+   whichever runs first sends and the other finds the count moved. A first
+   "ready" goes at once; a later "more" waits 10 minutes after the last
+   delivery (the hourly job sends what is left). If the invoke fails, the
+   hourly job at :20 is the backstop.
+
+The link in every email is the guest's *current* `galleryKey`, so a replaced
+code gives the new link, and a paused shared gallery does not affect the
+personal page.
+
 ### Shared gallery
 
 - Approved **event and category** photos (no one person) are published to the

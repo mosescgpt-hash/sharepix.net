@@ -647,6 +647,11 @@ const schema = a.schema({
       lastDeliveredAt: a.datetime(),
       reminderSentAt: a.datetime(),
       emailsStopped: a.boolean(),
+      // "Email me my link" (booth-deliveries): when it last went, how many in
+      // all, and when a guest who had no address gave one (with their tick).
+      linkEmailedAt: a.datetime(),
+      linkEmailCount: a.integer(),
+      emailConsentAt: a.datetime(),
       // Set when the booth scans this person's code: from then they may add
       // their own photos until uploads close. With the category running then.
       boothSessionAt: a.datetime(),
@@ -1861,6 +1866,8 @@ const schema = a.schema({
     removeOriginalsAt: a.string(),
     originalsRemoved: a.boolean(),
     emailsStopped: a.boolean(),
+    // The address their link goes to, masked ("j***@gmail.com"); null when none.
+    emailHint: a.string(),
     // Guest uploads: whether this person may add photos now, and why not.
     uploadsOpen: a.boolean(),
     uploadsMessage: a.string(),
@@ -1925,6 +1932,23 @@ const schema = a.schema({
     .returns(a.ref('BoothActionResult'))
     .authorization((allow) => [allow.authenticated()])
     .handler(a.handler.function(boothDeliveriesFn)),
+
+  // A guest tapped Stop on /booth/capture: email them their personal link now
+  // (or, with their tick, save the address they give and email that). Public;
+  // the secret key is the authorization. booth-deliveries rate-limits it.
+  boothEmailMyLink: a
+    .mutation()
+    .arguments({ key: a.string().required(), email: a.string(), consent: a.boolean() })
+    .returns(a.ref('BoothLinkEmailResult'))
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(boothDeliveriesFn)),
+
+  BoothLinkEmailResult: a.customType({
+    ok: a.boolean().required(),
+    message: a.string(),
+    emailHint: a.string(),
+    sent: a.boolean(),
+  }),
 
   boothStatus: a
     .query()

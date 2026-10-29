@@ -13,6 +13,15 @@ import { buildBoothSms } from './sms';
 import { buildBoothMessage, formatRemovalDate, type BoothMessageKind } from './message';
 import { channelsFor, deliveryDue, reminderDue, removalDue, type AttendeeState } from './plan';
 import { originalsRemovedAt, reminderAt } from './retention';
+import {
+  DELIVERY_SETTLE_MS,
+  checkLinkEmail,
+  linkEmailRefusal,
+  maskEmail,
+  promptDeliveryAllowed,
+  LINK_EMAIL_COOLDOWN_MS,
+  MAX_LINK_EMAILS,
+} from './linkEmail';
 
 const dynamo = new DynamoDBClient({});
 const s3 = new S3Client({});
@@ -43,6 +52,7 @@ const RESEND_COOLDOWN_MS = 5 * 60 * 1000;
 
 /** Explicit in the schema so they cannot drift. */
 const ATTENDEES_BY_EVENT = 'boothAttendeesByEventId';
+const ATTENDEES_BY_GALLERY_KEY = 'boothAttendeesByGalleryKey';
 const PHOTOS_BY_EVENT = 'photosByEventId';
 
 interface BoothEvent {
@@ -58,6 +68,9 @@ interface Attendee extends AttendeeState {
   name: string;
   galleryKey: string | null;
   lastDeliveredAt: string | null;
+  /** "Email me my link" (linkEmail.ts): when it last went, and how often. */
+  linkEmailedAt: string | null;
+  linkEmailCount: number;
 }
 
 interface BoothPhoto {
@@ -90,6 +103,8 @@ function readAttendee(item: Record<string, AttributeValue>): Attendee {
     deliveredCount: Number(item.deliveredCount?.N ?? 0) || 0,
     reminderSentAt: item.reminderSentAt?.S ?? null,
     lastDeliveredAt: item.lastDeliveredAt?.S ?? null,
+    linkEmailedAt: item.linkEmailedAt?.S ?? null,
+    linkEmailCount: Number(item.linkEmailCount?.N ?? 0) || 0,
   };
 }
 
@@ -304,7 +319,7 @@ async function sendSms(attendee: Attendee, event: BoothEvent, kind: 'ready' | 'r
 async function send(
   attendee: Attendee,
   event: BoothEvent,
-  kind: BoothMessageKind,
+  kind: Exclude<BoothMessageKind, 'session'>,
   photoCount: number,
 ): Promise<boolean> {
   const ch = channelsFor(attendee, kind, SMS_ENABLED);
@@ -576,16 +591,274 @@ async function resend(
   return { ok: true, message: 'Sent their photo link again.' };
 }
 
+interface LinkResult {
+  ok: boolean;
+  message: string;
+  /** "j***@example.com": the address the link goes to, masked. Null when none. */
+  emailHint: string | null;
+  /** True when an email went out on this call. */
+  sent: boolean;
+}
+
+/** The same shape for a wrong key and a missing one: nothing to enumerate. */
+const LINK_NOT_FOUND: LinkResult = {
+  ok: false,
+  message: 'This link is not valid.',
+  emailHint: null,
+  sent: false,
+};
+
+/** Same rule as booth-gallery/gallery.ts isGalleryKey (a Lambda cannot import it). */
+function isGalleryKey(key: string): boolean {
+  return /^[A-Za-z0-9_-]{32,64}$/.test(key);
+}
+
+async function attendeeByKey(key: string): Promise<Record<string, AttributeValue> | null> {
+  const found = await dynamo.send(
+    new QueryCommand({
+      TableName: ATTENDEE_TABLE,
+      IndexName: ATTENDEES_BY_GALLERY_KEY,
+      KeyConditionExpression: 'galleryKey = :key',
+      ExpressionAttributeValues: { ':key': { S: key } },
+      Limit: 2,
+    }),
+  );
+  return found.Items?.length === 1 ? found.Items[0] : null;
+}
+
+async function approvedFor(eventId: string, attendeeId: string): Promise<number> {
+  return approvedCounts(await loadPhotos(eventId)).get(attendeeId) ?? 0;
+}
+
+/**
+ * boothEmailMyLink: a guest tapped Stop on their capture page.
+ *
+ * The 192-bit gallery key is the whole authorization, as for the gallery. A
+ * wrong key gets the same answer as a missing one, and the answer never
+ * includes anyone else's details. If they already have an address on file the
+ * link goes there; if not, they may give one with their tick (and it is only
+ * ever saved when none was). Never to someone who stopped emails; at most once
+ * per 10 minutes and five times in all (linkEmail.ts); claimed with a
+ * conditional write before sending, so a double tap sends once.
+ */
+async function emailMyLink(args: {
+  key?: string | null;
+  email?: string | null;
+  consent?: boolean | null;
+}): Promise<LinkResult> {
+  const key = String(args.key ?? '').trim();
+  if (!isGalleryKey(key)) return LINK_NOT_FOUND;
+  const row = await attendeeByKey(key);
+  const attendeeId = row?.id?.S;
+  const eventId = row?.eventId?.S;
+  if (!row || !attendeeId || !eventId) return LINK_NOT_FOUND;
+
+  const ev = await dynamo.send(new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }));
+  if (!ev.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S) return LINK_NOT_FOUND;
+  const event = readEvent(ev.Item);
+
+  let attendee = readAttendee(row);
+  if (attendee.emailsStopped) {
+    return { ok: false, message: 'You turned off emails about these photos, so nothing was sent.', emailHint: null, sent: false };
+  }
+
+  const nowISO = new Date().toISOString();
+  if (!attendee.email) {
+    const given = (args.email ?? '').toString().trim();
+    // Nothing typed: the page is only asking whether there is an address.
+    if (!given) return { ok: true, message: '', emailHint: null, sent: false };
+    const checked = checkLinkEmail({ email: given, consent: args.consent });
+    if (!checked.ok) return { ok: false, message: checked.reason, emailHint: null, sent: false };
+    if (!SENDING_ENABLED) {
+      return { ok: false, message: 'Email is not switched on yet, so nothing was sent.', emailHint: null, sent: false };
+    }
+    // Only ever fills a gap: an address already on file is never replaced by
+    // whoever holds the key.
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: ATTENDEE_TABLE,
+          Key: { id: { S: attendeeId } },
+          UpdateExpression: 'SET email = :email, contactLabel = :label, emailConsentAt = :now, updatedAt = :now',
+          ConditionExpression: 'attribute_exists(id) AND attribute_not_exists(email)',
+          ExpressionAttributeValues: {
+            ':email': { S: checked.email },
+            ':label': { S: maskEmail(checked.email) ?? 'Guest' },
+            ':now': { S: nowISO },
+          },
+        }),
+      );
+    } catch (error) {
+      if (!isConditionFailure(error)) throw error;
+    }
+    const again = await dynamo.send(new GetItemCommand({ TableName: ATTENDEE_TABLE, Key: { id: { S: attendeeId } } }));
+    if (!again.Item) return LINK_NOT_FOUND;
+    attendee = readAttendee(again.Item);
+  }
+
+  const hint = maskEmail(attendee.email);
+  if (!attendee.email || !attendee.galleryKey) return { ok: true, message: '', emailHint: null, sent: false };
+  if (!SENDING_ENABLED) {
+    return { ok: false, message: 'Email is not switched on yet, so nothing was sent.', emailHint: hint, sent: false };
+  }
+  const refusal = linkEmailRefusal(attendee, Date.now());
+  if (refusal === 'stopped') {
+    return { ok: false, message: 'You turned off emails about these photos, so nothing was sent.', emailHint: null, sent: false };
+  }
+  if (refusal) {
+    // Already on its way (or as many as we send): the same friendly answer.
+    return { ok: true, message: 'Your link was emailed a moment ago.', emailHint: hint, sent: false };
+  }
+
+  // Claim before sending: a double tap or a retry finds the stamp and sends nothing.
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: ATTENDEE_TABLE,
+        Key: { id: { S: attendeeId } },
+        UpdateExpression: 'SET linkEmailedAt = :now, linkEmailCount = if_not_exists(linkEmailCount, :zero) + :one, updatedAt = :now',
+        ConditionExpression:
+          'attribute_exists(id) AND (attribute_not_exists(emailsStopped) OR emailsStopped = :false) AND ' +
+          '(attribute_not_exists(linkEmailedAt) OR linkEmailedAt < :cutoff) AND ' +
+          '(attribute_not_exists(linkEmailCount) OR linkEmailCount < :max)',
+        ExpressionAttributeValues: {
+          ':now': { S: nowISO },
+          ':cutoff': { S: new Date(Date.now() - LINK_EMAIL_COOLDOWN_MS).toISOString() },
+          ':max': { N: String(MAX_LINK_EMAILS) },
+          ':zero': { N: '0' },
+          ':one': { N: '1' },
+          ':false': { BOOL: false },
+        },
+      }),
+    );
+  } catch (error) {
+    if (isConditionFailure(error)) {
+      return { ok: true, message: 'Your link was emailed a moment ago.', emailHint: hint, sent: false };
+    }
+    throw error;
+  }
+
+  const total = await approvedFor(eventId, attendeeId);
+  if (!(await sendEmail(attendee, event, 'session', total))) {
+    // Give the claim back, so a retry is not treated as a repeat.
+    await dynamo
+      .send(
+        new UpdateItemCommand({
+          TableName: ATTENDEE_TABLE,
+          Key: { id: { S: attendeeId } },
+          UpdateExpression: 'REMOVE linkEmailedAt SET linkEmailCount = linkEmailCount - :one',
+          ConditionExpression: 'linkEmailedAt = :now',
+          ExpressionAttributeValues: { ':one': { N: '1' }, ':now': { S: nowISO } },
+        }),
+      )
+      .catch((error) => console.error('Could not release a link email claim', { id: attendeeId, error: String(error) }));
+    return { ok: false, message: 'We could not send the email just now. Your link above still works.', emailHint: hint, sent: false };
+  }
+  return { ok: true, message: 'Your link is on its way.', emailHint: hint, sent: true };
+}
+
+/** What a prompt delivery did, for the logs. */
+interface DeliverNowResult {
+  ok: boolean;
+  summary: string;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The host approved a booth photo: email "ready" / "more" to the people in it
+ * now, not at the next hourly run. Called only by decide-pro-photo (an
+ * asynchronous Lambda invoke, which only that function may make; AppSync
+ * calls never carry a `task`). It waits a minute first, so a host working
+ * through a queue sends one email for the batch, then does exactly what the
+ * hourly job does for each person: deliveryDue, then the same conditional
+ * claim on deliveredCount, so the two never double-send. A "more" also waits
+ * out a 10-minute gap from the last delivery; the hourly run takes the rest.
+ */
+async function deliverNow(
+  task: { eventId?: string | null; attendeeIds?: string[] | null },
+  settleMs: number,
+): Promise<DeliverNowResult> {
+  const eventId = String(task.eventId ?? '');
+  const ids = [...new Set((task.attendeeIds ?? []).map(String).filter(Boolean))].slice(0, 25);
+  if (!eventId || ids.length === 0) return { ok: true, summary: 'Nothing to do.' };
+  if (!SENDING_ENABLED) return { ok: true, summary: 'Email sending is off; the hourly job will decide.' };
+
+  if (settleMs > 0) await sleep(settleMs);
+
+  const ev = await dynamo.send(new GetItemCommand({ TableName: EVENT_TABLE, Key: { id: { S: eventId } } }));
+  if (!ev.Item || ev.Item.boothMode?.BOOL !== true || ev.Item.takenDownAt?.S) return { ok: true, summary: 'Not a live booth.' };
+  const event = readEvent(ev.Item);
+  if (event.alreadyRemovedAt || removalDue(new Date().toISOString(), event.removedAt, event.alreadyRemovedAt)) {
+    return { ok: true, summary: 'Past removal; nothing to deliver.' };
+  }
+
+  const approved = approvedCounts(await loadPhotos(eventId));
+  let delivered = 0;
+  let failed = 0;
+  for (const id of ids) {
+    const row = await dynamo.send(new GetItemCommand({ TableName: ATTENDEE_TABLE, Key: { id: { S: id } } }));
+    if (!row.Item || row.Item.eventId?.S !== eventId) continue;
+    const attendee = readAttendee(row.Item);
+    if (!attendee.galleryKey) continue;
+    const total = approved.get(id) ?? 0;
+    const kind = deliveryDue(attendee, total, SMS_ENABLED);
+    if (!kind || !promptDeliveryAllowed(kind, attendee.lastDeliveredAt, Date.now())) continue;
+    const nowISO = new Date().toISOString();
+    if (!(await claimDelivery(attendee, total, nowISO))) continue;
+    if (await send(attendee, event, kind, total)) delivered += 1;
+    else {
+      failed += 1;
+      await releaseDelivery(attendee, total);
+    }
+  }
+  console.log('booth-deliveries deliver-now', { eventId, delivered, failed });
+  return { ok: failed === 0, summary: `Sent ${delivered}, ${failed} failed.` };
+}
+
 interface InvocationEvent {
-  arguments?: { eventId?: string | null; attendeeId?: string | null };
+  arguments?: {
+    eventId?: string | null;
+    attendeeId?: string | null;
+    key?: string | null;
+    email?: string | null;
+    consent?: boolean | null;
+  };
+  /** Set only by decide-pro-photo's direct invoke (see deliverNow). */
+  task?: string;
+  settleMs?: number;
+  eventId?: string;
+  attendeeIds?: string[];
   identity?: { sub?: string | null; groups?: string[] | null } | null;
   info?: { fieldName?: string };
   fieldName?: string;
 }
 
 /** Invoked hourly by the schedule, and by boothResendEmail from the host's attendee list. */
-export const handler = async (event: InvocationEvent): Promise<JobResult | ResendResult> => {
-  if ((event?.info?.fieldName ?? event?.fieldName) === 'boothResendEmail') {
+export const handler = async (
+  event: InvocationEvent,
+): Promise<JobResult | ResendResult | LinkResult | DeliverNowResult> => {
+  const field = event?.info?.fieldName ?? event?.fieldName;
+  if (field === 'boothEmailMyLink') {
+    try {
+      return await emailMyLink(event.arguments ?? {});
+    } catch (error) {
+      console.error('boothEmailMyLink failed', error instanceof Error ? error.message : String(error));
+      return { ok: false, message: 'We could not send the email just now. Your link still works.', emailHint: null, sent: false };
+    }
+  }
+  // A direct invoke from decide-pro-photo. An AppSync call always has `info`.
+  if (!event?.info && !event?.fieldName && !event?.arguments && event?.task === 'deliver-now') {
+    try {
+      // settleMs is only for tests (0); anything else waits the usual minute, never longer than two.
+      const settle = Number.isFinite(event.settleMs) ? Math.min(Math.max(0, Number(event.settleMs)), 120_000) : DELIVERY_SETTLE_MS;
+      return await deliverNow(event, settle);
+    } catch (error) {
+      console.error('deliver-now failed', error instanceof Error ? error.message : String(error));
+      return { ok: false, summary: 'The prompt delivery failed; the hourly job will retry.' };
+    }
+  }
+  if (field === 'boothResendEmail') {
     try {
       return await resend(event.arguments ?? {}, event.identity);
     } catch (error) {
