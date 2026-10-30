@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   computeContentHash,
-  fetchEventPhotoHashes,
+  fetchEventPhotoHashIds,
   prepareEventUpload,
   uploadEventPhotoWithContext,
 } from '@/lib/api';
@@ -18,11 +18,27 @@ import {
   retryableCount,
 } from '@/lib/uploadQueue';
 
+export interface UploadedPhotoInfo {
+  /** The photo record's id. */
+  id: string;
+  /** True when the event already held these exact bytes. */
+  duplicate: boolean;
+  file: File;
+}
+
 interface UseMediaUploadArgs {
   eventId: string;
   allowVideo: boolean;
   videosRemaining: number | null;
   onUploaded?: () => void;
+  /**
+   * Called once for every file that now exists in the event, with the id of its
+   * photo record — including a file that was skipped because the same bytes
+   * were already there, where `duplicate` is true and `id` is the existing
+   * photo's. Additive: nothing that omits it behaves any differently. The guest
+   * book uses it to attach the photo to a note.
+   */
+  onPhotoUploaded?: (info: UploadedPhotoInfo) => void;
   /**
    * Which moment this batch is filed under, if the guest picked one or scanned
    * a QR code that did. Resolved once per batch — a guest cannot change it
@@ -46,6 +62,7 @@ export function useMediaUpload({
   allowVideo,
   videosRemaining,
   onUploaded,
+  onPhotoUploaded,
   momentId = null,
   challengeId = null,
 }: UseMediaUploadArgs) {
@@ -127,7 +144,7 @@ export function useMediaUpload({
 
       // Hashes already in this event, plus hashes we upload during this run, so
       // we skip both photos already stored and the same file picked twice.
-      const seenHashes = await fetchEventPhotoHashes(eventId);
+      const seenHashes = await fetchEventPhotoHashIds(eventId);
 
       // Snapshot the pending items up front so removals mid-loop can't shift a
       // React-state index out from under us.
@@ -139,9 +156,11 @@ export function useMediaUpload({
         } catch {
           hash = undefined; // hashing failed — fall through and upload normally
         }
+        const existingId = hash ? seenHashes.get(hash) : undefined;
         if (hash && seenHashes.has(hash)) {
           updateItem(item.id, { status: 'duplicate', percent: 0 });
           duplicates += 1;
+          if (existingId) onPhotoUploaded?.({ id: existingId, duplicate: true, file: item.file });
           continue;
         }
 
@@ -155,7 +174,7 @@ export function useMediaUpload({
             },
             hash,
           );
-          if (hash) seenHashes.add(hash);
+          if (hash) seenHashes.set(hash, photo.id);
           // Another guest can upload the same photo between our check and this
           // call; the server dedups it and tells us the record already existed.
           if (photo.duplicate) {
@@ -165,6 +184,7 @@ export function useMediaUpload({
             updateItem(item.id, { status: 'done', percent: 100 });
             uploaded += 1;
           }
+          if (photo.id) onPhotoUploaded?.({ id: photo.id, duplicate: photo.duplicate, file: item.file });
           await new Promise((resolve) => window.setTimeout(resolve, 150));
         } catch (err) {
           const rawMessage = err instanceof Error ? err.message : '';
