@@ -3387,19 +3387,29 @@ export async function computeContentHash(file: File): Promise<string | null> {
  * empty set and simply upload everything (dedup is a convenience, not a gate).
  */
 export async function fetchEventPhotoHashes(eventId: string): Promise<Set<string>> {
+  return new Set((await fetchEventPhotoHashIds(eventId)).keys());
+}
+
+/**
+ * The same hashes as fetchEventPhotoHashes, each with the id of the photo that
+ * carries it. A caller that skips a duplicate upload still needs that id when
+ * something must point at the existing photo — the guest book attaches it to a
+ * note. Best-effort, like the set: a failed read is an empty map.
+ */
+export async function fetchEventPhotoHashIds(eventId: string): Promise<Map<string, string>> {
   try {
     const { data, errors } = await getClient().queries.listEventPhotos(
       { eventId, linkKey: getLinkKey(eventId) || undefined },
       { authMode: await authModeFor() },
     );
-    if (errors?.length) return new Set();
-    const hashes = new Set<string>();
+    if (errors?.length) return new Map();
+    const ids = new Map<string, string>();
     for (const photo of data ?? []) {
-      if (photo?.contentHash) hashes.add(photo.contentHash);
+      if (photo?.contentHash && photo.id) ids.set(photo.contentHash, photo.id);
     }
-    return hashes;
+    return ids;
   } catch {
-    return new Set();
+    return new Map();
   }
 }
 

@@ -1,12 +1,28 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import GuestReferralLink from '@/components/GuestReferralLink';
 import Layout from '@/components/Layout';
 import GuestBookAlbum from '@/components/GuestBookAlbum';
 import Notice from '@/components/Notice';
-import { isVideoFilename } from '@/lib/validation';
-import { fetchEvent, fetchEventPhotos, fetchGuestBook, signGuestBook } from '@/lib/api';
+import { isVideoFilename, MAX_VIDEO_SIZE_LABEL, validateMediaFile } from '@/lib/validation';
+import {
+  fetchEvent,
+  fetchEventPhotos,
+  fetchGuestBook,
+  prepareEventUpload,
+  signGuestBook,
+} from '@/lib/api';
+import { useMediaUpload } from '@/hooks/useMediaUpload';
+import { videosRemaining } from '@/lib/pricing';
+import {
+  GUEST_BOOK_CONSENT_LINE,
+  GUEST_BOOK_VIDEO_CONSENT_LINE,
+  attachmentFailureMessage,
+  attachmentKind,
+  noteFailureMessage,
+  postSubmitNotice,
+} from '@/lib/guestBookAttach';
 import {
   MAX_MESSAGE_LENGTH,
   MAX_NAME_LENGTH,
@@ -30,6 +46,34 @@ export default function GuestBookPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState<'shown' | 'pending' | null>(null);
+  const [doneNotice, setDoneNotice] = useState<string | null>(null);
+
+  // The photo or video chosen in the form. It is uploaded when the guest taps
+  // Sign, through the same hook the upload page uses (one upload path), and the
+  // id it comes back with is what the note is signed with.
+  const [staged, setStaged] = useState<File | null>(null);
+  const attachedIdRef = useRef<string | null>(null);
+  const [attachedId, setAttachedId] = useState<string | null>(null);
+  // requested -> uploading -> settled -> idle. The upload hook reads its queue
+  // from the render it was called in, so each step waits for the render that
+  // holds the state it needs instead of racing it.
+  const [phase, setPhase] = useState<'idle' | 'requested' | 'uploading' | 'settled'>('idle');
+  const warmedRef = useRef(false);
+
+  const allowVideo = event?.videoUploadsEnabled !== false;
+  const videoSlots = event ? videosRemaining(event) : null;
+  const videoOffered = allowVideo && videoSlots !== 0;
+  const media = useMediaUpload({
+    eventId: eventId ?? '',
+    allowVideo,
+    videosRemaining: videoSlots,
+    // Also fires for a file the event already held (duplicate), with the
+    // existing photo's id, so a repeated picture still attaches.
+    onPhotoUploaded: (info) => {
+      attachedIdRef.current = info.id;
+      setAttachedId(info.id);
+    },
+  });
 
   const load = useCallback(async () => {
     if (!eventId) return;
@@ -43,12 +87,12 @@ export default function GuestBookPage() {
 
     // The album's own entries, plus the event's photos so an attached one can
     // be shown. Photos are already signed for both R2 and S3 by fetchEventPhotos.
-    const [book, media] = await Promise.all([
+    const [book, eventPhotos] = await Promise.all([
       fetchGuestBook(eventId),
       fetchEventPhotos(eventId).catch(() => [] as DisplayPhoto[]),
     ]);
     setEntries(book);
-    setPhotos(media);
+    setPhotos(eventPhotos);
   }, [eventId]);
 
   useEffect(() => {
@@ -78,30 +122,130 @@ export default function GuestBookPage() {
 
   const available = guestBookAvailable(event);
 
-  async function handleSubmit(submitEvent: FormEvent) {
-    submitEvent.preventDefault();
-    if (!eventId || saving) return;
-    setSaving(true);
+  const stagedKind = staged ? attachmentKind(staged) : null;
+
+  function resetAttachment() {
+    attachedIdRef.current = null;
+    setAttachedId(null);
+    setStaged(null);
+    media.clearPending();
+  }
+
+  function stageFile(input: ChangeEvent<HTMLInputElement>) {
+    const file = input.target.files?.[0];
+    // Cleared so picking the same file again after removing it still fires.
+    input.target.value = '';
+    if (!file || saving) return;
+    attachedIdRef.current = null;
+    setAttachedId(null);
+    media.clearPending();
+    const problem = validateMediaFile(file, { allowVideo });
+    if (problem) {
+      setStaged(null);
+      setFormError(problem);
+      return;
+    }
     setFormError(null);
+    setStaged(file);
+    // Warm the guest Cognito session now, while they are still writing, so the
+    // first upload does not go out unsigned. prepareEventUpload is what the
+    // upload page runs first; it is best-effort here and runs again at upload.
+    if (!warmedRef.current && eventId) {
+      warmedRef.current = true;
+      prepareEventUpload(eventId, name).catch(() => {
+        warmedRef.current = false;
+      });
+    }
+  }
+
+  async function finishSign(attachId: string | null) {
+    if (!eventId) return;
     try {
       const result = await signGuestBook({
         eventId,
         name,
         message,
-        photoId: photoId || null,
+        photoId: attachId || photoId || null,
       });
       setDone(result.pending ? 'pending' : 'shown');
+      setDoneNotice(
+        postSubmitNotice({
+          pending: result.pending,
+          attached: attachId ? stagedKind : null,
+          moderationMode: event?.moderationMode,
+        }),
+      );
       setName('');
       setMessage('');
       setPhotoId('');
+      resetAttachment();
       // A held note is not in the album yet, so only reload when it will show.
       if (!result.pending) await load();
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'We could not save that note.');
+      const detail = err instanceof Error ? err.message : 'We could not save that note.';
+      // The file is already in the event. Keep its id so the next tap signs
+      // with it instead of uploading it again.
+      setFormError(attachId && stagedKind ? noteFailureMessage(stagedKind, detail) : detail);
     } finally {
       setSaving(false);
     }
   }
+
+  async function handleSubmit(submitEvent: FormEvent) {
+    submitEvent.preventDefault();
+    if (!eventId || saving) return;
+    setSaving(true);
+    setFormError(null);
+    setDone(null);
+    setDoneNotice(null);
+    if (staged && !attachedIdRef.current) {
+      // The gallery shows who uploaded a file, so use the name they signed with.
+      media.setUploaderName(name);
+      if (media.retryable > 0) media.retryFailed();
+      else if (media.counts.pending === 0) media.addFiles([staged]);
+      setPhase('requested');
+      return;
+    }
+    await finishSign(attachedIdRef.current);
+  }
+
+  // Step 2: the queue now holds the file, so start the upload.
+  useEffect(() => {
+    if (phase !== 'requested' || media.busy) return;
+    if (media.counts.pending > 0) {
+      setPhase('uploading');
+      void media.upload().then(() => setPhase('settled'));
+      return;
+    }
+    // The queue refused it (a size, type or video-slot rule). Nothing uploaded.
+    setPhase('settled');
+  });
+
+  // Step 3: the upload has ended, successfully or not.
+  useEffect(() => {
+    if (phase !== 'settled') return;
+    setPhase('idle');
+    const id = attachedIdRef.current;
+    if (id) {
+      void finishSign(id);
+      return;
+    }
+    const failed = media.queue.find((item) => item.status === 'error');
+    if (failed?.permanent) {
+      // A rule it can never pass (size, type, no video slots left). Drop it so
+      // the guest can pick another file or sign without one.
+      setFormError(
+        `${failed.error ?? 'That file cannot be added.'} Your note is still here — choose a different file, or sign without one.`,
+      );
+      resetAttachment();
+    } else {
+      // Transient: keep the file staged and put it back in line, so tapping
+      // Sign again retries the upload.
+      setFormError(attachmentFailureMessage(stagedKind ?? 'photo', failed?.error));
+      media.retryFailed();
+    }
+    setSaving(false);
+  });
 
   return (
     <Layout title={event ? `${event.name} guest book` : 'Guest book'} width="bleed">
@@ -148,9 +292,10 @@ export default function GuestBookPage() {
                     tone={done === 'pending' ? 'info' : 'success'}
                     label={done === 'pending' ? 'With the host' : 'Signed'}
                   >
-                    {done === 'pending'
-                      ? 'Thank you — your note is with the host and will appear once they approve it.'
-                      : 'Thank you — your note is in the book below.'}
+                    {doneNotice ??
+                      (done === 'pending'
+                        ? 'Thank you — your note is with the host and will appear once they approve it.'
+                        : 'Thank you — your note is in the book below.')}
                   </Notice>
                 </div>
               ) : null}
@@ -185,6 +330,96 @@ export default function GuestBookPage() {
                 {message.length} / {MAX_MESSAGE_LENGTH}
               </p>
 
+              <div className="mt-5">
+                <p className="font-sans text-sm font-medium text-charcoal">
+                  Add a photo{videoOffered ? ' or a video message' : ''}{' '}
+                  <span className="text-charcoal/70">(optional)</span>
+                </p>
+                <div className={`mt-2 grid gap-3 ${videoOffered ? 'sm:grid-cols-2' : ''}`}>
+                  <label
+                    htmlFor="gb-add-photo"
+                    className={`spx-btn-outline cursor-pointer ${saving ? 'pointer-events-none opacity-60' : ''}`}
+                  >
+                    Add a photo
+                  </label>
+                  {videoOffered ? (
+                    <label
+                      htmlFor="gb-add-video"
+                      className={`spx-btn-outline cursor-pointer ${saving ? 'pointer-events-none opacity-60' : ''}`}
+                    >
+                      Record a video message
+                    </label>
+                  ) : null}
+                </div>
+                {/* Photos: no `capture`, so a phone offers camera and library.
+                    Video: `capture` opens the phone's own camera app. */}
+                <input
+                  id="gb-add-photo"
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  className="sr-only"
+                  disabled={saving}
+                  onChange={stageFile}
+                />
+                {videoOffered ? (
+                  <input
+                    id="gb-add-video"
+                    type="file"
+                    accept="video/*,.mov,.m4v"
+                    capture="user"
+                    className="sr-only"
+                    disabled={saving}
+                    onChange={stageFile}
+                  />
+                ) : null}
+
+                {staged ? (
+                  <div className="mt-3 border border-charcoal/10 bg-sand/60 px-3 py-2.5 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate">
+                        {stagedKind === 'video' ? 'Video' : 'Photo'}: {staged.name}
+                      </span>
+                      <span className="shrink-0 text-xs text-charcoal/70">
+                        {attachedId
+                          ? '✓ Uploaded'
+                          : media.busy
+                            ? `${media.overall}%`
+                            : 'Ready'}
+                      </span>
+                    </div>
+                    {media.busy ? (
+                      <div className="mt-2 h-1 w-full overflow-hidden bg-charcoal/10">
+                        <div
+                          className="h-full bg-pine transition-all"
+                          style={{ width: `${media.overall}%` }}
+                        />
+                      </div>
+                    ) : null}
+                    {!saving ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetAttachment();
+                          setFormError(null);
+                        }}
+                        className="mt-2 text-xs text-pine underline"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* The same consent sentence the upload page shows, said where
+                    the guest is about to attach something. */}
+                <p className="mt-3 text-xs text-charcoal/70">{GUEST_BOOK_CONSENT_LINE}</p>
+                {videoOffered ? (
+                  <p className="mt-1 text-xs text-charcoal/70">
+                    {GUEST_BOOK_VIDEO_CONSENT_LINE} Videos up to {MAX_VIDEO_SIZE_LABEL}.
+                  </p>
+                ) : null}
+              </div>
+
               {attachable.length > 0 ? (
                 <>
                   <label htmlFor="gb-photo" className="mt-4 block font-sans text-sm font-medium text-charcoal">
@@ -194,6 +429,7 @@ export default function GuestBookPage() {
                     id="gb-photo"
                     value={photoId}
                     onChange={(e) => setPhotoId(e.target.value)}
+                    disabled={staged !== null}
                     className="spx-input mt-2"
                   >
                     <option value="">No attachment</option>
@@ -211,6 +447,12 @@ export default function GuestBookPage() {
                     </Link>
                     , then come back and attach one.
                   </p>
+                  {staged ? (
+                    <p className="mt-1 text-xs text-charcoal/70">
+                      The {stagedKind === 'video' ? 'video' : 'photo'} you just added will be
+                      attached instead.
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <p className="mt-4 text-xs text-charcoal/70">
@@ -232,7 +474,7 @@ export default function GuestBookPage() {
                 disabled={saving}
                 className="spx-btn-ink mt-6 w-full disabled:opacity-60"
               >
-                {saving ? 'Signing…' : 'Sign the guest book'}
+                {saving ? (media.busy ? 'Uploading…' : 'Signing…') : 'Sign the guest book'}
               </button>
             </form>
 
