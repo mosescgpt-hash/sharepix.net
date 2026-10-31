@@ -3903,10 +3903,17 @@ export async function fetchEventPhotoRecords(eventId: string): Promise<QRPhoto[]
  * venue screen, so it is worth serving from the side with free egress.
  */
 export async function getPhotoDisplaySource(photo: QRPhoto): Promise<MediaSource> {
-  const path = photo.previewS3Key || photo.s3Key;
-  const source = sourceOf((await signedMediaFor(photo.eventId, [path])).get(path));
-  if (!source) throw new Error('That file is not available.');
-  return source;
+  // The preview first, then the original, then the thumbnail. A guest of an
+  // event with downloads withheld (or past its full-size window) is only ever
+  // signed the thumbnail, so asking for the preview alone left them with nothing.
+  // All three are asked for in one batch; the first that was signed wins.
+  const paths = [...new Set([photo.previewS3Key, photo.s3Key, photo.thumbS3Key].filter((p): p is string => Boolean(p)))];
+  const signed = await signedMediaFor(photo.eventId, paths);
+  for (const path of paths) {
+    const source = sourceOf(signed.get(path));
+    if (source) return source;
+  }
+  throw new Error('That file is not available.');
 }
 
 /**

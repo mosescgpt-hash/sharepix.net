@@ -10,7 +10,11 @@ import { initialSource, sourceAfterError, type MediaSource } from '@/lib/mediaSo
  * element ends in the browser's normal broken state rather than in a retry
  * loop. The decision itself is in lib/mediaSource, where it's tested.
  */
-export function useMediaSource(source: MediaSource): {
+export function useMediaSource(
+  source: MediaSource,
+  /** Called once nothing is left to try, so a caller can move on (the slideshow skips the photo). */
+  onExhausted?: () => void,
+): {
   src: string;
   onError: () => void;
 } {
@@ -27,6 +31,7 @@ export function useMediaSource(source: MediaSource): {
     onError: () => {
       const next = sourceAfterError(src, source);
       if (next) setSrc(next);
+      else onExhausted?.();
     },
   };
 }

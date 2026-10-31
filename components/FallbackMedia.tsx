@@ -19,10 +19,12 @@ import type { MediaSource } from '@/lib/mediaSource';
 type ImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> & {
   source: MediaSource;
   alt: string;
+  /** Fired when every URL for this image has failed. */
+  onFailed?: () => void;
 };
 
-export function FallbackImage({ source, alt, ...rest }: ImageProps) {
-  const { src, onError } = useMediaSource(source);
+export function FallbackImage({ source, alt, onFailed, ...rest }: ImageProps) {
+  const { src, onError } = useMediaSource(source, onFailed);
   // Signed URLs change constantly, so a plain img is simpler than next/image.
   // eslint-disable-next-line @next/next/no-img-element
   return <img {...rest} src={src} alt={alt} onError={onError} />;

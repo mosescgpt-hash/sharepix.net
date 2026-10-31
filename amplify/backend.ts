@@ -409,6 +409,15 @@ mediaUrlFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 // path cannot settle it from the key alone.
 photoTable.grantReadData(mediaUrlFn);
 mediaUrlFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// grantReadData covers the table but NOT its secondary indexes on Amplify's
+// table object, so the photosByEventId Query was refused (AccessDenied in the
+// logs) and every guest's photo URLs came back empty. Names the index on purpose.
+mediaUrlFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['dynamodb:Query'],
+    resources: [`${photoTable.tableArn}/index/photosByEventId`],
+  }),
+);
 // The same gallery rules as listEventPhotos, so the picture URLs are gated by
 // pause, the guest link key, a host's download share and a moderation review
 // link exactly as the list is. All read-only.
@@ -671,6 +680,14 @@ printFulfillFn.addEnvironment('R2_SECRET_ACCESS_KEY', process.env.R2_SECRET_ACCE
 const listFn = backend.listEventPhotos.resources.lambda as LambdaFunction;
 photoTable.grantReadData(listFn);
 listFn.addEnvironment('PHOTO_TABLE_NAME', photoTable.tableName);
+// Same gap as mediaUrl above: without this the listing quietly fell back to a
+// full table Scan on every gallery open and slideshow poll.
+listFn.addToRolePolicy(
+  new PolicyStatement({
+    actions: ['dynamodb:Query'],
+    resources: [`${photoTable.tableArn}/index/photosByEventId`],
+  }),
+);
 // Read-only, for one attribute: whether an admin closed the event.
 eventTable.grantReadData(listFn);
 listFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);

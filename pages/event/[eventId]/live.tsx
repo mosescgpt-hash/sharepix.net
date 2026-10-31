@@ -48,6 +48,11 @@ import ChallengeCaption from '@/components/challenges/ChallengeCaption';
 import { challengeCaption } from '@/lib/challenges/rules';
 import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
 
+/** How long a photo whose image failed is passed over before it is tried again. */
+const BAD_PHOTO_SKIP_MS = 60_000;
+/** The pause before moving on from a picture that would not load. */
+const IMAGE_FAILED_RETRY_MS = 1_500;
+
 /** A photo plus where we resolved it from (R2 first, S3 behind), and when. */
 interface Frame {
   photo: QRPhoto;
@@ -117,6 +122,13 @@ export default function LiveSlideshowPage() {
   const urlCacheRef = useRef<Map<string, { source: MediaSource; signedAt: number }>>(new Map());
   const failedPollsRef = useRef(0);
   const frameShownRef = useRef(false);
+  // Photos whose image would not load on this device, and when. They are passed
+  // over for a while (then tried again with a fresh URL) instead of freezing the
+  // screen on a broken picture.
+  const badPhotosRef = useRef<Map<string, number>>(new Map());
+  // Whether any image has actually painted yet. Until one has, a failed image
+  // is shown as "could not be loaded" rather than as a broken frame.
+  const imagePaintedRef = useRef(false);
 
   const uploadUrl =
     typeof window !== 'undefined' && eventId
@@ -197,6 +209,13 @@ export default function LiveSlideshowPage() {
       }
       if (!candidate) return;
 
+      // Passed over: this one failed to load on this device a moment ago.
+      const failedAt = badPhotosRef.current.get(candidate.id);
+      if (failedAt && Date.now() - failedAt < BAD_PHOTO_SKIP_MS) {
+        if (!frameShownRef.current) setLoadTrouble(true);
+        continue;
+      }
+
       const source = await resolveSource(candidate);
       if (!source) {
         // Couldn't sign it: try the next one. Only claim trouble when there is
@@ -219,6 +238,27 @@ export default function LiveSlideshowPage() {
       return;
     }
   }, [resolveSource]);
+
+  /**
+   * The picture on screen would not load from any of its URLs. Forget the URL
+   * (so the next try signs a fresh one), skip the photo for a while, and move on
+   * after a short pause — never straight away, so a device where every image
+   * fails cannot spin.
+   */
+  const handleImageFailed = useCallback(
+    (photo: QRPhoto) => {
+      urlCacheRef.current.delete(photo.id);
+      badPhotosRef.current.set(photo.id, Date.now());
+      if (!imagePaintedRef.current) {
+        // Nothing has ever shown: say so, instead of leaving a broken picture.
+        frameShownRef.current = false;
+        setFrame(null);
+        setLoadTrouble(true);
+      }
+      window.setTimeout(() => void advance(), IMAGE_FAILED_RETRY_MS);
+    },
+    [advance],
+  );
 
   // Initial load: event details, then the first fill of the reel.
   useEffect(() => {
@@ -509,6 +549,10 @@ export default function LiveSlideshowPage() {
               key={frame.photo.id}
               source={frame.source}
               alt=""
+              onLoad={() => {
+                imagePaintedRef.current = true;
+              }}
+              onFailed={() => handleImageFailed(frame.photo)}
               className={`absolute inset-0 h-full w-full object-contain transition-opacity duration-500 ${
                 fading ? 'opacity-0' : 'opacity-100'
               }`}
