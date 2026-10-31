@@ -117,7 +117,7 @@ export default function HostGuide({
             <section>
               <h3 className="font-sans text-base font-semibold text-charcoal">3. Run the live slideshow</h3>
               <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>On the computer driving the venue screen or projector, sign in and open this dashboard.</li>
+                <li>Tap Share live link on this page and send it to the computer driving the venue screen or projector (copy it, scan the QR code, or email it to yourself), then open it there.</li>
                 <li>
                   Open the{' '}
                   <Link

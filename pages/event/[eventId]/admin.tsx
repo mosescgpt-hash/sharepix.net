@@ -11,6 +11,7 @@ import GalleryAccessSettings from '@/components/GalleryAccessSettings';
 import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
+import ShareLiveLink from '@/components/ShareLiveLink';
 import BoothModeCard from '@/components/BoothModeCard';
 import BoothTab from '@/components/BoothTab';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
@@ -785,6 +786,13 @@ function AdminDashboardPage() {
                 </button>
               </div>
             </div>
+
+            {/* One tap to the live slideshow, and a way to send it to a computer or TV. */}
+            {liveSlideshowAvailable(event) ? (
+              <div className="mt-4">
+                <ShareLiveLink eventId={event.id} eventName={event.name} />
+              </div>
+            ) : null}
 
             <EventStatusNotices
               notices={statusNotices}
