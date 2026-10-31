@@ -140,3 +140,61 @@ describe('live page robustness (a phone that sees nothing)', () => {
     await screen.findByText(/could not be loaded yet/, undefined, { timeout: 3000 });
   });
 });
+
+describe('live page when a picture will not load on this device', () => {
+  it('passes over the broken photo and shows the next one', async () => {
+    fetchEventPhotoRecords.mockResolvedValue([old('p1'), old('p2')]);
+    getPhotoDisplaySource.mockImplementation(async (photo: { id: string }) => ({
+      primary: `https://img.test/${photo.id}.jpg`,
+    }));
+    const { container } = render(<LivePage />);
+    await waitFor(() => expect(container.querySelector('img')).toBeTruthy(), { timeout: 3000 });
+    const first = (container.querySelector('img') as HTMLImageElement).getAttribute('src');
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+    await waitFor(
+      () => {
+        const now = container.querySelector('img')?.getAttribute('src');
+        expect(now).toBeTruthy();
+        expect(now).not.toBe(first);
+      },
+      { timeout: 5000 },
+    );
+    // A photo that painted is never replaced by the "could not be loaded" screen.
+    expect(screen.queryByText(/could not be loaded yet/)).toBeNull();
+  });
+
+  it('says so, with Reload, when the very first picture fails and nothing has ever shown', async () => {
+    fetchEventPhotoRecords.mockResolvedValue([old('p1')]);
+    getPhotoDisplaySource.mockResolvedValue({ primary: 'https://img.test/only.jpg' });
+    const { container } = render(<LivePage />);
+    await waitFor(() => expect(container.querySelector('img')).toBeTruthy(), { timeout: 3000 });
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+    await screen.findByText(/could not be loaded yet/);
+    expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy();
+  });
+
+  it('keeps going once an earlier picture has painted', async () => {
+    fetchEventPhotoRecords.mockResolvedValue([old('p1'), old('p2')]);
+    getPhotoDisplaySource.mockImplementation(async (photo: { id: string }) => ({
+      primary: `https://img.test/${photo.id}.jpg`,
+    }));
+    const { container } = render(<LivePage />);
+    await waitFor(() => expect(container.querySelector('img')).toBeTruthy(), { timeout: 3000 });
+    fireEvent.load(container.querySelector('img') as HTMLImageElement);
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+    await waitFor(() => expect(container.querySelector('img')).toBeTruthy(), { timeout: 5000 });
+    expect(screen.queryByText(/could not be loaded yet/)).toBeNull();
+  });
+
+  it('tries the backup address before it gives up on a picture', async () => {
+    fetchEventPhotoRecords.mockResolvedValue([old('p1')]);
+    getPhotoDisplaySource.mockResolvedValue({ primary: 'https://r2.test/a.jpg', fallback: 'https://s3.test/a.jpg' });
+    const { container } = render(<LivePage />);
+    await waitFor(() => expect(container.querySelector('img')).toBeTruthy(), { timeout: 3000 });
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+    await waitFor(() => expect(container.querySelector('img')?.getAttribute('src')).toBe('https://s3.test/a.jpg'));
+    expect(screen.queryByText(/could not be loaded yet/)).toBeNull();
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+    await screen.findByText(/could not be loaded yet/);
+  });
+});

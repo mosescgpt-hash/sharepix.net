@@ -3,6 +3,7 @@ import {
   GetItemCommand,
   BatchGetItemCommand,
   QueryCommand,
+  ScanCommand,
   type AttributeValue,
 } from '@aws-sdk/client-dynamodb';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -364,48 +365,81 @@ async function guestVisible(
 ): Promise<{ stems: Set<string>; ids: Set<string> }> {
   const empty = { stems: new Set<string>(), ids: new Set<string>() };
   if (!PHOTO_TABLE) return empty;
-  const rows: PhotoRowFacts[] = [];
-  let startKey: Record<string, AttributeValue> | undefined;
+  const PROJECTION =
+    'id, s3Key, previewS3Key, thumbS3Key, approved, moderationStatus, eventOwner, boothMatch, publishStatus, boothDivider, boothSegment, uploaderId, uploadedByUserId';
+  const rowsOf = (items: Record<string, AttributeValue>[]): PhotoRowFacts[] =>
+    items.map((item) => ({
+      id: item.id?.S,
+      s3Key: item.s3Key?.S,
+      previewS3Key: item.previewS3Key?.S,
+      thumbS3Key: item.thumbS3Key?.S,
+      approved: item.approved?.BOOL,
+      moderationStatus: item.moderationStatus?.S,
+      eventOwner: item.eventOwner?.S,
+      boothMatch: item.boothMatch?.S,
+      publishStatus: item.publishStatus?.S,
+      boothDivider: item.boothDivider?.BOOL,
+      boothSegment: item.boothSegment?.S,
+      uploaderId: item.uploaderId?.S,
+      uploadedByUserId: item.uploadedByUserId?.S,
+    }));
+
+  let rows: PhotoRowFacts[] = [];
   try {
+    const items: Record<string, AttributeValue>[] = [];
+    let startKey: Record<string, AttributeValue> | undefined;
     do {
       const result = await dynamo.send(
         new QueryCommand({
           TableName: PHOTO_TABLE,
           IndexName: PHOTOS_BY_EVENT_INDEX,
           KeyConditionExpression: '#eventId = :eventId',
-          ProjectionExpression:
-            'id, s3Key, previewS3Key, thumbS3Key, approved, moderationStatus, eventOwner, boothMatch, publishStatus, boothDivider, boothSegment, uploaderId, uploadedByUserId',
+          ProjectionExpression: PROJECTION,
           ExpressionAttributeNames: { '#eventId': 'eventId' },
           ExpressionAttributeValues: { ':eventId': { S: eventId } },
           ExclusiveStartKey: startKey,
         }),
       );
-      for (const item of result.Items ?? []) {
-        rows.push({
-          id: item.id?.S,
-          s3Key: item.s3Key?.S,
-          previewS3Key: item.previewS3Key?.S,
-          thumbS3Key: item.thumbS3Key?.S,
-          approved: item.approved?.BOOL,
-          moderationStatus: item.moderationStatus?.S,
-          eventOwner: item.eventOwner?.S,
-          boothMatch: item.boothMatch?.S,
-          publishStatus: item.publishStatus?.S,
-          boothDivider: item.boothDivider?.BOOL,
-          boothSegment: item.boothSegment?.S,
-          uploaderId: item.uploaderId?.S,
-          uploadedByUserId: item.uploadedByUserId?.S,
-        });
-      }
+      items.push(...(result.Items ?? []));
       startKey = result.LastEvaluatedKey;
     } while (startKey);
+    rows = rowsOf(items);
   } catch (error) {
-    console.error('Could not read photo visibility; guest photo keys will not resolve', {
+    // The index not answering used to blank every guest's photos for good (the
+    // permission for it was missing). listEventPhotos falls back to a Scan in
+    // the same situation, so this does too: slower, never blank. It still logs
+    // loudly so it cannot become the permanent path unnoticed.
+    console.error('Could not Query the eventId index; falling back to a Scan', {
       at: new Date().toISOString(),
       eventId,
       error: error instanceof Error ? error.message : String(error),
     });
-    return empty;
+    try {
+      const items: Record<string, AttributeValue>[] = [];
+      let scanKey: Record<string, AttributeValue> | undefined;
+      do {
+        const result = await dynamo.send(
+          new ScanCommand({
+            TableName: PHOTO_TABLE,
+            FilterExpression: '#eventId = :eventId',
+            ProjectionExpression: PROJECTION,
+            ExpressionAttributeNames: { '#eventId': 'eventId' },
+            ExpressionAttributeValues: { ':eventId': { S: eventId } },
+            ExclusiveStartKey: scanKey,
+          }),
+        );
+        items.push(...(result.Items ?? []));
+        scanKey = result.LastEvaluatedKey;
+      } while (scanKey);
+      rows = rowsOf(items);
+    } catch (scanError) {
+      console.error('Could not read photo visibility; guest photo keys will not resolve', {
+        at: new Date().toISOString(),
+        eventId,
+        error: scanError instanceof Error ? scanError.message : String(scanError),
+      });
+      return empty;
+    }
   }
   return visibleStemsAndIds(rows, ctx as Parameters<typeof visibleStemsAndIds>[1]);
 }
