@@ -61,18 +61,42 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <button
-          type="button"
-          className="-mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center p-2 sm:hidden"
-          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-          aria-expanded={menuOpen}
-          aria-controls="primary-navigation"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          <span className="block h-px w-6 bg-charcoal" />
-          <span className="mt-[7px] block h-px w-6 bg-charcoal" />
-          <span className="mt-[7px] block h-px w-6 bg-charcoal" />
-        </button>
+        {/* Phones: the account link stays in the bar (no need to open the menu
+            to find it) beside the menu button. */}
+        <div className="flex items-center gap-1 sm:hidden">
+          {user.status === 'out' ? (
+            <Link
+              href="/sign-in"
+              data-testid="mobile-auth-link"
+              className="inline-flex min-h-[44px] items-center px-3 font-sans text-sm font-semibold text-ink"
+            >
+              Sign in
+            </Link>
+          ) : user.status === 'in' ? (
+            <Link
+              href="/my-events"
+              data-testid="mobile-auth-link"
+              className="inline-flex min-h-[44px] items-center px-3 font-sans text-sm font-semibold text-ink"
+            >
+              My events
+            </Link>
+          ) : null}
+          {/* A column on purpose: the bars were flex items of an inline-flex
+              row, so they sat side by side and collapsed into one thin line. */}
+          <button
+            type="button"
+            data-testid="menu-button"
+            className="-mr-2 flex h-11 min-h-[44px] w-11 min-w-[44px] flex-col items-center justify-center gap-[5px] rounded-md text-ink"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            aria-controls="primary-navigation"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span aria-hidden="true" className="block h-0.5 w-6 rounded-full bg-ink" />
+            <span aria-hidden="true" className="block h-0.5 w-6 rounded-full bg-ink" />
+            <span aria-hidden="true" className="block h-0.5 w-6 rounded-full bg-ink" />
+          </button>
+        </div>
 
         <div className="hidden items-center gap-8 sm:flex">
           {LINKS.map((link) => (
