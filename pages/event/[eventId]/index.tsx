@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import GuestReferralLink from '@/components/GuestReferralLink';
 import Layout from '@/components/Layout';
+import LogNotice from '@/components/LogNotice';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
 import EventCover from '@/components/EventCover';
@@ -339,6 +340,7 @@ export default function EventGalleryPage() {
               {/* The guest-to-host loop. Never shown to the host or an admin
                   looking at their own event — see components/GuestReferralLink.tsx. */}
               {!privileged && canSee ? <GuestReferralLink source="gallery" /> : null}
+              {!privileged && canSee ? <LogNotice className="mt-6 text-center" /> : null}
             </div>
           </section>
         </div>

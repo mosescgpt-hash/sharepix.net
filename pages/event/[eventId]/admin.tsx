@@ -12,6 +12,7 @@ import GuestBookModeration from '@/components/GuestBookModeration';
 import MomentsManager from '@/components/MomentsManager';
 import EventQRCode from '@/components/EventQRCode';
 import ShareLiveLink from '@/components/ShareLiveLink';
+import DiagnosticsPanel from '@/components/DiagnosticsPanel';
 import BoothModeCard from '@/components/BoothModeCard';
 import BoothTab from '@/components/BoothTab';
 import GalleryStyleSettings from '@/components/GalleryStyleSettings';
@@ -1670,6 +1671,8 @@ function AdminDashboardPage() {
                   </div>
                 )}
               </div>
+
+              <DiagnosticsPanel eventId={event.id} eventName={event.name} />
 
               {/* Closing and deleting, alone at the bottom in a card that
                   looks like what it is. Delete event used to share a card
