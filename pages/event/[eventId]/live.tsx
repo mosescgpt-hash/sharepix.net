@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
+import { logEvent } from '@/lib/clientLog';
 import Head from 'next/head';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -142,6 +143,9 @@ export default function LiveSlideshowPage() {
     try {
       const records = await withTimeout(fetchEventPhotoRecords(eventId), 20_000, 'Timed out loading photos');
       setGate(null);
+      // The first poll that works after some that did not: the moment a
+      // flaky connection came back, and how many polls it missed.
+      if (failedPollsRef.current > 0) logEvent('live_poll_recovered', undefined, failedPollsRef.current);
       failedPollsRef.current = 0;
       setProblem(null);
       const eligible = slideshowEligible(records);
@@ -163,14 +167,19 @@ export default function LiveSlideshowPage() {
       }
     } catch (err) {
       // Sharing was paused, or the QR code replaced, while the screen was running.
-      if (isSharingPausedError(err)) setGate('paused');
-      else if (isLinkRequiredError(err)) setGate('replaced');
-      else {
+      if (isSharingPausedError(err)) {
+        setGate('paused');
+        logEvent('live_paused', 'sharing paused');
+      } else if (isLinkRequiredError(err)) {
+        setGate('replaced');
+        logEvent('live_paused', 'link replaced');
+      } else {
         // Any other failed poll is not fatal — the reel we already have keeps
         // playing. But after two in a row, with nothing on screen, say so: a
         // phone that cannot get a guest session would otherwise sit on
         // "Waiting for photos" for the whole event.
         failedPollsRef.current += 1;
+        logEvent('live_poll_fail', classifyLiveError(err), failedPollsRef.current);
         if (failedPollsRef.current >= 2) setProblem(classifyLiveError(err));
       }
     }
@@ -202,6 +211,7 @@ export default function LiveSlideshowPage() {
         // Couldn't sign it: try the next one. Only claim trouble when there is
         // still nothing on screen to fall back on.
         if (!frameShownRef.current) setLoadTrouble(true);
+        logEvent('live_frame_unsignable', frameShownRef.current ? 'skipped' : 'nothing on screen');
         continue;
       }
 
@@ -232,6 +242,7 @@ export default function LiveSlideshowPage() {
         const ev = await withTimeout(fetchEvent(eventId), 20_000, 'Timed out loading the event');
         if (cancelled) return;
         if (!ev) {
+          logEvent('live_start_fail', 'event not found');
           setError('We couldn’t find that event.');
           return;
         }
@@ -241,6 +252,7 @@ export default function LiveSlideshowPage() {
         // signed in, so the gate is the event's own row rather than the
         // viewer's identity.
         if (!liveSlideshowAvailable(ev)) {
+          logEvent('live_start_fail', 'slideshow not enabled');
           setError(
             'The live slideshow is not enabled for this event. The host can turn it on from their event dashboard.',
           );
@@ -260,6 +272,7 @@ export default function LiveSlideshowPage() {
         ]);
         const privileged = isEventHost(ev, user) || admin;
         if (!privileged && (ev.guestViewBlocked === true || galleryAudienceFor(ev) === 'host')) {
+          logEvent('live_start_fail', 'gallery host only');
           setError(
             'The live slideshow is off because the host is keeping this gallery to themselves. The host can open it while signed in, or allow guests to view the gallery.',
           );
@@ -272,9 +285,11 @@ export default function LiveSlideshowPage() {
         if (!privileged) captureLinkKey(eventId);
         await refresh();
         if (!cancelled) await advance();
+        logEvent('live_start', privileged ? 'host' : 'guest', attempt);
       } catch (err) {
         if (!cancelled) {
           const kind = classifyLiveError(err);
+          logEvent('live_start_fail', kind, attempt);
           setStartFailed(true);
           setError(
             kind === 'timeout' || kind === 'network' || kind === 'session'
@@ -384,12 +399,14 @@ export default function LiveSlideshowPage() {
     if (fsSupport === 'none') {
       // iPhone Safari: no fullscreen API. Hide everything but the photo, and
       // tell the person how to get the browser bar out of the way.
+      logEvent('live_fullscreen', 'immersive');
       setImmersive((on) => !on);
       setFsHint(true);
       window.setTimeout(() => setFsHint(false), 8000);
       return;
     }
     const ok = await toggleNativeFullscreen(document);
+    logEvent('live_fullscreen', ok ? 'native' : 'native refused, immersive');
     if (!ok) {
       setImmersive((on) => !on);
       setFsHint(true);

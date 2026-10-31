@@ -17,6 +17,7 @@ import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
 import { isTimeoutError, withTimeout, withTimeoutOr } from '@/lib/withTimeout';
+import { logEvent } from '@/lib/clientLog';
 
 /** How long the events list may take before the page says so and offers a retry. */
 const MY_EVENTS_TIMEOUT_MS = 25_000;
@@ -71,6 +72,9 @@ function MyEventsPage() {
       })
       .catch((err) => {
         if (run !== loadRun.current) return;
+        // Recorded against the signed-in account: this page has no event.
+        if (isTimeoutError(err)) logEvent('myevents_timeout', undefined, MY_EVENTS_TIMEOUT_MS);
+        else logEvent('myevents_fail', err instanceof Error ? err.name : 'Error');
         setLoadFailed(true);
         setError(
           isTimeoutError(err)

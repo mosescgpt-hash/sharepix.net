@@ -69,6 +69,8 @@ import { claimRefund } from './functions/claim-refund/resource';
 import { submitFeedback } from './functions/submit-feedback/resource';
 import { surveyResponse } from './functions/survey-response/resource';
 import { recordAnalytics } from './functions/record-analytics/resource';
+import { recordClientLog } from './functions/record-client-log/resource';
+import { eventDiagnostics } from './functions/event-diagnostics/resource';
 import { submitMarketing } from './functions/submit-marketing/resource';
 import { reclaimStorage } from './functions/reclaim-storage/resource';
 import { photoEngagement } from './functions/photo-engagement/resource';
@@ -135,6 +137,8 @@ const backend = defineBackend({
   submitFeedback,
   surveyResponse,
   recordAnalytics,
+  recordClientLog,
+  eventDiagnostics,
   submitMarketing,
   reclaimStorage,
   photoEngagement,
@@ -172,6 +176,7 @@ const refundTable = backend.data.resources.tables.Refund;
 const feedbackTable = backend.data.resources.tables.EventFeedback;
 const surveyTable = backend.data.resources.tables.SurveyResponse;
 const analyticsTable = backend.data.resources.tables.AnalyticsEvent;
+const clientLogTable = backend.data.resources.tables.ClientLog;
 const marketingTable = backend.data.resources.tables.MarketingSubmission;
 const mediaTable = backend.data.resources.tables.MediaObject;
 const settingTable = backend.data.resources.tables.AppSetting;
@@ -185,9 +190,19 @@ const bucket = backend.storage.resources.bucket;
 // Amplify Gen2 tables are managed AmplifyDynamoDbTable resources (not plain
 // CfnTables), so PITR is set through cfnResources.amplifyDynamoDbTables.
 const { amplifyDynamoDbTables } = backend.data.resources.cfnResources;
-for (const table of Object.values(amplifyDynamoDbTables)) {
+for (const [name, table] of Object.entries(amplifyDynamoDbTables)) {
+  // Not the diagnostic log: it is 60 days of throwaway telemetry that expires
+  // by itself, and continuous backups of it would keep deleted rows for 35
+  // days beyond the retention the privacy page promises.
+  if (name === 'ClientLog') continue;
   table.pointInTimeRecoveryEnabled = true;
 }
+
+// The diagnostic log expires by itself. `expiresAt` is epoch seconds, set on
+// every batch and every daily-limit counter by record-client-log; DynamoDB
+// deletes the row some time after that moment, which is why reads never rely on
+// it. An Amplify model cannot declare a TTL, so it is set on the table here.
+amplifyDynamoDbTables.ClientLog.timeToLiveAttribute = { attributeName: 'expiresAt', enabled: true };
 
 // Storage lifecycle.
 //
@@ -1506,6 +1521,25 @@ submitMarketingFn.addEnvironment('ANALYTICS_TABLE_NAME', analyticsTable.tableNam
 const recordAnalyticsFn = backend.recordAnalytics.resources.lambda as LambdaFunction;
 analyticsTable.grantWriteData(recordAnalyticsFn);
 recordAnalyticsFn.addEnvironment('ANALYTICS_TABLE_NAME', analyticsTable.tableName);
+
+// The diagnostic log recorder. Reachable by any browser, so: write-only on its
+// own table, a read of the Event table for the one existence check, and no
+// index access.
+const recordClientLogFn = backend.recordClientLog.resources.lambda as LambdaFunction;
+clientLogTable.grantWriteData(recordClientLogFn);
+eventTable.grantReadData(recordClientLogFn);
+recordClientLogFn.addEnvironment('CLIENT_LOG_TABLE_NAME', clientLogTable.tableName);
+recordClientLogFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
+
+// The reader. Signed-in callers only, and the owner check is in the handler.
+// The Query needs the indexes spelled out for the same reason as the booth
+// functions (see amplify/lib/indexGrants.ts).
+const eventDiagnosticsFn = backend.eventDiagnostics.resources.lambda as LambdaFunction;
+clientLogTable.grantReadData(eventDiagnosticsFn);
+eventTable.grantReadData(eventDiagnosticsFn);
+eventDiagnosticsFn.addToRolePolicy(indexReadStatement([clientLogTable.tableArn]));
+eventDiagnosticsFn.addEnvironment('CLIENT_LOG_TABLE_NAME', clientLogTable.tableName);
+eventDiagnosticsFn.addEnvironment('EVENT_TABLE_NAME', eventTable.tableName);
 
 // The funnel events that are facts rather than claims: an event created, a
 // payment recorded, a contributor counted. All three of these functions already

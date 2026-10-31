@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { logEvent } from '@/lib/clientLog';
 import { initialSource, sourceAfterError, type MediaSource } from '@/lib/mediaSource';
 
 /**
@@ -26,6 +27,8 @@ export function useMediaSource(source: MediaSource): {
     src,
     onError: () => {
       const next = sourceAfterError(src, source);
+      // Which way it failed, and never the address: signed URLs are secrets.
+      logEvent('media_fallback', next ? 'switched to backup' : 'no backup left');
       if (next) setSrc(next);
     },
   };

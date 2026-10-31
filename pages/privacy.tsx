@@ -1,9 +1,10 @@
 import Layout from '@/components/Layout';
+import LogOptOut from '@/components/LogOptOut';
 import { BUSINESS_ADDRESS, LEGAL_ENTITY } from '@/lib/businessInfo';
 
 // Last updated date shown at the top of the policy. Update this whenever the
 // policy text changes.
-const LAST_UPDATED = 'October 20, 2026';
+const LAST_UPDATED = 'October 31, 2026';
 const CONTACT_EMAIL = 'privacy@sharepix.net';
 
 export default function PrivacyPage() {
@@ -153,6 +154,36 @@ export default function PrivacyPage() {
               Guided-setup progress is saved in your browser storage. If you choose to email
               support, your email message is sent to us through your email provider.
             </p>
+            <p>
+              The sentences above about page-view counting describe Cloudflare Web Analytics
+              only. SharePix&rsquo;s own diagnostic logs are described next.
+            </p>
+
+            <h3 id="diagnostic-logs">Diagnostic logs</h3>
+            <p>
+              So that we can work out what went wrong when an event has a problem, the
+              SharePix web app keeps short technical logs of what happened on a device: which
+              pages were opened, whether the device could connect, which step of an upload or
+              of the live slideshow failed and roughly why, and the kind of device and browser
+              (for example &ldquo;Safari 17 on iOS 17&rdquo;). Each device is given a random code
+              made on that device, which is shown as a support code. It is not linked to a name, an
+              email address or an account, and a person can read it out to us to help us find
+              their device&rsquo;s log.
+            </p>
+            <p>
+              The logs <strong>never contain</strong> photos or videos, guest book or other
+              messages, names, email addresses or IP addresses, and they never contain the
+              private key in a gallery link (the part after the &ldquo;#&rdquo;) or any signed
+              address. Anything that looks like one is removed before it is stored. They are
+              readable only by the host of the event concerned and by SharePix support, are kept
+              for 60 days, and are then deleted automatically.
+            </p>
+            <p>
+              <strong>Your choice.</strong> You can turn diagnostic logs off on this device, and
+              we also switch them off if your browser sends a Do Not Track signal. Turning them
+              off stops new logs and deletes any that are waiting on your device.
+            </p>
+            <LogOptOut />
           </div>
 
           <div>

@@ -45,6 +45,7 @@ import { createCoverImage, createPhotoPreview, createPhotoThumb } from '@/lib/me
 import type { CoverStyle } from '@/lib/eventCover';
 import { LIST_PAGE_LIMIT, listAllPages } from '@/lib/listPages';
 import { SURVEY_QUESTIONS } from '@/lib/survey';
+import { logEvent } from '@/lib/clientLog';
 import {
   ANALYTICS_EVENTS,
   isAnalyticsEvent,
@@ -251,6 +252,23 @@ export function isTransientUploadError(error: unknown): boolean {
   );
 }
 
+/**
+ * What kind of failure an upload hit, in a word, for the diagnostic log.
+ *
+ * The message itself is never logged: it can carry a signed URL or a file name.
+ */
+export function uploadErrorKind(error: unknown): string {
+  const text = errorMessage(error);
+  if (/rate exceeded|throttl|too many request/i.test(text)) return 'throttled';
+  if (/no current user|credential|not authorized|unauthor|forbidden|access denied/i.test(text)) return 'session';
+  if (/timeout|timed out/i.test(text)) return 'timeout';
+  if (/network|failed to fetch|load failed/i.test(text)) return 'network';
+  if (/limit|too many photos|too many videos|full/i.test(text)) return 'limit';
+  if (/size|too large|exceed/i.test(text)) return 'size';
+  if (/type|format|unsupported/i.test(text)) return 'type';
+  return 'other';
+}
+
 async function retryTransient<T>(operation: () => Promise<T>, attempts = 4): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -259,6 +277,8 @@ async function retryTransient<T>(operation: () => Promise<T>, attempts = 4): Pro
     } catch (error) {
       lastError = error;
       if (!isTransientUploadError(error) || attempt === attempts - 1) throw error;
+      // Cleaned by the logger: only the kind of failure is kept, not its text.
+      logEvent('upload_retry', uploadErrorKind(error), attempt + 1);
       // Refresh credentials only when the session was lost; throttling needs quiet backoff instead.
       if (/no current user|credential/i.test(errorMessage(error))) {
         await fetchAuthSession({ forceRefresh: true }).catch(() => undefined);
@@ -3429,6 +3449,26 @@ export async function uploadEventPhoto(
 }
 
 export async function uploadEventPhotoWithContext(
+  context: EventUploadContext,
+  file: File,
+  onProgress?: (p: { loaded: number; total: number }) => void,
+  contentHash?: string,
+): Promise<UploadedPhoto> {
+  // The diagnostic log gets the type, the size in KB and how long it took, and
+  // never the file name: names are people's words.
+  const began = Date.now();
+  logEvent('upload_start', file.type || 'unknown type', Math.round(file.size / 1024));
+  try {
+    const uploaded = await storeEventPhoto(context, file, onProgress, contentHash);
+    logEvent('upload_ok', uploaded.duplicate ? 'duplicate' : undefined, Date.now() - began);
+    return uploaded;
+  } catch (error) {
+    logEvent('upload_fail', uploadErrorKind(error), Date.now() - began);
+    throw error;
+  }
+}
+
+async function storeEventPhoto(
   context: EventUploadContext,
   file: File,
   onProgress?: (p: { loaded: number; total: number }) => void,

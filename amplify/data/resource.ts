@@ -32,6 +32,8 @@ import { claimRefund as claimRefundFn } from '../functions/claim-refund/resource
 import { submitFeedback as submitFeedbackFn } from '../functions/submit-feedback/resource';
 import { surveyResponse as surveyResponseFn } from '../functions/survey-response/resource';
 import { recordAnalytics as recordAnalyticsFn } from '../functions/record-analytics/resource';
+import { recordClientLog as recordClientLogFn } from '../functions/record-client-log/resource';
+import { eventDiagnostics as eventDiagnosticsFn } from '../functions/event-diagnostics/resource';
 import { submitMarketing as submitMarketingFn } from '../functions/submit-marketing/resource';
 import { reclaimStorage as reclaimStorageFn } from '../functions/reclaim-storage/resource';
 import { photoEngagement as photoEngagementFn } from '../functions/photo-engagement/resource';
@@ -1212,6 +1214,43 @@ const schema = a.schema({
       detailJson: a.string(),
       occurredAt: a.datetime(),
     })
+    .authorization((allow) => [allow.group('ADMINS')]),
+
+  /**
+   * One batch of a device's diagnostic log, kept 60 days.
+   *
+   * Written only by the record-client-log function and read only through
+   * event-diagnostics, which checks the caller owns the event. The model grants
+   * the ADMINS group and nobody else, so there is no path from a browser to
+   * these rows that skips both.
+   *
+   * `eventId` is an event id, or "acct#<sub>" for a signed-in host's own
+   * My Events and sign-in logs; the function decides which, never the caller.
+   * `expiresAt` is epoch seconds, which is what DynamoDB's TTL needs: it is set
+   * as the table's TTL attribute in backend.ts, and an Amplify model cannot say
+   * so itself. Every field is optional because the same table carries the daily
+   * limit counters, which are not batches and which expire the same way.
+   */
+  ClientLog: a
+    .model({
+      eventId: a.string(),
+      deviceId: a.string(),
+      sessionId: a.string(),
+      /** When the server received it. Entries carry only their age. */
+      ts: a.string(),
+      /** deviceId#ts: lets one device's batches be read by support code. */
+      deviceKey: a.string(),
+      entriesJson: a.string(),
+      deviceJson: a.string(),
+      build: a.string(),
+      entryCount: a.integer(),
+      problemCount: a.integer(),
+      expiresAt: a.integer(),
+    })
+    .secondaryIndexes((index) => [
+      index('eventId').sortKeys(['ts']).name('clientLogsByEventTs'),
+      index('eventId').sortKeys(['deviceKey']).name('clientLogsByEventDevice'),
+    ])
     .authorization((allow) => [allow.group('ADMINS')]),
 
   /**
@@ -2516,6 +2555,48 @@ const schema = a.schema({
     .returns(a.boolean())
     .authorization((allow) => [allow.guest(), allow.authenticated()])
     .handler(a.handler.function(recordAnalyticsFn)),
+
+  /**
+   * Store a batch of a device's diagnostic log.
+   *
+   * Open to guests as well as signed-in hosts, because the guest whose phone is
+   * failing is exactly the caller we need to hear from. The function checks the
+   * event exists, validates and scrubs the batch, applies daily limits and sets
+   * the expiry. Always returns true: telemetry never tells a device it failed.
+   */
+  recordClientLog: a
+    .mutation()
+    .arguments({
+      /** An event id, or empty for the signed-in caller's own account. */
+      eventId: a.string(),
+      /** The batch, as JSON. See lib/clientLogSchema.ts. */
+      batchJson: a.string().required(),
+    })
+    .returns(a.boolean())
+    .authorization((allow) => [allow.guest(), allow.authenticated()])
+    .handler(a.handler.function(recordClientLogFn)),
+
+  /**
+   * Read diagnostic logs: an event's, for its host or an admin, or the caller's
+   * own account's. Returns JSON, `{ rows, nextToken }`. Signed-in only, and an
+   * event the caller does not own answers empty rather than refused.
+   */
+  eventDiagnostics: a
+    .query()
+    .arguments({
+      /** "event" (default) or "account". */
+      scope: a.string(),
+      eventId: a.string(),
+      /** A guest's support code, or its first four or more characters. */
+      deviceCode: a.string(),
+      /** Only batches received after this ISO time. */
+      since: a.string(),
+      limit: a.integer(),
+      nextToken: a.string(),
+    })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(eventDiagnosticsFn)),
 
   /**
    * Open, autosave, or submit a post-event survey.

@@ -30,6 +30,11 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  // Which deploy a diagnostic log came from. Amplify Hosting sets AWS_COMMIT_ID
+  // at build time; anywhere else this is empty and the log says "dev".
+  env: {
+    NEXT_PUBLIC_BUILD_ID: (process.env.AWS_COMMIT_ID || '').slice(0, 7),
+  },
   images: {
     // Photos are served from signed S3 URLs; allow any S3 host.
     remotePatterns: [

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import UploadForm from '@/components/UploadForm';
+import LogNotice from '@/components/LogNotice';
 import EventCover from '@/components/EventCover';
 import ReminderOptInCard from '@/components/uploadReminders/ReminderOptInCard';
 import ChallengeCard from '@/components/challenges/ChallengeCard';
@@ -196,6 +197,7 @@ export default function GuestUploadPage() {
                     }}
                   />
                   {uploadedOnce ? <ReminderOptInCard event={event} /> : null}
+                  <LogNotice className="mt-4" />
                 </>
               ) : event.uploadsClosed ? (
                 <Notice tone="warn" label="Closed by the host">
