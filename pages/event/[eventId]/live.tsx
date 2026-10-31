@@ -32,6 +32,18 @@ import {
   slideshowEligible,
 } from '@/lib/slideshow';
 import { QREvent, QRPhoto } from '@/lib/types';
+import { isVideoFilename } from '@/lib/validation';
+import { withTimeout, withTimeoutOr } from '@/lib/withTimeout';
+import {
+  classifyLiveError,
+  connectionMessage,
+  emptyReelReason,
+  fullscreenSupport,
+  isFullscreenNow,
+  toggleNativeFullscreen,
+  type FullscreenSupport,
+  type LiveProblem,
+} from '@/lib/liveView';
 import ChallengeCaption from '@/components/challenges/ChallengeCaption';
 import { challengeCaption } from '@/lib/challenges/rules';
 import { useEventChallenges } from '@/lib/challenges/useEventChallenges';
@@ -65,6 +77,26 @@ export default function LiveSlideshowPage() {
   const [isNew, setIsNew] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
   const [photoCount, setPhotoCount] = useState(0);
+  // Why the reel is empty although photos exist: still inside the moderation
+  // buffer, or only videos (the slideshow shows still photos).
+  const [emptyReason, setEmptyReason] = useState<'none' | 'buffer' | 'videos-only'>('none');
+  // Set after two polls in a row fail for a reason other than a gate, so a
+  // viewer is told rather than left on "Waiting for photos". Cleared by the
+  // next poll that works.
+  const [problem, setProblem] = useState<LiveProblem | null>(null);
+  // Photos exist but none could be signed for display (so nothing can be shown).
+  const [loadTrouble, setLoadTrouble] = useState(false);
+  // Bumped by the Try again button to restart the start-up sequence.
+  const [attempt, setAttempt] = useState(0);
+  // Fullscreen: real fullscreen where the browser has it, otherwise (iPhone
+  // Safari) a "fill the screen" mode that hides the page chrome.
+  const [fsSupport, setFsSupport] = useState<FullscreenSupport>('native');
+  const [isFs, setIsFs] = useState(false);
+  const [immersive, setImmersive] = useState(false);
+  const [fsHint, setFsHint] = useState(false);
+  // A start-up failure that may clear on its own (slow network, session), as
+  // opposed to "event not found" or "slideshow not enabled".
+  const [startFailed, setStartFailed] = useState(false);
   // Why this screen has nothing to show: the host paused sharing, or the link
   // it was opened from was replaced. Cleared by the next poll that succeeds, so
   // a screen left running picks up again when the host resumes.
@@ -83,6 +115,8 @@ export default function LiveSlideshowPage() {
   const seenRef = useRef<Set<string>>(new Set());
   const indexRef = useRef(0);
   const urlCacheRef = useRef<Map<string, { source: MediaSource; signedAt: number }>>(new Map());
+  const failedPollsRef = useRef(0);
+  const frameShownRef = useRef(false);
 
   const uploadUrl =
     typeof window !== 'undefined' && eventId
@@ -106,11 +140,20 @@ export default function LiveSlideshowPage() {
   const refresh = useCallback(async () => {
     if (!eventId) return;
     try {
-      const records = await fetchEventPhotoRecords(eventId);
+      const records = await withTimeout(fetchEventPhotoRecords(eventId), 20_000, 'Timed out loading photos');
       setGate(null);
+      failedPollsRef.current = 0;
+      setProblem(null);
       const eligible = slideshowEligible(records);
       reelRef.current = eligible;
       setPhotoCount(eligible.length);
+      setEmptyReason(
+        emptyReelReason(
+          records.length,
+          eligible.length,
+          records.filter((photo) => isVideoFilename(photo.s3Key)).length,
+        ),
+      );
       // Anything not yet shown jumps the queue so it appears while the guest who
       // uploaded it is still nearby.
       const arrivals = newArrivals(eligible, seenRef.current);
@@ -122,35 +165,59 @@ export default function LiveSlideshowPage() {
       // Sharing was paused, or the QR code replaced, while the screen was running.
       if (isSharingPausedError(err)) setGate('paused');
       else if (isLinkRequiredError(err)) setGate('replaced');
-      // Any other failed poll is not fatal — the reel we already have keeps playing.
+      else {
+        // Any other failed poll is not fatal — the reel we already have keeps
+        // playing. But after two in a row, with nothing on screen, say so: a
+        // phone that cannot get a guest session would otherwise sit on
+        // "Waiting for photos" for the whole event.
+        failedPollsRef.current += 1;
+        if (failedPollsRef.current >= 2) setProblem(classifyLiveError(err));
+      }
     }
   }, [eventId]);
 
-  /** Move to the next photo: queued arrivals first, then the normal cycle. */
+  /**
+   * Move to the next photo: queued arrivals first, then the normal cycle.
+   *
+   * A photo that cannot be signed is skipped for the next one (up to three per
+   * tick) rather than ending the tick, so one bad file cannot freeze the screen.
+   * When nothing at all could be loaded, `loadTrouble` says so.
+   */
   const advance = useCallback(async () => {
-    const queued = queueRef.current.shift();
-    let candidate: QRPhoto | undefined = queued;
-    let flagAsNew = Boolean(queued);
+    for (let tries = 0; tries < 3; tries += 1) {
+      const queued = queueRef.current.shift();
+      let candidate: QRPhoto | undefined = queued;
+      const flagAsNew = Boolean(queued);
 
-    if (!candidate) {
-      const reel = reelRef.current;
-      if (reel.length === 0) return;
-      indexRef.current = nextIndex(indexRef.current, reel.length);
-      candidate = reel[indexRef.current];
+      if (!candidate) {
+        const reel = reelRef.current;
+        if (reel.length === 0) return;
+        indexRef.current = nextIndex(indexRef.current, reel.length);
+        candidate = reel[indexRef.current];
+      }
+      if (!candidate) return;
+
+      const source = await resolveSource(candidate);
+      if (!source) {
+        // Couldn't sign it: try the next one. Only claim trouble when there is
+        // still nothing on screen to fall back on.
+        if (!frameShownRef.current) setLoadTrouble(true);
+        continue;
+      }
+
+      setLoadTrouble(false);
+      frameShownRef.current = true;
+      seenRef.current.add(candidate.id);
+      setFading(true);
+      const chosen = candidate;
+      // Let the outgoing frame fade before swapping in the next one.
+      window.setTimeout(() => {
+        setFrame({ photo: chosen, source, signedAt: Date.now() });
+        setIsNew(flagAsNew);
+        setFading(false);
+      }, 400);
+      return;
     }
-    if (!candidate) return;
-
-    const source = await resolveSource(candidate);
-    if (!source) return; // couldn't sign it; try again on the next tick
-
-    seenRef.current.add(candidate.id);
-    setFading(true);
-    // Let the outgoing frame fade before swapping in the next one.
-    window.setTimeout(() => {
-      setFrame({ photo: candidate as QRPhoto, source, signedAt: Date.now() });
-      setIsNew(flagAsNew);
-      setFading(false);
-    }, 400);
   }, [resolveSource]);
 
   // Initial load: event details, then the first fill of the reel.
@@ -159,8 +226,10 @@ export default function LiveSlideshowPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setError(null);
+      setStartFailed(false);
       try {
-        const ev = await fetchEvent(eventId);
+        const ev = await withTimeout(fetchEvent(eventId), 20_000, 'Timed out loading the event');
         if (cancelled) return;
         if (!ev) {
           setError('We couldn’t find that event.');
@@ -181,9 +250,13 @@ export default function LiveSlideshowPage() {
         // Who may watch. The server refuses everything it should (this only
         // decides what to show), and a host who is signed in as themselves
         // always sees their own event.
+        // Neither check may hold a guest's phone on "Starting…": the admin check
+        // refreshes the session over the network, which can stall on a weak
+        // connection. A timeout reads as "not the host / not an admin", which is
+        // the safe answer, and the server decides access either way.
         const [user, admin] = await Promise.all([
-          getCurrentUserInfo(),
-          isGlobalAdmin().catch(() => false),
+          withTimeoutOr(getCurrentUserInfo(), 8_000, null),
+          withTimeoutOr(isGlobalAdmin().catch(() => false), 8_000, false),
         ]);
         const privileged = isEventHost(ev, user) || admin;
         if (!privileged && (ev.guestViewBlocked === true || galleryAudienceFor(ev) === 'host')) {
@@ -199,8 +272,16 @@ export default function LiveSlideshowPage() {
         if (!privileged) captureLinkKey(eventId);
         await refresh();
         if (!cancelled) await advance();
-      } catch {
-        if (!cancelled) setError('The slideshow could not be started.');
+      } catch (err) {
+        if (!cancelled) {
+          const kind = classifyLiveError(err);
+          setStartFailed(true);
+          setError(
+            kind === 'timeout' || kind === 'network' || kind === 'session'
+              ? connectionMessage(kind)
+              : 'The slideshow could not be started.',
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -208,7 +289,7 @@ export default function LiveSlideshowPage() {
     return () => {
       cancelled = true;
     };
-  }, [eventId, refresh, advance]);
+  }, [eventId, refresh, advance, attempt]);
 
   // Poll for new photos.
   useEffect(() => {
@@ -259,19 +340,65 @@ export default function LiveSlideshowPage() {
     };
     window.addEventListener('mousemove', wake);
     window.addEventListener('touchstart', wake);
+    window.addEventListener('pointerdown', wake);
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener('mousemove', wake);
       window.removeEventListener('touchstart', wake);
+      window.removeEventListener('pointerdown', wake);
     };
   }, []);
 
-  function toggleFullscreen() {
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-    else void document.documentElement.requestFullscreen().catch(() => undefined);
+  // Fit the screen on a phone. The page is a fixed layer the size of what is
+  // actually visible (not 100vh, which on iPhone Safari is taller than the
+  // visible area and made the page scroll), and the document behind it cannot
+  // scroll.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = { html: html.style.overflow, body: body.style.overflow, overscroll: html.style.overscrollBehavior };
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    return () => {
+      html.style.overflow = prev.html;
+      body.style.overflow = prev.body;
+      html.style.overscrollBehavior = prev.overscroll;
+    };
+  }, []);
+
+  // Which kind of fullscreen this browser has, and keep the button honest when
+  // the person leaves it with Esc or a swipe.
+  useEffect(() => {
+    setFsSupport(fullscreenSupport(document));
+    const sync = () => setIsFs(isFullscreenNow(document));
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      document.removeEventListener('webkitfullscreenchange', sync);
+    };
+  }, []);
+
+  async function toggleFullscreen() {
+    if (fsSupport === 'none') {
+      // iPhone Safari: no fullscreen API. Hide everything but the photo, and
+      // tell the person how to get the browser bar out of the way.
+      setImmersive((on) => !on);
+      setFsHint(true);
+      window.setTimeout(() => setFsHint(false), 8000);
+      return;
+    }
+    const ok = await toggleNativeFullscreen(document);
+    if (!ok) {
+      setImmersive((on) => !on);
+      setFsHint(true);
+      window.setTimeout(() => setFsHint(false), 8000);
+    }
   }
 
   const waiting = !frame && !loading && !error;
+  const exitLabel = fsSupport !== 'none' && isFs ? 'Exit full screen' : immersive ? 'Exit full screen' : 'Full screen';
 
   return (
     <>
@@ -279,19 +406,33 @@ export default function LiveSlideshowPage() {
         <title>{event ? `${event.name} — live` : 'Live slideshow'}</title>
         <meta name="robots" content="noindex" />
       </Head>
-      <main className="relative h-screen w-screen overflow-hidden bg-black text-white">
+      <main
+        className="fixed inset-0 overflow-hidden bg-black text-white"
+        // dvh where the browser has it; `fixed inset-0` above already tracks the
+        // visible area everywhere else.
+        style={{ height: '100dvh', width: '100vw' }}
+      >
         {/* Passive branding only — no link. This is a TV screen nobody is
             touching, not a page somebody can tap; see components/GuestReferralLink.tsx
             for the clickable version of this same guest-to-host loop. */}
         <p
           aria-hidden="true"
-          className="pointer-events-none absolute right-4 top-4 z-10 text-xs font-medium tracking-wide text-white/60"
+          className="pointer-events-none absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 text-xs font-medium tracking-wide text-white/60"
         >
           sharepix.net
         </p>
         {error ? (
-          <div className="flex h-full items-center justify-center px-8 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-6 px-8 text-center">
             <p className="text-xl text-white/80">{error}</p>
+            {startFailed ? (
+              <button
+                type="button"
+                onClick={() => setAttempt((n) => n + 1)}
+                className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black"
+              >
+                Try again
+              </button>
+            ) : null}
           </div>
         ) : gate ? (
           <div className="flex h-full items-center justify-center px-6">
@@ -302,23 +443,57 @@ export default function LiveSlideshowPage() {
             <p className="text-xl text-white/60">Starting the slideshow…</p>
           </div>
         ) : waiting ? (
-          <div className="flex h-full flex-col items-center justify-center gap-8 px-8 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center sm:gap-8 sm:px-8">
             <div>
-              <h1 className="font-sans text-4xl font-bold tracking-[-0.02em] sm:text-6xl">
+              <h1 className="font-sans text-3xl font-bold tracking-[-0.02em] sm:text-6xl">
                 {event?.name ?? 'Waiting for photos'}
               </h1>
-              <p className="mt-4 text-xl text-white/70 sm:text-2xl">
-                Scan to add the first photo — it appears here moments later.
-              </p>
+              {problem ? (
+                <p className="mt-4 text-base text-amber-200 sm:text-2xl" role="status">
+                  {connectionMessage(problem)}
+                </p>
+              ) : loadTrouble ? (
+                <p className="mt-4 text-base text-amber-200 sm:text-2xl" role="status">
+                  Photos were found but could not be loaded yet. Retrying…
+                </p>
+              ) : emptyReason === 'buffer' ? (
+                <p className="mt-4 text-base text-white/70 sm:text-2xl">
+                  Photos are on their way — each one appears about {LIVE_BUFFER_SECONDS} seconds
+                  after upload.
+                </p>
+              ) : emptyReason === 'videos-only' ? (
+                <p className="mt-4 text-base text-white/70 sm:text-2xl">
+                  Only videos have been added so far. The live slideshow shows photos, so videos
+                  stay in the gallery.
+                </p>
+              ) : (
+                <p className="mt-4 text-base text-white/70 sm:text-2xl">
+                  Scan to add the first photo — it appears here moments later.
+                </p>
+              )}
             </div>
-            {uploadUrl ? (
-              <div className="rounded-3xl bg-white p-6">
-                <QRCodeSVG value={uploadUrl} size={280} />
+            {uploadUrl && !problem ? (
+              <div className="rounded-3xl bg-white p-4 sm:p-6">
+                <QRCodeSVG
+                  value={uploadUrl}
+                  size={280}
+                  style={{ width: 'min(60vw, 32dvh, 280px)', height: 'auto' }}
+                />
               </div>
             ) : null}
-            <p className="text-sm text-white/40">
-              New photos appear about {LIVE_BUFFER_SECONDS} seconds after upload.
-            </p>
+            {problem || loadTrouble ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black"
+              >
+                Reload
+              </button>
+            ) : (
+              <p className="text-sm text-white/40">
+                New photos appear about {LIVE_BUFFER_SECONDS} seconds after upload.
+              </p>
+            )}
           </div>
         ) : frame ? (
           <>
@@ -340,14 +515,18 @@ export default function LiveSlideshowPage() {
             />
 
             {isNew ? (
-              <div className="absolute left-1/2 top-8 -translate-x-1/2 rounded-full bg-white/90 px-5 py-2 text-sm font-semibold text-black shadow-lg">
+              <div className="absolute left-1/2 top-[max(1rem,env(safe-area-inset-top))] -translate-x-1/2 sm:top-8 rounded-full bg-white/90 px-5 py-2 text-sm font-semibold text-black shadow-lg">
                 Just added
               </div>
             ) : null}
 
-            <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-6 bg-gradient-to-t from-black/70 to-transparent p-8">
+            <div
+              className={`absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 bg-gradient-to-t from-black/70 to-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:gap-6 sm:p-8 ${
+                immersive ? 'hidden' : ''
+              }`}
+            >
               <div className="min-w-0">
-                <p className="truncate text-2xl font-medium drop-shadow">
+                <p className="truncate text-lg font-medium drop-shadow sm:text-2xl">
                   {frame.photo.uploadedBy || 'Anonymous'}
                 </p>
                 <ChallengeCaption
@@ -358,9 +537,9 @@ export default function LiveSlideshowPage() {
                 ) : null}
               </div>
               {uploadUrl ? (
-                <div className="flex shrink-0 items-center gap-3 rounded-2xl bg-white/95 p-3 text-black">
-                  <QRCodeSVG value={uploadUrl} size={84} />
-                  <p className="max-w-[8rem] text-xs font-medium leading-snug">
+                <div className="flex shrink-0 items-center gap-2 rounded-2xl bg-white/95 p-2 text-black sm:gap-3 sm:p-3">
+                  <QRCodeSVG value={uploadUrl} size={84} className="h-14 w-14 sm:h-[84px] sm:w-[84px]" />
+                  <p className="hidden max-w-[8rem] text-xs font-medium leading-snug sm:block">
                     Scan to add your photos
                   </p>
                 </div>
@@ -369,9 +548,31 @@ export default function LiveSlideshowPage() {
           </>
         ) : null}
 
-        {/* Operator controls — fade out once the screen is left alone. */}
+        {/* Connection trouble while a photo is on screen: small, and clears itself. */}
+        {frame && problem ? (
+          <p
+            role="status"
+            className="absolute left-1/2 top-14 -translate-x-1/2 rounded-full bg-amber-500/90 px-4 py-1.5 text-xs font-medium text-black"
+          >
+            Reconnecting…
+          </p>
+        ) : null}
+
+        {fsHint ? (
+          <p
+            role="status"
+            className="absolute inset-x-4 bottom-24 rounded-2xl bg-black/80 px-4 py-3 text-center text-sm text-white"
+          >
+            {immersive
+              ? 'Tap the screen to bring the buttons back. For no browser bar at all, use Share, then Add to Home Screen, and open it from there.'
+              : 'Full screen is off.'}
+          </p>
+        ) : null}
+
+        {/* Operator controls — fade out once the screen is left alone. In the
+            fill-the-screen mode the exit button stays reachable on any tap. */}
         <div
-          className={`absolute right-6 top-6 flex items-center gap-2 transition-opacity duration-500 ${
+          className={`absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] flex items-center gap-2 transition-opacity duration-500 sm:right-6 sm:top-6 ${
             showChrome ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
@@ -380,10 +581,10 @@ export default function LiveSlideshowPage() {
           </span>
           <button
             type="button"
-            onClick={toggleFullscreen}
-            className="rounded-full bg-white/15 px-4 py-1.5 text-sm font-medium hover:bg-white/25"
+            onClick={() => void toggleFullscreen()}
+            className="rounded-full bg-white/25 px-4 py-2 text-sm font-medium backdrop-blur hover:bg-white/35"
           >
-            Fullscreen
+            {exitLabel}
           </button>
         </div>
       </main>

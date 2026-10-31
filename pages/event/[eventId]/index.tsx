@@ -6,6 +6,8 @@ import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import PhotoGrid from '@/components/PhotoGrid';
 import EventCover from '@/components/EventCover';
+import ShareLiveLink from '@/components/ShareLiveLink';
+import { liveSlideshowAvailable } from '@/lib/pricing';
 import { resolveGalleryTheme, themeStyle } from '@/lib/galleryTheme';
 import { commentsEnabled, likesEnabled } from '@/lib/photoEngagement';
 import GalleryAccessNotice from '@/components/GalleryAccessNotice';
@@ -211,6 +213,12 @@ export default function EventGalleryPage() {
 
           <section className="spx-section-canvas py-10 sm:py-14">
             <div className="spx-inner">
+              {/* The host's own view only: a guest never sees this. */}
+              {host && liveSlideshowAvailable(event) ? (
+                <div className="mb-6">
+                  <ShareLiveLink eventId={event.id} eventName={event.name} />
+                </div>
+              ) : null}
               <div className="space-y-4">
                 {router.query.prints === 'success' ? (
                   <Notice tone="success">

@@ -4,6 +4,7 @@ import { withHostAuth } from '@/components/hostAuth';
 import Layout from '@/components/Layout';
 import Notice from '@/components/Notice';
 import EventQRCode from '@/components/EventQRCode';
+import ShareLiveLink from '@/components/ShareLiveLink';
 import SwitchRow from '@/components/SwitchRow';
 import {
   CORPORATE_PLAN,
@@ -12,6 +13,7 @@ import {
   getTier,
   isSellableTier,
   isTrialTier,
+  liveSlideshowAvailable,
 } from '@/lib/pricing';
 import {
   applyInitialGalleryAccess,
@@ -269,6 +271,13 @@ function CreateEventPage() {
                   did not save. Open the dashboard to set it; until then guests can view and
                   download.
                 </Notice>
+              </div>
+            ) : null}
+            {/* Straight to the live slideshow, and a way to send it to another
+                screen, without a trip through the dashboard first. */}
+            {liveSlideshowAvailable(createdEvent) ? (
+              <div className="mb-6">
+                <ShareLiveLink eventId={createdEvent.id} eventName={createdEvent.name} />
               </div>
             ) : null}
             <EventQRCode

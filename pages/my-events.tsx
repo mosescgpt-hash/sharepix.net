@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { withHostAuth } from '@/components/hostAuth';
 import HostHeader from '@/components/HostHeader';
@@ -16,6 +16,10 @@ import { deleteEventsOneByOne, eventCountLabel, type BulkDeleteResult } from '@/
 import { isGlobalAdmin } from '@/lib/admin';
 import { getTier } from '@/lib/pricing';
 import { QREvent } from '@/lib/types';
+import { isTimeoutError, withTimeout, withTimeoutOr } from '@/lib/withTimeout';
+
+/** How long the events list may take before the page says so and offers a retry. */
+const MY_EVENTS_TIMEOUT_MS = 25_000;
 
 function formatDate(value?: string | null) {
   if (!value) return 'Date not set';
@@ -39,15 +43,49 @@ function MyEventsPage() {
   const [bulkProgress, setBulkProgress] = useState('');
   const [bulkResults, setBulkResults] = useState<{ name: string; result: BulkDeleteResult }[] | null>(null);
 
-  useEffect(() => {
-    Promise.all([listMyEvents(), isGlobalAdmin().catch(() => false)])
+  // The list failed to load (as opposed to a delete or checkout failing), so
+  // the page offers "Try again" rather than leaving a dead end.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const loadRun = useRef(0);
+
+  const loadEvents = useCallback(() => {
+    // A newer run supersedes an older one, so a slow first attempt that finally
+    // answers cannot overwrite a retry's result.
+    const run = (loadRun.current += 1);
+    setLoading(true);
+    setError(null);
+    setLoadFailed(false);
+    // A stalled phone connection never fails, it just never answers, and this
+    // page used to wait on "Loading your events…" forever. The admin check
+    // refreshes the sign-in session over the network, so it gets a short leash
+    // and counts as "not an admin" if it stalls: it only decides which extras to show.
+    withTimeout(
+      Promise.all([listMyEvents(), withTimeoutOr(isGlobalAdmin().catch(() => false), 8_000, false)]),
+      MY_EVENTS_TIMEOUT_MS,
+      'Timed out loading events',
+    )
       .then(([ownedEvents, globalAdmin]) => {
+        if (run !== loadRun.current) return;
         setEvents(ownedEvents);
         setAdmin(globalAdmin);
       })
-      .catch(() => setError('We could not load your events. Please try again.'))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (run !== loadRun.current) return;
+        setLoadFailed(true);
+        setError(
+          isTimeoutError(err)
+            ? 'Loading your events is taking too long. Check your connection and try again.'
+            : 'We could not load your events. Please try again.',
+        );
+      })
+      .finally(() => {
+        if (run === loadRun.current) setLoading(false);
+      });
   }, []);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   async function handleCompletePayment(event: QREvent) {
     setWorking(event.id);
@@ -169,6 +207,13 @@ function MyEventsPage() {
         <div className="spx-inner">
           {loading ? (
             <p className="spx-body text-center">Loading your events&hellip;</p>
+          ) : loadFailed ? (
+            <div className="space-y-4">
+              <Notice tone="error">{error}</Notice>
+              <button type="button" onClick={loadEvents} className="spx-btn-ink">
+                Try again
+              </button>
+            </div>
           ) : error ? (
             <Notice tone="error">{error}</Notice>
           ) : events.length === 0 ? (

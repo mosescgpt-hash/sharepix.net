@@ -79,7 +79,50 @@ describe('Navbar account state', () => {
 
   it('signed out shows Sign in', () => {
     render(<Navbar />);
-    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in');
+    // Once in the desktop nav and once in the phone bar.
+    const links = screen.getAllByRole('link', { name: 'Sign in' });
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    for (const link of links) expect(link).toHaveAttribute('href', '/sign-in');
+  });
+
+  describe('phone header', () => {
+    it('menu button is a column of three visible navy bars, at least 44px to tap', () => {
+      render(<Navbar />);
+      const button = screen.getByTestId('menu-button');
+      expect(button.className).toContain('flex-col');
+      expect(button.className).toContain('min-h-[44px]');
+      expect(button.className).toContain('min-w-[44px]');
+      const bars = button.querySelectorAll('span');
+      expect(bars).toHaveLength(3);
+      for (const bar of Array.from(bars)) {
+        expect(bar.className).toContain('bg-ink');
+        expect(bar.className).toContain('h-0.5');
+        expect(bar.className).not.toContain('h-px');
+      }
+    });
+
+    it('shows Sign in in the bar when signed out', () => {
+      render(<Navbar />);
+      const link = screen.getByTestId('mobile-auth-link');
+      expect(link).toHaveTextContent('Sign in');
+      expect(link).toHaveAttribute('href', '/sign-in');
+      expect(link.className).toContain('min-h-[44px]');
+      expect(link.className).toContain('text-ink');
+    });
+
+    it('shows My events in the bar when signed in', () => {
+      mockUser = { status: 'in', label: 'Seth', email: null };
+      render(<Navbar />);
+      const link = screen.getByTestId('mobile-auth-link');
+      expect(link).toHaveTextContent('My events');
+      expect(link).toHaveAttribute('href', '/my-events');
+    });
+
+    it('shows neither while auth is unknown', () => {
+      mockUser = { status: 'loading' };
+      render(<Navbar />);
+      expect(screen.queryByTestId('mobile-auth-link')).not.toBeInTheDocument();
+    });
   });
 
   it('signed in shows the account menu with events, create and sign out', async () => {
